@@ -105,7 +105,7 @@ Log progress in [`docs/build_log.md`](docs/build_log.md) and criteria in [`docs/
 Dosey/
 ├── README.md
 ├── firmware/              # Arduino/PlatformIO C++ examples for XIAO ESP32-C6
-├── mobile_app/            # Flutter app workspace; app will live in mobile_app/dosey_app/
+├── mobile_app/            # Flutter app workspace; app lives in mobile_app/dosey_app/
 ├── mechanical/            # Carousel measurements, mockups, assembly notes, later CAD/STL
 ├── docs/                  # Wiring, protocol, safety, tests, parts, decisions, logs
 └── media/                 # Photos and videos from hardware tests
@@ -126,11 +126,27 @@ No firmware build command exists yet.
 
 ## Mobile app
 
-The app will be a Flutter project under `mobile_app/dosey_app/`. Android is the first test target because the Moto G Play is available, but the app architecture should keep iOS support in scope.
+The app is a Flutter project under `mobile_app/dosey_app/`. Android is the first test target because the Moto G Play is available, but the app architecture keeps iOS support in scope.
 
 BLE, notifications, local storage, and permissions should sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app.
 
-No mobile build command exists yet.
+Current local checks:
+
+```sh
+cd mobile_app/dosey_app
+dart format .
+flutter analyze
+flutter test
+flutter build apk --debug
+```
+
+Local setup so far:
+
+- Flutter 3.44.1 stable and Dart 3.12.1 are installed with Homebrew.
+- Android command-line tools, Android SDK 36, platform-tools, build-tools 36.0.0, NDK 28.2.13676358, CMake 3.22.1, and OpenJDK 17 are installed.
+- Flutter is configured to use `/opt/homebrew/share/android-commandlinetools` and the Homebrew OpenJDK 17 install.
+- CocoaPods 1.16.2 is installed for future iOS plugin work.
+- Full Xcode is still required before iOS builds can run.
 
 ## Mechanical prototype
 
@@ -146,7 +162,7 @@ Use rough fixtures until repeatable one-slot movement works. Save measurements a
 
 ## Project status
 
-Early prototype. The repo is being organized before firmware, mobile app, and mechanical tests are built.
+Early prototype. The repo now has a safety-first Flutter app shell and local Android tooling, but no firmware, BLE implementation, or carousel movement test yet.
 
 Near-term work:
 
@@ -154,7 +170,7 @@ Near-term work:
 - Record wiring and power paths.
 - Draft the controller protocol.
 - Build a servo sweep and one-slot carousel movement test.
-- Create the Flutter app shell after hardware bring-up starts.
+- Connect the Flutter app to a controller simulator before real BLE hardware tests.
 
 ## License
 
