@@ -131,6 +131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<AppDeviceRole>(
+                      key: ValueKey('${platform.name}:${role.storageValue}'),
                       initialValue: role,
                       decoration: const InputDecoration(labelText: 'Mode'),
                       items: allowedRoles

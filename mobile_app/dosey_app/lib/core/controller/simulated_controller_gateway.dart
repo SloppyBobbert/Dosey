@@ -45,9 +45,7 @@ class SimulatedControllerGateway implements ControllerGateway {
   Future<void> cancelActiveCommand() async {}
 
   @override
-  void close() {
-    unawaited(_controller.close());
-  }
+  Future<void> close() => _controller.close();
 
   void _setSnapshot(ControllerSnapshot snapshot) {
     _snapshot = snapshot;

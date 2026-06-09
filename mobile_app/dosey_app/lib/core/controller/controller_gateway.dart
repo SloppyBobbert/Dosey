@@ -33,5 +33,5 @@ abstract interface class ControllerGateway {
 
   Future<void> cancelActiveCommand();
 
-  void close();
+  Future<void> close();
 }

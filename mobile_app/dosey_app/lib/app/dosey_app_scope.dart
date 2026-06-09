@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/google_auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
@@ -56,7 +58,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
 
   @override
   void dispose() {
-    _dependencies.controller.close();
+    unawaited(_dependencies.controller.close());
     if (_ownsDatabase) {
       _database.close();
     }
