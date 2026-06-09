@@ -21,4 +21,15 @@ void main() {
     expect(event.marksDoseTaken, isFalse);
     expect(event.doseId, 'morning-dose');
   });
+
+  test('dose taken confirmation is separate from controller dispense', () {
+    final event = DoseLogEvent.doseTakenConfirmed(
+      doseId: 'morning-dose',
+      occurredAt: DateTime.utc(2026, 6, 8, 12, 5),
+    );
+
+    expect(event.kind, DoseLogEventKind.doseTakenConfirmed);
+    expect(event.marksDoseTaken, isTrue);
+    expect(event.doseId, 'morning-dose');
+  });
 }

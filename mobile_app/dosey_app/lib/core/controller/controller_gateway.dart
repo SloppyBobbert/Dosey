@@ -12,6 +12,11 @@ class ControllerSnapshot {
       canRequestDispense = false,
       statusLabel = 'Controller disconnected';
 
+  const ControllerSnapshot.connected()
+    : connectionState = ControllerConnectionState.connected,
+      canRequestDispense = true,
+      statusLabel = 'Controller connected';
+
   final ControllerConnectionState connectionState;
   final bool canRequestDispense;
   final String statusLabel;
@@ -22,5 +27,11 @@ abstract interface class ControllerGateway {
 
   Future<void> connect();
 
+  Future<void> disconnect();
+
+  Future<void> requestDispense({required String doseId});
+
   Future<void> cancelActiveCommand();
+
+  Future<void> close();
 }

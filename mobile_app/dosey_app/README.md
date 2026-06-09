@@ -4,11 +4,13 @@ Flutter app for the Dosey medication-reminder robot prototype.
 
 ## Current scope
 
-- Android and iOS app shell.
-- Safety-first home screen.
-- Placeholder controller status and manual dispense test areas.
-- App-owned interfaces for controller/BLE, reminders, permissions, and dose logging.
-- Drift/SQLite local database for device role settings and dose log events.
+- Android and iOS app shell with Today, Reminders, Controller, Log, and Settings tabs.
+- Safety-first home/settings copy and safety acknowledgement storage.
+- Local reminder schedule storage.
+- Controller simulator for app flow testing before BLE.
+- Google sign-in through an app-owned auth interface; no Firebase/Supabase backend yet.
+- App-owned interfaces for controller/BLE, auth, reminders, permissions, and dose logging.
+- Drift/SQLite local database for device role settings, reminders, cached auth state, and dose log events.
 
 Device role rules:
 
@@ -28,6 +30,7 @@ dart format .
 flutter analyze
 flutter test
 flutter build apk --debug
+flutter build ios --debug --no-codesign
 # After Drift schema changes:
 dart run build_runner build
 ```

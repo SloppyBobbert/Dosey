@@ -33,8 +33,8 @@ Dosey is built around three main systems:
 1. **Mobile app**
    - Flutter/Dart app for Android and iOS
    - First test device: 2024 Moto G Play
-   - Uses a local Drift/SQLite database for device role settings and dose logs
-   - Handles reminders, schedule UI, local logs, permissions, and app-controller messaging
+   - Uses a local Drift/SQLite database for app settings, reminder schedules, cached auth state, and dose logs
+   - Handles reminders, schedule UI, local logs, Google sign-in plumbing, permissions, and app-controller messaging
    - Supports Android robot phone mode, Android personal phone mode, and iOS personal phone mode only
 
 2. **Controller**
@@ -130,9 +130,11 @@ No firmware build command exists yet.
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the first test target because the Moto G Play is available, but the app architecture keeps iOS support in scope.
 
-BLE, notifications, local storage, and permissions should sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app.
+BLE, notifications, local storage, auth, and permissions should sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app.
 
-The local database uses Drift on SQLite. The phone app stores app settings and dose log events locally; the ESP32 controller should only keep tiny controller state later, not a SQLite database. Cloud sync can come later after the local model is stable.
+The local database uses Drift on SQLite. The phone app stores app settings, reminder schedules, cached local auth state, and dose log events locally; the ESP32 controller should only keep tiny controller state later, not a SQLite database. Cloud sync can come later after the local model is stable.
+
+The app now has a plain five-tab shell: Today, Reminders, Controller, Log, and Settings. Google sign-in is wired through an app-owned auth interface with `google_sign_in`, but there is no Firebase, Supabase, or cloud session backend yet.
 
 Device roles are intentionally platform-limited:
 
@@ -148,6 +150,7 @@ dart format .
 flutter analyze
 flutter test
 flutter build apk --debug
+flutter build ios --debug --no-codesign
 # Run this after Drift schema changes:
 dart run build_runner build
 ```
@@ -174,16 +177,15 @@ Use rough fixtures until repeatable one-slot movement works. Save measurements a
 
 ## Project status
 
-Early prototype. The repo now has a safety-first Flutter app shell, a local SQLite data layer, and local Android tooling, but no firmware, BLE implementation, or carousel movement test yet.
+Early prototype. The repo now has a safety-first Flutter app shell, local reminder/settings/auth/dose-log storage, a controller simulator, Google sign-in plumbing, and local Android/iOS tooling. It still has no firmware, BLE implementation, cloud sync, or carousel movement test.
 
 Near-term work:
 
 - Test Grove modules on the XIAO Expansion Board.
 - Record wiring and power paths.
 - Draft the controller protocol.
-- Add role selection UI for Android robot/personal and iOS personal modes.
 - Build a servo sweep and one-slot carousel movement test.
-- Connect the Flutter app to a controller simulator before real BLE hardware tests.
+- Draft the real BLE protocol before adding a BLE package.
 
 ## License
 

@@ -6,11 +6,12 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS support in sc
 
 ## Current app
 
-- Flutter/Dart app shell.
-- Safety-first home screen.
-- Local Drift/SQLite database for app settings and dose logs.
+- Flutter/Dart app shell with Today, Reminders, Controller, Log, and Settings tabs.
+- Safety-first home/settings copy and safety acknowledgement storage.
+- Local Drift/SQLite database for app settings, reminder schedules, cached auth state, and dose logs.
 - Device roles: Android robot phone, Android personal phone, and iOS personal phone only.
-- Controller, notifications, storage, and permission seams stay behind app-owned interfaces.
+- Google sign-in is behind an app-owned interface with no Firebase/Supabase backend yet.
+- Controller simulator, notifications, storage, auth, and permission seams stay behind app-owned interfaces.
 - First physical test device: 2024 Moto G Play.
 
 Run Flutter commands from `mobile_app/dosey_app/`.
@@ -23,6 +24,7 @@ dart format .
 flutter analyze
 flutter test
 flutter build apk --debug
+flutter build ios --debug --no-codesign
 # After Drift schema changes:
 dart run build_runner build
 ```

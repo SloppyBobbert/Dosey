@@ -19,6 +19,17 @@ void main() {
     );
   });
 
+  test('default role follows the device platform', () {
+    expect(
+      AppDeviceRole.defaultFor(AppDevicePlatform.android),
+      AppDeviceRole.androidPersonal,
+    );
+    expect(
+      AppDeviceRole.defaultFor(AppDevicePlatform.ios),
+      AppDeviceRole.iosPersonal,
+    );
+  });
+
   test('robot controls only unlock for android robot mode', () {
     expect(AppDeviceRole.androidRobot.canHostRobot, isTrue);
     expect(AppDeviceRole.androidPersonal.canHostRobot, isFalse);

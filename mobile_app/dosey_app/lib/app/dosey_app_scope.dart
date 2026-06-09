@@ -1,0 +1,109 @@
+import 'dart:async';
+
+import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/auth/google_auth_service.dart';
+import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
+import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/settings/current_device_platform.dart';
+import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
+import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:flutter/widgets.dart';
+
+class DoseyAppScope extends StatefulWidget {
+  const DoseyAppScope({super.key, required this.child, this.database});
+
+  final Widget child;
+  final DoseyDatabase? database;
+
+  static DoseyAppDependencies of(BuildContext context) {
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_DoseyAppScopeInherited>();
+    assert(scope != null, 'DoseyAppScope was not found in the widget tree.');
+    return scope!.dependencies;
+  }
+
+  @override
+  State<DoseyAppScope> createState() => _DoseyAppScopeState();
+}
+
+class _DoseyAppScopeState extends State<DoseyAppScope> {
+  late final DoseyDatabase _database;
+  late final bool _ownsDatabase;
+  late final DoseyAppDependencies _dependencies;
+
+  @override
+  void initState() {
+    super.initState();
+    _database = widget.database ?? DoseyDatabase();
+    _ownsDatabase = widget.database == null;
+    final doseLog = DriftDoseLogRepository(_database);
+    final localAuth = LocalAuthRepository(_database);
+    _dependencies = DoseyAppDependencies(
+      database: _database,
+      settings: LocalAppSettingsRepository(
+        _database,
+        defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
+      ),
+      reminders: LocalReminderRepository(_database),
+      doseLog: doseLog,
+      localAuth: localAuth,
+      auth: GoogleAuthService(localAuth),
+      controller: SimulatedControllerGateway(doseLog),
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_dependencies.controller.close());
+    if (_ownsDatabase) {
+      _database.close();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _DoseyAppScopeInherited(
+      dependencies: _dependencies,
+      child: widget.child,
+    );
+  }
+}
+
+class DoseyAppDependencies {
+  const DoseyAppDependencies({
+    required this.database,
+    required this.settings,
+    required this.reminders,
+    required this.doseLog,
+    required this.localAuth,
+    required this.auth,
+    required this.controller,
+  });
+
+  final DoseyDatabase database;
+  final LocalAppSettingsRepository settings;
+  final LocalReminderRepository reminders;
+  final DriftDoseLogRepository doseLog;
+  final LocalAuthRepository localAuth;
+  final AuthService auth;
+  final ControllerGateway controller;
+}
+
+class _DoseyAppScopeInherited extends InheritedWidget {
+  const _DoseyAppScopeInherited({
+    required this.dependencies,
+    required super.child,
+  });
+
+  final DoseyAppDependencies dependencies;
+
+  @override
+  bool updateShouldNotify(_DoseyAppScopeInherited oldWidget) {
+    return dependencies != oldWidget.dependencies;
+  }
+}
