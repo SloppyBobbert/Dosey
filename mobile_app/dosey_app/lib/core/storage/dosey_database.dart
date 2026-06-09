@@ -13,6 +13,34 @@ class AppSettings extends Table {
   Set<Column> get primaryKey => {key};
 }
 
+@DataClassName('ReminderScheduleRow')
+class ReminderSchedules extends Table {
+  TextColumn get id => text()();
+  TextColumn get label => text()();
+  IntColumn get hour => integer()();
+  IntColumn get minute => integer()();
+  BoolColumn get isEnabled => boolean()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('AuthSessionRow')
+class AuthSessions extends Table {
+  TextColumn get id => text()();
+  TextColumn get userId => text()();
+  TextColumn get email => text()();
+  TextColumn get displayName => text().nullable()();
+  TextColumn get photoUrl => text().nullable()();
+  TextColumn get provider => text()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('DoseLogEventRow')
 class DoseLogEvents extends Table {
   TextColumn get id => text()();
@@ -25,17 +53,37 @@ class DoseLogEvents extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [AppSettings, DoseLogEvents])
+@DriftDatabase(
+  tables: [AppSettings, ReminderSchedules, AuthSessions, DoseLogEvents],
+)
 class DoseyDatabase extends _$DoseyDatabase {
   DoseyDatabase([QueryExecutor? executor])
     : super(executor ?? _openConnection());
 
   factory DoseyDatabase.inMemory() {
-    return DoseyDatabase(NativeDatabase.memory());
+    return DoseyDatabase(
+      DatabaseConnection(
+        NativeDatabase.memory(),
+        closeStreamsSynchronously: true,
+      ),
+    );
   }
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 3;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (migrator) => migrator.createAll(),
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) {
+        await migrator.createTable(reminderSchedules);
+      }
+      if (from < 3) {
+        await migrator.createTable(authSessions);
+      }
+    },
+  );
 }
 
 QueryExecutor _openConnection() {

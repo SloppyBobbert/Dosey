@@ -23,6 +23,18 @@ class DoseLogEvent {
     );
   }
 
+  factory DoseLogEvent.doseTakenConfirmed({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.doseTakenConfirmed,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: true,
+    );
+  }
+
   final DoseLogEventKind kind;
   final String doseId;
   final DateTime occurredAt;
