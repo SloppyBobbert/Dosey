@@ -60,7 +60,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
   void dispose() {
     unawaited(_dependencies.controller.close());
     if (_ownsDatabase) {
-      _database.close();
+      unawaited(_database.close());
     }
     super.dispose();
   }
