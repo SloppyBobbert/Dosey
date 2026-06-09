@@ -33,7 +33,9 @@ Dosey is built around three main systems:
 1. **Mobile app**
    - Flutter/Dart app for Android and iOS
    - First test device: 2024 Moto G Play
+   - Uses a local Drift/SQLite database for device role settings and dose logs
    - Handles reminders, schedule UI, local logs, permissions, and app-controller messaging
+   - Supports Android robot phone mode, Android personal phone mode, and iOS personal phone mode only
 
 2. **Controller**
    - Seeed Studio XIAO ESP32-C6 on the XIAO Expansion Board
@@ -130,6 +132,14 @@ The app is a Flutter project under `mobile_app/dosey_app/`. Android is the first
 
 BLE, notifications, local storage, and permissions should sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app.
 
+The local database uses Drift on SQLite. The phone app stores app settings and dose log events locally; the ESP32 controller should only keep tiny controller state later, not a SQLite database. Cloud sync can come later after the local model is stable.
+
+Device roles are intentionally platform-limited:
+
+- Android robot phone: the Android phone lives inside the robot and can host robot-control behavior.
+- Android personal phone: a personal Android phone can receive notifications and use the app.
+- iOS personal phone: iOS can receive notifications and use the app, but cannot be the robot's embedded phone.
+
 Current local checks:
 
 ```sh
@@ -138,15 +148,17 @@ dart format .
 flutter analyze
 flutter test
 flutter build apk --debug
+# Run this after Drift schema changes:
+dart run build_runner build
 ```
 
 Local setup so far:
 
 - Flutter 3.44.1 stable and Dart 3.12.1 are installed with Homebrew.
-- Android command-line tools, Android SDK 36, platform-tools, build-tools 36.0.0, NDK 28.2.13676358, CMake 3.22.1, and OpenJDK 17 are installed.
+- Android command-line tools, Android SDK platforms 35 and 36, platform-tools, build-tools 36.0.0, NDK 28.2.13676358, CMake 3.22.1, and OpenJDK 17 are installed.
 - Flutter is configured to use `/opt/homebrew/share/android-commandlinetools` and the Homebrew OpenJDK 17 install.
 - CocoaPods 1.16.2 is installed for future iOS plugin work.
-- Full Xcode is still required before iOS builds can run.
+- Xcode 26.5 is selected at `/Applications/Xcode.app/Contents/Developer`; local no-codesign iOS debug builds run.
 
 ## Mechanical prototype
 
@@ -162,13 +174,14 @@ Use rough fixtures until repeatable one-slot movement works. Save measurements a
 
 ## Project status
 
-Early prototype. The repo now has a safety-first Flutter app shell and local Android tooling, but no firmware, BLE implementation, or carousel movement test yet.
+Early prototype. The repo now has a safety-first Flutter app shell, a local SQLite data layer, and local Android tooling, but no firmware, BLE implementation, or carousel movement test yet.
 
 Near-term work:
 
 - Test Grove modules on the XIAO Expansion Board.
 - Record wiring and power paths.
 - Draft the controller protocol.
+- Add role selection UI for Android robot/personal and iOS personal modes.
 - Build a servo sweep and one-slot carousel movement test.
 - Connect the Flutter app to a controller simulator before real BLE hardware tests.
 
