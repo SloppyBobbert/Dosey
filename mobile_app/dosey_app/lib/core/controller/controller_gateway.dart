@@ -32,4 +32,6 @@ abstract interface class ControllerGateway {
   Future<void> requestDispense({required String doseId});
 
   Future<void> cancelActiveCommand();
+
+  void close();
 }

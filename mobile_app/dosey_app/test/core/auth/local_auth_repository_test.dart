@@ -54,4 +54,35 @@ void main() {
     expect(session.isSignedIn, isFalse);
     expect(session.user, isNull);
   });
+
+  test('local auth repository watches only the current session row', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAuthRepository(database);
+
+    await database
+        .into(database.authSessions)
+        .insert(
+          AuthSessionsCompanion.insert(
+            id: 'stale',
+            userId: 'old-user',
+            email: 'old@example.com',
+            provider: AuthProvider.google.name,
+            updatedAt: DateTime.utc(2026, 6, 9),
+          ),
+        );
+    await repository.saveUser(
+      const AuthUser(
+        id: 'current-user',
+        email: 'current@example.com',
+        displayName: null,
+        photoUrl: null,
+        provider: AuthProvider.google,
+      ),
+    );
+
+    final session = await repository.watchSession().first;
+    expect(session.user?.id, 'current-user');
+    expect(session.user?.email, 'current@example.com');
+  });
 }

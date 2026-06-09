@@ -8,7 +8,8 @@ class TodayScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reminders = DoseyAppScope.of(context).reminders;
+    final dependencies = DoseyAppScope.of(context);
+    final reminders = dependencies.reminders;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -37,13 +38,32 @@ class TodayScreen extends StatelessWidget {
                         Text('${schedule.timeLabel} · ${schedule.label}'),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
-                      onPressed: () {
-                        DoseyAppScope.of(context).doseLog.addEvent(
-                          DoseLogEvent.doseTakenConfirmed(
-                            doseId: 'manual-confirmation',
-                            occurredAt: DateTime.now().toUtc(),
-                          ),
-                        );
+                      onPressed: () async {
+                        try {
+                          await dependencies.doseLog.addEvent(
+                            DoseLogEvent.doseTakenConfirmed(
+                              doseId: 'manual-confirmation',
+                              occurredAt: DateTime.now().toUtc(),
+                            ),
+                          );
+                          if (!context.mounted) {
+                            return;
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Dose confirmation logged.'),
+                            ),
+                          );
+                        } on Object catch (error) {
+                          if (!context.mounted) {
+                            return;
+                          }
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Dose confirmation failed: $error'),
+                            ),
+                          );
+                        }
                       },
                       icon: const Icon(Icons.check_circle_outline),
                       label: const Text('Confirm dose taken manually'),

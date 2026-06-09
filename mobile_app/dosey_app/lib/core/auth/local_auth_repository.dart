@@ -10,7 +10,10 @@ class LocalAuthRepository {
   final DoseyDatabase _database;
 
   Stream<AuthSession> watchSession() {
-    return _database.select(_database.authSessions).watch().map((rows) {
+    final query = _database.select(_database.authSessions)
+      ..where((session) => session.id.equals(_currentSessionId));
+
+    return query.watch().map((rows) {
       if (rows.isEmpty) {
         return const AuthSession.signedOut();
       }

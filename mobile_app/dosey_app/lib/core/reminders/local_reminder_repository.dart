@@ -28,6 +28,8 @@ class LocalReminderRepository implements ReminderRepository {
 
   @override
   Future<void> upsertSchedule(ReminderSchedule schedule) {
+    _validateSchedule(schedule);
+
     return _database
         .into(_database.reminderSchedules)
         .insertOnConflictUpdate(
@@ -60,5 +62,18 @@ class LocalReminderRepository implements ReminderRepository {
       createdAt: row.createdAt.toUtc(),
       updatedAt: row.updatedAt.toUtc(),
     );
+  }
+
+  static void _validateSchedule(ReminderSchedule schedule) {
+    if (schedule.hour < 0 || schedule.hour > 23) {
+      throw ArgumentError.value(schedule.hour, 'hour', 'Must be 0 through 23.');
+    }
+    if (schedule.minute < 0 || schedule.minute > 59) {
+      throw ArgumentError.value(
+        schedule.minute,
+        'minute',
+        'Must be 0 through 59.',
+      );
+    }
   }
 }

@@ -1,5 +1,7 @@
 import 'package:dosey_app/main.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -46,5 +48,29 @@ void main() {
       find.text('Never mark a dose taken because the servo moved.'),
       findsOneWidget,
     );
+    final disabledButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Dispense disabled'),
+    );
+    expect(disabledButton.onPressed, isNull);
+  });
+
+  testWidgets('settings only offers iOS personal role on iOS', (
+    WidgetTester tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    try {
+      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('iOS personal phone'), findsOneWidget);
+      expect(find.text('Android robot phone'), findsNothing);
+      expect(find.text('Android personal phone'), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

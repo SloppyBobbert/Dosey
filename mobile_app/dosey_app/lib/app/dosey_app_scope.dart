@@ -1,8 +1,11 @@
-import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/google_auth_service.dart';
+import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -41,7 +44,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       database: _database,
       settings: LocalAppSettingsRepository(
         _database,
-        defaultRole: AppDeviceRole.androidPersonal,
+        defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
       ),
       reminders: LocalReminderRepository(_database),
       doseLog: doseLog,
@@ -85,8 +88,8 @@ class DoseyAppDependencies {
   final LocalReminderRepository reminders;
   final DriftDoseLogRepository doseLog;
   final LocalAuthRepository localAuth;
-  final GoogleAuthService auth;
-  final SimulatedControllerGateway controller;
+  final AuthService auth;
+  final ControllerGateway controller;
 }
 
 class _DoseyAppScopeInherited extends InheritedWidget {

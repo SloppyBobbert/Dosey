@@ -34,6 +34,13 @@ enum AppDeviceRole {
     };
   }
 
+  static AppDeviceRole defaultFor(AppDevicePlatform platform) {
+    return switch (platform) {
+      AppDevicePlatform.android => androidPersonal,
+      AppDevicePlatform.ios => iosPersonal,
+    };
+  }
+
   static AppDeviceRole? fromStorageValue(String value) {
     for (final role in values) {
       if (role.storageValue == value) {

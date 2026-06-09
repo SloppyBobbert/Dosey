@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:flutter/material.dart';
 
@@ -13,7 +14,12 @@ class ControllerScreen extends StatelessWidget {
     return StreamBuilder<AppDeviceRole>(
       stream: dependencies.settings.watchDeviceRole(),
       builder: (context, roleSnapshot) {
-        final role = roleSnapshot.data ?? AppDeviceRole.androidPersonal;
+        final platform = currentAppDevicePlatform();
+        final fallbackRole = AppDeviceRole.defaultFor(platform);
+        final storedRole = roleSnapshot.data;
+        final role = storedRole != null && storedRole.isAllowedOn(platform)
+            ? storedRole
+            : fallbackRole;
         return StreamBuilder<ControllerSnapshot>(
           stream: dependencies.controller.watchController(),
           builder: (context, controllerSnapshot) {
@@ -44,11 +50,17 @@ class ControllerScreen extends StatelessWidget {
                           spacing: 8,
                           children: [
                             OutlinedButton(
-                              onPressed: dependencies.controller.connect,
+                              onPressed: () => _runControllerAction(
+                                context,
+                                dependencies.controller.connect,
+                              ),
                               child: const Text('Connect simulator'),
                             ),
                             OutlinedButton(
-                              onPressed: dependencies.controller.disconnect,
+                              onPressed: () => _runControllerAction(
+                                context,
+                                dependencies.controller.disconnect,
+                              ),
                               child: const Text('Disconnect'),
                             ),
                           ],
@@ -79,8 +91,11 @@ class ControllerScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         FilledButton.tonalIcon(
                           onPressed: canDispense
-                              ? () => dependencies.controller.requestDispense(
-                                  doseId: 'manual-test',
+                              ? () => _runControllerAction(
+                                  context,
+                                  () => dependencies.controller.requestDispense(
+                                    doseId: 'manual-test',
+                                  ),
                                 )
                               : null,
                           icon: Icon(
@@ -102,5 +117,21 @@ class ControllerScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _runControllerAction(
+    BuildContext context,
+    Future<void> Function() action,
+  ) async {
+    try {
+      await action();
+    } on Object catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Controller action failed: $error')),
+      );
+    }
   }
 }

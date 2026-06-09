@@ -11,6 +11,7 @@ void main() {
     final gateway = SimulatedControllerGateway(
       DriftDoseLogRepository(database),
     );
+    addTearDown(gateway.close);
 
     final snapshot = await gateway.watchController().first;
 
@@ -23,6 +24,7 @@ void main() {
     addTearDown(database.close);
     final doseLog = DriftDoseLogRepository(database);
     final gateway = SimulatedControllerGateway(doseLog);
+    addTearDown(gateway.close);
 
     expect(gateway.requestDispense(doseId: 'morning'), throwsStateError);
 

@@ -24,6 +24,12 @@ class ReminderSchedules extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
+  List<String> get customConstraints => const [
+    'CHECK (hour >= 0 AND hour <= 23)',
+    'CHECK (minute >= 0 AND minute <= 59)',
+  ];
+
+  @override
   Set<Column> get primaryKey => {id};
 }
 
@@ -70,7 +76,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -81,6 +87,9 @@ class DoseyDatabase extends _$DoseyDatabase {
       }
       if (from < 3) {
         await migrator.createTable(authSessions);
+      }
+      if (from >= 2 && from < 4) {
+        await migrator.alterTable(TableMigration(reminderSchedules));
       }
     },
   );

@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:flutter/material.dart';
 
@@ -50,7 +51,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 12),
                     if (session.isSignedIn)
                       OutlinedButton(
-                        onPressed: () => dependencies.auth.signOut(),
+                        onPressed: () async {
+                          try {
+                            await dependencies.auth.signOut();
+                            if (!mounted) {
+                              return;
+                            }
+                            setState(() => _authMessage = null);
+                          } on Object catch (error) {
+                            if (!mounted) {
+                              return;
+                            }
+                            setState(() {
+                              _authMessage = 'Sign out failed: $error';
+                            });
+                          }
+                        },
                         child: const Text('Sign out'),
                       )
                     else
@@ -65,6 +81,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 try {
                                   await dependencies.auth.signInWithGoogle();
                                 } on Object catch (error) {
+                                  if (!mounted) {
+                                    return;
+                                  }
                                   setState(() {
                                     _authMessage =
                                         'Google sign-in is not configured yet: $error';
@@ -93,7 +112,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         StreamBuilder<AppDeviceRole>(
           stream: dependencies.settings.watchDeviceRole(),
           builder: (context, snapshot) {
-            final role = snapshot.data ?? AppDeviceRole.androidPersonal;
+            final platform = currentAppDevicePlatform();
+            final allowedRoles = AppDeviceRole.allowedFor(platform);
+            final fallbackRole = AppDeviceRole.defaultFor(platform);
+            final storedRole = snapshot.data;
+            final role = storedRole != null && allowedRoles.contains(storedRole)
+                ? storedRole
+                : fallbackRole;
             return Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
@@ -108,7 +133,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     DropdownButtonFormField<AppDeviceRole>(
                       initialValue: role,
                       decoration: const InputDecoration(labelText: 'Mode'),
-                      items: AppDeviceRole.allowedFor(AppDevicePlatform.android)
+                      items: allowedRoles
                           .map(
                             (role) => DropdownMenuItem(
                               value: role,
@@ -116,9 +141,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           )
                           .toList(),
-                      onChanged: (newRole) {
+                      onChanged: (newRole) async {
                         if (newRole != null) {
-                          dependencies.settings.setDeviceRole(newRole);
+                          try {
+                            await dependencies.settings.setDeviceRole(newRole);
+                          } on Object catch (error) {
+                            if (!context.mounted) {
+                              return;
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Device role update failed: $error',
+                                ),
+                              ),
+                            );
+                          }
                         }
                       },
                     ),
@@ -138,8 +176,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             return Card(
               child: CheckboxListTile(
                 value: acknowledged,
-                onChanged: (value) {
-                  dependencies.settings.setSafetyAcknowledged(value ?? false);
+                onChanged: (value) async {
+                  try {
+                    await dependencies.settings.setSafetyAcknowledged(
+                      value ?? false,
+                    );
+                  } on Object catch (error) {
+                    if (!context.mounted) {
+                      return;
+                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Safety acknowledgement failed: $error'),
+                      ),
+                    );
+                  }
                 },
                 title: const Text('I understand prototype safety rules'),
                 subtitle: const Text(

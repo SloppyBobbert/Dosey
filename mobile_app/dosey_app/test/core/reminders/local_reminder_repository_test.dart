@@ -61,4 +61,40 @@ void main() {
 
     expect(await repository.watchSchedules().first, isEmpty);
   });
+
+  test('local reminder repository rejects invalid reminder times', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalReminderRepository(database);
+    final now = DateTime.utc(2026, 6, 9, 8);
+
+    expect(
+      () => repository.upsertSchedule(
+        ReminderSchedule(
+          id: 'bad-hour',
+          label: 'Bad hour',
+          hour: 24,
+          minute: 0,
+          isEnabled: true,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => repository.upsertSchedule(
+        ReminderSchedule(
+          id: 'bad-minute',
+          label: 'Bad minute',
+          hour: 8,
+          minute: 60,
+          isEnabled: true,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ),
+      throwsArgumentError,
+    );
+  });
 }
