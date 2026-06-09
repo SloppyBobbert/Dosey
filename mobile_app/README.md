@@ -9,6 +9,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS support in sc
 - Flutter/Dart app shell with Today, Reminders, Controller, Log, and Settings tabs.
 - Safety-first home/settings copy and safety acknowledgement storage.
 - Local Drift/SQLite database for app settings, reminder schedules, cached auth state, and dose logs.
+- Simple local reminder add/edit/delete controls with enabled/disabled state.
 - Device roles: Android robot phone, Android personal phone, and iOS personal phone only.
 - Google sign-in is behind an app-owned interface with no Firebase/Supabase backend yet.
 - Controller simulator, notifications, storage, auth, and permission seams stay behind app-owned interfaces.
