@@ -1,11 +1,19 @@
 import 'dart:async';
 
+import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
-import 'package:dosey_app/core/auth/google_auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/bluetooth/flutter_blue_plus_ble_gateway.dart';
+import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
+import 'package:dosey_app/core/connectivity/connectivity_plus_gateway.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
+import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
+import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -51,14 +59,19 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       reminders: LocalReminderRepository(_database),
       doseLog: doseLog,
       localAuth: localAuth,
-      auth: GoogleAuthService(localAuth),
+      auth: AppAuthService(localAuth: localAuth),
       controller: SimulatedControllerGateway(doseLog),
+      ble: FlutterBluePlusBleGateway(),
+      connectivity: ConnectivityPlusGateway(),
+      reminderScheduler: FlutterLocalNotificationScheduler(),
+      permissions: PermissionHandlerGateway(),
     );
   }
 
   @override
   void dispose() {
     unawaited(_dependencies.controller.close());
+    unawaited(_dependencies.ble.close());
     if (_ownsDatabase) {
       unawaited(_database.close());
     }
@@ -83,6 +96,10 @@ class DoseyAppDependencies {
     required this.localAuth,
     required this.auth,
     required this.controller,
+    required this.ble,
+    required this.connectivity,
+    required this.reminderScheduler,
+    required this.permissions,
   });
 
   final DoseyDatabase database;
@@ -92,6 +109,10 @@ class DoseyAppDependencies {
   final LocalAuthRepository localAuth;
   final AuthService auth;
   final ControllerGateway controller;
+  final BleGateway ble;
+  final ConnectivityGateway connectivity;
+  final ReminderScheduler reminderScheduler;
+  final AppPermissionGateway permissions;
 }
 
 class _DoseyAppScopeInherited extends InheritedWidget {

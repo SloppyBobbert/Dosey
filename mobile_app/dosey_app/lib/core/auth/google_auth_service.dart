@@ -4,7 +4,7 @@ import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-class GoogleAuthService implements AuthService {
+class GoogleAuthService {
   GoogleAuthService(
     this._localAuth, {
     GoogleAccountGateway? googleAccountGateway,
@@ -16,7 +16,6 @@ class GoogleAuthService implements AuthService {
 
   Future<void>? _initialization;
 
-  @override
   Stream<AuthSession> watchSession() => _localAuth.watchSession();
 
   Future<void> restorePreviousGoogleSession() async {
@@ -28,7 +27,6 @@ class GoogleAuthService implements AuthService {
     }
   }
 
-  @override
   Future<AuthSession> signInWithGoogle() async {
     await _ensureInitialized();
     final account = await _googleAccountGateway.authenticate(
@@ -39,7 +37,6 @@ class GoogleAuthService implements AuthService {
     return AuthSession.signedIn(user);
   }
 
-  @override
   Future<void> signOut() async {
     try {
       await _ensureInitialized();
