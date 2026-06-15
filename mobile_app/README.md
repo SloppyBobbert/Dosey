@@ -42,3 +42,11 @@ dart run build_runner build
 ```
 
 Android SDK platforms 35 and 36 and OpenJDK 17 are configured locally for the first Moto G Play builds. Xcode 26.5 and CocoaPods 1.16.2 are configured for local iOS no-codesign builds.
+
+## CI
+
+GitHub Actions runs Mobile CI for pull requests and pushes to `main`. The workflow checks committed whitespace, generated Drift code, formatting, analyzer output, tests, and an Android debug APK build from `mobile_app/dosey_app/`.
+
+The Android debug APK is uploaded as a short-lived workflow artifact for basic install/build confirmation. It is not a release build.
+
+iOS no-codesign builds still run locally because GitHub macOS runners are slower and costlier.

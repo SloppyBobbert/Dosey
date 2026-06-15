@@ -49,6 +49,22 @@ flutter build ios --debug --no-codesign
 dart run build_runner build
 ```
 
+## CI commands
+
+Mobile CI runs the non-iOS subset on GitHub Actions:
+
+```sh
+flutter pub get
+dart run build_runner build
+git diff --exit-code -- lib/core/storage/dosey_database.g.dart
+dart format --set-exit-if-changed .
+flutter analyze
+flutter test
+flutter build apk --debug
+```
+
+The workflow also checks committed whitespace with `git diff --check` and uploads the Android debug APK as a short-lived artifact. iOS no-codesign builds still run locally.
+
 ## Local toolchain notes
 
 - Android SDK: `/opt/homebrew/share/android-commandlinetools`
