@@ -165,4 +165,22 @@ void main() {
 
     expect(find.text('No reminders yet.'), findsOneWidget);
   });
+
+  testWidgets('reminder form is scrollable in the bottom sheet', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.tap(find.text('Reminders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Label'), findsOneWidget);
+    expect(find.text('Save reminder'), findsOneWidget);
+  });
 }
