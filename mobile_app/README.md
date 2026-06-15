@@ -45,6 +45,8 @@ Android SDK platforms 35 and 36 and OpenJDK 17 are configured locally for the fi
 
 ## CI
 
-GitHub Actions runs Mobile CI for pull requests and pushes to `main`. The workflow checks formatting, analyzer output, tests, and an Android debug APK build from `mobile_app/dosey_app/`.
+GitHub Actions runs Mobile CI for pull requests and pushes to `main`. The workflow checks committed whitespace, generated Drift code, formatting, analyzer output, tests, and an Android debug APK build from `mobile_app/dosey_app/`.
+
+The Android debug APK is uploaded as a short-lived workflow artifact for basic install/build confirmation. It is not a release build.
 
 iOS no-codesign builds still run locally because GitHub macOS runners are slower and costlier.

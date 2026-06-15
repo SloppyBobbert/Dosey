@@ -172,7 +172,7 @@ flutter build ios --debug --no-codesign
 dart run build_runner build
 ```
 
-Pull requests also run Mobile CI through GitHub Actions. The workflow checks Flutter formatting, analyzer output, tests, and an Android debug APK build on Ubuntu. iOS builds stay local for now because they require macOS runners.
+Pull requests also run Mobile CI through GitHub Actions. The workflow checks committed whitespace, Drift generated code, Flutter formatting, analyzer output, tests, and an Android debug APK build on Ubuntu. It also uploads the debug APK as a short-lived workflow artifact. iOS builds stay local for now because they require macOS runners.
 
 Local setup so far:
 
