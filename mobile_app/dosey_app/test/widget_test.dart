@@ -125,4 +125,44 @@ void main() {
     expect(find.text('Morning vitamin'), findsNothing);
     expect(find.text('No reminders yet.'), findsOneWidget);
   });
+
+  testWidgets('reminder form validates required label and time range', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.tap(find.text('Reminders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add reminder'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter a reminder label.'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Label'),
+      'Vitamin D',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '24');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '60');
+    await tester.tap(find.text('Save reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hour must be 0 through 23.'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
+    await tester.tap(find.text('Save reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Minute must be 0 through 59.'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No reminders yet.'), findsOneWidget);
+  });
 }

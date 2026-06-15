@@ -119,7 +119,7 @@ class _ReminderTile extends StatelessWidget {
       await reminders.upsertSchedule(
         schedule.copyWith(isEnabled: value, updatedAt: DateTime.now().toUtc()),
       );
-    } catch (error) {
+    } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -130,7 +130,7 @@ class _ReminderTile extends StatelessWidget {
   Future<void> _delete(BuildContext context) async {
     try {
       await reminders.deleteSchedule(schedule.id);
-    } catch (error) {
+    } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -154,6 +154,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
   late final TextEditingController _hourController;
   late final TextEditingController _minuteController;
   late bool _isEnabled;
+  var _isSaving = false;
   String? _errorText;
 
   @override
@@ -253,7 +254,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
               ),
               const Spacer(),
               FilledButton(
-                onPressed: _save,
+                onPressed: _isSaving ? null : _save,
                 child: const Text('Save reminder'),
               ),
             ],
@@ -264,6 +265,8 @@ class _ReminderSheetState extends State<_ReminderSheet> {
   }
 
   Future<void> _save() async {
+    if (_isSaving) return;
+
     final label = _labelController.text.trim();
     final hour = int.tryParse(_hourController.text.trim());
     final minute = int.tryParse(_minuteController.text.trim());
@@ -281,6 +284,11 @@ class _ReminderSheetState extends State<_ReminderSheet> {
       return;
     }
 
+    setState(() {
+      _errorText = null;
+      _isSaving = true;
+    });
+
     final now = DateTime.now().toUtc();
     final existing = widget.schedule;
     final schedule = ReminderSchedule(
@@ -295,9 +303,12 @@ class _ReminderSheetState extends State<_ReminderSheet> {
 
     try {
       await widget.reminders.upsertSchedule(schedule);
-    } catch (error) {
+    } on Object catch (error) {
       if (!mounted) return;
-      setState(() => _errorText = 'Reminder save failed: $error');
+      setState(() {
+        _errorText = 'Reminder save failed: $error';
+        _isSaving = false;
+      });
       return;
     }
 
