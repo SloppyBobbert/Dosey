@@ -4,6 +4,17 @@ Flutter app workspace for Dosey.
 
 The app lives in `mobile_app/dosey_app/` and keeps Android and iOS support in scope from the start.
 
+## Quick status
+
+| Item | Status |
+| --- | --- |
+| App shell | Today, Reminders, Controller, Log, Settings |
+| Local storage | Drift/SQLite |
+| Reminders | Local add/edit/delete and enabled state |
+| Auth | Google sign-in wrapper, no backend yet |
+| Controller | Simulator only; no BLE package yet |
+| Builds | Android debug APK and iOS no-codesign debug build run locally |
+
 ## Current app
 
 - Flutter/Dart app shell with Today, Reminders, Controller, Log, and Settings tabs.

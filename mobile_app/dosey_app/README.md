@@ -2,6 +2,13 @@
 
 Flutter app for the Dosey medication-reminder robot prototype.
 
+## Status badges
+
+![Flutter](https://img.shields.io/badge/Flutter-3.44.1-02569B?logo=flutter&logoColor=white)
+![Dart](https://img.shields.io/badge/Dart-3.12.1-0175C2?logo=dart&logoColor=white)
+![Local data](https://img.shields.io/badge/local%20data-Drift%20%2F%20SQLite-336791)
+![Backend](https://img.shields.io/badge/backend-none%20yet-lightgrey)
+
 ## Current scope
 
 - Android and iOS app shell with Today, Reminders, Controller, Log, and Settings tabs.
@@ -11,6 +18,13 @@ Flutter app for the Dosey medication-reminder robot prototype.
 - Google sign-in through an app-owned auth interface; no Firebase/Supabase backend yet.
 - App-owned interfaces for controller/BLE, auth, reminders, permissions, and dose logging.
 - Drift/SQLite local database for device role settings, reminders, cached auth state, and dose log events.
+
+## What works locally
+
+- Create, edit, disable, and delete local reminders.
+- Store device role, safety acknowledgement, cached auth state, and dose log events locally.
+- Exercise controller flows with a simulator before BLE exists.
+- Run Android debug APK and iOS no-codesign debug builds on this machine.
 
 Device role rules:
 
