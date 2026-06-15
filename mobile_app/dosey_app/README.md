@@ -49,6 +49,18 @@ flutter build ios --debug --no-codesign
 dart run build_runner build
 ```
 
+## CI commands
+
+Mobile CI runs the non-iOS subset on GitHub Actions:
+
+```sh
+flutter pub get
+dart format --set-exit-if-changed .
+flutter analyze
+flutter test
+flutter build apk --debug
+```
+
 ## Local toolchain notes
 
 - Android SDK: `/opt/homebrew/share/android-commandlinetools`

@@ -4,6 +4,7 @@
 [![Medical grade](https://img.shields.io/badge/medical--grade-no-red)](#safety)
 [![Mobile](https://img.shields.io/badge/mobile-Flutter-02569B?logo=flutter&logoColor=white)](#mobile-app)
 [![Local data](https://img.shields.io/badge/local%20data-Drift%20%2F%20SQLite-336791)](#mobile-app)
+[![Mobile CI](https://github.com/SloppyBobbert/Dosey/actions/workflows/mobile-ci.yml/badge.svg)](https://github.com/SloppyBobbert/Dosey/actions/workflows/mobile-ci.yml)
 [![Controller](https://img.shields.io/badge/controller-ESP32--C6-333333)](#firmware)
 [![Hardware](https://img.shields.io/badge/hardware-not%20dispensing%20yet-lightgrey)](#project-status)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
@@ -170,6 +171,8 @@ flutter build ios --debug --no-codesign
 # Run this after Drift schema changes:
 dart run build_runner build
 ```
+
+Pull requests also run Mobile CI through GitHub Actions. The workflow checks Flutter formatting, analyzer output, tests, and an Android debug APK build on Ubuntu. iOS builds stay local for now because they require macOS runners.
 
 Local setup so far:
 
