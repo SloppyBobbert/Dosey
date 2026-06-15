@@ -3,12 +3,25 @@
 [![Status](https://img.shields.io/badge/status-early%20prototype-orange)](#project-status)
 [![Medical grade](https://img.shields.io/badge/medical--grade-no-red)](#safety)
 [![Mobile](https://img.shields.io/badge/mobile-Flutter-02569B?logo=flutter&logoColor=white)](#mobile-app)
+[![Local data](https://img.shields.io/badge/local%20data-Drift%20%2F%20SQLite-336791)](#mobile-app)
 [![Controller](https://img.shields.io/badge/controller-ESP32--C6-333333)](#firmware)
+[![Hardware](https://img.shields.io/badge/hardware-not%20dispensing%20yet-lightgrey)](#project-status)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
 Dosey is an early medication-reminder robot prototype. It pairs a phone app with a small ESP32 controller and a premade pill carousel so the robot can remind, react, and present a preloaded dose.
 
 This is a prototype and research build. It is not a medical-grade device.
+
+## At a glance
+
+| Area | Current state |
+| --- | --- |
+| Mobile app | Flutter app with local reminders, settings, auth cache, dose log, and controller simulator |
+| Local data | Drift/SQLite on the phone app only |
+| Controller | XIAO ESP32-C6 planned; firmware not started yet |
+| Mechanism | Premade carousel direction chosen; movement not proven yet |
+| Cloud sync | Not selected or implemented |
+| Safety status | Fake-pill testing only; not for real medication |
 
 ## Safety
 
@@ -115,10 +128,13 @@ Dosey/
 
 Useful docs:
 
-- [`docs/wiring.md`](docs/wiring.md) — Grove ports, XIAO pin map, power paths, shared grounds
-- [`docs/protocol.md`](docs/protocol.md) — BLE/serial command, ACK/NACK, status, and event messages
-- [`docs/mobile_stack.md`](docs/mobile_stack.md) — Flutter mobile architecture notes
-- [`docs/decisions.md`](docs/decisions.md) — architecture and build-direction decisions
+| Doc | Use it for |
+| --- | --- |
+| [`docs/wiring.md`](docs/wiring.md) | Grove ports, XIAO pin map, power paths, shared grounds |
+| [`docs/protocol.md`](docs/protocol.md) | BLE/serial command, ACK/NACK, status, and event messages |
+| [`docs/mobile_stack.md`](docs/mobile_stack.md) | Flutter mobile architecture notes |
+| [`docs/decisions.md`](docs/decisions.md) | Architecture and build-direction decisions |
+| [`docs/test_plan.md`](docs/test_plan.md) | Bring-up checks, app checks, and hardware test criteria |
 
 ## Firmware
 
