@@ -73,4 +73,114 @@ void main() {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets('reminders tab adds edits toggles and deletes reminders', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.tap(find.text('Reminders'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No reminders yet.'), findsOneWidget);
+    expect(find.text('Add reminder'), findsOneWidget);
+
+    await tester.tap(find.text('Add reminder'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Label'),
+      'Vitamin D',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
+    await tester.tap(find.text('Save reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('08:30'), findsOneWidget);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+
+    await tester.tap(find.byTooltip('Edit reminder'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Label'),
+      'Morning vitamin',
+    );
+    await tester.tap(find.text('Save reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsNothing);
+    expect(find.text('Morning vitamin'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Morning vitamin'), findsNothing);
+    expect(find.text('No reminders yet.'), findsOneWidget);
+  });
+
+  testWidgets('reminder form validates required label and time range', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.tap(find.text('Reminders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add reminder'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter a reminder label.'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Label'),
+      'Vitamin D',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '24');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '60');
+    await tester.tap(find.text('Save reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hour must be 0 through 23.'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
+    await tester.tap(find.text('Save reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Minute must be 0 through 59.'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No reminders yet.'), findsOneWidget);
+  });
+
+  testWidgets('reminder form is scrollable in the bottom sheet', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.tap(find.text('Reminders'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add reminder'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Label'), findsOneWidget);
+    expect(find.text('Save reminder'), findsOneWidget);
+  });
 }

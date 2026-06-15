@@ -22,4 +22,22 @@ class ReminderSchedule {
     final paddedMinute = minute.toString().padLeft(2, '0');
     return '$paddedHour:$paddedMinute';
   }
+
+  ReminderSchedule copyWith({
+    String? label,
+    int? hour,
+    int? minute,
+    bool? isEnabled,
+    DateTime? updatedAt,
+  }) {
+    return ReminderSchedule(
+      id: id,
+      label: label ?? this.label,
+      hour: hour ?? this.hour,
+      minute: minute ?? this.minute,
+      isEnabled: isEnabled ?? this.isEnabled,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
 }

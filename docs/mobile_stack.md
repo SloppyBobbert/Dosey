@@ -6,7 +6,7 @@ First physical test device: 2024 Moto G Play. Keep iOS support in the architectu
 
 ## Current app
 
-The Flutter app lives in `mobile_app/dosey_app/`. It currently has a plain five-tab shell: Today, Reminders, Controller, Log, and Settings. It also has safety acknowledgement storage, local reminder schedule storage, Google sign-in behind an app-owned auth interface, a controller simulator, app-owned interfaces for controller communication, reminders, permissions, and dose logging, and a local Drift/SQLite data layer.
+The Flutter app lives in `mobile_app/dosey_app/`. It currently has a plain five-tab shell: Today, Reminders, Controller, Log, and Settings. It also has safety acknowledgement storage, simple local reminder add/edit/delete controls, Google sign-in behind an app-owned auth interface, a controller simulator, app-owned interfaces for controller communication, reminders, permissions, and dose logging, and a local Drift/SQLite data layer.
 
 Do not add a real BLE package until the command/status protocol in `docs/protocol.md` is drafted. Do not add Firebase, Supabase, or cloud sync until the backend direction is chosen.
 

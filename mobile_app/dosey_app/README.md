@@ -6,7 +6,7 @@ Flutter app for the Dosey medication-reminder robot prototype.
 
 - Android and iOS app shell with Today, Reminders, Controller, Log, and Settings tabs.
 - Safety-first home/settings copy and safety acknowledgement storage.
-- Local reminder schedule storage.
+- Local reminder schedule storage with simple add/edit/delete controls and enabled/disabled state.
 - Controller simulator for app flow testing before BLE.
 - Google sign-in through an app-owned auth interface; no Firebase/Supabase backend yet.
 - App-owned interfaces for controller/BLE, auth, reminders, permissions, and dose logging.

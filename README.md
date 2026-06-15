@@ -34,7 +34,7 @@ Dosey is built around three main systems:
    - Flutter/Dart app for Android and iOS
    - First test device: 2024 Moto G Play
    - Uses a local Drift/SQLite database for app settings, reminder schedules, cached auth state, and dose logs
-   - Handles reminders, schedule UI, local logs, Google sign-in plumbing, permissions, and app-controller messaging
+   - Handles local reminder add/edit/delete controls, local logs, Google sign-in plumbing, permissions, and app-controller messaging
    - Supports Android robot phone mode, Android personal phone mode, and iOS personal phone mode only
 
 2. **Controller**
@@ -177,7 +177,7 @@ Use rough fixtures until repeatable one-slot movement works. Save measurements a
 
 ## Project status
 
-Early prototype. The repo now has a safety-first Flutter app shell, local reminder/settings/auth/dose-log storage, a controller simulator, Google sign-in plumbing, and local Android/iOS tooling. It still has no firmware, BLE implementation, cloud sync, or carousel movement test.
+Early prototype. The repo now has a safety-first Flutter app shell, local reminder add/edit/delete controls, local settings/auth/dose-log storage, a controller simulator, Google sign-in plumbing, and local Android/iOS tooling. It still has no firmware, BLE implementation, cloud sync, or carousel movement test.
 
 Near-term work:
 
