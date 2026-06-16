@@ -1,7 +1,7 @@
 import 'package:dosey_app/core/notifications/local_notification_models.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_native_timezone_latest/flutter_native_timezone_latest.dart';
 import 'package:timezone/data/latest.dart' as timezone_data;
 import 'package:timezone/timezone.dart';
 
@@ -125,19 +125,22 @@ abstract interface class LocalNotificationsPlugin {
 
 class FlutterLocalNotificationsPluginAdapter
     implements LocalNotificationsPlugin {
-  FlutterLocalNotificationsPluginAdapter()
-    : _plugin = FlutterLocalNotificationsPlugin();
+  FlutterLocalNotificationsPluginAdapter({
+    NotificationTimezoneInitializer? timezoneInitializer,
+  }) : _plugin = FlutterLocalNotificationsPlugin(),
+       _timezoneInitializer =
+           timezoneInitializer ?? const NotificationTimezoneInitializer();
 
   final FlutterLocalNotificationsPlugin _plugin;
+  final NotificationTimezoneInitializer _timezoneInitializer;
   bool _isInitialized = false;
-  bool _timezonesInitialized = false;
 
   @override
   Future<void> initialize() async {
     if (_isInitialized) {
       return;
     }
-    await _initializeTimezones();
+    await _timezoneInitializer.ensureInitialized();
     await _plugin.initialize(
       const InitializationSettings(
         android: AndroidInitializationSettings('@mipmap/ic_launcher'),
@@ -216,14 +219,46 @@ class FlutterLocalNotificationsPluginAdapter
   TZDateTime scheduledDate(DateTime dateTime) {
     return TZDateTime.from(dateTime, local);
   }
+}
 
-  Future<void> _initializeTimezones() async {
+class NotificationTimezoneInitializer {
+  const NotificationTimezoneInitializer({
+    this.gateway = const PlatformChannelLocalTimezoneGateway(),
+  });
+
+  final LocalTimezoneGateway gateway;
+  static bool _timezonesInitialized = false;
+
+  Future<void> ensureInitialized() async {
     if (_timezonesInitialized) {
       return;
     }
     timezone_data.initializeTimeZones();
-    final timeZoneName = await FlutterNativeTimezoneLatest.getLocalTimezone();
+    final timeZoneName = await gateway.localTimezoneName();
     setLocalLocation(getLocation(timeZoneName));
     _timezonesInitialized = true;
+  }
+}
+
+abstract interface class LocalTimezoneGateway {
+  Future<String> localTimezoneName();
+}
+
+class PlatformChannelLocalTimezoneGateway implements LocalTimezoneGateway {
+  const PlatformChannelLocalTimezoneGateway({
+    this.channel = const MethodChannel(_channelName),
+  });
+
+  static const _channelName = 'com.sloppybobbert.dosey_app/timezone';
+
+  final MethodChannel channel;
+
+  @override
+  Future<String> localTimezoneName() async {
+    final timezoneName = await channel.invokeMethod<String>('getLocalTimezone');
+    if (timezoneName == null || timezoneName.isEmpty) {
+      throw StateError('Native timezone channel returned no timezone name.');
+    }
+    return timezoneName;
   }
 }

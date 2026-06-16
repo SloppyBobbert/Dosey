@@ -1,8 +1,11 @@
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
 import 'package:dosey_app/core/notifications/local_notification_models.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('dosey reminder notification channel stays stable', () {
     expect(doseyReminderNotificationChannel.id, 'dosey_reminders');
     expect(doseyReminderNotificationChannel.name, 'Dose reminders');
@@ -56,6 +59,37 @@ void main() {
       'cancel',
     ]);
   });
+
+  test(
+    'timezone initializer resolves and caches the device timezone',
+    () async {
+      final gateway = _FakeLocalTimezoneGateway('America/New_York');
+      final initializer = NotificationTimezoneInitializer(gateway: gateway);
+
+      await initializer.ensureInitialized();
+      await initializer.ensureInitialized();
+
+      expect(gateway.requests, 1);
+    },
+  );
+
+  test('platform channel timezone gateway reads native timezone', () async {
+    const channel = MethodChannel('com.sloppybobbert.dosey_app/timezone');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'getLocalTimezone');
+          return 'America/Los_Angeles';
+        });
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    final timezoneName = await const PlatformChannelLocalTimezoneGateway()
+        .localTimezoneName();
+
+    expect(timezoneName, 'America/Los_Angeles');
+  });
 }
 
 class _FakeLocalNotificationsPlugin implements LocalNotificationsPlugin {
@@ -94,5 +128,18 @@ class _FakeLocalNotificationsPlugin implements LocalNotificationsPlugin {
   Future<void> cancel(int id) async {
     cancelledIds.add(id);
     operations.add('cancel');
+  }
+}
+
+class _FakeLocalTimezoneGateway implements LocalTimezoneGateway {
+  _FakeLocalTimezoneGateway(this.timezoneName);
+
+  final String timezoneName;
+  int requests = 0;
+
+  @override
+  Future<String> localTimezoneName() async {
+    requests += 1;
+    return timezoneName;
   }
 }
