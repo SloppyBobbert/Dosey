@@ -24,7 +24,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS support in sc
 - Device roles: Android robot phone, Android personal phone, and iOS personal phone only.
 - `flutter_blue_plus` BLE foundation behind an app-owned interface; protocol still incomplete.
 - `connectivity_plus` behind an app-owned interface for advisory connectivity/Wi-Fi status only, not provisioning.
-- `google_sign_in` and `sign_in_with_apple` behind app-owned auth interfaces with no Firebase/Supabase backend yet.
+- `google_sign_in` plus a native iOS Apple sign-in bridge behind app-owned auth interfaces with no Firebase/Supabase backend yet.
 - `flutter_local_notifications` for local reminder notifications; channel/sound IDs are meant to stay stable, but custom sound assets may still need platform provisioning.
 - `permission_handler` behind an app-owned runtime permission interface.
 - No cloud sync or push notifications yet.

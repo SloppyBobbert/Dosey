@@ -17,5 +17,18 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.sloppybobbert.dosey_app/apple_auth"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "signIn" -> result.error(
+                    "APPLE_SIGN_IN_UNAVAILABLE",
+                    "Apple sign-in is only available on iOS in this prototype.",
+                    null
+                )
+                else -> result.notImplemented()
+            }
+        }
     }
 }

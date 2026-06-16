@@ -23,7 +23,7 @@ Selected background packages:
 
 - `flutter_blue_plus` for BLE foundation only.
 - `connectivity_plus` for advisory connectivity/Wi-Fi status only, not provisioning.
-- `google_sign_in` and `sign_in_with_apple` for Google/Apple-only auth.
+- `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
 - `flutter_local_notifications` for local reminder notifications and sounds.
 - `permission_handler` for runtime permission requests/checks.
 

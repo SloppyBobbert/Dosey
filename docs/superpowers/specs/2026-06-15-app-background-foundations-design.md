@@ -29,7 +29,7 @@ This branch does not cover:
 
 - `flutter_blue_plus` for BLE central/client behavior against the ESP32 peripheral
 - `connectivity_plus` for coarse connectivity state such as wifi/cellular/none
-- `sign_in_with_apple` for Apple sign-in support
+- a native iOS platform channel for Apple sign-in support
 - `flutter_local_notifications` for local notifications and sound/channel groundwork
 - `permission_handler` for centralized runtime permission requests
 

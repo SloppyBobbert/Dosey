@@ -12,7 +12,7 @@ The selected background foundation packages are:
 
 - `flutter_blue_plus` for BLE foundation only. The controller protocol is still not complete.
 - `connectivity_plus` for advisory connectivity and Wi-Fi status only. It does not handle Wi-Fi provisioning.
-- `google_sign_in` and `sign_in_with_apple` for Google/Apple-only auth.
+- `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
 - `flutter_local_notifications` for local notifications and reminder sounds.
 - `permission_handler` for runtime permission requests/checks.
 

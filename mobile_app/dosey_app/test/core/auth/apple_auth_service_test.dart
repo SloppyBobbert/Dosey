@@ -2,9 +2,12 @@ import 'package:dosey_app/core/auth/apple_auth_service.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('sign in with Apple caches the signed-in user', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
@@ -122,6 +125,34 @@ void main() {
     expect(session.user?.email, 'dosey@privaterelay.appleid.com');
     expect(session.user?.provider, AuthProvider.apple);
   });
+
+  test(
+    'Apple account gateway reads credentials from platform channel',
+    () async {
+      const channel = MethodChannel('com.sloppybobbert.dosey_app/apple_auth');
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            expect(call.method, 'signIn');
+            return <String, Object?>{
+              'id': 'apple-123',
+              'email': 'dosey@privaterelay.appleid.com',
+              'displayName': 'Dosey Tester',
+            };
+          });
+      addTearDown(() {
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(channel, null);
+      });
+
+      final account = await const AppleSignInAccountGateway(
+        channel: channel,
+      ).signIn();
+
+      expect(account.id, 'apple-123');
+      expect(account.email, 'dosey@privaterelay.appleid.com');
+      expect(account.displayName, 'Dosey Tester');
+    },
+  );
 }
 
 class _SuccessfulAppleGateway implements AppleAccountGateway {

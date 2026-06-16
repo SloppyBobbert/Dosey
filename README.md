@@ -151,7 +151,7 @@ BLE, notifications, local storage, auth, and permissions sit behind app-owned in
 
 - `flutter_blue_plus` for BLE foundation only; the real controller protocol is still incomplete.
 - `connectivity_plus` for advisory connectivity and Wi-Fi status only; this is not Wi-Fi provisioning.
-- `google_sign_in` + `sign_in_with_apple` for Google/Apple-only auth.
+- `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
 - `flutter_local_notifications` for local reminder notifications and sounds.
 - `permission_handler` for runtime permissions.
 

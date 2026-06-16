@@ -1,6 +1,6 @@
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:flutter/services.dart';
 
 class AppleAuthService {
   AppleAuthService(this._localAuth, {AppleAccountGateway? appleAccountGateway})
@@ -75,35 +75,33 @@ abstract interface class AppleAccountGateway {
 }
 
 class AppleSignInAccountGateway implements AppleAccountGateway {
+  const AppleSignInAccountGateway({
+    this.channel = const MethodChannel(_channelName),
+  });
+
+  static const _channelName = 'com.sloppybobbert.dosey_app/apple_auth';
+
+  final MethodChannel channel;
+
   @override
   Future<AppleAccountInfo> signIn() async {
-    final credential = await SignInWithApple.getAppleIDCredential(
-      scopes: [
-        AppleIDAuthorizationScopes.email,
-        AppleIDAuthorizationScopes.fullName,
-      ],
-    );
+    final credential = await channel.invokeMapMethod<String, Object?>('signIn');
+    if (credential == null) {
+      throw StateError('Apple sign-in did not return credentials.');
+    }
+
+    final id = credential['id'] as String?;
+    if (id == null || id.isEmpty) {
+      throw StateError('Apple sign-in did not return a user identifier.');
+    }
 
     return AppleAccountInfo(
-      id: credential.userIdentifier!,
-      email: credential.email,
-      displayName: _displayNameFromCredential(credential),
+      id: id,
+      email: credential['email'] as String?,
+      displayName: credential['displayName'] as String?,
     );
   }
 
   @override
   Future<void> signOut() async {}
-
-  String? _displayNameFromCredential(
-    AuthorizationCredentialAppleID credential,
-  ) {
-    final givenName = credential.givenName?.trim();
-    final familyName = credential.familyName?.trim();
-    final fullName = [
-      if (givenName != null && givenName.isNotEmpty) givenName,
-      if (familyName != null && familyName.isNotEmpty) familyName,
-    ].join(' ');
-
-    return fullName.isEmpty ? null : fullName;
-  }
 }

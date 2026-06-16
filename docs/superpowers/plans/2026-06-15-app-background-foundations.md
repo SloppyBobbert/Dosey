@@ -6,7 +6,7 @@
 
 **Architecture:** Keep every plugin behind an app-owned interface so the Flutter app does not depend directly on package APIs. Add small pure-Dart models for auth providers, BLE state, connectivity state, notification sound/channel config, and permission coverage; then add thin plugin-backed wrapper shells plus tests around the domain behavior.
 
-**Tech Stack:** Flutter 3.44.1, Dart 3.12.1, Drift/SQLite, `flutter_blue_plus`, `connectivity_plus`, `sign_in_with_apple`, `flutter_local_notifications`, `permission_handler`, `flutter_test`, `build_runner`
+**Tech Stack:** Flutter 3.44.1, Dart 3.12.1, Drift/SQLite, `flutter_blue_plus`, `connectivity_plus`, native iOS Apple sign-in bridge, `flutter_local_notifications`, `permission_handler`, `flutter_test`, `build_runner`
 
 ---
 
@@ -88,7 +88,7 @@ dependencies:
   flutter_blue_plus: ^1.35.5
   flutter_local_notifications: ^17.2.3
   permission_handler: ^11.3.1
-  sign_in_with_apple: ^6.1.4
+  # Apple sign-in uses a native iOS platform channel; keep plugin calls behind app-owned auth interfaces.
 ```
 
 Update `auth_service.dart` so the provider enum and service contract become:
