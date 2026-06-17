@@ -47,11 +47,18 @@ import UIKit
         return
       }
 
+      guard let anchor = self?.currentPresentationAnchor() else {
+        result(FlutterError(
+          code: "APPLE_SIGN_IN_NO_PRESENTATION_ANCHOR",
+          message: "No active window available for Apple sign-in.",
+          details: nil
+        ))
+        return
+      }
+
       let handler = AppleSignInHandler(
         result: result,
-        presentationAnchor: { [weak self] in
-          self?.currentPresentationAnchor() ?? ASPresentationAnchor()
-        },
+        presentationAnchor: { anchor },
         onFinish: { [weak self] in
           self?.appleSignInHandler = nil
         }
@@ -61,11 +68,12 @@ import UIKit
     }
   }
 
-  private func currentPresentationAnchor() -> ASPresentationAnchor {
-    let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-    return windowScenes
+  private func currentPresentationAnchor() -> ASPresentationAnchor? {
+    return UIApplication.shared.connectedScenes
+      .compactMap { $0 as? UIWindowScene }
+      .filter { $0.activationState == .foregroundActive }
       .flatMap { $0.windows }
-      .first { $0.isKeyWindow } ?? ASPresentationAnchor()
+      .first { $0.isKeyWindow }
   }
 }
 

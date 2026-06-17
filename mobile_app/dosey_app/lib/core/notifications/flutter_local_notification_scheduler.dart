@@ -11,13 +11,25 @@ class FlutterLocalNotificationScheduler implements ReminderScheduler {
 
   final LocalNotificationsPlugin _plugin;
   bool _isInitialized = false;
+  Future<void>? _initializing;
 
   Future<void> _ensureInitialized() async {
     if (_isInitialized) {
       return;
     }
-    await _plugin.initialize();
-    _isInitialized = true;
+    final inFlight = _initializing;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+    _initializing = _plugin.initialize().then((_) {
+      _isInitialized = true;
+    });
+    try {
+      await _initializing;
+    } finally {
+      _initializing = null;
+    }
   }
 
   @override
@@ -126,28 +138,42 @@ abstract interface class LocalNotificationsPlugin {
 class FlutterLocalNotificationsPluginAdapter
     implements LocalNotificationsPlugin {
   FlutterLocalNotificationsPluginAdapter({
+    FlutterLocalNotificationsPlugin? plugin,
     NotificationTimezoneInitializer? timezoneInitializer,
-  }) : _plugin = FlutterLocalNotificationsPlugin(),
+  }) : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
        _timezoneInitializer =
            timezoneInitializer ?? const NotificationTimezoneInitializer();
 
   final FlutterLocalNotificationsPlugin _plugin;
   final NotificationTimezoneInitializer _timezoneInitializer;
   bool _isInitialized = false;
+  Future<void>? _initializing;
 
   @override
   Future<void> initialize() async {
     if (_isInitialized) {
       return;
     }
-    await _timezoneInitializer.ensureInitialized();
-    await _plugin.initialize(
-      const InitializationSettings(
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-        iOS: DarwinInitializationSettings(),
-      ),
-    );
-    _isInitialized = true;
+    final inFlight = _initializing;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+    _initializing = () async {
+      await _timezoneInitializer.ensureInitialized();
+      await _plugin.initialize(
+        const InitializationSettings(
+          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+          iOS: DarwinInitializationSettings(),
+        ),
+      );
+      _isInitialized = true;
+    }();
+    try {
+      await _initializing;
+    } finally {
+      _initializing = null;
+    }
   }
 
   @override
@@ -228,15 +254,33 @@ class NotificationTimezoneInitializer {
 
   final LocalTimezoneGateway gateway;
   static bool _timezonesInitialized = false;
+  static Future<void>? _initializing;
 
   Future<void> ensureInitialized() async {
     if (_timezonesInitialized) {
       return;
     }
-    timezone_data.initializeTimeZones();
-    final timeZoneName = await gateway.localTimezoneName();
-    setLocalLocation(getLocation(timeZoneName));
-    _timezonesInitialized = true;
+    final inFlight = _initializing;
+    if (inFlight != null) {
+      await inFlight;
+      return;
+    }
+    _initializing = () async {
+      timezone_data.initializeTimeZones();
+      final timeZoneName = await gateway.localTimezoneName();
+      setLocalLocation(getLocation(timeZoneName));
+      _timezonesInitialized = true;
+    }();
+    try {
+      await _initializing;
+    } finally {
+      _initializing = null;
+    }
+  }
+
+  static void resetForTest() {
+    _timezonesInitialized = false;
+    _initializing = null;
   }
 }
 

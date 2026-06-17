@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
 import 'package:dosey_app/core/notifications/local_notification_models.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -60,6 +63,24 @@ void main() {
     ]);
   });
 
+  test('scheduler only initializes once during concurrent first use', () async {
+    final plugin = _BlockingFakeLocalNotificationsPlugin();
+    final scheduler = FlutterLocalNotificationScheduler(plugin: plugin);
+
+    final permissionFuture = scheduler.requestPermission();
+    final cancelFuture = scheduler.cancelDoseReminder('dose-42');
+    await Future<void>.delayed(Duration.zero);
+
+    expect(plugin.initializeCalls, 1);
+
+    plugin.completeInitialize();
+    await Future.wait([permissionFuture, cancelFuture]);
+
+    expect(plugin.initializeCalls, 1);
+    expect(plugin.permissionRequests, 1);
+    expect(plugin.cancelledIds, [1843149358]);
+  });
+
   test(
     'timezone initializer resolves and caches the device timezone',
     () async {
@@ -70,6 +91,49 @@ void main() {
       await initializer.ensureInitialized();
 
       expect(gateway.requests, 1);
+    },
+  );
+
+  test('timezone initializer coalesces concurrent initialization', () async {
+    NotificationTimezoneInitializer.resetForTest();
+    final gateway = _BlockingFakeLocalTimezoneGateway('America/New_York');
+    final initializer = NotificationTimezoneInitializer(gateway: gateway);
+
+    final first = initializer.ensureInitialized();
+    final second = initializer.ensureInitialized();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(gateway.requests, 1);
+
+    gateway.complete();
+    await Future.wait([first, second]);
+
+    expect(gateway.requests, 1);
+  });
+
+  test(
+    'adapter only initializes plugin and timezone once concurrently',
+    () async {
+      NotificationTimezoneInitializer.resetForTest();
+      final timezoneInitializer =
+          _BlockingFakeNotificationTimezoneInitializer();
+      final plugin = _FakeFlutterLocalNotificationsPlatformPlugin();
+      final adapter = TestFlutterLocalNotificationsPluginAdapter(
+        plugin: plugin,
+        timezoneInitializer: timezoneInitializer,
+      );
+
+      final first = adapter.initialize();
+      final second = adapter.initialize();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(timezoneInitializer.calls, 1);
+
+      timezoneInitializer.complete();
+      await Future.wait([first, second]);
+
+      expect(timezoneInitializer.calls, 1);
+      expect(plugin.initializeCalls, 1);
     },
   );
 
@@ -131,6 +195,25 @@ class _FakeLocalNotificationsPlugin implements LocalNotificationsPlugin {
   }
 }
 
+class _BlockingFakeLocalNotificationsPlugin
+    extends _FakeLocalNotificationsPlugin {
+  final Completer<void> _initializeCompleter = Completer<void>();
+  int initializeCalls = 0;
+
+  @override
+  Future<void> initialize() async {
+    initializeCalls += 1;
+    await _initializeCompleter.future;
+    return super.initialize();
+  }
+
+  void completeInitialize() {
+    if (!_initializeCompleter.isCompleted) {
+      _initializeCompleter.complete();
+    }
+  }
+}
+
 class _FakeLocalTimezoneGateway implements LocalTimezoneGateway {
   _FakeLocalTimezoneGateway(this.timezoneName);
 
@@ -142,4 +225,70 @@ class _FakeLocalTimezoneGateway implements LocalTimezoneGateway {
     requests += 1;
     return timezoneName;
   }
+}
+
+class _BlockingFakeLocalTimezoneGateway extends _FakeLocalTimezoneGateway {
+  _BlockingFakeLocalTimezoneGateway(super.timezoneName);
+
+  final Completer<void> _completer = Completer<void>();
+
+  @override
+  Future<String> localTimezoneName() async {
+    requests += 1;
+    await _completer.future;
+    return timezoneName;
+  }
+
+  void complete() {
+    if (!_completer.isCompleted) {
+      _completer.complete();
+    }
+  }
+}
+
+class _BlockingFakeNotificationTimezoneInitializer
+    extends NotificationTimezoneInitializer {
+  _BlockingFakeNotificationTimezoneInitializer();
+
+  final Completer<void> _completer = Completer<void>();
+  int calls = 0;
+
+  @override
+  Future<void> ensureInitialized() async {
+    calls += 1;
+    await _completer.future;
+  }
+
+  void complete() {
+    if (!_completer.isCompleted) {
+      _completer.complete();
+    }
+  }
+}
+
+class _FakeFlutterLocalNotificationsPlatformPlugin
+    implements FlutterLocalNotificationsPlugin {
+  int initializeCalls = 0;
+
+  @override
+  Future<bool?> initialize(
+    InitializationSettings initializationSettings, {
+    DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse,
+    DidReceiveBackgroundNotificationResponseCallback?
+    onDidReceiveBackgroundNotificationResponse,
+  }) async {
+    initializeCalls += 1;
+    return true;
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class TestFlutterLocalNotificationsPluginAdapter
+    extends FlutterLocalNotificationsPluginAdapter {
+  TestFlutterLocalNotificationsPluginAdapter({
+    required super.timezoneInitializer,
+    required FlutterLocalNotificationsPlugin plugin,
+  }) : super(plugin: plugin);
 }

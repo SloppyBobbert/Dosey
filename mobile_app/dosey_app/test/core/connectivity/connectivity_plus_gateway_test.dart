@@ -18,7 +18,7 @@ void main() {
 
       expect(await gateway.currentConnectivity(), ConnectivityState.offline);
 
-      final states = gateway.watchConnectivity().take(3).toList();
+      final states = gateway.watchConnectivity().take(4).toList();
       updates.add(const [PluginConnectivityType.wifi]);
       updates.add(const [PluginConnectivityType.mobile]);
       updates.add(const [PluginConnectivityType.vpn]);
@@ -27,6 +27,7 @@ void main() {
         ConnectivityState.offline,
         ConnectivityState.wifi,
         ConnectivityState.cellular,
+        ConnectivityState.other,
       ]);
     },
   );

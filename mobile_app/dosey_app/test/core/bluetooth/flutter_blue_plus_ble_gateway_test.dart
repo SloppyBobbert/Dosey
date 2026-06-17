@@ -98,6 +98,43 @@ void main() {
 
     await gateway.close();
   });
+
+  test(
+    'connecting to a different device disconnects the active device first',
+    () async {
+      final plugin = _FakeFlutterBluePlusPlugin(
+        adapterStates: const Stream.empty(),
+        currentAdapterState: PluginBleAdapterState.on,
+        connectionStatesByDeviceId: {
+          'dosey-1': const Stream.empty(),
+          'dosey-2': const Stream.empty(),
+        },
+      );
+      final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+
+      await gateway.connect(deviceId: 'dosey-1', deviceName: 'Dosey One');
+      await gateway.connect(deviceId: 'dosey-2', deviceName: 'Dosey Two');
+
+      expect(plugin.connectCalls, ['dosey-1', 'dosey-2']);
+      expect(plugin.disconnectCalls, ['dosey-1']);
+
+      await gateway.close();
+    },
+  );
+
+  test('close disconnects the active device before shutting down', () async {
+    final plugin = _FakeFlutterBluePlusPlugin(
+      adapterStates: const Stream.empty(),
+      currentAdapterState: PluginBleAdapterState.on,
+      connectionStatesByDeviceId: {'dosey-1': const Stream.empty()},
+    );
+    final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+
+    await gateway.connect(deviceId: 'dosey-1', deviceName: 'Dosey One');
+    await gateway.close();
+
+    expect(plugin.disconnectCalls, ['dosey-1']);
+  });
 }
 
 class _FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {

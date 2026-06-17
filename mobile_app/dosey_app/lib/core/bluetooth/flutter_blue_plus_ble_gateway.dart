@@ -29,6 +29,10 @@ class FlutterBluePlusBleGateway implements BleGateway {
 
   @override
   Future<void> connect({required String deviceId, String? deviceName}) async {
+    final activeDeviceId = _connectionSnapshot.deviceId;
+    if (activeDeviceId != null && activeDeviceId != deviceId) {
+      await disconnect();
+    }
     await _clearConnectionSubscription();
     _setConnection(
       BleConnectionSnapshot.connecting(
@@ -79,8 +83,18 @@ class FlutterBluePlusBleGateway implements BleGateway {
 
   @override
   Future<void> close() async {
+    final activeDeviceId = _connectionSnapshot.deviceId;
+    if (activeDeviceId != null) {
+      try {
+        await _plugin.disconnect(activeDeviceId);
+      } catch (_) {
+        // Closing is best effort; keep disposal from surfacing transport errors.
+      }
+    }
     await _clearConnectionSubscription();
-    await _connectionController.close();
+    if (!_connectionController.isClosed) {
+      await _connectionController.close();
+    }
   }
 
   Future<void> _clearConnectionSubscription() async {

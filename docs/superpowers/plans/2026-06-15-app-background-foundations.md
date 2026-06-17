@@ -29,10 +29,10 @@
 - Create: `mobile_app/dosey_app/lib/core/notifications/flutter_local_notification_scheduler.dart`
 - Create: `mobile_app/dosey_app/lib/core/permissions/permission_handler_gateway.dart`
 - Create: `mobile_app/dosey_app/test/core/auth/apple_auth_service_test.dart`
-- Create: `mobile_app/dosey_app/test/core/bluetooth/ble_gateway_test.dart`
-- Create: `mobile_app/dosey_app/test/core/connectivity/connectivity_gateway_test.dart`
-- Create: `mobile_app/dosey_app/test/core/notifications/local_notification_models_test.dart`
-- Create: `mobile_app/dosey_app/test/core/permissions/app_permission_gateway_test.dart`
+- Create: `mobile_app/dosey_app/test/core/bluetooth/flutter_blue_plus_ble_gateway_test.dart`
+- Create: `mobile_app/dosey_app/test/core/connectivity/connectivity_plus_gateway_test.dart`
+- Create: `mobile_app/dosey_app/test/core/notifications/flutter_local_notification_scheduler_test.dart`
+- Create: `mobile_app/dosey_app/test/core/permissions/permission_handler_gateway_test.dart`
 - Modify: `README.md`
 - Modify: `docs/mobile_stack.md`
 - Modify: `mobile_app/README.md`
@@ -86,8 +86,8 @@ Add these dependencies to `mobile_app/dosey_app/pubspec.yaml`:
 dependencies:
   connectivity_plus: ^6.0.5
   flutter_blue_plus: ^1.35.5
-  flutter_local_notifications: ^17.2.3
-  permission_handler: ^11.3.1
+  flutter_local_notifications: ^19.4.2
+  permission_handler: ^12.0.1
   # Apple sign-in uses a native iOS platform channel; keep plugin calls behind app-owned auth interfaces.
 ```
 
@@ -142,8 +142,8 @@ git commit -m "feat: add auth background foundations"
 - Create: `mobile_app/dosey_app/lib/core/bluetooth/flutter_blue_plus_ble_gateway.dart`
 - Create: `mobile_app/dosey_app/lib/core/connectivity/connectivity_gateway.dart`
 - Create: `mobile_app/dosey_app/lib/core/connectivity/connectivity_plus_gateway.dart`
-- Test: `mobile_app/dosey_app/test/core/bluetooth/ble_gateway_test.dart`
-- Test: `mobile_app/dosey_app/test/core/connectivity/connectivity_gateway_test.dart`
+- Test: `mobile_app/dosey_app/test/core/bluetooth/flutter_blue_plus_ble_gateway_test.dart`
+- Test: `mobile_app/dosey_app/test/core/connectivity/connectivity_plus_gateway_test.dart`
 
 - [ ] **Step 1: Write the failing model tests**
 
@@ -157,9 +157,9 @@ void main() {
     expect(const BleConnectionSnapshot.disconnected().isConnected, isFalse);
   });
 
-  test('connectivity type distinguishes wifi and offline', () {
-    expect(ConnectivityKind.values, contains(ConnectivityKind.wifi));
-    expect(ConnectivityKind.values, contains(ConnectivityKind.offline));
+  test('connectivity state distinguishes wifi and offline', () {
+    expect(ConnectivityState.values, contains(ConnectivityState.wifi));
+    expect(ConnectivityState.values, contains(ConnectivityState.offline));
   });
 }
 ```
@@ -170,7 +170,7 @@ Run:
 
 ```sh
 cd mobile_app/dosey_app
-flutter test test/core/bluetooth/ble_gateway_test.dart test/core/connectivity/connectivity_gateway_test.dart
+flutter test test/core/bluetooth/flutter_blue_plus_ble_gateway_test.dart test/core/connectivity/connectivity_plus_gateway_test.dart
 ```
 
 Expected: FAIL because these types do not exist yet.
@@ -215,11 +215,11 @@ abstract interface class BleGateway {
 `connectivity_gateway.dart` should define:
 
 ```dart
-enum ConnectivityKind { offline, wifi, cellular, other }
+enum ConnectivityState { offline, wifi, cellular, other }
 
 abstract interface class ConnectivityGateway {
-  Stream<ConnectivityKind> watchConnectivity();
-  Future<ConnectivityKind> currentConnectivity();
+  Stream<ConnectivityState> watchConnectivity();
+  Future<ConnectivityState> currentConnectivity();
 }
 ```
 
@@ -231,7 +231,7 @@ Run:
 
 ```sh
 cd mobile_app/dosey_app
-flutter test test/core/bluetooth/ble_gateway_test.dart test/core/connectivity/connectivity_gateway_test.dart
+flutter test test/core/bluetooth/flutter_blue_plus_ble_gateway_test.dart test/core/connectivity/connectivity_plus_gateway_test.dart
 ```
 
 Expected: PASS.
@@ -250,8 +250,8 @@ git commit -m "feat: add bluetooth and connectivity foundations"
 - Create: `mobile_app/dosey_app/lib/core/permissions/permission_handler_gateway.dart`
 - Create: `mobile_app/dosey_app/lib/core/notifications/local_notification_models.dart`
 - Create: `mobile_app/dosey_app/lib/core/notifications/flutter_local_notification_scheduler.dart`
-- Test: `mobile_app/dosey_app/test/core/permissions/app_permission_gateway_test.dart`
-- Test: `mobile_app/dosey_app/test/core/notifications/local_notification_models_test.dart`
+- Test: `mobile_app/dosey_app/test/core/permissions/permission_handler_gateway_test.dart`
+- Test: `mobile_app/dosey_app/test/core/notifications/flutter_local_notification_scheduler_test.dart`
 
 - [ ] **Step 1: Write the failing permission and notification tests**
 
@@ -261,13 +261,14 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/notifications/local_notification_models.dart';
 
 void main() {
-  test('permission enum includes bluetooth and notifications foundations', () {
-    expect(AppPermission.values, contains(AppPermission.bluetooth));
+  test('permission enum includes split Bluetooth and notifications foundations', () {
+    expect(AppPermission.values, contains(AppPermission.bluetoothScan));
+    expect(AppPermission.values, contains(AppPermission.bluetoothConnect));
     expect(AppPermission.values, contains(AppPermission.notifications));
   });
 
   test('reminder notification channel id stays stable', () {
-    expect(reminderNotificationChannel.id, 'dosey_reminders');
+    expect(doseyReminderNotificationChannel.id, 'dosey_reminders');
   });
 }
 ```
@@ -278,7 +279,7 @@ Run:
 
 ```sh
 cd mobile_app/dosey_app
-flutter test test/core/permissions/app_permission_gateway_test.dart test/core/notifications/local_notification_models_test.dart
+flutter test test/core/permissions/permission_handler_gateway_test.dart test/core/notifications/flutter_local_notification_scheduler_test.dart
 ```
 
 Expected: FAIL because notification models and expanded permission support are missing.
@@ -289,7 +290,6 @@ Extend the permission enum to cover the package set clearly, for example:
 
 ```dart
 enum AppPermission {
-  bluetooth,
   bluetoothScan,
   bluetoothConnect,
   notifications,
@@ -299,25 +299,40 @@ enum AppPermission {
 Create stable notification channel/sound constants:
 
 ```dart
+class LocalNotificationSound {
+  const LocalNotificationSound({
+    required this.androidResourceName,
+    required this.appleFileName,
+  });
+
+  final String androidResourceName;
+  final String appleFileName;
+}
+
 class LocalNotificationChannel {
   const LocalNotificationChannel({
     required this.id,
     required this.name,
     required this.description,
-    required this.soundFileName,
+    required this.sound,
   });
 
   final String id;
   final String name;
   final String description;
-  final String soundFileName;
+  final LocalNotificationSound sound;
 }
 
-const reminderNotificationChannel = LocalNotificationChannel(
+const doseyReminderNotificationSound = LocalNotificationSound(
+  androidResourceName: 'dosey_reminder',
+  appleFileName: 'dosey_reminder.aiff',
+);
+
+const doseyReminderNotificationChannel = LocalNotificationChannel(
   id: 'dosey_reminders',
-  name: 'Dosey reminders',
-  description: 'Reminder alerts for scheduled doses.',
-  soundFileName: 'dosey_reminder.wav',
+  name: 'Dose reminders',
+  description: 'Dosey reminder alerts for scheduled doses.',
+  sound: doseyReminderNotificationSound,
 );
 ```
 
@@ -329,7 +344,7 @@ Run:
 
 ```sh
 cd mobile_app/dosey_app
-flutter test test/core/permissions/app_permission_gateway_test.dart test/core/notifications/local_notification_models_test.dart
+flutter test test/core/permissions/permission_handler_gateway_test.dart test/core/notifications/flutter_local_notification_scheduler_test.dart
 ```
 
 Expected: PASS.
