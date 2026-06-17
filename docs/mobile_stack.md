@@ -2,7 +2,7 @@
 
 Dosey's mobile app direction is Flutter/Dart for Android and iOS.
 
-First physical test device: 2024 Moto G Play. Keep iOS support in the architecture and wrap BLE, notifications, auth, database, and permissions behind app-owned interfaces.
+Android is the practical platform for Robot Mode because the mounted phone lives inside the robot. iOS remains in scope for Personal Mode only.
 
 ## Current app
 
@@ -18,13 +18,60 @@ The selected background foundation packages are:
 
 Do not treat the BLE layer as product-ready controller behavior until the command/status protocol in `docs/protocol.md` is finished. Do not add Firebase, Supabase, cloud sync, or push notifications until the backend direction is chosen.
 
-## Device roles
+## Device modes
 
-- `androidRobot`: Android phone lives in the robot and can host robot-control behavior.
-- `androidPersonal`: personal Android phone for reminders, notifications, and app use.
-- `iosPersonal`: personal iPhone for reminders, notifications, and app use.
+- **Robot Mode:** runs on the mounted Android phone inside Dosey.
+- **Personal Mode:** runs on patient or caregiver Android and iOS phones.
+
+Device role rules:
+
+- `androidRobot`: Android phone lives in Dosey and can host robot-control behavior.
+- `androidPersonal`: personal Android phone for reminders, notifications, schedule edits, and app use.
+- `iosPersonal`: personal iPhone for reminders, notifications, schedule edits, and app use.
 
 iOS cannot be selected as the embedded robot phone. Robot-control features should stay gated behind Android robot mode and controller connection state.
+
+If the user does not sign in and the device is Android, the prototype may support Robot Mode locally. Account, family, and cloud features can come later.
+
+## Phone responsibilities
+
+The phone is the brain of Dosey. It handles:
+
+- Medication schedule.
+- Manual medication database.
+- Refill tracking.
+- Dose history.
+- Cute animated face.
+- Voice reminders, sound effects, or text-to-speech.
+- User interface.
+- Optional PIN authorization.
+- Caregiver alerts and family permissions later.
+- Early, late, missed, skipped, snoozed, and already-taken dose logic.
+- Bluetooth commands to the XIAO.
+- Wi-Fi updates and future cloud sync.
+- Optional future voice commands and local AI features.
+
+## XIAO boundary
+
+The XIAO should not handle medication names, schedules, dose decisions, caregiver logic, PIN logic, voice generation, AI conversation, or medical advice. It should only report hardware status and execute hardware commands.
+
+## MVP app features
+
+- Medication schedule setup.
+- Manual medication database.
+- Guided Daviky carousel loading.
+- Dose reminders.
+- Dispense button.
+- Bluetooth connection to XIAO with acknowledgements.
+- Hardware test screen.
+- Dose history.
+- Refill countdown and refill alerts.
+- Early dose, late dose, missed dose, snooze, skip, and already-taken flows.
+- Optional PIN authorization.
+- Basic cute animated face.
+- Basic sound or voice reminder placeholder.
+- Basic caregiver contact setup.
+- Heartbeat/offline detection for XIAO power loss, crash, disconnect, or missed responses.
 
 ## Local data
 
@@ -38,13 +85,12 @@ Current backend status: no Firebase, no Supabase, no cloud sync, and no push not
 
 ## Local toolchain
 
-- Flutter 3.44.1 stable
-- Dart 3.12.1
-- Android command-line tools at `/opt/homebrew/share/android-commandlinetools`
-- Android SDK Platforms 35 and 36, Platform-Tools 37.0.0, Build-Tools 36.0.0, NDK 28.2.13676358, and CMake 3.22.1
-- Homebrew OpenJDK 17 configured through `flutter config --jdk-dir`
-- CocoaPods 1.16.2 for future iOS plugin work
-- Xcode 26.5 selected at `/Applications/Xcode.app/Contents/Developer`
+- Flutter 3.44.1 stable.
+- Dart 3.12.1.
+- Android command-line tools at `/opt/homebrew/share/android-commandlinetools`.
+- Android SDK Platforms 35 and 36, Platform-Tools 37.0.0, Build-Tools 36.0.0, NDK 28.2.13676358, and CMake 3.22.1.
+- Homebrew OpenJDK 17 configured through `flutter config --jdk-dir`.
+- Xcode 26.5 selected at `/Applications/Xcode.app/Contents/Developer`.
 
 Local Android debug APK builds and iOS no-codesign debug builds run from this machine.
 
@@ -54,10 +100,11 @@ Run from `mobile_app/dosey_app/`:
 
 ```sh
 dart format .
+dart run build_runner build
+git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
 flutter build apk --debug
 flutter build ios --debug --no-codesign
-# After Drift schema changes:
-dart run build_runner build
+git diff --check
 ```

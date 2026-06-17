@@ -1,6 +1,6 @@
 # Dosey app
 
-Flutter app for the Dosey medication-reminder robot prototype.
+Flutter app for the Dosey medication-dispensing companion robot prototype.
 
 ## Status badges
 
@@ -31,12 +31,14 @@ Notification channel IDs and sound IDs are intended to stay stable. Custom remin
 
 No cloud sync, push notifications, Firebase, or Supabase are in the app yet.
 
-## What works locally
+## Target product model
 
-- Create, edit, disable, and delete local reminders.
-- Store device role, safety acknowledgement, cached auth state, and dose log events locally.
-- Exercise controller flows with a simulator before BLE exists.
-- Run Android debug APK and iOS no-codesign debug builds on this machine.
+Dosey has two app modes:
+
+- **Robot Mode:** Android-only mode for the mounted phone inside Dosey. It shows the face, reminders, dispense UI, refill status, hardware test controls, and controller connection state.
+- **Personal Mode:** Android and iOS mode for patient or caregiver phones. It supports notifications, missed dose/refill visibility, dose history, and schedule editing when permissions allow.
+
+The phone is the brain. It handles schedules, medication data, refill logic, dose history, PIN, caregiver logic, UI, reminders, Bluetooth commands, and future cloud or voice features. The XIAO should only execute hardware actions and report status.
 
 Device role rules:
 
@@ -44,7 +46,22 @@ Device role rules:
 - Android can also be a personal phone for notifications and app use.
 - iOS can only be a personal phone; it cannot be the robot's embedded phone.
 
-The app must not mark a dose taken because the servo moved. Dispense logging requires a controller success event, and later versions should require drop/cup confirmation.
+## What works locally
+
+- Create, edit, disable, and delete local reminders.
+- Store device role, safety acknowledgement, cached auth state, and dose log events locally.
+- Exercise controller flows with a simulator before BLE exists.
+- Run Android debug APK and iOS no-codesign debug builds on this machine.
+
+The app must not mark a dose taken because the servo moved. Dispense logging requires a controller success event, and later versions should separately track dose visible and dose taken confirmation.
+
+## Near-term app work
+
+- Draft the Bluetooth command/status/heartbeat protocol before adding a BLE package.
+- Implement Robot Mode flows for guided Daviky carousel loading, dispense confirmation, refill countdown, and hardware tests.
+- Include dose actions for take now, take early, take late, snooze, skip, mark already taken, ask caregiver, and mark missed.
+- Add heartbeat/offline detection for XIAO power loss, crash, disconnect, or missed responses.
+- Keep caregiver alerts, Piper voices, voice commands, cloud sync, facial recognition, and local AI as later features.
 
 ## Local commands
 
@@ -53,12 +70,13 @@ Run from this directory:
 ```sh
 flutter pub get
 dart format .
+dart run build_runner build
+git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
 flutter build apk --debug
 flutter build ios --debug --no-codesign
-# After Drift schema changes:
-dart run build_runner build
+git diff --check
 ```
 
 ## CI commands
@@ -79,8 +97,7 @@ The workflow also checks committed whitespace with `git diff --check` and upload
 
 ## Local toolchain notes
 
-- Android SDK: `/opt/homebrew/share/android-commandlinetools`
-- JDK: Homebrew OpenJDK 17
-- Android packages installed: platform-tools, Android SDK Platforms 35 and 36, Build-Tools 36.0.0, NDK 28.2.13676358, CMake 3.22.1
-- CocoaPods 1.16.2 is installed for future iOS plugin work.
+- Android SDK: `/opt/homebrew/share/android-commandlinetools`.
+- JDK: Homebrew OpenJDK 17.
+- Android packages installed: platform-tools, Android SDK Platforms 35 and 36, Build-Tools 36.0.0, NDK 28.2.13676358, CMake 3.22.1.
 - Xcode 26.5 is selected at `/Applications/Xcode.app/Contents/Developer`; no-codesign iOS debug builds run locally.
