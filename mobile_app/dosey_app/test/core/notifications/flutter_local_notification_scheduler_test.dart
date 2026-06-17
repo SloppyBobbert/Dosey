@@ -84,6 +84,7 @@ void main() {
   test(
     'timezone initializer resolves and caches the device timezone',
     () async {
+      NotificationTimezoneInitializer.resetForTest();
       final gateway = _FakeLocalTimezoneGateway('America/New_York');
       final initializer = NotificationTimezoneInitializer(gateway: gateway);
 
