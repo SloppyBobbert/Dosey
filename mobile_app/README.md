@@ -2,14 +2,14 @@
 
 Flutter app workspace for Dosey.
 
-The app lives in `mobile_app/dosey_app/` and keeps Android and iOS support in scope from the start.
+The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phone support in scope. Robot Mode is Android-only because the embedded robot phone is mounted inside Dosey.
 
 ## Quick status
 
 | Item | Status |
 | --- | --- |
 | App shell | Today, Reminders, Controller, Log, Settings |
-| Local storage | Drift/SQLite |
+| Local storage | Drift/SQLite on the phone app only |
 | Reminders | Local add/edit/delete and enabled state |
 | Auth | Google sign-in wrapper, no backend yet |
 | Controller | Simulator only; no BLE package yet |
@@ -26,6 +26,14 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS support in sc
 - Controller simulator, notifications, storage, auth, and permission seams stay behind app-owned interfaces.
 - First physical test device: 2024 Moto G Play.
 
+## Target app direction
+
+Robot Mode on the mounted Android phone should handle the face screen, reminders, dispense UI, hardware test screen, Bluetooth connection, refill status, dose history, sounds or text-to-speech, and full-screen behavior when practical.
+
+Personal Mode should handle patient or caregiver notifications, missed dose/refill alerts, dose history, and medication schedule editing when permissions allow.
+
+The phone owns medication schedules, medication data, refill logic, PIN rules, caregiver logic, and dose states. The XIAO should only execute and report hardware actions.
+
 Run Flutter commands from `mobile_app/dosey_app/`.
 
 ## Local commands
@@ -33,15 +41,16 @@ Run Flutter commands from `mobile_app/dosey_app/`.
 ```sh
 cd mobile_app/dosey_app
 dart format .
+dart run build_runner build
+git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
 flutter build apk --debug
 flutter build ios --debug --no-codesign
-# After Drift schema changes:
-dart run build_runner build
+git diff --check
 ```
 
-Android SDK platforms 35 and 36 and OpenJDK 17 are configured locally for the first Moto G Play builds. Xcode 26.5 and CocoaPods 1.16.2 are configured for local iOS no-codesign builds.
+Android SDK platforms 35 and 36 and OpenJDK 17 are configured locally for the first Moto G Play builds. Xcode 26.5 is configured for local iOS no-codesign builds.
 
 ## CI
 
