@@ -61,7 +61,7 @@ Dosey is built around four main systems:
 
 3. **XIAO and Grove controller**
    - The controller handles direct hardware only: servo movement, PIR, LEDs, buzzer/vibration, buttons, sensor readings, status, and Bluetooth messages.
-   - The exact final XIAO model still needs confirmation because older notes name ESP32-C6 while the updated plan mentions ESP32S3.
+   - The exact final XIAO model still needs confirmation. Use the generic XIAO ESP32 controller direction until the ESP32S3 versus ESP32-C6 choice is verified against the hardware.
    - A Grove expansion board/shield with enough ports is the current direction. The old XIAO Expansion Board should be treated as an earlier reference unless testing confirms it remains the best board.
 
 4. **LEGO shell**

@@ -46,8 +46,8 @@ The app must not mark a dose taken because the servo moved. Dispense logging req
 ## Near-term app work
 
 - Draft the Bluetooth command/status/heartbeat protocol before adding a BLE package.
-- Add Robot Mode flows for guided Daviky carousel loading, dispense confirmation, refill countdown, and hardware tests.
-- Add dose actions for take now, take early, take late, snooze, skip, mark already taken, ask caregiver, and mark missed.
+- Implement Robot Mode flows for guided Daviky carousel loading, dispense confirmation, refill countdown, and hardware tests.
+- Include dose actions for take now, take early, take late, snooze, skip, mark already taken, ask caregiver, and mark missed.
 - Add heartbeat/offline detection for XIAO power loss, crash, disconnect, or missed responses.
 - Keep caregiver alerts, Piper voices, voice commands, cloud sync, facial recognition, and local AI as later features.
 

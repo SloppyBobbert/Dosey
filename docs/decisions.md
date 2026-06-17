@@ -21,6 +21,6 @@ Record architecture and build-direction decisions here.
 
 ## To confirm
 
-- Final XIAO board model. Current repo work references XIAO ESP32-C6, while the updated plan notes older ESP32S3 references. Confirm the actual board before writing a final pin map.
+- Final XIAO board model. Use the generic XIAO ESP32 controller direction until the ESP32S3 versus ESP32-C6 choice is verified against the hardware.
 - Final Grove expansion board/shield. The updated plan replaces the old XIAO Expansion Board direction with a Grove expansion board/shield that has enough ports.
 - Whether the Daviky cup is practical as-is or needs a LEGO-supported cup opening.
