@@ -14,10 +14,22 @@ Flutter app for the Dosey medication-reminder robot prototype.
 - Android and iOS app shell with Today, Reminders, Controller, Log, and Settings tabs.
 - Safety-first home/settings copy and safety acknowledgement storage.
 - Local reminder schedule storage with simple add/edit/delete controls and enabled/disabled state.
-- Controller simulator for app flow testing before BLE.
-- Google sign-in through an app-owned auth interface; no Firebase/Supabase backend yet.
-- App-owned interfaces for controller/BLE, auth, reminders, permissions, and dose logging.
+- Controller simulator plus BLE foundation for app flow work; controller protocol is still incomplete.
+- Google and Apple sign-in through app-owned auth interfaces; no Firebase/Supabase backend yet.
+- App-owned interfaces for controller/BLE, connectivity, auth, reminders, permissions, notifications, and dose logging.
 - Drift/SQLite local database for device role settings, reminders, cached auth state, and dose log events.
+
+Selected background packages:
+
+- `flutter_blue_plus` for BLE foundation only.
+- `connectivity_plus` for advisory connectivity/Wi-Fi status only, not provisioning.
+- `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
+- `flutter_local_notifications` for local reminder notifications and sounds.
+- `permission_handler` for runtime permission requests/checks.
+
+Notification channel IDs and sound IDs are intended to stay stable. Custom reminder sound assets may still need platform provisioning on Android/iOS.
+
+No cloud sync, push notifications, Firebase, or Supabase are in the app yet.
 
 ## What works locally
 

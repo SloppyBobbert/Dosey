@@ -147,11 +147,19 @@ No firmware build command exists yet.
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the first test target because the Moto G Play is available, but the app architecture keeps iOS support in scope.
 
-BLE, notifications, local storage, auth, and permissions should sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app.
+BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
+
+- `flutter_blue_plus` for BLE foundation only; the real controller protocol is still incomplete.
+- `connectivity_plus` for advisory connectivity and Wi-Fi status only; this is not Wi-Fi provisioning.
+- `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
+- `flutter_local_notifications` for local reminder notifications and sounds.
+- `permission_handler` for runtime permissions.
 
 The local database uses Drift on SQLite. The phone app stores app settings, reminder schedules, cached local auth state, and dose log events locally; the ESP32 controller should only keep tiny controller state later, not a SQLite database. Cloud sync can come later after the local model is stable.
 
-The app now has a plain five-tab shell: Today, Reminders, Controller, Log, and Settings. Google sign-in is wired through an app-owned auth interface with `google_sign_in`, but there is no Firebase, Supabase, or cloud session backend yet.
+The app now has a plain five-tab shell: Today, Reminders, Controller, Log, and Settings. Google and Apple sign-in are wired through app-owned auth interfaces, but there is no Firebase, Supabase, cloud sync, push notifications, or cloud session backend yet.
+
+Reminder notification channel and sound IDs are intended to stay stable once chosen. Actual custom sound assets may still need platform provisioning where required.
 
 Device roles are intentionally platform-limited:
 
@@ -196,7 +204,7 @@ Use rough fixtures until repeatable one-slot movement works. Save measurements a
 
 ## Project status
 
-Early prototype. The repo now has a safety-first Flutter app shell, local reminder add/edit/delete controls, local settings/auth/dose-log storage, a controller simulator, Google sign-in plumbing, and local Android/iOS tooling. It still has no firmware, BLE implementation, cloud sync, or carousel movement test.
+Early prototype. The repo now has a safety-first Flutter app shell, local reminder add/edit/delete controls, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, and local Android/iOS tooling. It still has no firmware, completed BLE protocol, cloud sync, push notifications, or carousel movement test.
 
 Near-term work:
 
@@ -204,7 +212,7 @@ Near-term work:
 - Record wiring and power paths.
 - Draft the controller protocol.
 - Build a servo sweep and one-slot carousel movement test.
-- Draft the real BLE protocol before adding a BLE package.
+- Draft the real BLE protocol before wiring real controller commands into the BLE gateway.
 
 ## License
 

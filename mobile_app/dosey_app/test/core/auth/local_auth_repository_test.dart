@@ -34,6 +34,25 @@ void main() {
     expect(session.user, user);
   });
 
+  test('local auth repository caches an Apple user', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAuthRepository(database);
+    const user = AuthUser(
+      id: 'apple-123',
+      email: 'dosey@privaterelay.appleid.com',
+      displayName: 'Dosey Tester',
+      photoUrl: null,
+      provider: AuthProvider.apple,
+    );
+
+    await repository.saveUser(user);
+
+    final session = await repository.watchSession().first;
+    expect(session.isSignedIn, isTrue);
+    expect(session.user, user);
+  });
+
   test('local auth repository clears a cached user', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
@@ -85,4 +104,31 @@ void main() {
     expect(session.user?.id, 'current-user');
     expect(session.user?.email, 'current@example.com');
   });
+
+  test(
+    'local auth repository preserves Apple email outside current session',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalAuthRepository(database);
+
+      await repository.saveUser(
+        const AuthUser(
+          id: 'apple-123',
+          email: 'dosey@privaterelay.appleid.com',
+          displayName: 'Dosey Tester',
+          photoUrl: null,
+          provider: AuthProvider.apple,
+        ),
+      );
+      await repository.clearUser();
+
+      expect(
+        await repository.readAppleEmail('apple-123'),
+        'dosey@privaterelay.appleid.com',
+      );
+      final session = await repository.watchSession().first;
+      expect(session.isSignedIn, isFalse);
+    },
+  );
 }

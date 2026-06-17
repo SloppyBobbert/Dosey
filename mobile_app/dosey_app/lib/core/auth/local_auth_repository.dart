@@ -6,6 +6,7 @@ class LocalAuthRepository {
   const LocalAuthRepository(this._database);
 
   static const _currentSessionId = 'current';
+  static const _appleUserIdPrefix = 'apple:';
 
   final DoseyDatabase _database;
 
@@ -21,20 +22,47 @@ class LocalAuthRepository {
     });
   }
 
+  Future<AuthSession> readSession() async {
+    final row = await _currentSessionRow();
+    if (row == null) {
+      return const AuthSession.signedOut();
+    }
+
+    return AuthSession.signedIn(_fromRow(row));
+  }
+
+  Future<AuthUser?> readCurrentUser() async {
+    final row = await _currentSessionRow();
+    return row == null ? null : _fromRow(row);
+  }
+
+  Future<String?> readAppleEmail(String userId) async {
+    final query = _database.select(_database.authSessions)
+      ..where((session) => session.id.equals(_appleSessionId(userId)));
+    final row = await query.getSingleOrNull();
+    if (row == null || row.provider != AuthProvider.apple.name) {
+      return null;
+    }
+
+    return row.email;
+  }
+
   Future<void> saveUser(AuthUser user) {
-    return _database
-        .into(_database.authSessions)
-        .insertOnConflictUpdate(
-          AuthSessionsCompanion.insert(
-            id: _currentSessionId,
-            userId: user.id,
-            email: user.email,
-            displayName: Value(user.displayName),
-            photoUrl: Value(user.photoUrl),
-            provider: user.provider.name,
-            updatedAt: DateTime.now().toUtc(),
-          ),
-        );
+    return _database.transaction(() async {
+      await _database
+          .into(_database.authSessions)
+          .insertOnConflictUpdate(
+            _sessionCompanion(id: _currentSessionId, user: user),
+          );
+
+      if (user.provider == AuthProvider.apple) {
+        await _database
+            .into(_database.authSessions)
+            .insertOnConflictUpdate(
+              _sessionCompanion(id: _appleSessionId(user.id), user: user),
+            );
+      }
+    });
   }
 
   Future<void> clearUser() {
@@ -42,6 +70,30 @@ class LocalAuthRepository {
       _database.authSessions,
     )..where((session) => session.id.equals(_currentSessionId))).go();
   }
+
+  Future<AuthSessionRow?> _currentSessionRow() {
+    final query = _database.select(_database.authSessions)
+      ..where((session) => session.id.equals(_currentSessionId));
+
+    return query.getSingleOrNull();
+  }
+
+  AuthSessionsCompanion _sessionCompanion({
+    required String id,
+    required AuthUser user,
+  }) {
+    return AuthSessionsCompanion.insert(
+      id: id,
+      userId: user.id,
+      email: user.email,
+      displayName: Value(user.displayName),
+      photoUrl: Value(user.photoUrl),
+      provider: user.provider.name,
+      updatedAt: DateTime.now().toUtc(),
+    );
+  }
+
+  static String _appleSessionId(String userId) => '$_appleUserIdPrefix$userId';
 
   static AuthUser _fromRow(AuthSessionRow row) {
     return AuthUser(

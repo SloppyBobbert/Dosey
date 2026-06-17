@@ -11,8 +11,8 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS support in sc
 | App shell | Today, Reminders, Controller, Log, Settings |
 | Local storage | Drift/SQLite |
 | Reminders | Local add/edit/delete and enabled state |
-| Auth | Google sign-in wrapper, no backend yet |
-| Controller | Simulator only; no BLE package yet |
+| Auth | Google + Apple wrappers, no backend yet |
+| Controller | Simulator plus BLE foundation only; protocol incomplete |
 | Builds | Android debug APK and iOS no-codesign debug build run locally |
 
 ## Current app
@@ -22,8 +22,12 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS support in sc
 - Local Drift/SQLite database for app settings, reminder schedules, cached auth state, and dose logs.
 - Simple local reminder add/edit/delete controls with enabled/disabled state.
 - Device roles: Android robot phone, Android personal phone, and iOS personal phone only.
-- Google sign-in is behind an app-owned interface with no Firebase/Supabase backend yet.
-- Controller simulator, notifications, storage, auth, and permission seams stay behind app-owned interfaces.
+- `flutter_blue_plus` BLE foundation behind an app-owned interface; protocol still incomplete.
+- `connectivity_plus` behind an app-owned interface for advisory connectivity/Wi-Fi status only, not provisioning.
+- `google_sign_in` plus a native iOS Apple sign-in bridge behind app-owned auth interfaces with no Firebase/Supabase backend yet.
+- `flutter_local_notifications` for local reminder notifications; channel/sound IDs are meant to stay stable, but custom sound assets may still need platform provisioning.
+- `permission_handler` behind an app-owned runtime permission interface.
+- No cloud sync or push notifications yet.
 - First physical test device: 2024 Moto G Play.
 
 Run Flutter commands from `mobile_app/dosey_app/`.
