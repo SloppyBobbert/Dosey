@@ -135,10 +135,26 @@ The app is a Flutter project under `mobile_app/dosey_app/`. Android is the pract
 
 The current app has a plain five-tab shell: Today, Reminders, Controller, Log, and Settings. It includes safety acknowledgement storage, local reminder add/edit/delete controls, local Drift/SQLite storage, a controller simulator, Google sign-in plumbing, and app-owned interfaces for controller communication, reminders, permissions, auth, and dose logging.
 
+BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
+
+- `flutter_blue_plus` for BLE foundation only; the real controller protocol is still incomplete.
+- `connectivity_plus` for advisory connectivity and Wi-Fi status only; this is not Wi-Fi provisioning.
+- `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
+- `flutter_local_notifications` for local reminder notifications and sounds.
+- `permission_handler` for runtime permissions.
+
 The app should grow toward two modes:
 
 - **Robot Mode:** mounted Android phone face, reminders, dispense UI, hardware test screen, Bluetooth connection, refill status, dose history, sounds/TTS, and full-screen or kiosk-style behavior when practical.
 - **Personal Mode:** patient or caregiver phone for notifications, missed dose/refill alerts, dose history, and schedule editing when permissions allow.
+
+Reminder notification channel and sound IDs are intended to stay stable once chosen. Actual custom sound assets may still need platform provisioning where required.
+
+Device roles are intentionally platform-limited:
+
+- Android robot phone: the Android phone lives inside the robot and can host robot-control behavior.
+- Android personal phone: a personal Android phone can receive notifications and use the app.
+- iOS personal phone: iOS can receive notifications and use the app, but cannot be the robot's embedded phone.
 
 Current local checks:
 
@@ -170,7 +186,7 @@ The servo has already been tested as strong enough for the current mechanism, so
 
 ## Project status
 
-Early prototype. The repo has a safety-first Flutter app shell, local reminder controls, local settings/auth/dose-log storage, a controller simulator, Google sign-in plumbing, and local Android/iOS tooling. It still has no firmware, real Bluetooth implementation, hardware heartbeat, cloud sync, or proven Daviky carousel movement.
+Early prototype. The repo has a safety-first Flutter app shell, local reminder controls, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
 
 Near-term work:
 

@@ -6,9 +6,17 @@ Android is the practical platform for Robot Mode because the mounted phone lives
 
 ## Current app
 
-The Flutter app lives in `mobile_app/dosey_app/`. It currently has a plain five-tab shell: Today, Reminders, Controller, Log, and Settings. It also has safety acknowledgement storage, simple local reminder add/edit/delete controls, Google sign-in behind an app-owned auth interface, a controller simulator, app-owned interfaces for controller communication, reminders, permissions, auth, and dose logging, and a local Drift/SQLite data layer.
+The Flutter app lives in `mobile_app/dosey_app/`. It currently has a plain five-tab shell: Today, Reminders, Controller, Log, and Settings. It also has safety acknowledgement storage, simple local reminder add/edit/delete controls, Google/Apple sign-in behind app-owned auth interfaces, a controller simulator, app-owned interfaces for controller communication, reminders, permissions, and dose logging, and a local Drift/SQLite data layer.
 
-Do not add a real BLE package until the command/status/heartbeat protocol in `docs/protocol.md` is drafted. Do not add Firebase, Supabase, or cloud sync until the backend direction is chosen.
+The selected background foundation packages are:
+
+- `flutter_blue_plus` for BLE foundation only. The controller protocol is still not complete.
+- `connectivity_plus` for advisory connectivity and Wi-Fi status only. It does not handle Wi-Fi provisioning.
+- `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
+- `flutter_local_notifications` for local notifications and reminder sounds.
+- `permission_handler` for runtime permission requests/checks.
+
+Do not treat the BLE layer as product-ready controller behavior until the command/status protocol in `docs/protocol.md` is finished. Do not add Firebase, Supabase, cloud sync, or push notifications until the backend direction is chosen.
 
 ## Device modes
 
@@ -70,6 +78,10 @@ The XIAO should not handle medication names, schedules, dose decisions, caregive
 The phone app uses Drift on SQLite for local data. Current local tables cover app settings, reminder schedules, cached auth state, and dose log events. The dose log keeps controller dispense success separate from dose taken confirmation, so servo movement never marks a dose as taken.
 
 The ESP32 controller should not run SQLite. It may keep tiny controller state in flash later. Cloud sync can be added after the local schema and safety flow are stable.
+
+Notification channel IDs and sound IDs should remain stable once shipped so scheduled reminder behavior stays predictable. Custom sound assets may still need Android/iOS asset provisioning.
+
+Current backend status: no Firebase, no Supabase, no cloud sync, and no push notifications yet.
 
 ## Local toolchain
 

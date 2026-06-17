@@ -1,4 +1,4 @@
-enum AuthProvider { google }
+enum AuthProvider { google, apple }
 
 class AuthUser {
   const AuthUser({
@@ -45,6 +45,8 @@ abstract interface class AuthService {
   Stream<AuthSession> watchSession();
 
   Future<AuthSession> signInWithGoogle();
+
+  Future<AuthSession> signInWithApple();
 
   Future<void> signOut();
 }

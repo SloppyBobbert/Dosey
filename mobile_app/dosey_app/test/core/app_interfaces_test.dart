@@ -1,4 +1,6 @@
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -31,5 +33,24 @@ void main() {
     expect(event.kind, DoseLogEventKind.doseTakenConfirmed);
     expect(event.marksDoseTaken, isTrue);
     expect(event.doseId, 'morning-dose');
+  });
+
+  test('ble snapshots stay app-owned and protocol agnostic', () {
+    const availability = BleAvailabilitySnapshot.available();
+    const connection = BleConnectionSnapshot.connected(deviceId: 'dosey-1');
+
+    expect(availability.isAvailable, isTrue);
+    expect(connection.state, BleConnectionState.connected);
+    expect(connection.deviceId, 'dosey-1');
+    expect(connection.deviceName, isNull);
+  });
+
+  test('connectivity states distinguish offline wifi cellular and other', () {
+    expect(ConnectivityState.values, [
+      ConnectivityState.offline,
+      ConnectivityState.wifi,
+      ConnectivityState.cellular,
+      ConnectivityState.other,
+    ]);
   });
 }
