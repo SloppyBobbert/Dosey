@@ -4,6 +4,7 @@ import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,6 +44,44 @@ void main() {
       find.widgetWithText(FilledButton, 'Continue'),
     );
     expect(enabledButton.onPressed, isNotNull);
+  });
+
+  testWidgets('onboarding shows an error when setup state cannot load', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OnboardingGate(
+          onboardingCompletedStream: Stream<bool>.error(
+            StateError('settings failed'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Setup could not load'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('safety notice stays put when acknowledgement cannot save', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    await database.close();
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dosey is not a medical device'), findsOneWidget);
+    expect(find.text('Setup could not be saved. Try again.'), findsOneWidget);
+    expect(find.text('How will you use this phone?'), findsNothing);
   });
 
   testWidgets('Android Robot Mode completes onboarding without login', (

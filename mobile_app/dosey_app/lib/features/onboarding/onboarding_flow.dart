@@ -13,6 +13,8 @@ class OnboardingFlow extends StatefulWidget {
 }
 
 class _OnboardingFlowState extends State<OnboardingFlow> {
+  static const _setupSaveErrorMessage = 'Setup could not be saved. Try again.';
+
   var _step = _OnboardingStep.medicalNotice;
   var _noticeAcknowledged = false;
   var _isSelectingRole = false;
@@ -72,7 +74,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   }
 
   Future<void> _continueFromNotice() async {
-    await DoseyAppScope.of(context).settings.setSafetyAcknowledged(true);
+    final saved = await _saveSetupChange(
+      () => DoseyAppScope.of(context).settings.setSafetyAcknowledged(true),
+    );
+    if (!saved) return;
     if (!mounted) return;
     setState(() => _step = _OnboardingStep.modeSelection);
   }
@@ -88,11 +93,22 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     });
 
     try {
-      await DoseyAppScope.of(context).settings.setDeviceRole(role);
+      final saved = await _saveSetupChange(
+        () => DoseyAppScope.of(context).settings.setDeviceRole(role),
+      );
+      if (!saved) {
+        if (mounted) {
+          setState(() => _isSelectingRole = false);
+        }
+        return;
+      }
       if (!mounted) return;
 
       if (role == AppDeviceRole.androidRobot) {
-        await _completeOnboarding();
+        final completed = await _completeOnboarding();
+        if (!completed && mounted) {
+          setState(() => _isSelectingRole = false);
+        }
         return;
       }
 
@@ -105,8 +121,24 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     }
   }
 
-  Future<void> _completeOnboarding() {
-    return DoseyAppScope.of(context).settings.setOnboardingCompleted(true);
+  Future<bool> _completeOnboarding() {
+    return _saveSetupChange(
+      () => DoseyAppScope.of(context).settings.setOnboardingCompleted(true),
+    );
+  }
+
+  Future<bool> _saveSetupChange(Future<void> Function() save) async {
+    try {
+      await save();
+      return true;
+    } on Object {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text(_setupSaveErrorMessage)));
+      }
+      return false;
+    }
   }
 }
 
@@ -340,7 +372,7 @@ class _SignInGatePage extends StatefulWidget {
 
   final AppDeviceRole? selectedRole;
   final VoidCallback onBack;
-  final Future<void> Function() onSignedIn;
+  final Future<bool> Function() onSignedIn;
 
   @override
   State<_SignInGatePage> createState() => _SignInGatePageState();
