@@ -1,4 +1,6 @@
 import 'package:dosey_app/main.dart';
+import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -179,6 +181,71 @@ void main() {
       find.text('Use candy, beads, dry beans, vitamins, or fake pills.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Today screen shows polished empty reminder landing', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dosey is ready for your day'), findsOneWidget);
+    expect(find.text('Local-only'), findsOneWidget);
+    expect(find.text('Prototype-safe'), findsOneWidget);
+    expect(find.text('Manual confirmation'), findsOneWidget);
+    expect(find.text('No reminders scheduled for today.'), findsOneWidget);
+    expect(
+      find.text('Add your first reminder from the Reminders tab.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Today screen previews upcoming reminders', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: 'vitamin-d',
+        label: 'Vitamin D',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Next reminders'), findsOneWidget);
+    expect(find.text('08:30'), findsOneWidget);
+    expect(find.text('Vitamin D'), findsOneWidget);
+  });
+
+  testWidgets('Today manual confirmation still writes dose log entry', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm dose taken manually'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dose taken confirmed'), findsOneWidget);
+    expect(find.text('manual-confirmation'), findsOneWidget);
   });
 
   testWidgets('controller tab keeps manual dispense disabled by default', (
