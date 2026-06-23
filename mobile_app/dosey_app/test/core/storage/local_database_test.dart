@@ -85,6 +85,19 @@ void main() {
               updated_at INTEGER NOT NULL
             );
           ''')
+          ..execute('''
+            CREATE TABLE reminder_schedules (
+              id TEXT NOT NULL PRIMARY KEY,
+              label TEXT NOT NULL,
+              hour INTEGER NOT NULL,
+              minute INTEGER NOT NULL,
+              is_enabled INTEGER NOT NULL CHECK (is_enabled IN (0, 1)),
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              CHECK (hour >= 0 AND hour <= 23),
+              CHECK (minute >= 0 AND minute <= 59)
+            );
+          ''')
           ..execute('PRAGMA user_version = 4;');
       },
     );

@@ -14,6 +14,7 @@ import 'package:dosey_app/core/notifications/flutter_local_notification_schedule
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
+import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -56,6 +57,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         _database,
         defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
       ),
+      prescriptions: LocalPrescriptionRepository(_database),
       reminders: LocalReminderRepository(_database),
       doseLog: doseLog,
       localAuth: localAuth,
@@ -91,6 +93,7 @@ class DoseyAppDependencies {
   const DoseyAppDependencies({
     required this.database,
     required this.settings,
+    required this.prescriptions,
     required this.reminders,
     required this.doseLog,
     required this.localAuth,
@@ -104,6 +107,7 @@ class DoseyAppDependencies {
 
   final DoseyDatabase database;
   final LocalAppSettingsRepository settings;
+  final LocalPrescriptionRepository prescriptions;
   final LocalReminderRepository reminders;
   final DriftDoseLogRepository doseLog;
   final LocalAuthRepository localAuth;

@@ -232,7 +232,8 @@ void main() {
 
     expect(find.text('Dosey'), findsOneWidget);
     expect(find.text('Today'), findsWidgets);
-    expect(find.text('Reminders'), findsOneWidget);
+    expect(find.text('Prescriptions'), findsOneWidget);
+    expect(find.text('Schedule'), findsOneWidget);
     expect(find.text('Controller'), findsOneWidget);
     expect(find.text('Log'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
@@ -426,6 +427,58 @@ void main() {
     expect(find.text('manual-confirmation'), findsOneWidget);
   });
 
+  testWidgets('prescriptions tab adds edits and deletes prescriptions', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Prescriptions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No prescriptions yet.'), findsOneWidget);
+    expect(
+      find.text('Enter what is on your prescription label.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Add prescription'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Medication name'),
+      'Vitamin D',
+    );
+    await tester.tap(find.text('Capsule'));
+    await tester.tap(find.text('Save prescription'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('Capsule'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Edit prescription'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Medication name'),
+      'Vitamin D3',
+    );
+    await tester.tap(find.text('Tablet'));
+    await tester.tap(find.text('Save prescription'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsNothing);
+    expect(find.text('Vitamin D3'), findsOneWidget);
+    expect(find.text('Tablet'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete prescription'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D3'), findsNothing);
+    expect(find.text('No prescriptions yet.'), findsOneWidget);
+  });
+
   testWidgets('controller tab keeps manual dispense disabled by default', (
     WidgetTester tester,
   ) async {
@@ -513,7 +566,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reminders'));
+    await tester.tap(find.text('Schedule'));
     await tester.pumpAndSettle();
 
     expect(find.text('No reminders yet.'), findsOneWidget);
@@ -567,7 +620,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reminders'));
+    await tester.tap(find.text('Schedule'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Add reminder'));
@@ -609,7 +662,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Reminders'));
+    await tester.tap(find.text('Schedule'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Add reminder'));
