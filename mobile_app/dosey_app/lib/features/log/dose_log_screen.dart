@@ -47,6 +47,8 @@ class DoseLogScreen extends StatelessWidget {
       DoseLogEventKind.controllerDispenseSucceeded =>
         'Controller dispense succeeded',
       DoseLogEventKind.doseTakenConfirmed => 'Dose taken confirmed',
+      DoseLogEventKind.doseSkipped => 'Dose skipped',
+      DoseLogEventKind.doseMissed => 'Dose missed',
       DoseLogEventKind.error => 'Error',
     };
   }

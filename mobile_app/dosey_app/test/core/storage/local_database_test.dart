@@ -45,6 +45,35 @@ void main() {
     },
   );
 
+  test(
+    'local dose log persists skipped and missed without marking taken',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = DriftDoseLogRepository(database);
+
+      await repository.addEvent(
+        DoseLogEvent.doseSkipped(
+          doseId: 'morning-dose',
+          occurredAt: DateTime.utc(2026, 6, 9, 12),
+        ),
+      );
+      await repository.addEvent(
+        DoseLogEvent.doseMissed(
+          doseId: 'evening-dose',
+          occurredAt: DateTime.utc(2026, 6, 9, 18),
+        ),
+      );
+
+      final events = await repository.watchEvents().first;
+      expect(events, hasLength(2));
+      expect(events.first.kind, DoseLogEventKind.doseMissed);
+      expect(events.first.marksDoseTaken, isFalse);
+      expect(events.last.kind, DoseLogEventKind.doseSkipped);
+      expect(events.last.marksDoseTaken, isFalse);
+    },
+  );
+
   test('migration marks existing installs as already onboarded', () async {
     final executor = NativeDatabase.memory(
       setup: (database) {

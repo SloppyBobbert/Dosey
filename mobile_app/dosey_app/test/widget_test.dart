@@ -307,6 +307,89 @@ void main() {
     expect(find.text('Vitamin D'), findsOneWidget);
   });
 
+  testWidgets('Today screen shows current dose actions from reminders', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Current dose'), findsOneWidget);
+    expect(find.text('08:30 · Vitamin D'), findsOneWidget);
+    expect(find.text('Confirm taken'), findsOneWidget);
+    expect(find.text('Skip dose'), findsOneWidget);
+    expect(find.text('Mark missed'), findsOneWidget);
+  });
+
+  testWidgets('Today confirm taken logs current dose as taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm taken'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dose taken confirmed'), findsOneWidget);
+    expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
+  });
+
+  testWidgets('Today skip dose logs skipped without marking taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Skip dose'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dose skipped'), findsOneWidget);
+    expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
+  });
+
+  testWidgets('Today mark missed logs missed dose with safe guidance', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mark missed'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Log'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dose missed'), findsOneWidget);
+    expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
+  });
+
   testWidgets('signed-out Personal Mode returns to account gate', (
     WidgetTester tester,
   ) async {
@@ -570,4 +653,25 @@ Future<void> _saveSignedInUser(
       provider: provider,
     ),
   );
+}
+
+Future<void> _addVitaminReminder(DoseyDatabase database) {
+  return LocalReminderRepository(database).upsertSchedule(
+    ReminderSchedule(
+      id: 'vitamin-d',
+      label: 'Vitamin D',
+      hour: 8,
+      minute: 30,
+      isEnabled: true,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    ),
+  );
+}
+
+String _todayDoseId(String scheduleId) {
+  final now = DateTime.now();
+  final month = now.month.toString().padLeft(2, '0');
+  final day = now.day.toString().padLeft(2, '0');
+  return '$scheduleId:${now.year}-$month-$day';
 }

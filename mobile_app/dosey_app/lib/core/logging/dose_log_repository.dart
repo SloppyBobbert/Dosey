@@ -1,7 +1,13 @@
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
 
-enum DoseLogEventKind { controllerDispenseSucceeded, doseTakenConfirmed, error }
+enum DoseLogEventKind {
+  controllerDispenseSucceeded,
+  doseTakenConfirmed,
+  doseSkipped,
+  doseMissed,
+  error,
+}
 
 class DoseLogEvent {
   const DoseLogEvent({
@@ -32,6 +38,30 @@ class DoseLogEvent {
       doseId: doseId,
       occurredAt: occurredAt,
       marksDoseTaken: true,
+    );
+  }
+
+  factory DoseLogEvent.doseSkipped({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.doseSkipped,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: false,
+    );
+  }
+
+  factory DoseLogEvent.doseMissed({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.doseMissed,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: false,
     );
   }
 

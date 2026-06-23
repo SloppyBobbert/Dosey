@@ -11,46 +11,151 @@ class TodayScreen extends StatelessWidget {
     final dependencies = DoseyAppScope.of(context);
     final reminders = dependencies.reminders;
 
-    return ListView(
+    return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-      children: [
-        _TodayHeroCard(
-          onConfirmDoseTaken: () async {
-            try {
-              await dependencies.doseLog.addEvent(
-                DoseLogEvent.doseTakenConfirmed(
-                  doseId: 'manual-confirmation',
-                  occurredAt: DateTime.now().toUtc(),
-                ),
-              );
-              if (!context.mounted) {
-                return;
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _TodayHeroCard(
+            onConfirmDoseTaken: () async {
+              try {
+                await dependencies.doseLog.addEvent(
+                  DoseLogEvent.doseTakenConfirmed(
+                    doseId: 'manual-confirmation',
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                );
+                if (!context.mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Dose confirmation logged.')),
+                );
+              } on Object catch (error) {
+                if (!context.mounted) {
+                  return;
+                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Dose confirmation failed: $error')),
+                );
               }
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Dose confirmation logged.')),
-              );
-            } on Object catch (error) {
-              if (!context.mounted) {
-                return;
+            },
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<List<ReminderSchedule>>(
+            stream: reminders.watchSchedules(),
+            builder: (context, reminderSnapshot) {
+              final schedules =
+                  reminderSnapshot.data ?? const <ReminderSchedule>[];
+              final currentSchedule = _currentSchedule(schedules);
+              if (currentSchedule == null) {
+                return const SizedBox.shrink();
               }
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Dose confirmation failed: $error')),
+
+              return StreamBuilder<List<DoseLogEvent>>(
+                stream: dependencies.doseLog.watchEvents(),
+                builder: (context, logSnapshot) {
+                  final doseId = _doseIdForToday(currentSchedule.id);
+                  final latestEvent = _latestEventForDose(
+                    logSnapshot.data ?? const <DoseLogEvent>[],
+                    doseId,
+                  );
+                  return _CurrentDoseCard(
+                    schedule: currentSchedule,
+                    latestEvent: latestEvent,
+                    onConfirmTaken: () => _logDoseAction(
+                      context,
+                      DoseLogEvent.doseTakenConfirmed(
+                        doseId: doseId,
+                        occurredAt: DateTime.now().toUtc(),
+                      ),
+                      'Dose marked taken.',
+                    ),
+                    onSkipDose: () => _logDoseAction(
+                      context,
+                      DoseLogEvent.doseSkipped(
+                        doseId: doseId,
+                        occurredAt: DateTime.now().toUtc(),
+                      ),
+                      'Dose skipped.',
+                    ),
+                    onMarkMissed: () => _logDoseAction(
+                      context,
+                      DoseLogEvent.doseMissed(
+                        doseId: doseId,
+                        occurredAt: DateTime.now().toUtc(),
+                      ),
+                      'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+                    ),
+                  );
+                },
               );
-            }
-          },
-        ),
-        const SizedBox(height: 12),
-        const _SafetyCard(),
-        const SizedBox(height: 12),
-        StreamBuilder<List<ReminderSchedule>>(
-          stream: reminders.watchSchedules(),
-          builder: (context, snapshot) {
-            final schedules = snapshot.data ?? const <ReminderSchedule>[];
-            return _ReminderPreviewCard(schedules: schedules);
-          },
-        ),
-      ],
+            },
+          ),
+          const SizedBox(height: 12),
+          const _SafetyCard(),
+          const SizedBox(height: 12),
+          StreamBuilder<List<ReminderSchedule>>(
+            stream: reminders.watchSchedules(),
+            builder: (context, snapshot) {
+              final schedules = snapshot.data ?? const <ReminderSchedule>[];
+              return _ReminderPreviewCard(schedules: schedules);
+            },
+          ),
+        ],
+      ),
     );
+  }
+
+  static ReminderSchedule? _currentSchedule(List<ReminderSchedule> schedules) {
+    for (final schedule in schedules) {
+      if (schedule.isEnabled) {
+        return schedule;
+      }
+    }
+    return null;
+  }
+
+  static DoseLogEvent? _latestEventForDose(
+    List<DoseLogEvent> events,
+    String doseId,
+  ) {
+    for (final event in events) {
+      if (event.doseId == doseId) {
+        return event;
+      }
+    }
+    return null;
+  }
+
+  static String _doseIdForToday(String scheduleId) {
+    final now = DateTime.now();
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    return '$scheduleId:${now.year}-$month-$day';
+  }
+
+  static Future<void> _logDoseAction(
+    BuildContext context,
+    DoseLogEvent event,
+    String successMessage,
+  ) async {
+    try {
+      await DoseyAppScope.of(context).doseLog.addEvent(event);
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(successMessage)));
+    } on Object catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Dose action failed: $error')));
+    }
   }
 }
 
@@ -160,6 +265,138 @@ class _TodayHeroCard extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CurrentDoseCard extends StatelessWidget {
+  const _CurrentDoseCard({
+    required this.schedule,
+    required this.latestEvent,
+    required this.onConfirmTaken,
+    required this.onSkipDose,
+    required this.onMarkMissed,
+  });
+
+  final ReminderSchedule schedule;
+  final DoseLogEvent? latestEvent;
+  final VoidCallback onConfirmTaken;
+  final VoidCallback onSkipDose;
+  final VoidCallback onMarkMissed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    Icons.medication_liquid_outlined,
+                    color: colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Current dose',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text('${schedule.timeLabel} · ${schedule.label}'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (latestEvent != null) ...[
+              const SizedBox(height: 12),
+              _DoseStatusBanner(event: latestEvent!),
+            ],
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: onConfirmTaken,
+                  icon: const Icon(Icons.check_circle_outline),
+                  label: const Text('Confirm taken'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onSkipDose,
+                  icon: const Icon(Icons.skip_next_outlined),
+                  label: const Text('Skip dose'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onMarkMissed,
+                  icon: const Icon(Icons.schedule_outlined),
+                  label: const Text('Mark missed'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DoseStatusBanner extends StatelessWidget {
+  const _DoseStatusBanner({required this.event});
+
+  final DoseLogEvent event;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final (icon, label) = switch (event.kind) {
+      DoseLogEventKind.doseTakenConfirmed => (
+        Icons.check_circle_outline,
+        'Confirmed taken',
+      ),
+      DoseLogEventKind.doseSkipped => (Icons.skip_next_outlined, 'Skipped'),
+      DoseLogEventKind.doseMissed => (Icons.schedule_outlined, 'Missed'),
+      _ => (Icons.info_outline, 'Logged'),
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.58),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: colorScheme.primary),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: theme.textTheme.labelLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }
