@@ -5,6 +5,7 @@ class LocalAppSettingsRepository {
   LocalAppSettingsRepository(this._database, {required this.defaultRole});
 
   static const _deviceRoleKey = 'device_role';
+  static const _onboardingCompletedKey = 'onboarding_completed';
   static const _safetyAcknowledgedKey = 'safety_acknowledged';
 
   final DoseyDatabase _database;
@@ -25,6 +26,19 @@ class LocalAppSettingsRepository {
 
   Future<void> setDeviceRole(AppDeviceRole role) {
     return _setValue(_deviceRoleKey, role.storageValue);
+  }
+
+  Stream<bool> watchOnboardingCompleted() {
+    final query = _database.select(_database.appSettings)
+      ..where((setting) => setting.key.equals(_onboardingCompletedKey));
+
+    return query.watchSingleOrNull().map((setting) {
+      return setting?.value == 'true';
+    });
+  }
+
+  Future<void> setOnboardingCompleted(bool completed) {
+    return _setValue(_onboardingCompletedKey, completed.toString());
   }
 
   Stream<bool> watchSafetyAcknowledged() {

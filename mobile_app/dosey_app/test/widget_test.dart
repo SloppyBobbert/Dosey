@@ -1,17 +1,172 @@
 import 'package:dosey_app/main.dart';
+import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  testWidgets('shows local-first app tabs and safety guidance', (
+  testWidgets('first install shows medical-device onboarding before shell', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
 
     await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dosey is not a medical device'), findsOneWidget);
+    expect(find.text('Controller'), findsNothing);
+  });
+
+  testWidgets('medical-device onboarding requires acknowledgement', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    final continueButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Continue'),
+    );
+    expect(continueButton.onPressed, isNull);
+
+    await tester.tap(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+
+    final enabledButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Continue'),
+    );
+    expect(enabledButton.onPressed, isNotNull);
+  });
+
+  testWidgets('Android Robot Mode completes onboarding without login', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await _acceptMedicalNotice(tester);
+    await tester.tap(find.text('Robot Mode'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dosey'), findsOneWidget);
+    expect(find.text('Controller'), findsOneWidget);
+    expect(find.text('Sign in to continue'), findsNothing);
+  });
+
+  testWidgets('Android Personal Mode shows Google sign-in gate', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await _acceptMedicalNotice(tester);
+    await tester.tap(find.text('Personal Mode'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in to continue'), findsOneWidget);
+    expect(
+      find.text('Personal Mode requires Google sign-in for now.'),
+      findsOneWidget,
+    );
+    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Controller'), findsNothing);
+  });
+
+  testWidgets('onboarding sign-in failure stays on account gate', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await _acceptMedicalNotice(tester);
+    await tester.tap(find.text('Personal Mode'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue with Google'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in to continue'), findsOneWidget);
+    expect(
+      find.text('Google sign-in failed. Check your connection and try again.'),
+      findsOneWidget,
+    );
+    expect(find.text('Controller'), findsNothing);
+    final signInButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Continue with Google'),
+    );
+    expect(signInButton.onPressed, isNotNull);
+  });
+
+  testWidgets('iOS onboarding never offers Robot Mode', (
+    WidgetTester tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    try {
+      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpAndSettle();
+
+      await _acceptMedicalNotice(tester);
+
+      expect(find.text('Robot Mode'), findsNothing);
+      expect(find.text('Personal Mode'), findsOneWidget);
+
+      await tester.tap(find.text('Personal Mode'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sign in to continue'), findsOneWidget);
+      expect(find.text('Continue with Apple'), findsOneWidget);
+      expect(find.text('Continue with Google'), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('settings can start onboarding over', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Start over setup'), 200);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start over setup'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dosey is not a medical device'), findsOneWidget);
+    expect(find.text('Controller'), findsNothing);
+  });
+
+  testWidgets('shows local-first app tabs and safety guidance', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
 
     expect(find.text('Dosey'), findsOneWidget);
     expect(find.text('Today'), findsWidgets);
@@ -31,8 +186,10 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
+    await _markOnboardingComplete(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Controller'));
     await tester.pumpAndSettle();
 
@@ -60,9 +217,11 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
+    await _markOnboardingComplete(database);
 
     try {
       await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Settings'));
       await tester.pumpAndSettle();
 
@@ -79,8 +238,10 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
+    await _markOnboardingComplete(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Reminders'));
     await tester.pumpAndSettle();
 
@@ -131,8 +292,10 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
+    await _markOnboardingComplete(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Reminders'));
     await tester.pumpAndSettle();
 
@@ -171,8 +334,10 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
+    await _markOnboardingComplete(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Reminders'));
     await tester.pumpAndSettle();
 
@@ -183,4 +348,18 @@ void main() {
     expect(find.widgetWithText(TextFormField, 'Label'), findsOneWidget);
     expect(find.text('Save reminder'), findsOneWidget);
   });
+}
+
+Future<void> _acceptMedicalNotice(WidgetTester tester) async {
+  await tester.tap(find.byType(Checkbox));
+  await tester.pumpAndSettle();
+  await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _markOnboardingComplete(DoseyDatabase database) {
+  return LocalAppSettingsRepository(
+    database,
+    defaultRole: AppDeviceRole.androidPersonal,
+  ).setOnboardingCompleted(true);
 }

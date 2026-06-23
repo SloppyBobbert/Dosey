@@ -201,6 +201,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
             );
           },
         ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Setup', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                const Text(
+                  'Show the first-run safety notice and mode selection again.',
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: () async {
+                    try {
+                      await dependencies.settings.setSafetyAcknowledged(false);
+                      await dependencies.settings.setOnboardingCompleted(false);
+                    } on Object catch (error) {
+                      if (!context.mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Setup reset failed: $error')),
+                      );
+                    }
+                  },
+                  child: const Text('Start over setup'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }

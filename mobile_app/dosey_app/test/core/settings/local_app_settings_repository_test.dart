@@ -18,4 +18,19 @@ void main() {
 
     expect(await repository.watchSafetyAcknowledged().first, isTrue);
   });
+
+  test('local app settings persist onboarding completion', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    expect(await repository.watchOnboardingCompleted().first, isFalse);
+
+    await repository.setOnboardingCompleted(true);
+
+    expect(await repository.watchOnboardingCompleted().first, isTrue);
+  });
 }

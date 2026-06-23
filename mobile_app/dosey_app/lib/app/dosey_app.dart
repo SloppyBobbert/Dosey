@@ -1,6 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
-import 'package:dosey_app/features/shell/dosey_shell.dart';
+import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
 import 'package:flutter/material.dart';
 
 class DoseyApp extends StatelessWidget {
@@ -21,7 +21,7 @@ class DoseyApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: seed),
           useMaterial3: true,
         ),
-        home: const DoseyShell(),
+        home: const OnboardingGate(),
       ),
     );
   }
