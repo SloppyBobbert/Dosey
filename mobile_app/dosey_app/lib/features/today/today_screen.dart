@@ -12,69 +12,155 @@ class TodayScreen extends StatelessWidget {
     final reminders = dependencies.reminders;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
       children: [
+        _TodayHeroCard(
+          onConfirmDoseTaken: () async {
+            try {
+              await dependencies.doseLog.addEvent(
+                DoseLogEvent.doseTakenConfirmed(
+                  doseId: 'manual-confirmation',
+                  occurredAt: DateTime.now().toUtc(),
+                ),
+              );
+              if (!context.mounted) {
+                return;
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Dose confirmation logged.')),
+              );
+            } on Object catch (error) {
+              if (!context.mounted) {
+                return;
+              }
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Dose confirmation failed: $error')),
+              );
+            }
+          },
+        ),
+        const SizedBox(height: 12),
         const _SafetyCard(),
         const SizedBox(height: 12),
         StreamBuilder<List<ReminderSchedule>>(
           stream: reminders.watchSchedules(),
           builder: (context, snapshot) {
             final schedules = snapshot.data ?? const <ReminderSchedule>[];
-            return Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Today',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    if (schedules.isEmpty)
-                      const Text('No local reminders yet.')
-                    else
-                      for (final schedule in schedules.take(3))
-                        Text('${schedule.timeLabel} · ${schedule.label}'),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: () async {
-                        try {
-                          await dependencies.doseLog.addEvent(
-                            DoseLogEvent.doseTakenConfirmed(
-                              doseId: 'manual-confirmation',
-                              occurredAt: DateTime.now().toUtc(),
-                            ),
-                          );
-                          if (!context.mounted) {
-                            return;
-                          }
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Dose confirmation logged.'),
-                            ),
-                          );
-                        } on Object catch (error) {
-                          if (!context.mounted) {
-                            return;
-                          }
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Dose confirmation failed: $error'),
-                            ),
-                          );
-                        }
-                      },
-                      icon: const Icon(Icons.check_circle_outline),
-                      label: const Text('Confirm dose taken manually'),
-                    ),
-                  ],
-                ),
-              ),
-            );
+            return _ReminderPreviewCard(schedules: schedules);
           },
         ),
       ],
+    );
+  }
+}
+
+class _TodayHeroCard extends StatelessWidget {
+  const _TodayHeroCard({required this.onConfirmDoseTaken});
+
+  final VoidCallback onConfirmDoseTaken;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(28),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            colorScheme.primaryContainer,
+            colorScheme.secondaryContainer.withValues(alpha: 0.78),
+            colorScheme.surface,
+          ],
+        ),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Today',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Dosey is ready for your day',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w800,
+                          height: 1.05,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Review reminders, keep prototype checks visible, and confirm doses only after you know they were taken.',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onPrimaryContainer.withValues(
+                            alpha: 0.78,
+                          ),
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    color: colorScheme.surface.withValues(alpha: 0.74),
+                    borderRadius: BorderRadius.circular(22),
+                  ),
+                  child: Icon(
+                    Icons.wb_sunny_outlined,
+                    color: colorScheme.primary,
+                    size: 30,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: const [
+                _StatusPill(icon: Icons.phone_android, label: 'Local-only'),
+                _StatusPill(
+                  icon: Icons.science_outlined,
+                  label: 'Prototype-safe',
+                ),
+                _StatusPill(
+                  icon: Icons.check_circle_outline,
+                  label: 'Manual confirmation',
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: onConfirmDoseTaken,
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('Confirm dose taken manually'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -84,19 +170,207 @@ class _SafetyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.health_and_safety_outlined, color: colorScheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Prototype safety',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Use candy, beads, dry beans, vitamins, or fake pills.',
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Never mark a dose taken because the servo moved.',
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReminderPreviewCard extends StatelessWidget {
+  const _ReminderPreviewCard({required this.schedules});
+
+  final List<ReminderSchedule> schedules;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: const [
-            Text('Prototype safety'),
-            SizedBox(height: 8),
-            Text('Use candy, beads, dry beans, vitamins, or fake pills.'),
-            SizedBox(height: 8),
-            Text('Never mark a dose taken because the servo moved.'),
+          children: [
+            Text(
+              'Scheduled reminders',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (schedules.isEmpty)
+              const _EmptyReminderState()
+            else
+              for (final schedule in schedules.take(3))
+                _ReminderRow(schedule: schedule),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _EmptyReminderState extends StatelessWidget {
+  const _EmptyReminderState();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.54),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.event_available_outlined, color: colorScheme.primary),
+          const SizedBox(height: 10),
+          Text(
+            'No reminders scheduled for today.',
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Add your first reminder from the Reminders tab.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReminderRow extends StatelessWidget {
+  const _ReminderRow({required this.schedule});
+
+  final ReminderSchedule schedule;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.42),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Text(
+                schedule.timeLabel,
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: colorScheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                schedule.label,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Icon(
+              schedule.isEnabled
+                  ? Icons.notifications_active_outlined
+                  : Icons.notifications_off_outlined,
+              color: schedule.isEnabled
+                  ? colorScheme.primary
+                  : colorScheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPill extends StatelessWidget {
+  const _StatusPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: 0.76),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: colorScheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }

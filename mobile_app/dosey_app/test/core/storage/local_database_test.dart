@@ -2,6 +2,7 @@ import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -43,4 +44,28 @@ void main() {
       expect(events.single.marksDoseTaken, isFalse);
     },
   );
+
+  test('migration marks existing installs as already onboarded', () async {
+    final executor = NativeDatabase.memory(
+      setup: (database) {
+        database
+          ..execute('''
+            CREATE TABLE app_settings (
+              key TEXT NOT NULL PRIMARY KEY,
+              value TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('PRAGMA user_version = 4;');
+      },
+    );
+    final database = DoseyDatabase(executor);
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    expect(await settings.watchOnboardingCompleted().first, isTrue);
+  });
 }

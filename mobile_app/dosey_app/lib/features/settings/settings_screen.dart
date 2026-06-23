@@ -18,6 +18,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.of(context);
+    final usesAppleSignIn = currentAppDevicePlatform() == AppDevicePlatform.ios;
+    final providerName = usesAppleSignIn ? 'Apple' : 'Google';
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -35,13 +37,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Google login',
+                      '$providerName login',
                       style: Theme.of(context).textTheme.titleMedium,
                     ),
                     const SizedBox(height: 8),
                     Text(
                       session.user == null
-                          ? 'Signed out. Google sign-in is local-only until cloud sync is chosen.'
+                          ? 'Signed out. $providerName sign-in is local-only until cloud sync is chosen.'
                           : 'Signed in as ${session.user!.email}',
                     ),
                     if (_authMessage != null) ...[
@@ -79,14 +81,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   _authMessage = null;
                                 });
                                 try {
-                                  await dependencies.auth.signInWithGoogle();
+                                  if (usesAppleSignIn) {
+                                    await dependencies.auth.signInWithApple();
+                                  } else {
+                                    await dependencies.auth.signInWithGoogle();
+                                  }
                                 } on Object catch (error) {
                                   if (!mounted) {
                                     return;
                                   }
                                   setState(() {
                                     _authMessage =
-                                        'Google sign-in is not configured yet: $error';
+                                        '$providerName sign-in is not configured yet: $error';
                                   });
                                 } finally {
                                   if (mounted) {
@@ -99,7 +105,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: Text(
                           _isSigningIn
                               ? 'Signing in...'
-                              : 'Sign in with Google',
+                              : 'Sign in with $providerName',
                         ),
                       ),
                   ],
@@ -200,6 +206,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
             );
           },
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Setup', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                const Text(
+                  'Show the first-run safety notice and mode selection again.',
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton(
+                  onPressed: () async {
+                    try {
+                      await dependencies.settings.resetSetupState();
+                    } on Object catch (error) {
+                      if (!context.mounted) {
+                        return;
+                      }
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Setup reset failed: $error')),
+                      );
+                    }
+                  },
+                  child: const Text('Start over setup'),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );

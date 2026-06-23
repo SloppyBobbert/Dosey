@@ -5,6 +5,7 @@ class LocalAppSettingsRepository {
   LocalAppSettingsRepository(this._database, {required this.defaultRole});
 
   static const _deviceRoleKey = 'device_role';
+  static const _onboardingCompletedKey = 'onboarding_completed';
   static const _safetyAcknowledgedKey = 'safety_acknowledged';
 
   final DoseyDatabase _database;
@@ -27,6 +28,19 @@ class LocalAppSettingsRepository {
     return _setValue(_deviceRoleKey, role.storageValue);
   }
 
+  Stream<bool> watchOnboardingCompleted() {
+    final query = _database.select(_database.appSettings)
+      ..where((setting) => setting.key.equals(_onboardingCompletedKey));
+
+    return query.watchSingleOrNull().map((setting) {
+      return setting?.value == 'true';
+    });
+  }
+
+  Future<void> setOnboardingCompleted(bool completed) {
+    return _setValue(_onboardingCompletedKey, completed.toString());
+  }
+
   Stream<bool> watchSafetyAcknowledged() {
     final query = _database.select(_database.appSettings)
       ..where((setting) => setting.key.equals(_safetyAcknowledgedKey));
@@ -38,6 +52,13 @@ class LocalAppSettingsRepository {
 
   Future<void> setSafetyAcknowledged(bool acknowledged) {
     return _setValue(_safetyAcknowledgedKey, acknowledged.toString());
+  }
+
+  Future<void> resetSetupState() {
+    return _database.transaction(() async {
+      await _setValue(_safetyAcknowledgedKey, false.toString());
+      await _setValue(_onboardingCompletedKey, false.toString());
+    });
   }
 
   Future<void> _setValue(String key, String value) {
