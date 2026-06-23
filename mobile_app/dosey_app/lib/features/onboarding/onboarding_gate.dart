@@ -13,8 +13,13 @@ class OnboardingGate extends StatelessWidget {
     return StreamBuilder<bool>(
       stream: settings.watchOnboardingCompleted(),
       builder: (context, snapshot) {
-        final completed = snapshot.data ?? false;
-        if (completed) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.data!) {
           return const DoseyShell();
         }
 

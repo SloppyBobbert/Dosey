@@ -15,6 +15,7 @@ class OnboardingFlow extends StatefulWidget {
 class _OnboardingFlowState extends State<OnboardingFlow> {
   var _step = _OnboardingStep.medicalNotice;
   var _noticeAcknowledged = false;
+  var _isSelectingRole = false;
   AppDeviceRole? _selectedRole;
 
   @override
@@ -56,6 +57,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                   _OnboardingStep.signInGate => _SignInGatePage(
                     selectedRole: _selectedRole,
                     onBack: () => setState(() {
+                      _isSelectingRole = false;
                       _step = _OnboardingStep.modeSelection;
                     }),
                     onSignedIn: _completeOnboarding,
@@ -76,16 +78,31 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   }
 
   Future<void> _selectRole(AppDeviceRole role) async {
-    _selectedRole = role;
-    await DoseyAppScope.of(context).settings.setDeviceRole(role);
-    if (!mounted) return;
-
-    if (role == AppDeviceRole.androidRobot) {
-      await _completeOnboarding();
+    if (_isSelectingRole) {
       return;
     }
 
-    setState(() => _step = _OnboardingStep.signInGate);
+    setState(() {
+      _isSelectingRole = true;
+      _selectedRole = role;
+    });
+
+    try {
+      await DoseyAppScope.of(context).settings.setDeviceRole(role);
+      if (!mounted) return;
+
+      if (role == AppDeviceRole.androidRobot) {
+        await _completeOnboarding();
+        return;
+      }
+
+      setState(() => _step = _OnboardingStep.signInGate);
+    } on Object {
+      if (mounted) {
+        setState(() => _isSelectingRole = false);
+      }
+      rethrow;
+    }
   }
 
   Future<void> _completeOnboarding() {

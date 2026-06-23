@@ -33,4 +33,21 @@ void main() {
 
     expect(await repository.watchOnboardingCompleted().first, isTrue);
   });
+
+  test('local app settings reset setup state together', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    await repository.setSafetyAcknowledged(true);
+    await repository.setOnboardingCompleted(true);
+
+    await repository.resetSetupState();
+
+    expect(await repository.watchSafetyAcknowledged().first, isFalse);
+    expect(await repository.watchOnboardingCompleted().first, isFalse);
+  });
 }

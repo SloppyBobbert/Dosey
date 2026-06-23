@@ -54,6 +54,13 @@ class LocalAppSettingsRepository {
     return _setValue(_safetyAcknowledgedKey, acknowledged.toString());
   }
 
+  Future<void> resetSetupState() {
+    return _database.transaction(() async {
+      await _setValue(_safetyAcknowledgedKey, false.toString());
+      await _setValue(_onboardingCompletedKey, false.toString());
+    });
+  }
+
   Future<void> _setValue(String key, String value) {
     return _database
         .into(_database.appSettings)

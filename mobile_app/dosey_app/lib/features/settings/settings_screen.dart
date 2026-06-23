@@ -217,8 +217,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 OutlinedButton(
                   onPressed: () async {
                     try {
-                      await dependencies.settings.setSafetyAcknowledged(false);
-                      await dependencies.settings.setOnboardingCompleted(false);
+                      await dependencies.settings.resetSetupState();
                     } on Object catch (error) {
                       if (!context.mounted) {
                         return;

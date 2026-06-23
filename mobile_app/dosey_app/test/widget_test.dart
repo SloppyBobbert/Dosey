@@ -85,6 +85,25 @@ void main() {
     expect(find.text('Controller'), findsNothing);
   });
 
+  testWidgets('rapid role taps keep first onboarding role selection', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await _acceptMedicalNotice(tester);
+    await tester.tap(find.text('Personal Mode'));
+    await tester.tap(find.text('Robot Mode'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in to continue'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Controller'), findsNothing);
+  });
+
   testWidgets('onboarding sign-in failure stays on account gate', (
     WidgetTester tester,
   ) async {
@@ -181,6 +200,23 @@ void main() {
       find.text('Use candy, beads, dry beans, vitamins, or fake pills.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('completed onboarding does not flash onboarding while loading', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('Dosey is not a medical device'), findsNothing);
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dosey is ready for your day'), findsOneWidget);
   });
 
   testWidgets('Today screen shows polished empty reminder landing', (
