@@ -15,6 +15,7 @@ class LocalReminderRepository implements ReminderRepository {
 
   final DoseyDatabase _database;
 
+  /// Watches schedules in clock order so Today and Schedule share one ordering.
   @override
   Stream<List<ReminderSchedule>> watchSchedules() {
     final query = _database.select(_database.reminderSchedules)
@@ -26,6 +27,7 @@ class LocalReminderRepository implements ReminderRepository {
     return query.watch().map((rows) => rows.map(_fromRow).toList());
   }
 
+  /// Saves schedule timing plus its optional prescription link for newer flows.
   @override
   Future<void> upsertSchedule(ReminderSchedule schedule) {
     _validateSchedule(schedule);
@@ -36,6 +38,7 @@ class LocalReminderRepository implements ReminderRepository {
           ReminderSchedulesCompanion.insert(
             id: schedule.id,
             label: schedule.label,
+            prescriptionId: Value(schedule.prescriptionId),
             hour: schedule.hour,
             minute: schedule.minute,
             isEnabled: schedule.isEnabled,
@@ -56,6 +59,7 @@ class LocalReminderRepository implements ReminderRepository {
     return ReminderSchedule(
       id: row.id,
       label: row.label,
+      prescriptionId: row.prescriptionId,
       hour: row.hour,
       minute: row.minute,
       isEnabled: row.isEnabled,

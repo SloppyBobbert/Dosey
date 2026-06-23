@@ -17,6 +17,7 @@ class AppSettings extends Table {
 class ReminderSchedules extends Table {
   TextColumn get id => text()();
   TextColumn get label => text()();
+  TextColumn get prescriptionId => text().nullable()();
   IntColumn get hour => integer()();
   IntColumn get minute => integer()();
   BoolColumn get isEnabled => boolean()();
@@ -28,6 +29,18 @@ class ReminderSchedules extends Table {
     'CHECK (hour >= 0 AND hour <= 23)',
     'CHECK (minute >= 0 AND minute <= 59)',
   ];
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('PrescriptionRow')
+class Prescriptions extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get pillType => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -60,7 +73,13 @@ class DoseLogEvents extends Table {
 }
 
 @DriftDatabase(
-  tables: [AppSettings, ReminderSchedules, AuthSessions, DoseLogEvents],
+  tables: [
+    AppSettings,
+    ReminderSchedules,
+    Prescriptions,
+    AuthSessions,
+    DoseLogEvents,
+  ],
 )
 class DoseyDatabase extends _$DoseyDatabase {
   DoseyDatabase([QueryExecutor? executor])
@@ -76,7 +95,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -96,6 +115,13 @@ class DoseyDatabase extends _$DoseyDatabase {
       }
       if (from < 5) {
         await _seedOnboardingCompleted(completed: true);
+      }
+      if (from < 6) {
+        await migrator.createTable(prescriptions);
+        await migrator.addColumn(
+          reminderSchedules,
+          reminderSchedules.prescriptionId,
+        );
       }
     },
   );

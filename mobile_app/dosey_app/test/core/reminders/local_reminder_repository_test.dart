@@ -40,6 +40,30 @@ void main() {
     expect(schedules.single.updatedAt, createdAt);
   });
 
+  test('local reminder repository links schedules to prescriptions', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalReminderRepository(database);
+    final createdAt = DateTime.utc(2026, 6, 9, 8);
+
+    await repository.upsertSchedule(
+      ReminderSchedule(
+        id: 'morning-vitamin',
+        label: 'Vitamin D',
+        prescriptionId: 'vitamin-d',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+        createdAt: createdAt,
+        updatedAt: createdAt,
+      ),
+    );
+
+    final schedule = (await repository.watchSchedules().first).single;
+    expect(schedule.prescriptionId, 'vitamin-d');
+    expect(schedule.label, 'Vitamin D');
+  });
+
   test('local reminder repository deletes schedules', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
