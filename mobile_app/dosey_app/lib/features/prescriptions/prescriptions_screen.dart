@@ -1,6 +1,8 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
+import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:flutter/material.dart';
 
 class PrescriptionsScreen extends StatelessWidget {
@@ -8,7 +10,8 @@ class PrescriptionsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final prescriptions = DoseyAppScope.of(context).prescriptions;
+    final dependencies = DoseyAppScope.of(context);
+    final prescriptions = dependencies.prescriptions;
 
     return StreamBuilder<List<Prescription>>(
       stream: prescriptions.watchPrescriptions(),
@@ -48,14 +51,23 @@ class PrescriptionsScreen extends StatelessWidget {
               const Card(
                 child: Padding(
                   padding: EdgeInsets.all(16),
-                  child: Text('No prescriptions yet.'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('No prescriptions yet.'),
+                      SizedBox(height: 6),
+                      Text('Add your first prescription.'),
+                    ],
+                  ),
                 ),
               )
             else
               for (final prescription in items)
                 _PrescriptionTile(
                   prescription: prescription,
+                  allPrescriptions: items,
                   prescriptions: prescriptions,
+                  reminders: dependencies.reminders,
                 ),
           ],
         );
@@ -83,11 +95,15 @@ class PrescriptionsScreen extends StatelessWidget {
 class _PrescriptionTile extends StatelessWidget {
   const _PrescriptionTile({
     required this.prescription,
+    required this.allPrescriptions,
     required this.prescriptions,
+    required this.reminders,
   });
 
   final Prescription prescription;
+  final List<Prescription> allPrescriptions;
   final PrescriptionRepository prescriptions;
+  final ReminderRepository reminders;
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +115,11 @@ class _PrescriptionTile extends StatelessWidget {
         trailing: Wrap(
           spacing: 4,
           children: [
+            IconButton(
+              tooltip: 'Schedule prescription',
+              onPressed: () => _schedule(context),
+              icon: const Icon(Icons.event_available_outlined),
+            ),
             IconButton(
               tooltip: 'Edit prescription',
               onPressed: () => PrescriptionsScreen._showPrescriptionSheet(
@@ -116,6 +137,17 @@ class _PrescriptionTile extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// Opens the schedule builder with this prescription already selected so
+  /// users can move from medication entry to routine setup without retyping.
+  Future<void> _schedule(BuildContext context) {
+    return RemindersScreen.showScheduleSheet(
+      context,
+      reminders,
+      allPrescriptions,
+      initialPrescriptionId: prescription.id,
     );
   }
 

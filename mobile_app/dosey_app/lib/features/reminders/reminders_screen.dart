@@ -40,7 +40,7 @@ class RemindersScreen extends StatelessWidget {
                     FilledButton.icon(
                       onPressed: prescriptions.isEmpty
                           ? null
-                          : () => _showScheduleSheet(
+                          : () => showScheduleSheet(
                               context,
                               dependencies.reminders,
                               prescriptions,
@@ -88,11 +88,12 @@ class RemindersScreen extends StatelessWidget {
     );
   }
 
-  static Future<void> _showScheduleSheet(
+  static Future<void> showScheduleSheet(
     BuildContext context,
     ReminderRepository reminders,
     List<Prescription> prescriptions, {
     ReminderSchedule? schedule,
+    String? initialPrescriptionId,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -102,6 +103,7 @@ class RemindersScreen extends StatelessWidget {
         reminders: reminders,
         prescriptions: prescriptions,
         schedule: schedule,
+        initialPrescriptionId: initialPrescriptionId,
       ),
     );
   }
@@ -148,7 +150,7 @@ class _ScheduleTile extends StatelessWidget {
             ),
             IconButton(
               tooltip: 'Edit schedule',
-              onPressed: () => RemindersScreen._showScheduleSheet(
+              onPressed: () => RemindersScreen.showScheduleSheet(
                 context,
                 reminders,
                 prescriptions,
@@ -197,11 +199,13 @@ class _ScheduleSheet extends StatefulWidget {
     required this.reminders,
     required this.prescriptions,
     this.schedule,
+    this.initialPrescriptionId,
   });
 
   final ReminderRepository reminders;
   final List<Prescription> prescriptions;
   final ReminderSchedule? schedule;
+  final String? initialPrescriptionId;
 
   @override
   State<_ScheduleSheet> createState() => _ScheduleSheetState();
@@ -401,6 +405,13 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
           (prescription) => prescription.id == savedId,
         )) {
       return savedId;
+    }
+    final initialId = widget.initialPrescriptionId;
+    if (initialId != null &&
+        widget.prescriptions.any(
+          (prescription) => prescription.id == initialId,
+        )) {
+      return initialId;
     }
     return widget.prescriptions.isEmpty ? null : widget.prescriptions.first.id;
   }

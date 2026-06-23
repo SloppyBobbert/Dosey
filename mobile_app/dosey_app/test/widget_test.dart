@@ -470,6 +470,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No prescriptions yet.'), findsOneWidget);
+    expect(find.text('Add your first prescription.'), findsOneWidget);
     expect(
       find.text('Enter what is on your prescription label.'),
       findsOneWidget,
@@ -507,6 +508,39 @@ void main() {
 
     expect(find.text('Vitamin D3'), findsNothing);
     expect(find.text('No prescriptions yet.'), findsOneWidget);
+  });
+
+  testWidgets('prescription card can start a schedule for that medication', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Prescriptions'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Schedule prescription'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add schedule'), findsWidgets);
+    expect(find.text('Which prescription?'), findsOneWidget);
+    expect(find.text('Vitamin D'), findsWidgets);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
+    await tester.tap(find.text('Save schedule'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('08:30'), findsOneWidget);
+    expect(find.text('Capsule'), findsOneWidget);
   });
 
   testWidgets('Schedule tab asks for prescriptions before schedules', (
