@@ -6,7 +6,9 @@ import 'package:flutter/material.dart';
 enum _OnboardingStep { medicalNotice, modeSelection, signInGate }
 
 class OnboardingFlow extends StatefulWidget {
-  const OnboardingFlow({super.key});
+  const OnboardingFlow({super.key, this.signInRole});
+
+  final AppDeviceRole? signInRole;
 
   @override
   State<OnboardingFlow> createState() => _OnboardingFlowState();
@@ -15,10 +17,19 @@ class OnboardingFlow extends StatefulWidget {
 class _OnboardingFlowState extends State<OnboardingFlow> {
   static const _setupSaveErrorMessage = 'Setup could not be saved. Try again.';
 
-  var _step = _OnboardingStep.medicalNotice;
+  late _OnboardingStep _step;
   var _noticeAcknowledged = false;
   var _isSelectingRole = false;
   AppDeviceRole? _selectedRole;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedRole = widget.signInRole;
+    _step = widget.signInRole == null
+        ? _OnboardingStep.medicalNotice
+        : _OnboardingStep.signInGate;
+  }
 
   @override
   Widget build(BuildContext context) {

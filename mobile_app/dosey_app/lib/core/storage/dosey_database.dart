@@ -76,11 +76,14 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (migrator) => migrator.createAll(),
+    onCreate: (migrator) async {
+      await migrator.createAll();
+      await _seedOnboardingCompleted(completed: false);
+    },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
         await migrator.createTable(reminderSchedules);
@@ -91,8 +94,22 @@ class DoseyDatabase extends _$DoseyDatabase {
       if (from >= 2 && from < 4) {
         await migrator.alterTable(TableMigration(reminderSchedules));
       }
+      if (from < 5) {
+        await _seedOnboardingCompleted(completed: true);
+      }
     },
   );
+
+  Future<void> _seedOnboardingCompleted({required bool completed}) async {
+    await into(appSettings).insert(
+      AppSettingsCompanion.insert(
+        key: 'onboarding_completed',
+        value: completed.toString(),
+        updatedAt: DateTime.now().toUtc(),
+      ),
+      mode: InsertMode.insertOrIgnore,
+    );
+  }
 }
 
 QueryExecutor _openConnection() {

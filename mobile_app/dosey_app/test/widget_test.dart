@@ -1,4 +1,6 @@
 import 'package:dosey_app/main.dart';
+import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -300,9 +302,27 @@ void main() {
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
 
-    expect(find.text('Next reminders'), findsOneWidget);
+    expect(find.text('Scheduled reminders'), findsOneWidget);
     expect(find.text('08:30'), findsOneWidget);
     expect(find.text('Vitamin D'), findsOneWidget);
+  });
+
+  testWidgets('signed-out Personal Mode returns to account gate', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in to continue'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('Controller'), findsNothing);
   });
 
   testWidgets('Today manual confirmation still writes dose log entry', (
@@ -359,7 +379,8 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
-    await _markOnboardingComplete(database);
+    await _markOnboardingComplete(database, role: AppDeviceRole.iosPersonal);
+    await _saveSignedInUser(database, provider: AuthProvider.apple);
 
     try {
       await tester.pumpWidget(DoseyApp(database: database));
@@ -370,6 +391,31 @@ void main() {
       expect(find.text('iOS personal phone'), findsOneWidget);
       expect(find.text('Android robot phone'), findsNothing);
       expect(find.text('Android personal phone'), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('iOS sign-out returns to Apple account gate', (
+    WidgetTester tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.iosPersonal);
+    await _saveSignedInUser(database, provider: AuthProvider.apple);
+
+    try {
+      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sign out'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sign in to continue'), findsOneWidget);
+      expect(find.text('Continue with Apple'), findsOneWidget);
+      expect(find.text('Sign in with Google'), findsNothing);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
@@ -499,9 +545,29 @@ Future<void> _acceptMedicalNotice(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _markOnboardingComplete(DoseyDatabase database) {
-  return LocalAppSettingsRepository(
+Future<void> _markOnboardingComplete(
+  DoseyDatabase database, {
+  AppDeviceRole role = AppDeviceRole.androidRobot,
+}) async {
+  final settings = LocalAppSettingsRepository(
     database,
     defaultRole: AppDeviceRole.androidPersonal,
-  ).setOnboardingCompleted(true);
+  );
+  await settings.setDeviceRole(role);
+  await settings.setOnboardingCompleted(true);
+}
+
+Future<void> _saveSignedInUser(
+  DoseyDatabase database, {
+  required AuthProvider provider,
+}) {
+  return LocalAuthRepository(database).saveUser(
+    AuthUser(
+      id: provider.name,
+      email: '${provider.name}@example.com',
+      displayName: 'Dosey Tester',
+      photoUrl: null,
+      provider: provider,
+    ),
+  );
 }
