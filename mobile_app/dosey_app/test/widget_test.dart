@@ -594,6 +594,39 @@ void main() {
     expect(find.text('Capsule'), findsOneWidget);
   });
 
+  testWidgets('Schedule tab blocks duplicate prescription times', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add schedule'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
+    await tester.tap(find.text('Save schedule'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add schedule'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
+    await tester.tap(find.text('Save schedule'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('A schedule already exists for this prescription at 08:30.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('controller tab keeps manual dispense disabled by default', (
     WidgetTester tester,
   ) async {

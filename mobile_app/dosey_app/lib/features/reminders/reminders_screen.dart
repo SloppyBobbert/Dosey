@@ -388,7 +388,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorText = 'Schedule save failed: $error';
+        _errorText = _scheduleSaveErrorMessage(error);
         _isSaving = false;
       });
       return;
@@ -423,5 +423,13 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
       if (prescription.id == selectedId) return prescription;
     }
     return null;
+  }
+
+  /// Keeps validation failures readable while preserving raw details for unknown errors.
+  static String _scheduleSaveErrorMessage(Object error) {
+    if (error is ArgumentError && error.message is String) {
+      return error.message as String;
+    }
+    return 'Schedule save failed: $error';
   }
 }

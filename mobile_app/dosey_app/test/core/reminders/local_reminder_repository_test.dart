@@ -64,6 +64,51 @@ void main() {
     expect(schedule.label, 'Vitamin D');
   });
 
+  test(
+    'local reminder repository rejects duplicate prescription times',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalReminderRepository(database);
+      final createdAt = DateTime.utc(2026, 6, 9, 8);
+
+      await repository.upsertSchedule(
+        ReminderSchedule(
+          id: 'morning-vitamin',
+          label: 'Vitamin D',
+          prescriptionId: 'vitamin-d',
+          hour: 8,
+          minute: 30,
+          isEnabled: true,
+          createdAt: createdAt,
+          updatedAt: createdAt,
+        ),
+      );
+
+      expect(
+        () => repository.upsertSchedule(
+          ReminderSchedule(
+            id: 'duplicate-morning-vitamin',
+            label: 'Vitamin D',
+            prescriptionId: 'vitamin-d',
+            hour: 8,
+            minute: 30,
+            isEnabled: true,
+            createdAt: createdAt,
+            updatedAt: createdAt,
+          ),
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.message,
+            'message',
+            'A schedule already exists for this prescription at 08:30.',
+          ),
+        ),
+      );
+    },
+  );
+
   test('local reminder repository deletes schedules', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);

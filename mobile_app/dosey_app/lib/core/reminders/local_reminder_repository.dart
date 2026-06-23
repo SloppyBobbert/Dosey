@@ -29,10 +29,11 @@ class LocalReminderRepository implements ReminderRepository {
 
   /// Saves schedule timing plus its optional prescription link for newer flows.
   @override
-  Future<void> upsertSchedule(ReminderSchedule schedule) {
+  Future<void> upsertSchedule(ReminderSchedule schedule) async {
     _validateSchedule(schedule);
+    await _rejectDuplicatePrescriptionTime(schedule);
 
-    return _database
+    await _database
         .into(_database.reminderSchedules)
         .insertOnConflictUpdate(
           ReminderSchedulesCompanion.insert(
@@ -79,5 +80,30 @@ class LocalReminderRepository implements ReminderRepository {
         'Must be 0 through 59.',
       );
     }
+  }
+
+  /// Prevents accidental duplicate schedule rows for the same medication time.
+  Future<void> _rejectDuplicatePrescriptionTime(
+    ReminderSchedule schedule,
+  ) async {
+    final prescriptionId = schedule.prescriptionId;
+    if (prescriptionId == null) return;
+
+    final duplicate =
+        await (_database.select(_database.reminderSchedules)
+              ..where(
+                (row) =>
+                    row.prescriptionId.equals(prescriptionId) &
+                    row.hour.equals(schedule.hour) &
+                    row.minute.equals(schedule.minute) &
+                    row.id.equals(schedule.id).not(),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    if (duplicate == null) return;
+
+    throw ArgumentError(
+      'A schedule already exists for this prescription at ${schedule.timeLabel}.',
+    );
   }
 }
