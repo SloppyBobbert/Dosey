@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:flutter/material.dart';
 
@@ -11,100 +12,128 @@ class TodayScreen extends StatelessWidget {
     final dependencies = DoseyAppScope.of(context);
     final reminders = dependencies.reminders;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _TodayHeroCard(
-            onConfirmDoseTaken: () async {
-              try {
-                await dependencies.doseLog.addEvent(
-                  DoseLogEvent.doseTakenConfirmed(
-                    doseId: 'manual-confirmation',
-                    occurredAt: DateTime.now().toUtc(),
-                  ),
-                );
-                if (!context.mounted) {
-                  return;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Dose confirmation logged.')),
-                );
-              } on Object catch (error) {
-                if (!context.mounted) {
-                  return;
-                }
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Dose confirmation failed: $error')),
-                );
-              }
-            },
-          ),
-          const SizedBox(height: 12),
-          StreamBuilder<List<ReminderSchedule>>(
-            stream: reminders.watchSchedules(),
-            builder: (context, reminderSnapshot) {
-              final schedules =
-                  reminderSnapshot.data ?? const <ReminderSchedule>[];
-              final currentSchedule = _currentSchedule(schedules);
-              if (currentSchedule == null) {
-                return const SizedBox.shrink();
-              }
+    return StreamBuilder<List<Prescription>>(
+      stream: dependencies.prescriptions.watchPrescriptions(),
+      builder: (context, prescriptionSnapshot) {
+        final prescriptionsById = _prescriptionsById(
+          prescriptionSnapshot.data ?? const <Prescription>[],
+        );
 
-              return StreamBuilder<List<DoseLogEvent>>(
-                stream: dependencies.doseLog.watchEvents(),
-                builder: (context, logSnapshot) {
-                  final doseId = _doseIdForToday(currentSchedule.id);
-                  final latestEvent = _latestEventForDose(
-                    logSnapshot.data ?? const <DoseLogEvent>[],
-                    doseId,
-                  );
-                  return _CurrentDoseCard(
-                    schedule: currentSchedule,
-                    latestEvent: latestEvent,
-                    onConfirmTaken: () => _logDoseAction(
-                      context,
+        return SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _TodayHeroCard(
+                onConfirmDoseTaken: () async {
+                  try {
+                    await dependencies.doseLog.addEvent(
                       DoseLogEvent.doseTakenConfirmed(
-                        doseId: doseId,
+                        doseId: 'manual-confirmation',
                         occurredAt: DateTime.now().toUtc(),
                       ),
-                      'Dose marked taken.',
-                    ),
-                    onSkipDose: () => _logDoseAction(
-                      context,
-                      DoseLogEvent.doseSkipped(
-                        doseId: doseId,
-                        occurredAt: DateTime.now().toUtc(),
+                    );
+                    if (!context.mounted) {
+                      return;
+                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Dose confirmation logged.'),
                       ),
-                      'Dose skipped.',
-                    ),
-                    onMarkMissed: () => _logDoseAction(
-                      context,
-                      DoseLogEvent.doseMissed(
-                        doseId: doseId,
-                        occurredAt: DateTime.now().toUtc(),
+                    );
+                  } on Object catch (error) {
+                    if (!context.mounted) {
+                      return;
+                    }
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Dose confirmation failed: $error'),
                       ),
-                      'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-                    ),
+                    );
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              StreamBuilder<List<ReminderSchedule>>(
+                stream: reminders.watchSchedules(),
+                builder: (context, reminderSnapshot) {
+                  final schedules =
+                      reminderSnapshot.data ?? const <ReminderSchedule>[];
+                  final currentSchedule = _currentSchedule(schedules);
+                  if (currentSchedule == null) {
+                    return const SizedBox.shrink();
+                  }
+
+                  return StreamBuilder<List<DoseLogEvent>>(
+                    stream: dependencies.doseLog.watchEvents(),
+                    builder: (context, logSnapshot) {
+                      final doseId = _doseIdForToday(currentSchedule.id);
+                      final latestEvent = _latestEventForDose(
+                        logSnapshot.data ?? const <DoseLogEvent>[],
+                        doseId,
+                      );
+                      return _CurrentDoseCard(
+                        schedule: currentSchedule,
+                        prescription:
+                            prescriptionsById[currentSchedule.prescriptionId],
+                        latestEvent: latestEvent,
+                        onConfirmTaken: () => _logDoseAction(
+                          context,
+                          DoseLogEvent.doseTakenConfirmed(
+                            doseId: doseId,
+                            occurredAt: DateTime.now().toUtc(),
+                          ),
+                          'Dose marked taken.',
+                        ),
+                        onSkipDose: () => _logDoseAction(
+                          context,
+                          DoseLogEvent.doseSkipped(
+                            doseId: doseId,
+                            occurredAt: DateTime.now().toUtc(),
+                          ),
+                          'Dose skipped.',
+                        ),
+                        onMarkMissed: () => _logDoseAction(
+                          context,
+                          DoseLogEvent.doseMissed(
+                            doseId: doseId,
+                            occurredAt: DateTime.now().toUtc(),
+                          ),
+                          'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+                        ),
+                      );
+                    },
                   );
                 },
-              );
-            },
+              ),
+              const SizedBox(height: 12),
+              const _SafetyCard(),
+              const SizedBox(height: 12),
+              StreamBuilder<List<ReminderSchedule>>(
+                stream: reminders.watchSchedules(),
+                builder: (context, snapshot) {
+                  final schedules = snapshot.data ?? const <ReminderSchedule>[];
+                  return _ReminderPreviewCard(
+                    schedules: schedules,
+                    prescriptionsById: prescriptionsById,
+                  );
+                },
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          const _SafetyCard(),
-          const SizedBox(height: 12),
-          StreamBuilder<List<ReminderSchedule>>(
-            stream: reminders.watchSchedules(),
-            builder: (context, snapshot) {
-              final schedules = snapshot.data ?? const <ReminderSchedule>[];
-              return _ReminderPreviewCard(schedules: schedules);
-            },
-          ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  /// Joins schedules to the user's saved prescription metadata for display
+  /// only; this does not verify medications, identify pills, or advise dosing.
+  static Map<String, Prescription> _prescriptionsById(
+    List<Prescription> prescriptions,
+  ) {
+    return {
+      for (final prescription in prescriptions) prescription.id: prescription,
+    };
   }
 
   static ReminderSchedule? _currentSchedule(List<ReminderSchedule> schedules) {
@@ -273,6 +302,7 @@ class _TodayHeroCard extends StatelessWidget {
 class _CurrentDoseCard extends StatelessWidget {
   const _CurrentDoseCard({
     required this.schedule,
+    required this.prescription,
     required this.latestEvent,
     required this.onConfirmTaken,
     required this.onSkipDose,
@@ -280,6 +310,7 @@ class _CurrentDoseCard extends StatelessWidget {
   });
 
   final ReminderSchedule schedule;
+  final Prescription? prescription;
   final DoseLogEvent? latestEvent;
   final VoidCallback onConfirmTaken;
   final VoidCallback onSkipDose;
@@ -322,6 +353,10 @@ class _CurrentDoseCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text('${schedule.timeLabel} · ${schedule.label}'),
+                      if (prescription != null) ...[
+                        const SizedBox(height: 2),
+                        Text(prescription!.pillType.label),
+                      ],
                     ],
                   ),
                 ),
@@ -447,9 +482,13 @@ class _SafetyCard extends StatelessWidget {
 }
 
 class _ReminderPreviewCard extends StatelessWidget {
-  const _ReminderPreviewCard({required this.schedules});
+  const _ReminderPreviewCard({
+    required this.schedules,
+    required this.prescriptionsById,
+  });
 
   final List<ReminderSchedule> schedules;
+  final Map<String, Prescription> prescriptionsById;
 
   @override
   Widget build(BuildContext context) {
@@ -472,7 +511,10 @@ class _ReminderPreviewCard extends StatelessWidget {
               const _EmptyReminderState()
             else
               for (final schedule in schedules.take(3))
-                _ReminderRow(schedule: schedule),
+                _ReminderRow(
+                  schedule: schedule,
+                  prescription: prescriptionsById[schedule.prescriptionId],
+                ),
           ],
         ),
       ),
@@ -520,9 +562,10 @@ class _EmptyReminderState extends StatelessWidget {
 }
 
 class _ReminderRow extends StatelessWidget {
-  const _ReminderRow({required this.schedule});
+  const _ReminderRow({required this.schedule, required this.prescription});
 
   final ReminderSchedule schedule;
+  final Prescription? prescription;
 
   @override
   Widget build(BuildContext context) {
@@ -555,11 +598,25 @@ class _ReminderRow extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Text(
-                schedule.label,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    schedule.label,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  if (prescription != null) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      prescription!.pillType.label,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             Icon(

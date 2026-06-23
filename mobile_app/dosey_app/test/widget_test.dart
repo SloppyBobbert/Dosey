@@ -310,6 +310,34 @@ void main() {
     expect(find.text('Vitamin D'), findsOneWidget);
   });
 
+  testWidgets('Today screen shows linked prescription pill type', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: 'vitamin-d-morning',
+        label: 'Vitamin D',
+        prescriptionId: 'vitamin-d',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Current dose'), findsOneWidget);
+    expect(find.text('08:30 · Vitamin D'), findsOneWidget);
+    expect(find.text('Capsule'), findsWidgets);
+  });
+
   testWidgets('Today screen shows current dose actions from reminders', (
     WidgetTester tester,
   ) async {
