@@ -508,7 +508,7 @@ class _EmptyReminderState extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Add your first reminder from the Reminders tab.',
+            'Add your first schedule from the Schedule tab.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colorScheme.onSurfaceVariant,
             ),

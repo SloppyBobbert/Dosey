@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:flutter/material.dart';
@@ -8,79 +9,130 @@ class RemindersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reminders = DoseyAppScope.of(context).reminders;
+    final dependencies = DoseyAppScope.of(context);
 
-    return StreamBuilder<List<ReminderSchedule>>(
-      stream: reminders.watchSchedules(),
-      builder: (context, snapshot) {
-        final schedules = snapshot.data ?? const <ReminderSchedule>[];
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Row(
+    return StreamBuilder<List<Prescription>>(
+      stream: dependencies.prescriptions.watchPrescriptions(),
+      builder: (context, prescriptionSnapshot) {
+        final prescriptions =
+            prescriptionSnapshot.data ?? const <Prescription>[];
+        return StreamBuilder<List<ReminderSchedule>>(
+          stream: dependencies.reminders.watchSchedules(),
+          builder: (context, scheduleSnapshot) {
+            final schedules =
+                scheduleSnapshot.data ?? const <ReminderSchedule>[];
+            final prescriptionsById = {
+              for (final prescription in prescriptions)
+                prescription.id: prescription,
+            };
+
+            return ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                Expanded(
-                  child: Text(
-                    'Local reminders',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Schedule',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: prescriptions.isEmpty
+                          ? null
+                          : () => _showScheduleSheet(
+                              context,
+                              dependencies.reminders,
+                              prescriptions,
+                            ),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add schedule'),
+                    ),
+                  ],
                 ),
-                FilledButton.icon(
-                  onPressed: () => _showReminderSheet(context, reminders),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add reminder'),
+                const SizedBox(height: 8),
+                Text(
+                  'Create schedules from prescriptions you entered. Dosey does not verify dosing instructions.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
+                const SizedBox(height: 16),
+                if (prescriptions.isEmpty)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text(
+                        'Add a prescription before creating a schedule.',
+                      ),
+                    ),
+                  )
+                else if (schedules.isEmpty)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Text('No schedules yet.'),
+                    ),
+                  )
+                else
+                  for (final schedule in schedules)
+                    _ScheduleTile(
+                      schedule: schedule,
+                      prescription: prescriptionsById[schedule.prescriptionId],
+                      prescriptions: prescriptions,
+                      reminders: dependencies.reminders,
+                    ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Stored on this phone only. Notifications will be wired up later.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 16),
-            if (schedules.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('No reminders yet.'),
-                ),
-              )
-            else
-              for (final schedule in schedules)
-                _ReminderTile(schedule: schedule, reminders: reminders),
-          ],
+            );
+          },
         );
       },
     );
   }
 
-  static Future<void> _showReminderSheet(
+  static Future<void> _showScheduleSheet(
     BuildContext context,
-    ReminderRepository reminders, {
+    ReminderRepository reminders,
+    List<Prescription> prescriptions, {
     ReminderSchedule? schedule,
   }) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) =>
-          _ReminderSheet(reminders: reminders, schedule: schedule),
+      builder: (context) => _ScheduleSheet(
+        reminders: reminders,
+        prescriptions: prescriptions,
+        schedule: schedule,
+      ),
     );
   }
 }
 
-class _ReminderTile extends StatelessWidget {
-  const _ReminderTile({required this.schedule, required this.reminders});
+class _ScheduleTile extends StatelessWidget {
+  const _ScheduleTile({
+    required this.schedule,
+    required this.prescription,
+    required this.prescriptions,
+    required this.reminders,
+  });
 
   final ReminderSchedule schedule;
+  final Prescription? prescription;
+  final List<Prescription> prescriptions;
   final ReminderRepository reminders;
 
   @override
   Widget build(BuildContext context) {
+    final title = prescription?.name ?? schedule.label;
     return Card(
       child: ListTile(
-        title: Text(schedule.label),
-        subtitle: Text(schedule.timeLabel),
+        title: Text(title),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(schedule.timeLabel),
+            if (prescription != null) Text(prescription!.pillType.label),
+          ],
+        ),
         leading: Icon(
           schedule.isEnabled
               ? Icons.notifications_active_outlined
@@ -95,16 +147,17 @@ class _ReminderTile extends StatelessWidget {
               onChanged: (value) => _setEnabled(context, value),
             ),
             IconButton(
-              tooltip: 'Edit reminder',
-              onPressed: () => RemindersScreen._showReminderSheet(
+              tooltip: 'Edit schedule',
+              onPressed: () => RemindersScreen._showScheduleSheet(
                 context,
                 reminders,
+                prescriptions,
                 schedule: schedule,
               ),
               icon: const Icon(Icons.edit_outlined),
             ),
             IconButton(
-              tooltip: 'Delete reminder',
+              tooltip: 'Delete schedule',
               onPressed: () => _delete(context),
               icon: const Icon(Icons.delete_outline),
             ),
@@ -123,7 +176,7 @@ class _ReminderTile extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Reminder update failed: $error')));
+      ).showSnackBar(SnackBar(content: Text('Schedule update failed: $error')));
     }
   }
 
@@ -134,25 +187,30 @@ class _ReminderTile extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Reminder delete failed: $error')));
+      ).showSnackBar(SnackBar(content: Text('Schedule delete failed: $error')));
     }
   }
 }
 
-class _ReminderSheet extends StatefulWidget {
-  const _ReminderSheet({required this.reminders, this.schedule});
+class _ScheduleSheet extends StatefulWidget {
+  const _ScheduleSheet({
+    required this.reminders,
+    required this.prescriptions,
+    this.schedule,
+  });
 
   final ReminderRepository reminders;
+  final List<Prescription> prescriptions;
   final ReminderSchedule? schedule;
 
   @override
-  State<_ReminderSheet> createState() => _ReminderSheetState();
+  State<_ScheduleSheet> createState() => _ScheduleSheetState();
 }
 
-class _ReminderSheetState extends State<_ReminderSheet> {
-  late final TextEditingController _labelController;
+class _ScheduleSheetState extends State<_ScheduleSheet> {
   late final TextEditingController _hourController;
   late final TextEditingController _minuteController;
+  late String? _selectedPrescriptionId;
   late bool _isEnabled;
   var _isSaving = false;
   String? _errorText;
@@ -161,7 +219,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
   void initState() {
     super.initState();
     final schedule = widget.schedule;
-    _labelController = TextEditingController(text: schedule?.label ?? '');
+    _selectedPrescriptionId = _initialPrescriptionId(schedule);
     _hourController = TextEditingController(
       text: schedule == null ? '' : schedule.hour.toString(),
     );
@@ -173,7 +231,6 @@ class _ReminderSheetState extends State<_ReminderSheet> {
 
   @override
   void dispose() {
-    _labelController.dispose();
     _hourController.dispose();
     _minuteController.dispose();
     super.dispose();
@@ -193,18 +250,34 @@ class _ReminderSheetState extends State<_ReminderSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              widget.schedule == null ? 'Add reminder' : 'Edit reminder',
+              widget.schedule == null ? 'Add schedule' : 'Edit schedule',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _labelController,
-              decoration: const InputDecoration(
-                labelText: 'Label',
-                border: OutlineInputBorder(),
-              ),
-              textInputAction: TextInputAction.next,
+            const SizedBox(height: 8),
+            Text(
+              'Use the medication details you already entered. Dosey does not confirm your dose is correct.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
+            const SizedBox(height: 16),
+            Text(
+              'Which prescription?',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            for (final prescription in widget.prescriptions)
+              Card.outlined(
+                child: ListTile(
+                  selected: _selectedPrescriptionId == prescription.id,
+                  title: Text(prescription.name),
+                  subtitle: Text(prescription.pillType.label),
+                  trailing: _selectedPrescriptionId == prescription.id
+                      ? const Icon(Icons.check_circle_outline)
+                      : null,
+                  onTap: () => setState(() {
+                    _selectedPrescriptionId = prescription.id;
+                  }),
+                ),
+              ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -256,7 +329,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
                 const Spacer(),
                 FilledButton(
                   onPressed: _isSaving ? null : _save,
-                  child: const Text('Save reminder'),
+                  child: const Text('Save schedule'),
                 ),
               ],
             ),
@@ -266,15 +339,17 @@ class _ReminderSheetState extends State<_ReminderSheet> {
     );
   }
 
+  /// Builds a reminder schedule from a saved prescription, preserving legacy
+  /// schedules by leaving their label-only display intact until edited.
   Future<void> _save() async {
     if (_isSaving) return;
 
-    final label = _labelController.text.trim();
+    final prescription = _selectedPrescription();
     final hour = int.tryParse(_hourController.text.trim());
     final minute = int.tryParse(_minuteController.text.trim());
 
-    if (label.isEmpty) {
-      setState(() => _errorText = 'Enter a reminder label.');
+    if (prescription == null) {
+      setState(() => _errorText = 'Choose a prescription.');
       return;
     }
     if (hour == null || hour < 0 || hour > 23) {
@@ -294,8 +369,9 @@ class _ReminderSheetState extends State<_ReminderSheet> {
     final now = DateTime.now().toUtc();
     final existing = widget.schedule;
     final schedule = ReminderSchedule(
-      id: existing?.id ?? 'reminder-${now.microsecondsSinceEpoch}',
-      label: label,
+      id: existing?.id ?? 'schedule-${now.microsecondsSinceEpoch}',
+      label: prescription.name,
+      prescriptionId: prescription.id,
       hour: hour,
       minute: minute,
       isEnabled: _isEnabled,
@@ -308,7 +384,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorText = 'Reminder save failed: $error';
+        _errorText = 'Schedule save failed: $error';
         _isSaving = false;
       });
       return;
@@ -316,5 +392,25 @@ class _ReminderSheetState extends State<_ReminderSheet> {
 
     if (!mounted) return;
     Navigator.of(context).pop();
+  }
+
+  String? _initialPrescriptionId(ReminderSchedule? schedule) {
+    final savedId = schedule?.prescriptionId;
+    if (savedId != null &&
+        widget.prescriptions.any(
+          (prescription) => prescription.id == savedId,
+        )) {
+      return savedId;
+    }
+    return widget.prescriptions.isEmpty ? null : widget.prescriptions.first.id;
+  }
+
+  Prescription? _selectedPrescription() {
+    final selectedId = _selectedPrescriptionId;
+    if (selectedId == null) return null;
+    for (final prescription in widget.prescriptions) {
+      if (prescription.id == selectedId) return prescription;
+    }
+    return null;
   }
 }

@@ -1,6 +1,8 @@
 import 'package:dosey_app/main.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
+import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -277,7 +279,7 @@ void main() {
     expect(find.text('Manual confirmation'), findsOneWidget);
     expect(find.text('No reminders scheduled for today.'), findsOneWidget);
     expect(
-      find.text('Add your first reminder from the Reminders tab.'),
+      find.text('Add your first schedule from the Schedule tab.'),
       findsOneWidget,
     );
   });
@@ -479,6 +481,57 @@ void main() {
     expect(find.text('No prescriptions yet.'), findsOneWidget);
   });
 
+  testWidgets('Schedule tab asks for prescriptions before schedules', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Add a prescription before creating a schedule.'),
+      findsOneWidget,
+    );
+    final addButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Add schedule'),
+    );
+    expect(addButton.onPressed, isNull);
+  });
+
+  testWidgets('Schedule tab creates schedules from prescriptions', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No schedules yet.'), findsOneWidget);
+    await tester.tap(find.text('Add schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Which prescription?'), findsOneWidget);
+    expect(find.text('Vitamin D'), findsWidgets);
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
+    await tester.tap(find.text('Save schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('08:30'), findsOneWidget);
+    expect(find.text('Capsule'), findsOneWidget);
+  });
+
   testWidgets('controller tab keeps manual dispense disabled by default', (
     WidgetTester tester,
   ) async {
@@ -557,34 +610,32 @@ void main() {
     }
   });
 
-  testWidgets('reminders tab adds edits toggles and deletes reminders', (
+  testWidgets('Schedule tab adds edits toggles and deletes schedules', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Schedule'));
     await tester.pumpAndSettle();
 
-    expect(find.text('No reminders yet.'), findsOneWidget);
-    expect(find.text('Add reminder'), findsOneWidget);
+    expect(find.text('No schedules yet.'), findsOneWidget);
+    expect(find.text('Add schedule'), findsOneWidget);
 
-    await tester.tap(find.text('Add reminder'));
+    await tester.tap(find.text('Add schedule'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Label'),
-      'Vitamin D',
-    );
     await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
     await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
-    await tester.tap(find.text('Save reminder'));
+    await tester.tap(find.text('Save schedule'));
     await tester.pumpAndSettle();
 
     expect(find.text('Vitamin D'), findsOneWidget);
     expect(find.text('08:30'), findsOneWidget);
+    expect(find.text('Capsule'), findsOneWidget);
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
 
     await tester.tap(find.byType(Switch));
@@ -592,57 +643,51 @@ void main() {
 
     expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
 
-    await tester.tap(find.byTooltip('Edit reminder'));
+    await tester.tap(find.byTooltip('Edit schedule'));
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Label'),
-      'Morning vitamin',
-    );
-    await tester.tap(find.text('Save reminder'));
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '9');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '15');
+    await tester.tap(find.text('Save schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('09:15'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Delete schedule'));
     await tester.pumpAndSettle();
 
     expect(find.text('Vitamin D'), findsNothing);
-    expect(find.text('Morning vitamin'), findsOneWidget);
-
-    await tester.tap(find.byTooltip('Delete reminder'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Morning vitamin'), findsNothing);
-    expect(find.text('No reminders yet.'), findsOneWidget);
+    expect(find.text('No schedules yet.'), findsOneWidget);
   });
 
-  testWidgets('reminder form validates required label and time range', (
+  testWidgets('schedule form validates time range', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Schedule'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Add reminder'));
+    await tester.tap(find.text('Add schedule'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save reminder'));
+    await tester.tap(find.text('Save schedule'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Enter a reminder label.'), findsOneWidget);
-
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Label'),
-      'Vitamin D',
-    );
+    expect(find.text('Hour must be 0 through 23.'), findsOneWidget);
     await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '24');
     await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '60');
-    await tester.tap(find.text('Save reminder'));
+    await tester.tap(find.text('Save schedule'));
     await tester.pumpAndSettle();
 
     expect(find.text('Hour must be 0 through 23.'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
-    await tester.tap(find.text('Save reminder'));
+    await tester.tap(find.text('Save schedule'));
     await tester.pumpAndSettle();
 
     expect(find.text('Minute must be 0 through 59.'), findsOneWidget);
@@ -650,27 +695,29 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
 
-    expect(find.text('No reminders yet.'), findsOneWidget);
+    expect(find.text('No schedules yet.'), findsOneWidget);
   });
 
-  testWidgets('reminder form is scrollable in the bottom sheet', (
+  testWidgets('schedule form is scrollable in the bottom sheet', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Schedule'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Add reminder'));
+    await tester.tap(find.text('Add schedule'));
     await tester.pumpAndSettle();
 
     expect(find.byType(SingleChildScrollView), findsOneWidget);
-    expect(find.widgetWithText(TextFormField, 'Label'), findsOneWidget);
-    expect(find.text('Save reminder'), findsOneWidget);
+    expect(find.text('Which prescription?'), findsOneWidget);
+    expect(find.widgetWithText(TextFormField, 'Hour'), findsOneWidget);
+    expect(find.text('Save schedule'), findsOneWidget);
   });
 }
 
@@ -716,6 +763,18 @@ Future<void> _addVitaminReminder(DoseyDatabase database) {
       hour: 8,
       minute: 30,
       isEnabled: true,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    ),
+  );
+}
+
+Future<void> _addVitaminPrescription(DoseyDatabase database) {
+  return LocalPrescriptionRepository(database).upsertPrescription(
+    Prescription(
+      id: 'vitamin-d',
+      name: 'Vitamin D',
+      pillType: PillType.capsule,
       createdAt: DateTime.utc(2026),
       updatedAt: DateTime.utc(2026),
     ),
