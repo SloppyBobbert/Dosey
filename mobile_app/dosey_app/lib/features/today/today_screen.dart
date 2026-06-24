@@ -1,7 +1,9 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
+import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:flutter/material.dart';
 
 class TodayScreen extends StatelessWidget {
@@ -19,111 +21,82 @@ class TodayScreen extends StatelessWidget {
           prescriptionSnapshot.data ?? const <Prescription>[],
         );
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _TodayHeroCard(
-                onConfirmDoseTaken: () async {
-                  try {
-                    await dependencies.doseLog.addEvent(
-                      DoseLogEvent.doseTakenConfirmed(
-                        doseId: 'manual-confirmation',
-                        occurredAt: DateTime.now().toUtc(),
+        return StreamBuilder<ScheduleProfile>(
+          stream: dependencies.scheduleProfiles.watchActiveProfile(),
+          builder: (context, profileSnapshot) {
+            return StreamBuilder<List<ReminderSchedule>>(
+              stream: _activeSchedulesStream(reminders, profileSnapshot.data),
+              builder: (context, reminderSnapshot) {
+                final schedules =
+                    reminderSnapshot.data ?? const <ReminderSchedule>[];
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _TodayHeroCard(
+                        onConfirmDoseTaken: () async {
+                          try {
+                            await dependencies.doseLog.addEvent(
+                              DoseLogEvent.doseTakenConfirmed(
+                                doseId: 'manual-confirmation',
+                                occurredAt: DateTime.now().toUtc(),
+                              ),
+                            );
+                            if (!context.mounted) {
+                              return;
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Dose confirmation logged.'),
+                              ),
+                            );
+                          } on Object catch (error) {
+                            if (!context.mounted) {
+                              return;
+                            }
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Dose confirmation failed: $error',
+                                ),
+                              ),
+                            );
+                          }
+                        },
                       ),
-                    );
-                    if (!context.mounted) {
-                      return;
-                    }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Dose confirmation logged.'),
+                      const SizedBox(height: 12),
+                      _CurrentDoseSection(
+                        schedules: schedules,
+                        prescriptionsById: prescriptionsById,
                       ),
-                    );
-                  } on Object catch (error) {
-                    if (!context.mounted) {
-                      return;
-                    }
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Dose confirmation failed: $error'),
+                      const SizedBox(height: 12),
+                      const _SafetyCard(),
+                      const SizedBox(height: 12),
+                      _ReminderPreviewCard(
+                        schedules: schedules,
+                        prescriptionsById: prescriptionsById,
                       ),
-                    );
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              StreamBuilder<List<ReminderSchedule>>(
-                stream: reminders.watchSchedules(),
-                builder: (context, reminderSnapshot) {
-                  final schedules =
-                      reminderSnapshot.data ?? const <ReminderSchedule>[];
-                  final currentSchedule = _currentSchedule(schedules);
-                  if (currentSchedule == null) {
-                    return const SizedBox.shrink();
-                  }
-
-                  return StreamBuilder<List<DoseLogEvent>>(
-                    stream: dependencies.doseLog.watchEvents(),
-                    builder: (context, logSnapshot) {
-                      final doseId = _doseIdForToday(currentSchedule.id);
-                      final latestEvent = _latestEventForDose(
-                        logSnapshot.data ?? const <DoseLogEvent>[],
-                        doseId,
-                      );
-                      return _CurrentDoseCard(
-                        schedule: currentSchedule,
-                        prescription:
-                            prescriptionsById[currentSchedule.prescriptionId],
-                        latestEvent: latestEvent,
-                        onConfirmTaken: () => _logDoseAction(
-                          context,
-                          DoseLogEvent.doseTakenConfirmed(
-                            doseId: doseId,
-                            occurredAt: DateTime.now().toUtc(),
-                          ),
-                          'Dose marked taken.',
-                        ),
-                        onSkipDose: () => _logDoseAction(
-                          context,
-                          DoseLogEvent.doseSkipped(
-                            doseId: doseId,
-                            occurredAt: DateTime.now().toUtc(),
-                          ),
-                          'Dose skipped.',
-                        ),
-                        onMarkMissed: () => _logDoseAction(
-                          context,
-                          DoseLogEvent.doseMissed(
-                            doseId: doseId,
-                            occurredAt: DateTime.now().toUtc(),
-                          ),
-                          'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-              const _SafetyCard(),
-              const SizedBox(height: 12),
-              StreamBuilder<List<ReminderSchedule>>(
-                stream: reminders.watchSchedules(),
-                builder: (context, snapshot) {
-                  final schedules = snapshot.data ?? const <ReminderSchedule>[];
-                  return _ReminderPreviewCard(
-                    schedules: schedules,
-                    prescriptionsById: prescriptionsById,
-                  );
-                },
-              ),
-            ],
-          ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
         );
       },
     );
+  }
+
+  /// Uses only the active schedule profile for the robot-facing Today view.
+  static Stream<List<ReminderSchedule>> _activeSchedulesStream(
+    ReminderRepository reminders,
+    ScheduleProfile? activeProfile,
+  ) {
+    if (activeProfile == null) {
+      return Stream<List<ReminderSchedule>>.value(const <ReminderSchedule>[]);
+    }
+    return reminders.watchSchedules(profileId: activeProfile.id);
   }
 
   /// Joins schedules to the user's saved prescription metadata for display
@@ -185,6 +158,64 @@ class TodayScreen extends StatelessWidget {
         context,
       ).showSnackBar(SnackBar(content: Text('Dose action failed: $error')));
     }
+  }
+}
+
+class _CurrentDoseSection extends StatelessWidget {
+  const _CurrentDoseSection({
+    required this.schedules,
+    required this.prescriptionsById,
+  });
+
+  final List<ReminderSchedule> schedules;
+  final Map<String, Prescription> prescriptionsById;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentSchedule = TodayScreen._currentSchedule(schedules);
+    if (currentSchedule == null) {
+      return const SizedBox.shrink();
+    }
+
+    return StreamBuilder<List<DoseLogEvent>>(
+      stream: DoseyAppScope.of(context).doseLog.watchEvents(),
+      builder: (context, logSnapshot) {
+        final doseId = TodayScreen._doseIdForToday(currentSchedule.id);
+        final latestEvent = TodayScreen._latestEventForDose(
+          logSnapshot.data ?? const <DoseLogEvent>[],
+          doseId,
+        );
+        return _CurrentDoseCard(
+          schedule: currentSchedule,
+          prescription: prescriptionsById[currentSchedule.prescriptionId],
+          latestEvent: latestEvent,
+          onConfirmTaken: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseTakenConfirmed(
+              doseId: doseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Dose marked taken.',
+          ),
+          onSkipDose: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseSkipped(
+              doseId: doseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Dose skipped.',
+          ),
+          onMarkMissed: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseMissed(
+              doseId: doseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+          ),
+        );
+      },
+    );
   }
 }
 

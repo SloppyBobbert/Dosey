@@ -2,6 +2,8 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
+import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:flutter/material.dart';
 
 class RemindersScreen extends StatelessWidget {
@@ -16,76 +18,101 @@ class RemindersScreen extends StatelessWidget {
       builder: (context, prescriptionSnapshot) {
         final prescriptions =
             prescriptionSnapshot.data ?? const <Prescription>[];
-        return StreamBuilder<List<ReminderSchedule>>(
-          stream: dependencies.reminders.watchSchedules(),
-          builder: (context, scheduleSnapshot) {
-            final schedules =
-                scheduleSnapshot.data ?? const <ReminderSchedule>[];
-            final prescriptionsById = {
-              for (final prescription in prescriptions)
-                prescription.id: prescription,
-            };
+        return StreamBuilder<List<ScheduleProfile>>(
+          stream: dependencies.scheduleProfiles.watchProfiles(),
+          builder: (context, profileSnapshot) {
+            final profiles = profileSnapshot.data ?? const <ScheduleProfile>[];
+            final activeProfile = _activeProfile(profiles);
+            return StreamBuilder<List<ReminderSchedule>>(
+              stream: dependencies.reminders.watchSchedules(
+                profileId: activeProfile?.id,
+              ),
+              builder: (context, scheduleSnapshot) {
+                final schedules =
+                    scheduleSnapshot.data ?? const <ReminderSchedule>[];
+                final prescriptionsById = {
+                  for (final prescription in prescriptions)
+                    prescription.id: prescription,
+                };
 
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Row(
+                return ListView(
+                  padding: const EdgeInsets.all(16),
                   children: [
-                    Expanded(
-                      child: Text(
-                        'Schedule',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Schedule',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                        FilledButton.icon(
+                          onPressed:
+                              prescriptions.isEmpty || activeProfile == null
+                              ? null
+                              : () => showScheduleSheet(
+                                  context,
+                                  dependencies.reminders,
+                                  prescriptions,
+                                  profileId: activeProfile.id,
+                                ),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add schedule'),
+                        ),
+                      ],
                     ),
-                    FilledButton.icon(
-                      onPressed: prescriptions.isEmpty
-                          ? null
-                          : () => showScheduleSheet(
-                              context,
-                              dependencies.reminders,
-                              prescriptions,
-                            ),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add schedule'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Create schedules from prescriptions you entered. Dosey does not verify dosing instructions.',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    const SizedBox(height: 16),
+                    _ScheduleProfileSection(
+                      profiles: profiles,
+                      activeProfile: activeProfile,
+                      profilesRepository: dependencies.scheduleProfiles,
+                    ),
+                    const SizedBox(height: 16),
+                    if (prescriptions.isEmpty)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text(
+                            'Add a prescription before creating a schedule.',
+                          ),
+                        ),
+                      )
+                    else if (schedules.isEmpty)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('No schedules yet.'),
+                        ),
+                      )
+                    else
+                      for (final schedule in schedules)
+                        _ScheduleTile(
+                          schedule: schedule,
+                          prescription:
+                              prescriptionsById[schedule.prescriptionId],
+                          prescriptions: prescriptions,
+                          reminders: dependencies.reminders,
+                        ),
                   ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Create schedules from prescriptions you entered. Dosey does not verify dosing instructions.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 16),
-                if (prescriptions.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                        'Add a prescription before creating a schedule.',
-                      ),
-                    ),
-                  )
-                else if (schedules.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text('No schedules yet.'),
-                    ),
-                  )
-                else
-                  for (final schedule in schedules)
-                    _ScheduleTile(
-                      schedule: schedule,
-                      prescription: prescriptionsById[schedule.prescriptionId],
-                      prescriptions: prescriptions,
-                      reminders: dependencies.reminders,
-                    ),
-              ],
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  static ScheduleProfile? _activeProfile(List<ScheduleProfile> profiles) {
+    for (final profile in profiles) {
+      if (profile.isActive) return profile;
+    }
+    return profiles.isEmpty ? null : profiles.first;
   }
 
   static Future<void> showScheduleSheet(
@@ -94,6 +121,7 @@ class RemindersScreen extends StatelessWidget {
     List<Prescription> prescriptions, {
     ReminderSchedule? schedule,
     String? initialPrescriptionId,
+    String profileId = ReminderSchedule.defaultProfileId,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -104,8 +132,205 @@ class RemindersScreen extends StatelessWidget {
         prescriptions: prescriptions,
         schedule: schedule,
         initialPrescriptionId: initialPrescriptionId,
+        profileId: profileId,
       ),
     );
+  }
+}
+
+class _ScheduleProfileSection extends StatelessWidget {
+  const _ScheduleProfileSection({
+    required this.profiles,
+    required this.activeProfile,
+    required this.profilesRepository,
+  });
+
+  final List<ScheduleProfile> profiles;
+  final ScheduleProfile? activeProfile;
+  final ScheduleProfileRepository profilesRepository;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Active schedule',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(activeProfile?.name ?? 'No active schedule'),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _showProfileSheet(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add schedule profile'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (final profile in profiles)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(profile.name),
+                subtitle: Text(profile.isActive ? 'Active' : 'Saved'),
+                trailing: profile.isActive
+                    ? const Icon(Icons.check_circle_outline)
+                    : Tooltip(
+                        message: 'Use ${profile.name} schedule',
+                        child: TextButton(
+                          onPressed: () => _setActive(context, profile.id),
+                          child: Text('Use ${profile.name}'),
+                        ),
+                      ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showProfileSheet(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _ScheduleProfileSheet(profiles: profilesRepository),
+    );
+  }
+
+  /// Switches the robot to one active schedule profile without deleting any
+  /// saved schedules in other profiles.
+  Future<void> _setActive(BuildContext context, String id) async {
+    try {
+      await profilesRepository.setActiveProfile(id);
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Schedule profile update failed: $error')),
+      );
+    }
+  }
+}
+
+class _ScheduleProfileSheet extends StatefulWidget {
+  const _ScheduleProfileSheet({required this.profiles});
+
+  final ScheduleProfileRepository profiles;
+
+  @override
+  State<_ScheduleProfileSheet> createState() => _ScheduleProfileSheetState();
+}
+
+class _ScheduleProfileSheetState extends State<_ScheduleProfileSheet> {
+  final _nameController = TextEditingController();
+  var _isSaving = false;
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Add schedule profile',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Schedule name',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.done,
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _errorText!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: _isSaving ? null : _save,
+                child: const Text('Save schedule profile'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Saves a named routine profile that can become the one active robot schedule.
+  Future<void> _save() async {
+    if (_isSaving) return;
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      setState(() => _errorText = 'Schedule name is required.');
+      return;
+    }
+
+    setState(() {
+      _errorText = null;
+      _isSaving = true;
+    });
+
+    final now = DateTime.now().toUtc();
+    try {
+      await widget.profiles.upsertProfile(
+        ScheduleProfile(
+          id: 'schedule-profile-${now.microsecondsSinceEpoch}',
+          name: name,
+          isActive: false,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorText = 'Schedule profile save failed: $error';
+        _isSaving = false;
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
   }
 }
 
@@ -198,12 +423,14 @@ class _ScheduleSheet extends StatefulWidget {
   const _ScheduleSheet({
     required this.reminders,
     required this.prescriptions,
+    required this.profileId,
     this.schedule,
     this.initialPrescriptionId,
   });
 
   final ReminderRepository reminders;
   final List<Prescription> prescriptions;
+  final String profileId;
   final ReminderSchedule? schedule;
   final String? initialPrescriptionId;
 
@@ -376,6 +603,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
       id: existing?.id ?? 'schedule-${now.microsecondsSinceEpoch}',
       label: prescription.name,
       prescriptionId: prescription.id,
+      profileId: existing?.profileId ?? widget.profileId,
       hour: hour,
       minute: minute,
       isEnabled: _isEnabled,

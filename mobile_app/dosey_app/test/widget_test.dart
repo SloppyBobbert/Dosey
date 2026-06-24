@@ -5,6 +5,8 @@ import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart'
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
+import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -310,6 +312,30 @@ void main() {
     expect(find.text('Vitamin D'), findsOneWidget);
   });
 
+  testWidgets('Today screen only shows reminders from the active schedule', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database);
+    await _addTravelProfile(database);
+    await _addVitaminReminder(
+      database,
+      id: 'travel-vitamin-d',
+      profileId: 'travel',
+      hour: 10,
+      minute: 0,
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('10:00 · Vitamin D'), findsOneWidget);
+    expect(find.text('08:30 · Vitamin D'), findsNothing);
+  });
+
   testWidgets('Today screen shows linked prescription pill type', (
     WidgetTester tester,
   ) async {
@@ -594,6 +620,42 @@ void main() {
     expect(find.text('Capsule'), findsOneWidget);
   });
 
+  testWidgets('Schedule tab switches between saved schedule profiles', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Active schedule'), findsOneWidget);
+    expect(find.text('Schedule 1'), findsWidgets);
+    expect(find.text('Vitamin D'), findsOneWidget);
+
+    await tester.tap(find.text('Add schedule profile'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Schedule name'),
+      'Travel',
+    );
+    await tester.tap(find.text('Save schedule profile'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Use Travel schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Active schedule'), findsOneWidget);
+    expect(find.text('Travel'), findsWidgets);
+    expect(find.text('No schedules yet.'), findsOneWidget);
+    expect(find.text('Vitamin D'), findsNothing);
+  });
+
   testWidgets('Schedule tab blocks duplicate prescription times', (
     WidgetTester tester,
   ) async {
@@ -850,18 +912,40 @@ Future<void> _saveSignedInUser(
   );
 }
 
-Future<void> _addVitaminReminder(DoseyDatabase database) {
+Future<void> _addVitaminReminder(
+  DoseyDatabase database, {
+  String id = 'vitamin-d',
+  String profileId = ReminderSchedule.defaultProfileId,
+  int hour = 8,
+  int minute = 30,
+}) {
   return LocalReminderRepository(database).upsertSchedule(
     ReminderSchedule(
-      id: 'vitamin-d',
+      id: id,
       label: 'Vitamin D',
-      hour: 8,
-      minute: 30,
+      prescriptionId: 'vitamin-d',
+      profileId: profileId,
+      hour: hour,
+      minute: minute,
       isEnabled: true,
       createdAt: DateTime.utc(2026),
       updatedAt: DateTime.utc(2026),
     ),
   );
+}
+
+Future<void> _addTravelProfile(DoseyDatabase database) async {
+  final repository = LocalScheduleProfileRepository(database);
+  await repository.upsertProfile(
+    ScheduleProfile(
+      id: 'travel',
+      name: 'Travel',
+      isActive: false,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    ),
+  );
+  await repository.setActiveProfile('travel');
 }
 
 Future<void> _addVitaminPrescription(DoseyDatabase database) {

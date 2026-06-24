@@ -2,6 +2,8 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:flutter/material.dart';
 
@@ -17,59 +19,67 @@ class PrescriptionsScreen extends StatelessWidget {
       stream: prescriptions.watchPrescriptions(),
       builder: (context, snapshot) {
         final items = snapshot.data ?? const <Prescription>[];
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Row(
+        return StreamBuilder<ScheduleProfile>(
+          stream: dependencies.scheduleProfiles.watchActiveProfile(),
+          builder: (context, profileSnapshot) {
+            final activeProfileId =
+                profileSnapshot.data?.id ?? ReminderSchedule.defaultProfileId;
+            return ListView(
+              padding: const EdgeInsets.all(16),
               children: [
-                Expanded(
-                  child: Text(
-                    'Prescriptions',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Prescriptions',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    FilledButton.icon(
+                      onPressed: () =>
+                          _showPrescriptionSheet(context, prescriptions),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add prescription'),
+                    ),
+                  ],
                 ),
-                FilledButton.icon(
-                  onPressed: () =>
-                      _showPrescriptionSheet(context, prescriptions),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add prescription'),
+                const SizedBox(height: 8),
+                Text(
+                  'Enter what is on your prescription label.',
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
+                const SizedBox(height: 4),
+                Text(
+                  'Dosey does not verify prescriptions or identify pills.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 16),
+                if (items.isEmpty)
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('No prescriptions yet.'),
+                          SizedBox(height: 6),
+                          Text('Add your first prescription.'),
+                        ],
+                      ),
+                    ),
+                  )
+                else
+                  for (final prescription in items)
+                    _PrescriptionTile(
+                      prescription: prescription,
+                      allPrescriptions: items,
+                      activeProfileId: activeProfileId,
+                      prescriptions: prescriptions,
+                      reminders: dependencies.reminders,
+                    ),
               ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Enter what is on your prescription label.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Dosey does not verify prescriptions or identify pills.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 16),
-            if (items.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('No prescriptions yet.'),
-                      SizedBox(height: 6),
-                      Text('Add your first prescription.'),
-                    ],
-                  ),
-                ),
-              )
-            else
-              for (final prescription in items)
-                _PrescriptionTile(
-                  prescription: prescription,
-                  allPrescriptions: items,
-                  prescriptions: prescriptions,
-                  reminders: dependencies.reminders,
-                ),
-          ],
+            );
+          },
         );
       },
     );
@@ -96,12 +106,14 @@ class _PrescriptionTile extends StatelessWidget {
   const _PrescriptionTile({
     required this.prescription,
     required this.allPrescriptions,
+    required this.activeProfileId,
     required this.prescriptions,
     required this.reminders,
   });
 
   final Prescription prescription;
   final List<Prescription> allPrescriptions;
+  final String activeProfileId;
   final PrescriptionRepository prescriptions;
   final ReminderRepository reminders;
 
@@ -148,6 +160,7 @@ class _PrescriptionTile extends StatelessWidget {
       reminders,
       allPrescriptions,
       initialPrescriptionId: prescription.id,
+      profileId: activeProfileId,
     );
   }
 
