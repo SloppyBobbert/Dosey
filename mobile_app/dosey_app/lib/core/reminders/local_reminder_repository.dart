@@ -3,7 +3,7 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
 
 abstract interface class ReminderRepository {
-  Stream<List<ReminderSchedule>> watchSchedules();
+  Stream<List<ReminderSchedule>> watchSchedules({String? profileId});
 
   Future<void> upsertSchedule(ReminderSchedule schedule);
 
@@ -17,12 +17,15 @@ class LocalReminderRepository implements ReminderRepository {
 
   /// Watches schedules in clock order so Today and Schedule share one ordering.
   @override
-  Stream<List<ReminderSchedule>> watchSchedules() {
+  Stream<List<ReminderSchedule>> watchSchedules({String? profileId}) {
     final query = _database.select(_database.reminderSchedules)
       ..orderBy([
         (schedule) => OrderingTerm.asc(schedule.hour),
         (schedule) => OrderingTerm.asc(schedule.minute),
       ]);
+    if (profileId != null) {
+      query.where((schedule) => schedule.profileId.equals(profileId));
+    }
 
     return query.watch().map((rows) => rows.map(_fromRow).toList());
   }
@@ -40,6 +43,7 @@ class LocalReminderRepository implements ReminderRepository {
             id: schedule.id,
             label: schedule.label,
             prescriptionId: Value(schedule.prescriptionId),
+            profileId: Value(schedule.profileId),
             hour: schedule.hour,
             minute: schedule.minute,
             isEnabled: schedule.isEnabled,
@@ -61,6 +65,7 @@ class LocalReminderRepository implements ReminderRepository {
       id: row.id,
       label: row.label,
       prescriptionId: row.prescriptionId,
+      profileId: row.profileId,
       hour: row.hour,
       minute: row.minute,
       isEnabled: row.isEnabled,
@@ -94,6 +99,7 @@ class LocalReminderRepository implements ReminderRepository {
               ..where(
                 (row) =>
                     row.prescriptionId.equals(prescriptionId) &
+                    row.profileId.equals(schedule.profileId) &
                     row.hour.equals(schedule.hour) &
                     row.minute.equals(schedule.minute) &
                     row.id.equals(schedule.id).not(),
