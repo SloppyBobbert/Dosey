@@ -19,11 +19,11 @@ class PrescriptionsScreen extends StatelessWidget {
       stream: prescriptions.watchPrescriptions(),
       builder: (context, snapshot) {
         final items = snapshot.data ?? const <Prescription>[];
-        return StreamBuilder<ScheduleProfile>(
-          stream: dependencies.scheduleProfiles.watchActiveProfile(),
+        return StreamBuilder<List<ScheduleProfile>>(
+          stream: dependencies.scheduleProfiles.watchProfiles(),
           builder: (context, profileSnapshot) {
-            final activeProfileId =
-                profileSnapshot.data?.id ?? ReminderSchedule.defaultProfileId;
+            final profiles = profileSnapshot.data ?? const <ScheduleProfile>[];
+            final activeProfileId = _activeProfileId(profiles);
             return StreamBuilder<List<ReminderSchedule>>(
               stream: dependencies.reminders.watchSchedules(),
               builder: (context, schedulesSnapshot) {
@@ -82,6 +82,7 @@ class PrescriptionsScreen extends StatelessWidget {
                           scheduleSummary: _scheduleSummaryFor(
                             prescription,
                             schedules,
+                            profiles,
                             activeProfileId,
                           ),
                           prescriptions: prescriptions,
@@ -102,6 +103,7 @@ class PrescriptionsScreen extends StatelessWidget {
   static _PrescriptionScheduleSummary _scheduleSummaryFor(
     Prescription prescription,
     List<ReminderSchedule> schedules,
+    List<ScheduleProfile> profiles,
     String activeProfileId,
   ) {
     final prescriptionSchedules = schedules
@@ -116,11 +118,60 @@ class PrescriptionsScreen extends StatelessWidget {
         .map((schedule) => schedule.profileId)
         .toSet()
         .length;
+    final details = _profileDetailsFor(
+      prescriptionSchedules,
+      profiles,
+      activeProfileId,
+    );
 
     return _PrescriptionScheduleSummary(
       activeTimes: [for (final schedule in activeSchedules) schedule.timeLabel],
       profileCount: profileCount,
+      details: details,
     );
+  }
+
+  static String _activeProfileId(List<ScheduleProfile> profiles) {
+    for (final profile in profiles) {
+      if (profile.isActive) return profile.id;
+    }
+    return profiles.isEmpty
+        ? ReminderSchedule.defaultProfileId
+        : profiles.first.id;
+  }
+
+  static List<_PrescriptionScheduleDetail> _profileDetailsFor(
+    List<ReminderSchedule> schedules,
+    List<ScheduleProfile> profiles,
+    String activeProfileId,
+  ) {
+    final schedulesByProfile = <String, List<ReminderSchedule>>{};
+    for (final schedule in schedules) {
+      schedulesByProfile
+          .putIfAbsent(schedule.profileId, () => [])
+          .add(schedule);
+    }
+
+    final profileNames = {
+      for (final profile in profiles) profile.id: profile.name,
+    };
+    final details = <_PrescriptionScheduleDetail>[];
+    for (final entry in schedulesByProfile.entries) {
+      final profileSchedules = entry.value..sort(_compareSchedulesByTime);
+      details.add(
+        _PrescriptionScheduleDetail(
+          profileName: profileNames[entry.key] ?? entry.key,
+          isActive: entry.key == activeProfileId,
+          times: [for (final schedule in profileSchedules) schedule.timeLabel],
+        ),
+      );
+    }
+
+    details.sort((a, b) {
+      if (a.isActive != b.isActive) return a.isActive ? -1 : 1;
+      return a.profileName.compareTo(b.profileName);
+    });
+    return details;
   }
 
   static int _compareSchedulesByTime(ReminderSchedule a, ReminderSchedule b) {
@@ -150,10 +201,12 @@ class _PrescriptionScheduleSummary {
   const _PrescriptionScheduleSummary({
     required this.activeTimes,
     required this.profileCount,
+    required this.details,
   });
 
   final List<String> activeTimes;
   final int profileCount;
+  final List<_PrescriptionScheduleDetail> details;
 
   bool get hasSchedules => profileCount > 0;
 
@@ -167,6 +220,20 @@ class _PrescriptionScheduleSummary {
         ? 'Used in 1 schedule'
         : 'Used in $profileCount schedules';
   }
+}
+
+class _PrescriptionScheduleDetail {
+  const _PrescriptionScheduleDetail({
+    required this.profileName,
+    required this.isActive,
+    required this.times,
+  });
+
+  final String profileName;
+  final bool isActive;
+  final List<String> times;
+
+  String get timesLabel => times.join(', ');
 }
 
 class _PrescriptionTile extends StatelessWidget {
@@ -206,6 +273,13 @@ class _PrescriptionTile extends StatelessWidget {
           spacing: 4,
           children: [
             IconButton(
+              tooltip: 'View schedule details',
+              onPressed: scheduleSummary.hasSchedules
+                  ? () => _showScheduleDetails(context)
+                  : null,
+              icon: const Icon(Icons.list_alt_outlined),
+            ),
+            IconButton(
               tooltip: 'Schedule prescription',
               onPressed: () => _schedule(context),
               icon: const Icon(Icons.event_available_outlined),
@@ -226,6 +300,19 @@ class _PrescriptionTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Shows where this medication appears across saved schedule profiles while
+  /// reinforcing that Today only follows the single active profile.
+  Future<void> _showScheduleDetails(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => _PrescriptionScheduleDetailsSheet(
+        prescription: prescription,
+        summary: scheduleSummary,
       ),
     );
   }
@@ -251,6 +338,49 @@ class _PrescriptionTile extends StatelessWidget {
         SnackBar(content: Text('Prescription delete failed: $error')),
       );
     }
+  }
+}
+
+class _PrescriptionScheduleDetailsSheet extends StatelessWidget {
+  const _PrescriptionScheduleDetailsSheet({
+    required this.prescription,
+    required this.summary,
+  });
+
+  final Prescription prescription;
+  final _PrescriptionScheduleSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${prescription.name} schedules',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          const Text('Only the active schedule is used by Today.'),
+          const SizedBox(height: 16),
+          for (final detail in summary.details) ...[
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                detail.isActive
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_unchecked,
+              ),
+              title: Text(detail.profileName),
+              subtitle: Text(detail.timesLabel),
+              trailing: detail.isActive ? const Text('Active') : null,
+            ),
+          ],
+        ],
+      ),
+    );
   }
 }
 

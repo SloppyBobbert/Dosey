@@ -599,6 +599,42 @@ void main() {
     expect(find.text('No schedules yet'), findsOneWidget);
   });
 
+  testWidgets('prescription cards show schedule profile details', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database);
+    await _addTravelProfile(database, setActive: false);
+    await _addVitaminReminder(
+      database,
+      id: 'travel-vitamin-d',
+      profileId: 'travel',
+      hour: 20,
+      minute: 0,
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Prescriptions'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('View schedule details'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D schedules'), findsOneWidget);
+    expect(find.text('Schedule 1'), findsOneWidget);
+    expect(find.text('08:30'), findsOneWidget);
+    expect(find.text('Travel'), findsOneWidget);
+    expect(find.text('20:00'), findsOneWidget);
+    expect(
+      find.text('Only the active schedule is used by Today.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Schedule tab asks for prescriptions before schedules', (
     WidgetTester tester,
   ) async {
