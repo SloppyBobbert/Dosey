@@ -24,65 +24,109 @@ class PrescriptionsScreen extends StatelessWidget {
           builder: (context, profileSnapshot) {
             final activeProfileId =
                 profileSnapshot.data?.id ?? ReminderSchedule.defaultProfileId;
-            return ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Row(
+            return StreamBuilder<List<ReminderSchedule>>(
+              stream: dependencies.reminders.watchSchedules(),
+              builder: (context, schedulesSnapshot) {
+                final schedules =
+                    schedulesSnapshot.data ?? const <ReminderSchedule>[];
+                return ListView(
+                  padding: const EdgeInsets.all(16),
                   children: [
-                    Expanded(
-                      child: Text(
-                        'Prescriptions',
-                        style: Theme.of(context).textTheme.titleLarge,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Prescriptions',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                        ),
+                        FilledButton.icon(
+                          onPressed: () =>
+                              _showPrescriptionSheet(context, prescriptions),
+                          icon: const Icon(Icons.add),
+                          label: const Text('Add prescription'),
+                        ),
+                      ],
                     ),
-                    FilledButton.icon(
-                      onPressed: () =>
-                          _showPrescriptionSheet(context, prescriptions),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Add prescription'),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Enter what is on your prescription label.',
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Dosey does not verify prescriptions or identify pills.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 16),
+                    if (items.isEmpty)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('No prescriptions yet.'),
+                              SizedBox(height: 6),
+                              Text('Add your first prescription.'),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      for (final prescription in items)
+                        _PrescriptionTile(
+                          prescription: prescription,
+                          allPrescriptions: items,
+                          activeProfileId: activeProfileId,
+                          scheduleSummary: _scheduleSummaryFor(
+                            prescription,
+                            schedules,
+                            activeProfileId,
+                          ),
+                          prescriptions: prescriptions,
+                          reminders: dependencies.reminders,
+                        ),
                   ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Enter what is on your prescription label.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Dosey does not verify prescriptions or identify pills.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 16),
-                if (items.isEmpty)
-                  const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('No prescriptions yet.'),
-                          SizedBox(height: 6),
-                          Text('Add your first prescription.'),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  for (final prescription in items)
-                    _PrescriptionTile(
-                      prescription: prescription,
-                      allPrescriptions: items,
-                      activeProfileId: activeProfileId,
-                      prescriptions: prescriptions,
-                      reminders: dependencies.reminders,
-                    ),
-              ],
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  /// Summarizes schedule usage for one prescription without changing which
+  /// profile is active for Today or robot-facing dose actions.
+  static _PrescriptionScheduleSummary _scheduleSummaryFor(
+    Prescription prescription,
+    List<ReminderSchedule> schedules,
+    String activeProfileId,
+  ) {
+    final prescriptionSchedules = schedules
+        .where((schedule) => schedule.prescriptionId == prescription.id)
+        .toList();
+    final activeSchedules =
+        prescriptionSchedules
+            .where((schedule) => schedule.profileId == activeProfileId)
+            .toList()
+          ..sort(_compareSchedulesByTime);
+    final profileCount = prescriptionSchedules
+        .map((schedule) => schedule.profileId)
+        .toSet()
+        .length;
+
+    return _PrescriptionScheduleSummary(
+      activeTimes: [for (final schedule in activeSchedules) schedule.timeLabel],
+      profileCount: profileCount,
+    );
+  }
+
+  static int _compareSchedulesByTime(ReminderSchedule a, ReminderSchedule b) {
+    final hourComparison = a.hour.compareTo(b.hour);
+    if (hourComparison != 0) return hourComparison;
+    return a.minute.compareTo(b.minute);
   }
 
   static Future<void> _showPrescriptionSheet(
@@ -102,11 +146,35 @@ class PrescriptionsScreen extends StatelessWidget {
   }
 }
 
+class _PrescriptionScheduleSummary {
+  const _PrescriptionScheduleSummary({
+    required this.activeTimes,
+    required this.profileCount,
+  });
+
+  final List<String> activeTimes;
+  final int profileCount;
+
+  bool get hasSchedules => profileCount > 0;
+
+  String get activeTimesLabel => activeTimes.isEmpty
+      ? 'Active: no times in this schedule'
+      : 'Active: ${activeTimes.join(', ')}';
+
+  String get coverageLabel {
+    if (!hasSchedules) return 'No schedules yet';
+    return profileCount == 1
+        ? 'Used in 1 schedule'
+        : 'Used in $profileCount schedules';
+  }
+}
+
 class _PrescriptionTile extends StatelessWidget {
   const _PrescriptionTile({
     required this.prescription,
     required this.allPrescriptions,
     required this.activeProfileId,
+    required this.scheduleSummary,
     required this.prescriptions,
     required this.reminders,
   });
@@ -114,6 +182,7 @@ class _PrescriptionTile extends StatelessWidget {
   final Prescription prescription;
   final List<Prescription> allPrescriptions;
   final String activeProfileId;
+  final _PrescriptionScheduleSummary scheduleSummary;
   final PrescriptionRepository prescriptions;
   final ReminderRepository reminders;
 
@@ -123,7 +192,16 @@ class _PrescriptionTile extends StatelessWidget {
       child: ListTile(
         leading: _PillTypeBadge(pillType: prescription.pillType),
         title: Text(prescription.name),
-        subtitle: Text(prescription.pillType.label),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(prescription.pillType.label),
+            const SizedBox(height: 4),
+            if (scheduleSummary.hasSchedules)
+              Text(scheduleSummary.activeTimesLabel),
+            Text(scheduleSummary.coverageLabel),
+          ],
+        ),
         trailing: Wrap(
           spacing: 4,
           children: [

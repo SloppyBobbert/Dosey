@@ -569,6 +569,36 @@ void main() {
     expect(find.text('Capsule'), findsOneWidget);
   });
 
+  testWidgets('prescription cards summarize schedule coverage', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addAllergyPrescription(database);
+    await _addVitaminReminder(database);
+    await _addTravelProfile(database, setActive: false);
+    await _addVitaminReminder(
+      database,
+      id: 'travel-vitamin-d',
+      profileId: 'travel',
+      hour: 20,
+      minute: 0,
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Prescriptions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('Active: 08:30'), findsOneWidget);
+    expect(find.text('Used in 2 schedules'), findsOneWidget);
+    expect(find.text('Allergy pill'), findsOneWidget);
+    expect(find.text('No schedules yet'), findsOneWidget);
+  });
+
   testWidgets('Schedule tab asks for prescriptions before schedules', (
     WidgetTester tester,
   ) async {
@@ -999,6 +1029,18 @@ Future<void> _addVitaminPrescription(DoseyDatabase database) {
       id: 'vitamin-d',
       name: 'Vitamin D',
       pillType: PillType.capsule,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    ),
+  );
+}
+
+Future<void> _addAllergyPrescription(DoseyDatabase database) {
+  return LocalPrescriptionRepository(database).upsertPrescription(
+    Prescription(
+      id: 'allergy-pill',
+      name: 'Allergy pill',
+      pillType: PillType.tablet,
       createdAt: DateTime.utc(2026),
       updatedAt: DateTime.utc(2026),
     ),
