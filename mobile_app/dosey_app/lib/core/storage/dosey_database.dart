@@ -134,17 +134,21 @@ class DoseyDatabase extends _$DoseyDatabase {
       }
       if (from < 6) {
         await migrator.createTable(prescriptions);
-        await migrator.addColumn(
-          reminderSchedules,
-          reminderSchedules.prescriptionId,
-        );
+        if (from >= 2) {
+          await migrator.addColumn(
+            reminderSchedules,
+            reminderSchedules.prescriptionId,
+          );
+        }
       }
       if (from < 7) {
         await migrator.createTable(scheduleProfiles);
-        await migrator.addColumn(
-          reminderSchedules,
-          reminderSchedules.profileId,
-        );
+        if (from >= 2) {
+          await migrator.addColumn(
+            reminderSchedules,
+            reminderSchedules.profileId,
+          );
+        }
         await _seedDefaultScheduleProfile();
       }
     },

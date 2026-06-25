@@ -110,4 +110,29 @@ void main() {
 
     expect(await settings.watchOnboardingCompleted().first, isTrue);
   });
+
+  test('migration from schema one creates current schedule tables', () async {
+    final executor = NativeDatabase.memory(
+      setup: (database) {
+        database
+          ..execute('''
+            CREATE TABLE app_settings (
+              key TEXT NOT NULL PRIMARY KEY,
+              value TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('PRAGMA user_version = 1;');
+      },
+    );
+    final database = DoseyDatabase(executor);
+    addTearDown(database.close);
+
+    expect(await database.select(database.reminderSchedules).get(), isEmpty);
+    expect(await database.select(database.prescriptions).get(), isEmpty);
+    final profiles = await database.select(database.scheduleProfiles).get();
+
+    expect(profiles, hasLength(1));
+    expect(profiles.single.id, 'schedule-1');
+  });
 }
