@@ -1,5 +1,7 @@
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
+import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -58,6 +60,40 @@ void main() {
     await repository.deletePrescription('blood-pressure');
 
     expect(await repository.watchPrescriptions().first, isEmpty);
+  });
+
+  test('deleting a prescription removes linked schedules', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final prescriptions = LocalPrescriptionRepository(database);
+    final reminders = LocalReminderRepository(database);
+    final now = DateTime.utc(2026, 6, 9, 8);
+
+    await prescriptions.upsertPrescription(
+      Prescription(
+        id: 'vitamin-d',
+        name: 'Vitamin D',
+        pillType: PillType.capsule,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await reminders.upsertSchedule(
+      ReminderSchedule(
+        id: 'vitamin-d-morning',
+        label: 'Vitamin D',
+        prescriptionId: 'vitamin-d',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    await prescriptions.deletePrescription('vitamin-d');
+
+    expect(await reminders.watchSchedules().first, isEmpty);
   });
 
   test('local prescription repository rejects blank names', () async {

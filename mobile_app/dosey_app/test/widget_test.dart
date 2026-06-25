@@ -1,6 +1,7 @@
 import 'package:dosey_app/main.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -364,6 +365,77 @@ void main() {
     expect(find.text('Capsule'), findsWidgets);
   });
 
+  testWidgets('Today screen uses linked prescription name for current dose', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await LocalPrescriptionRepository(database).upsertPrescription(
+      Prescription(
+        id: 'vitamin-d',
+        name: 'Vitamin D3',
+        pillType: PillType.capsule,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: 'vitamin-d-morning',
+        label: 'Vitamin D',
+        prescriptionId: 'vitamin-d',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Current dose'), findsOneWidget);
+    expect(find.text('08:30 · Vitamin D3'), findsOneWidget);
+  });
+
+  testWidgets('Today advances after the earlier dose is skipped', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addAllergyPrescription(database);
+    await _addVitaminReminder(database);
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: 'allergy-pill',
+        label: 'Allergy pill',
+        prescriptionId: 'allergy-pill',
+        hour: 12,
+        minute: 0,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    await DriftDoseLogRepository(database).addEvent(
+      DoseLogEvent.doseSkipped(
+        doseId: _todayDoseId('vitamin-d'),
+        occurredAt: DateTime.now().toUtc(),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Current dose'), findsOneWidget);
+    expect(find.text('12:00 · Allergy pill'), findsOneWidget);
+    expect(find.text('08:30 · Vitamin D'), findsNothing);
+  });
+
   testWidgets('Today screen shows current dose actions from reminders', (
     WidgetTester tester,
   ) async {
@@ -633,6 +705,7 @@ void main() {
       find.text('Only the active schedule is used by Today.'),
       findsOneWidget,
     );
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
   });
 
   testWidgets('Schedule tab asks for prescriptions before schedules', (
@@ -921,6 +994,40 @@ void main() {
 
     expect(find.text('Vitamin D'), findsNothing);
     expect(find.text('No schedules yet.'), findsOneWidget);
+  });
+
+  testWidgets('editing orphan schedule requires a prescription choice', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: 'legacy-reminder',
+        label: 'Legacy reminder',
+        prescriptionId: 'missing-prescription',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Legacy reminder'), findsOneWidget);
+    await tester.tap(find.byTooltip('Edit schedule'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose a prescription.'), findsOneWidget);
   });
 
   testWidgets('schedule form validates time range', (

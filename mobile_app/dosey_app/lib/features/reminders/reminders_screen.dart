@@ -33,8 +33,9 @@ class RemindersScreen extends StatelessWidget {
                 );
 
                 return StreamBuilder<List<ReminderSchedule>>(
-                  stream: dependencies.reminders.watchSchedules(
-                    profileId: activeProfile?.id,
+                  stream: _activeSchedulesStream(
+                    dependencies.reminders,
+                    activeProfile,
                   ),
                   builder: (context, scheduleSnapshot) {
                     final schedules =
@@ -125,6 +126,16 @@ class RemindersScreen extends StatelessWidget {
       if (profile.isActive) return profile;
     }
     return profiles.isEmpty ? null : profiles.first;
+  }
+
+  static Stream<List<ReminderSchedule>> _activeSchedulesStream(
+    ReminderRepository reminders,
+    ScheduleProfile? activeProfile,
+  ) {
+    if (activeProfile == null) {
+      return Stream<List<ReminderSchedule>>.value(const <ReminderSchedule>[]);
+    }
+    return reminders.watchSchedules(profileId: activeProfile.id);
   }
 
   /// Counts schedules per profile so saved routines show their scope even when
@@ -704,6 +715,9 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
           (prescription) => prescription.id == savedId,
         )) {
       return savedId;
+    }
+    if (schedule != null) {
+      return null;
     }
     final initialId = widget.initialPrescriptionId;
     if (initialId != null &&

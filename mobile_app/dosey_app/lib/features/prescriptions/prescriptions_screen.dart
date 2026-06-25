@@ -352,33 +352,35 @@ class _PrescriptionScheduleDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            '${prescription.name} schedules',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          const Text('Only the active schedule is used by Today.'),
-          const SizedBox(height: 16),
-          for (final detail in summary.details) ...[
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(
-                detail.isActive
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-              ),
-              title: Text(detail.profileName),
-              subtitle: Text(detail.timesLabel),
-              trailing: detail.isActive ? const Text('Active') : null,
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '${prescription.name} schedules',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
+            const SizedBox(height: 8),
+            const Text('Only the active schedule is used by Today.'),
+            const SizedBox(height: 16),
+            for (final detail in summary.details) ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  detail.isActive
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                ),
+                title: Text(detail.profileName),
+                subtitle: Text(detail.timesLabel),
+                trailing: detail.isActive ? const Text('Active') : null,
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

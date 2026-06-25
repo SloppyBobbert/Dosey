@@ -1,3 +1,5 @@
+import 'package:dosey_app/core/schedules/schedule_profile.dart';
+
 class ReminderSchedule {
   const ReminderSchedule({
     required this.id,
@@ -11,7 +13,7 @@ class ReminderSchedule {
     required this.updatedAt,
   });
 
-  static const defaultProfileId = 'schedule-1';
+  static const defaultProfileId = ScheduleProfile.defaultProfileId;
 
   final String id;
   final String label;

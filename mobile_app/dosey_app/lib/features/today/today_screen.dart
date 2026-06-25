@@ -21,7 +21,7 @@ class TodayScreen extends StatelessWidget {
           prescriptionSnapshot.data ?? const <Prescription>[],
         );
 
-        return StreamBuilder<ScheduleProfile>(
+        return StreamBuilder<ScheduleProfile?>(
           stream: dependencies.scheduleProfiles.watchActiveProfile(),
           builder: (context, profileSnapshot) {
             return StreamBuilder<List<ReminderSchedule>>(
@@ -109,9 +109,13 @@ class TodayScreen extends StatelessWidget {
     };
   }
 
-  static ReminderSchedule? _currentSchedule(List<ReminderSchedule> schedules) {
+  static ReminderSchedule? _currentSchedule(
+    List<ReminderSchedule> schedules,
+    List<DoseLogEvent> events,
+  ) {
     for (final schedule in schedules) {
-      if (schedule.isEnabled) {
+      final doseId = _doseIdForToday(schedule.id);
+      if (schedule.isEnabled && !_hasTerminalEventForDose(events, doseId)) {
         return schedule;
       }
     }
@@ -122,12 +126,35 @@ class TodayScreen extends StatelessWidget {
     List<DoseLogEvent> events,
     String doseId,
   ) {
+    DoseLogEvent? latest;
     for (final event in events) {
-      if (event.doseId == doseId) {
-        return event;
+      if (event.doseId == doseId &&
+          (latest == null || event.occurredAt.isAfter(latest.occurredAt))) {
+        latest = event;
       }
     }
-    return null;
+    return latest;
+  }
+
+  static bool _hasTerminalEventForDose(
+    List<DoseLogEvent> events,
+    String doseId,
+  ) {
+    for (final event in events) {
+      if (event.doseId == doseId && _isTerminalDoseEvent(event)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static bool _isTerminalDoseEvent(DoseLogEvent event) {
+    return switch (event.kind) {
+      DoseLogEventKind.doseTakenConfirmed ||
+      DoseLogEventKind.doseSkipped ||
+      DoseLogEventKind.doseMissed => true,
+      _ => false,
+    };
   }
 
   static String _doseIdForToday(String scheduleId) {
@@ -172,19 +199,16 @@ class _CurrentDoseSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currentSchedule = TodayScreen._currentSchedule(schedules);
-    if (currentSchedule == null) {
-      return const SizedBox.shrink();
-    }
-
     return StreamBuilder<List<DoseLogEvent>>(
       stream: DoseyAppScope.of(context).doseLog.watchEvents(),
       builder: (context, logSnapshot) {
+        final events = logSnapshot.data ?? const <DoseLogEvent>[];
+        final currentSchedule = TodayScreen._currentSchedule(schedules, events);
+        if (currentSchedule == null) {
+          return const SizedBox.shrink();
+        }
         final doseId = TodayScreen._doseIdForToday(currentSchedule.id);
-        final latestEvent = TodayScreen._latestEventForDose(
-          logSnapshot.data ?? const <DoseLogEvent>[],
-          doseId,
-        );
+        final latestEvent = TodayScreen._latestEventForDose(events, doseId);
         return _CurrentDoseCard(
           schedule: currentSchedule,
           prescription: prescriptionsById[currentSchedule.prescriptionId],
@@ -351,6 +375,7 @@ class _CurrentDoseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final scheduleName = prescription?.name ?? schedule.label;
 
     return Card(
       child: Padding(
@@ -383,7 +408,7 @@ class _CurrentDoseCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text('${schedule.timeLabel} · ${schedule.label}'),
+                      Text('${schedule.timeLabel} · $scheduleName'),
                       if (prescription != null) ...[
                         const SizedBox(height: 2),
                         Text(prescription!.pillType.label),
@@ -602,6 +627,7 @@ class _ReminderRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final scheduleName = prescription?.name ?? schedule.label;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -633,7 +659,7 @@ class _ReminderRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    schedule.label,
+                    scheduleName,
                     style: theme.textTheme.bodyLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),

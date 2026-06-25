@@ -5,7 +5,7 @@ import 'package:drift/drift.dart';
 abstract interface class ScheduleProfileRepository {
   Stream<List<ScheduleProfile>> watchProfiles();
 
-  Stream<ScheduleProfile> watchActiveProfile();
+  Stream<ScheduleProfile?> watchActiveProfile();
 
   Future<void> upsertProfile(ScheduleProfile profile);
 
@@ -28,11 +28,13 @@ class LocalScheduleProfileRepository implements ScheduleProfileRepository {
 
   /// Emits the single active schedule profile used by Today and robot dosing.
   @override
-  Stream<ScheduleProfile> watchActiveProfile() {
+  Stream<ScheduleProfile?> watchActiveProfile() {
     final query = _database.select(_database.scheduleProfiles)
       ..where((profile) => profile.isActive.equals(true))
       ..limit(1);
-    return query.watchSingle().map(_fromRow);
+    return query.watchSingleOrNull().map(
+      (row) => row == null ? null : _fromRow(row),
+    );
   }
 
   @override

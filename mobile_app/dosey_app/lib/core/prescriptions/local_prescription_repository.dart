@@ -44,9 +44,14 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
 
   @override
   Future<void> deletePrescription(String id) {
-    return (_database.delete(
-      _database.prescriptions,
-    )..where((prescription) => prescription.id.equals(id))).go();
+    return _database.transaction(() async {
+      await (_database.delete(
+        _database.reminderSchedules,
+      )..where((schedule) => schedule.prescriptionId.equals(id))).go();
+      await (_database.delete(
+        _database.prescriptions,
+      )..where((prescription) => prescription.id.equals(id))).go();
+    });
   }
 
   static Prescription _fromRow(PrescriptionRow row) {
