@@ -84,7 +84,16 @@ class RemindersScreen extends StatelessWidget {
                           profilesRepository: dependencies.scheduleProfiles,
                         ),
                         const SizedBox(height: 16),
-                        if (prescriptions.isEmpty)
+                        if (schedules.isNotEmpty)
+                          for (final schedule in schedules)
+                            _ScheduleTile(
+                              schedule: schedule,
+                              prescription:
+                                  prescriptionsById[schedule.prescriptionId],
+                              prescriptions: prescriptions,
+                              reminders: dependencies.reminders,
+                            )
+                        else if (prescriptions.isEmpty)
                           const Card(
                             child: Padding(
                               padding: EdgeInsets.all(16),
@@ -93,22 +102,13 @@ class RemindersScreen extends StatelessWidget {
                               ),
                             ),
                           )
-                        else if (schedules.isEmpty)
+                        else
                           const Card(
                             child: Padding(
                               padding: EdgeInsets.all(16),
                               child: Text('No schedules yet.'),
                             ),
-                          )
-                        else
-                          for (final schedule in schedules)
-                            _ScheduleTile(
-                              schedule: schedule,
-                              prescription:
-                                  prescriptionsById[schedule.prescriptionId],
-                              prescriptions: prescriptions,
-                              reminders: dependencies.reminders,
-                            ),
+                          ),
                       ],
                     );
                   },

@@ -34,39 +34,7 @@ class TodayScreen extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _TodayHeroCard(
-                        onConfirmDoseTaken: () async {
-                          try {
-                            await dependencies.doseLog.addEvent(
-                              DoseLogEvent.doseTakenConfirmed(
-                                doseId: 'manual-confirmation',
-                                occurredAt: DateTime.now().toUtc(),
-                              ),
-                            );
-                            if (!context.mounted) {
-                              return;
-                            }
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Dose confirmation logged.'),
-                              ),
-                            );
-                          } on Object catch (error) {
-                            if (!context.mounted) {
-                              return;
-                            }
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Dose confirmation failed: $error',
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      _CurrentDoseSection(
+                      _TodayDoseContent(
                         schedules: schedules,
                         prescriptionsById: prescriptionsById,
                       ),
@@ -188,8 +156,8 @@ class TodayScreen extends StatelessWidget {
   }
 }
 
-class _CurrentDoseSection extends StatelessWidget {
-  const _CurrentDoseSection({
+class _TodayDoseContent extends StatelessWidget {
+  const _TodayDoseContent({
     required this.schedules,
     required this.prescriptionsById,
   });
@@ -204,41 +172,86 @@ class _CurrentDoseSection extends StatelessWidget {
       builder: (context, logSnapshot) {
         final events = logSnapshot.data ?? const <DoseLogEvent>[];
         final currentSchedule = TodayScreen._currentSchedule(schedules, events);
-        if (currentSchedule == null) {
-          return const SizedBox.shrink();
-        }
-        final doseId = TodayScreen._doseIdForToday(currentSchedule.id);
-        final latestEvent = TodayScreen._latestEventForDose(events, doseId);
-        return _CurrentDoseCard(
-          schedule: currentSchedule,
-          prescription: prescriptionsById[currentSchedule.prescriptionId],
-          latestEvent: latestEvent,
-          onConfirmTaken: () => TodayScreen._logDoseAction(
-            context,
-            DoseLogEvent.doseTakenConfirmed(
-              doseId: doseId,
-              occurredAt: DateTime.now().toUtc(),
+        final currentDoseId = currentSchedule == null
+            ? null
+            : TodayScreen._doseIdForToday(currentSchedule.id);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _TodayHeroCard(
+              onConfirmDoseTaken: () => TodayScreen._logDoseAction(
+                context,
+                DoseLogEvent.doseTakenConfirmed(
+                  doseId: currentDoseId ?? 'manual-confirmation',
+                  occurredAt: DateTime.now().toUtc(),
+                ),
+                'Dose confirmation logged.',
+              ),
             ),
-            'Dose marked taken.',
-          ),
-          onSkipDose: () => TodayScreen._logDoseAction(
-            context,
-            DoseLogEvent.doseSkipped(
-              doseId: doseId,
-              occurredAt: DateTime.now().toUtc(),
+            const SizedBox(height: 12),
+            _CurrentDoseSection(
+              events: events,
+              currentSchedule: currentSchedule,
+              currentDoseId: currentDoseId,
+              prescriptionsById: prescriptionsById,
             ),
-            'Dose skipped.',
-          ),
-          onMarkMissed: () => TodayScreen._logDoseAction(
-            context,
-            DoseLogEvent.doseMissed(
-              doseId: doseId,
-              occurredAt: DateTime.now().toUtc(),
-            ),
-            'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-          ),
+          ],
         );
       },
+    );
+  }
+}
+
+class _CurrentDoseSection extends StatelessWidget {
+  const _CurrentDoseSection({
+    required this.events,
+    required this.currentSchedule,
+    required this.currentDoseId,
+    required this.prescriptionsById,
+  });
+
+  final List<DoseLogEvent> events;
+  final ReminderSchedule? currentSchedule;
+  final String? currentDoseId;
+  final Map<String, Prescription> prescriptionsById;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentSchedule = this.currentSchedule;
+    final currentDoseId = this.currentDoseId;
+    if (currentSchedule == null || currentDoseId == null) {
+      return const SizedBox.shrink();
+    }
+    final latestEvent = TodayScreen._latestEventForDose(events, currentDoseId);
+    return _CurrentDoseCard(
+      schedule: currentSchedule,
+      prescription: prescriptionsById[currentSchedule.prescriptionId],
+      latestEvent: latestEvent,
+      onConfirmTaken: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseTakenConfirmed(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'Dose marked taken.',
+      ),
+      onSkipDose: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseSkipped(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'Dose skipped.',
+      ),
+      onMarkMissed: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseMissed(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+      ),
     );
   }
 }

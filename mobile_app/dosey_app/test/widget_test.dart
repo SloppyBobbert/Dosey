@@ -555,6 +555,26 @@ void main() {
     expect(find.text('manual-confirmation'), findsOneWidget);
   });
 
+  testWidgets('Today hero manual confirmation confirms the current dose', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirm dose taken manually'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dose taken confirmed'), findsOneWidget);
+    expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
+    expect(find.text('manual-confirmation'), findsNothing);
+  });
+
   testWidgets('prescriptions tab adds edits and deletes prescriptions', (
     WidgetTester tester,
   ) async {
@@ -729,6 +749,37 @@ void main() {
     );
     expect(addButton.onPressed, isNull);
   });
+
+  testWidgets(
+    'Schedule tab shows legacy schedules before prescriptions exist',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await LocalReminderRepository(database).upsertSchedule(
+        ReminderSchedule(
+          id: 'legacy-reminder',
+          label: 'Legacy reminder',
+          prescriptionId: 'missing-prescription',
+          hour: 8,
+          minute: 30,
+          isEnabled: true,
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+        ),
+      );
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Schedule'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Legacy reminder'), findsOneWidget);
+      expect(find.text('08:30'), findsOneWidget);
+      expect(find.byTooltip('Edit schedule'), findsOneWidget);
+      expect(find.byTooltip('Delete schedule'), findsOneWidget);
+    },
+  );
 
   testWidgets('Schedule tab creates schedules from prescriptions', (
     WidgetTester tester,
