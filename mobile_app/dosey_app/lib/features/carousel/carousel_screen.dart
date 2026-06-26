@@ -117,6 +117,13 @@ class _CarouselScreenState extends State<CarouselScreen> {
     }
     return null;
   }
+
+  static String doseIdForToday(String scheduleId) {
+    final now = DateTime.now();
+    final month = now.month.toString().padLeft(2, '0');
+    final day = now.day.toString().padLeft(2, '0');
+    return '$scheduleId:${now.year}-$month-$day';
+  }
 }
 
 class _CarouselHeader extends StatelessWidget {
@@ -340,12 +347,11 @@ class _SlotCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [Text(_doseLabel), Text(slot.status.label)],
         ),
-        trailing: slot.status == CarouselSlotStatus.assigned
-            ? TextButton(
-                onPressed: () => _markLoaded(context),
-                child: const Text('Mark loaded'),
-              )
-            : null,
+        trailing: _SlotAction(
+          status: slot.status,
+          onMarkLoaded: () => _markLoaded(context),
+          onDispense: () => _dispense(context),
+        ),
       ),
     );
   }
@@ -369,5 +375,55 @@ class _SlotCard extends StatelessWidget {
         context,
       ).showSnackBar(SnackBar(content: Text(error.message.toString())));
     }
+  }
+
+  Future<void> _dispense(BuildContext context) async {
+    try {
+      final dependencies = DoseyAppScope.of(context);
+      await dependencies.controller.requestDispense(
+        doseId: _CarouselScreenState.doseIdForToday(slot.scheduleId),
+      );
+      await dependencies.carouselSlots.markDispensed(slot.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Dispense command logged. Confirm taken only after the dose is verified.',
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Dispense failed: $error')));
+    }
+  }
+}
+
+class _SlotAction extends StatelessWidget {
+  const _SlotAction({
+    required this.status,
+    required this.onMarkLoaded,
+    required this.onDispense,
+  });
+
+  final CarouselSlotStatus status;
+  final VoidCallback onMarkLoaded;
+  final VoidCallback onDispense;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (status) {
+      CarouselSlotStatus.assigned => TextButton(
+        onPressed: onMarkLoaded,
+        child: const Text('Mark loaded'),
+      ),
+      CarouselSlotStatus.loaded => TextButton(
+        onPressed: onDispense,
+        child: const Text('Dispense slot'),
+      ),
+      _ => const SizedBox.shrink(),
+    };
   }
 }

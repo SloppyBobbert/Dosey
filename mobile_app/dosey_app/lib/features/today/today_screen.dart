@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -224,35 +225,89 @@ class _CurrentDoseSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final latestEvent = TodayScreen._latestEventForDose(events, currentDoseId);
-    return _CurrentDoseCard(
-      schedule: currentSchedule,
-      prescription: prescriptionsById[currentSchedule.prescriptionId],
-      latestEvent: latestEvent,
-      onConfirmTaken: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseTakenConfirmed(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Dose marked taken.',
+    final dependencies = DoseyAppScope.of(context);
+    return StreamBuilder<List<CarouselSlot>>(
+      stream: dependencies.carouselSlots.watchSlots(
+        profileId: currentSchedule.profileId,
       ),
-      onSkipDose: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseSkipped(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Dose skipped.',
-      ),
-      onMarkMissed: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseMissed(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-      ),
+      builder: (context, slotSnapshot) {
+        final loadedSlot = _loadedSlotForSchedule(
+          slotSnapshot.data ?? const <CarouselSlot>[],
+          currentSchedule,
+        );
+        return _CurrentDoseCard(
+          schedule: currentSchedule,
+          prescription: prescriptionsById[currentSchedule.prescriptionId],
+          latestEvent: latestEvent,
+          loadedSlot: loadedSlot,
+          onDispenseLoadedSlot: loadedSlot == null
+              ? null
+              : () => _dispenseLoadedSlot(context, loadedSlot, currentDoseId),
+          onConfirmTaken: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseTakenConfirmed(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Dose marked taken.',
+          ),
+          onSkipDose: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseSkipped(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Dose skipped.',
+          ),
+          onMarkMissed: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseMissed(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+          ),
+        );
+      },
     );
+  }
+
+  static CarouselSlot? _loadedSlotForSchedule(
+    List<CarouselSlot> slots,
+    ReminderSchedule schedule,
+  ) {
+    for (final slot in slots) {
+      if (slot.scheduleId == schedule.id &&
+          slot.status == CarouselSlotStatus.loaded) {
+        return slot;
+      }
+    }
+    return null;
+  }
+
+  static Future<void> _dispenseLoadedSlot(
+    BuildContext context,
+    CarouselSlot slot,
+    String doseId,
+  ) async {
+    try {
+      final dependencies = DoseyAppScope.of(context);
+      await dependencies.controller.requestDispense(doseId: doseId);
+      await dependencies.carouselSlots.markDispensed(slot.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Dispense command logged. Confirm taken only after the dose is verified.',
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Dispense failed: $error')));
+    }
   }
 }
 
@@ -372,6 +427,8 @@ class _CurrentDoseCard extends StatelessWidget {
     required this.schedule,
     required this.prescription,
     required this.latestEvent,
+    required this.loadedSlot,
+    required this.onDispenseLoadedSlot,
     required this.onConfirmTaken,
     required this.onSkipDose,
     required this.onMarkMissed,
@@ -380,6 +437,8 @@ class _CurrentDoseCard extends StatelessWidget {
   final ReminderSchedule schedule;
   final Prescription? prescription;
   final DoseLogEvent? latestEvent;
+  final CarouselSlot? loadedSlot;
+  final VoidCallback? onDispenseLoadedSlot;
   final VoidCallback onConfirmTaken;
   final VoidCallback onSkipDose;
   final VoidCallback onMarkMissed;
@@ -445,6 +504,12 @@ class _CurrentDoseCard extends StatelessWidget {
                   icon: const Icon(Icons.check_circle_outline),
                   label: const Text('Confirm taken'),
                 ),
+                if (loadedSlot != null)
+                  FilledButton.tonalIcon(
+                    onPressed: onDispenseLoadedSlot,
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text('Dispense from slot ${loadedSlot!.slotNumber}'),
+                  ),
                 OutlinedButton.icon(
                   onPressed: onSkipDose,
                   icon: const Icon(Icons.skip_next_outlined),
@@ -480,6 +545,10 @@ class _DoseStatusBanner extends StatelessWidget {
       ),
       DoseLogEventKind.doseSkipped => (Icons.skip_next_outlined, 'Skipped'),
       DoseLogEventKind.doseMissed => (Icons.schedule_outlined, 'Missed'),
+      DoseLogEventKind.controllerDispenseSucceeded => (
+        Icons.play_circle_outline,
+        'Dispense moved',
+      ),
       _ => (Icons.info_outline, 'Logged'),
     };
 

@@ -1,6 +1,8 @@
 import 'package:dosey_app/main.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
@@ -308,6 +310,76 @@ void main() {
 
     expect(find.text('Loaded'), findsOneWidget);
     expect(find.text('1 loaded / 1 assigned'), findsOneWidget);
+  });
+
+  testWidgets('Today dispenses a loaded slot without marking the dose taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Today'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dispense from slot 1'), findsOneWidget);
+    await tester.tap(find.text('Dispense from slot 1'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('Dispense moved'), findsOneWidget);
+    expect(find.text('Confirm taken'), findsOneWidget);
+    final events = await database.select(database.doseLogEvents).get();
+    expect(
+      events.single.kind,
+      DoseLogEventKind.controllerDispenseSucceeded.name,
+    );
+    expect(events.single.marksDoseTaken, isFalse);
+  });
+
+  testWidgets('Carousel dispenses loaded slots through the controller', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -320));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Loaded'), findsOneWidget);
+    expect(find.text('Dispense slot'), findsOneWidget);
+    await tester.tap(find.text('Dispense slot'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text('Dispensed'), findsOneWidget);
+    final events = await database.select(database.doseLogEvents).get();
+    expect(
+      events.single.kind,
+      DoseLogEventKind.controllerDispenseSucceeded.name,
+    );
+    expect(events.single.marksDoseTaken, isFalse);
   });
 
   testWidgets('completed onboarding does not flash onboarding while loading', (
@@ -1253,6 +1325,21 @@ Future<void> _addVitaminReminder(
       hour: hour,
       minute: minute,
       isEnabled: true,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    ),
+  );
+}
+
+Future<void> _addLoadedVitaminSlot(DoseyDatabase database) {
+  return LocalCarouselSlotRepository(database).assignSlot(
+    CarouselSlot(
+      id: 'schedule-1-vitamin-d-morning',
+      slotNumber: 1,
+      prescriptionId: 'vitamin-d',
+      scheduleId: 'vitamin-d-morning',
+      profileId: ReminderSchedule.defaultProfileId,
+      status: CarouselSlotStatus.loaded,
       createdAt: DateTime.utc(2026),
       updatedAt: DateTime.utc(2026),
     ),

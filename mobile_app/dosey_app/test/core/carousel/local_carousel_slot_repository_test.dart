@@ -48,6 +48,32 @@ void main() {
     expect(slots.single.updatedAt.isAfter(now), isTrue);
   });
 
+  test('local carousel slot repository marks loaded slots dispensed', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _seedPrescriptionSchedule(database);
+    final repository = LocalCarouselSlotRepository(database);
+    final now = DateTime.utc(2026, 6, 25, 8);
+
+    await repository.assignSlot(
+      CarouselSlot(
+        id: 'slot-1',
+        slotNumber: 1,
+        prescriptionId: 'vitamin-d',
+        scheduleId: 'vitamin-d-morning',
+        profileId: 'schedule-1',
+        status: CarouselSlotStatus.loaded,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await repository.markDispensed('slot-1');
+
+    final slots = await repository.watchSlots().first;
+    expect(slots.single.status, CarouselSlotStatus.dispensed);
+    expect(slots.single.updatedAt.isAfter(now), isTrue);
+  });
+
   test('local carousel slot repository rejects duplicate slots', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);

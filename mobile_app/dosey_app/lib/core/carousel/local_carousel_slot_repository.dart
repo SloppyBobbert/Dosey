@@ -9,6 +9,8 @@ abstract interface class CarouselSlotRepository {
 
   Future<void> markLoaded(String id);
 
+  Future<void> markDispensed(String id);
+
   Future<void> markNeedsReview(String id);
 
   Future<void> clearSlot(String id);
@@ -57,6 +59,11 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
   @override
   Future<void> markLoaded(String id) {
     return _updateStatus(id, CarouselSlotStatus.loaded);
+  }
+
+  @override
+  Future<void> markDispensed(String id) {
+    return _updateStatus(id, CarouselSlotStatus.dispensed);
   }
 
   @override
