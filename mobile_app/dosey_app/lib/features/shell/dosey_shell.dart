@@ -31,6 +31,16 @@ class _DoseyShellState extends State<DoseyShell> {
     SettingsScreen(),
   ];
 
+  static const _sectionTitles = [
+    'Today',
+    'Prescriptions',
+    'Schedule',
+    'Carousel',
+    'Controller',
+    'Log',
+    'Settings',
+  ];
+
   @override
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.of(context);
@@ -38,7 +48,19 @@ class _DoseyShellState extends State<DoseyShell> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dosey'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Dosey',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            Text(_sectionTitles[_selectedIndex]),
+          ],
+        ),
         actions: [
           StreamBuilder<AuthSession>(
             stream: dependencies.auth.watchSession(),
