@@ -227,6 +227,63 @@ void main() {
     expect(find.text('Controller'), findsNothing);
   });
 
+  testWidgets('settings shows signed-out profile and grouped safety sections', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Profile'), findsOneWidget);
+    expect(find.text('Not signed in'), findsOneWidget);
+    expect(find.text('Local prototype'), findsOneWidget);
+    expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Cloud sync is not active yet.'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Device mode'), 200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Device mode'), findsOneWidget);
+    expect(find.text('Android robot phone'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Prototype safety'), 200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Prototype safety'), findsOneWidget);
+    expect(
+      find.text(
+        'Servo movement and reminders do not prove a dose was taken. Confirm doses manually after checking the cup.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('settings shows signed-in profile identity', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    await _saveSignedInUser(database, provider: AuthProvider.google);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dosey Tester'), findsOneWidget);
+    expect(find.text('google@example.com'), findsOneWidget);
+    expect(find.text('Google account'), findsOneWidget);
+    expect(find.text('Android personal phone'), findsOneWidget);
+    expect(find.text('Sign out'), findsOneWidget);
+  });
+
   testWidgets('shows local-first app tabs and safety guidance', (
     WidgetTester tester,
   ) async {
