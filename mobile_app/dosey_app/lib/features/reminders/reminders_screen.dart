@@ -45,36 +45,25 @@ class RemindersScreen extends StatelessWidget {
                         prescription.id: prescription,
                     };
 
+                    final canAddSchedule =
+                        prescriptions.isNotEmpty && activeProfile != null;
+
                     return ListView(
                       padding: const EdgeInsets.all(16),
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Schedule',
-                                style: Theme.of(context).textTheme.titleLarge,
-                              ),
-                            ),
-                            FilledButton.icon(
-                              onPressed:
-                                  prescriptions.isEmpty || activeProfile == null
-                                  ? null
-                                  : () => showScheduleSheet(
-                                      context,
-                                      dependencies.reminders,
-                                      prescriptions,
-                                      profileId: activeProfile.id,
-                                    ),
-                              icon: const Icon(Icons.add),
-                              label: const Text('Add schedule'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Create schedules from prescriptions you entered. Dosey does not verify dosing instructions.',
-                          style: Theme.of(context).textTheme.bodySmall,
+                        _ScheduleHeroCard(
+                          activeProfile: activeProfile,
+                          schedules: schedules,
+                          hasPrescriptions: prescriptions.isNotEmpty,
+                          canAddSchedule: canAddSchedule,
+                          onAddSchedule: canAddSchedule
+                              ? () => showScheduleSheet(
+                                  context,
+                                  dependencies.reminders,
+                                  prescriptions,
+                                  profileId: activeProfile.id,
+                                )
+                              : null,
                         ),
                         const SizedBox(height: 16),
                         _ScheduleProfileSection(
@@ -93,22 +82,8 @@ class RemindersScreen extends StatelessWidget {
                               prescriptions: prescriptions,
                               reminders: dependencies.reminders,
                             )
-                        else if (prescriptions.isEmpty)
-                          const Card(
-                            child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Text(
-                                'Add a prescription before creating a schedule.',
-                              ),
-                            ),
-                          )
                         else
-                          const Card(
-                            child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Text('No schedules yet.'),
-                            ),
-                          ),
+                          const SizedBox.shrink(),
                       ],
                     );
                   },
@@ -172,6 +147,148 @@ class RemindersScreen extends StatelessWidget {
         schedule: schedule,
         initialPrescriptionId: initialPrescriptionId,
         profileId: profileId,
+      ),
+    );
+  }
+}
+
+class _ScheduleHeroCard extends StatelessWidget {
+  const _ScheduleHeroCard({
+    required this.activeProfile,
+    required this.schedules,
+    required this.hasPrescriptions,
+    required this.canAddSchedule,
+    required this.onAddSchedule,
+  });
+
+  final ScheduleProfile? activeProfile;
+  final List<ReminderSchedule> schedules;
+  final bool hasPrescriptions;
+  final bool canAddSchedule;
+  final VoidCallback? onAddSchedule;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final enabledCount = schedules
+        .where((schedule) => schedule.isEnabled)
+        .length;
+    final scheduledCount = schedules.length;
+    final emptyHint = scheduledCount == 0
+        ? hasPrescriptions
+              ? 'No schedules yet.'
+              : 'Add a prescription before creating a schedule.'
+        : null;
+
+    return Card(
+      color: colorScheme.primaryContainer,
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Routine builder',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        activeProfile?.name ?? 'No active schedule',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: onAddSchedule,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add schedule'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              emptyHint ??
+                  'Create schedules from prescriptions you entered. Dosey does not verify dosing instructions.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onPrimaryContainer.withValues(alpha: 0.78),
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                const _ScheduleHeroChip(
+                  icon: Icons.event_available_outlined,
+                  label: 'Active routine',
+                ),
+                _ScheduleHeroChip(
+                  icon: Icons.notifications_active_outlined,
+                  label: '$enabledCount enabled / $scheduledCount scheduled',
+                ),
+                const _ScheduleHeroChip(
+                  icon: Icons.timeline_outlined,
+                  label: 'Feeds Today timeline',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ScheduleHeroChip extends StatelessWidget {
+  const _ScheduleHeroChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: 0.76),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: colorScheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }

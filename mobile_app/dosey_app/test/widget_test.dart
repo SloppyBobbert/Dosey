@@ -1151,6 +1151,33 @@ void main() {
     expect(find.text('Capsule'), findsOneWidget);
   });
 
+  testWidgets('Schedule tab shows active routine summary for the timeline', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Routine builder'), findsOneWidget);
+    expect(find.text('Active routine'), findsOneWidget);
+    expect(find.text('Schedule 1'), findsWidgets);
+    expect(find.text('1 enabled / 1 scheduled'), findsOneWidget);
+    expect(find.text('Feeds Today timeline'), findsOneWidget);
+
+    await tester.scrollUntilVisible(find.text('Vitamin D'), 220);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('08:30'), findsOneWidget);
+  });
+
   testWidgets('Schedule tab switches between saved schedule profiles', (
     WidgetTester tester,
   ) async {
@@ -1366,11 +1393,15 @@ void main() {
     expect(find.text('Capsule'), findsOneWidget);
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
 
+    await tester.ensureVisible(find.byType(Switch));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
 
     expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
 
+    await tester.ensureVisible(find.byTooltip('Edit schedule'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Edit schedule'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '9');
@@ -1381,6 +1412,8 @@ void main() {
     expect(find.text('Vitamin D'), findsOneWidget);
     expect(find.text('09:15'), findsOneWidget);
 
+    await tester.ensureVisible(find.byTooltip('Delete schedule'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Delete schedule'));
     await tester.pumpAndSettle();
 
@@ -1414,6 +1447,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Legacy reminder'), findsOneWidget);
+    await tester.ensureVisible(find.byTooltip('Edit schedule'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Edit schedule'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save schedule'));
