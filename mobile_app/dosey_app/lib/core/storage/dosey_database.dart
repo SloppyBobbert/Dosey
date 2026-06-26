@@ -17,6 +17,9 @@ class AppSettings extends Table {
 class ReminderSchedules extends Table {
   TextColumn get id => text()();
   TextColumn get label => text()();
+  TextColumn get prescriptionId => text().nullable()();
+  TextColumn get profileId =>
+      text().withDefault(const Constant('schedule-1'))();
   IntColumn get hour => integer()();
   IntColumn get minute => integer()();
   BoolColumn get isEnabled => boolean()();
@@ -28,6 +31,30 @@ class ReminderSchedules extends Table {
     'CHECK (hour >= 0 AND hour <= 23)',
     'CHECK (minute >= 0 AND minute <= 59)',
   ];
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('ScheduleProfileRow')
+class ScheduleProfiles extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  BoolColumn get isActive => boolean()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('PrescriptionRow')
+class Prescriptions extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get pillType => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -60,7 +87,14 @@ class DoseLogEvents extends Table {
 }
 
 @DriftDatabase(
-  tables: [AppSettings, ReminderSchedules, AuthSessions, DoseLogEvents],
+  tables: [
+    AppSettings,
+    ReminderSchedules,
+    Prescriptions,
+    ScheduleProfiles,
+    AuthSessions,
+    DoseLogEvents,
+  ],
 )
 class DoseyDatabase extends _$DoseyDatabase {
   DoseyDatabase([QueryExecutor? executor])
@@ -76,13 +110,14 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) async {
       await migrator.createAll();
       await _seedOnboardingCompleted(completed: false);
+      await _seedDefaultScheduleProfile();
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
@@ -97,6 +132,25 @@ class DoseyDatabase extends _$DoseyDatabase {
       if (from < 5) {
         await _seedOnboardingCompleted(completed: true);
       }
+      if (from < 6) {
+        await migrator.createTable(prescriptions);
+        if (from >= 2) {
+          await migrator.addColumn(
+            reminderSchedules,
+            reminderSchedules.prescriptionId,
+          );
+        }
+      }
+      if (from < 7) {
+        await migrator.createTable(scheduleProfiles);
+        if (from >= 2) {
+          await migrator.addColumn(
+            reminderSchedules,
+            reminderSchedules.profileId,
+          );
+        }
+        await _seedDefaultScheduleProfile();
+      }
     },
   );
 
@@ -106,6 +160,20 @@ class DoseyDatabase extends _$DoseyDatabase {
         key: 'onboarding_completed',
         value: completed.toString(),
         updatedAt: DateTime.now().toUtc(),
+      ),
+      mode: InsertMode.insertOrIgnore,
+    );
+  }
+
+  Future<void> _seedDefaultScheduleProfile() async {
+    final now = DateTime.now().toUtc();
+    await into(scheduleProfiles).insert(
+      ScheduleProfilesCompanion.insert(
+        id: 'schedule-1',
+        name: 'Schedule 1',
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
       ),
       mode: InsertMode.insertOrIgnore,
     );

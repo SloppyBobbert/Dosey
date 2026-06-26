@@ -1,6 +1,9 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
+import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:flutter/material.dart';
 
 class RemindersScreen extends StatelessWidget {
@@ -8,79 +11,437 @@ class RemindersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final reminders = DoseyAppScope.of(context).reminders;
+    final dependencies = DoseyAppScope.of(context);
 
-    return StreamBuilder<List<ReminderSchedule>>(
-      stream: reminders.watchSchedules(),
-      builder: (context, snapshot) {
-        final schedules = snapshot.data ?? const <ReminderSchedule>[];
-        return ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Local reminders',
-                    style: Theme.of(context).textTheme.titleLarge,
+    return StreamBuilder<List<Prescription>>(
+      stream: dependencies.prescriptions.watchPrescriptions(),
+      builder: (context, prescriptionSnapshot) {
+        final prescriptions =
+            prescriptionSnapshot.data ?? const <Prescription>[];
+        return StreamBuilder<List<ScheduleProfile>>(
+          stream: dependencies.scheduleProfiles.watchProfiles(),
+          builder: (context, profileSnapshot) {
+            final profiles = profileSnapshot.data ?? const <ScheduleProfile>[];
+            final activeProfile = _activeProfile(profiles);
+            return StreamBuilder<List<ReminderSchedule>>(
+              stream: dependencies.reminders.watchSchedules(),
+              builder: (context, allSchedulesSnapshot) {
+                final allSchedules =
+                    allSchedulesSnapshot.data ?? const <ReminderSchedule>[];
+                final profileScheduleCounts = _profileScheduleCounts(
+                  allSchedules,
+                );
+
+                return StreamBuilder<List<ReminderSchedule>>(
+                  stream: _activeSchedulesStream(
+                    dependencies.reminders,
+                    activeProfile,
                   ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _showReminderSheet(context, reminders),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add reminder'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Stored on this phone only. Notifications will be wired up later.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 16),
-            if (schedules.isEmpty)
-              const Card(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text('No reminders yet.'),
-                ),
-              )
-            else
-              for (final schedule in schedules)
-                _ReminderTile(schedule: schedule, reminders: reminders),
-          ],
+                  builder: (context, scheduleSnapshot) {
+                    final schedules =
+                        scheduleSnapshot.data ?? const <ReminderSchedule>[];
+                    final prescriptionsById = {
+                      for (final prescription in prescriptions)
+                        prescription.id: prescription,
+                    };
+
+                    return ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Schedule',
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                            ),
+                            FilledButton.icon(
+                              onPressed:
+                                  prescriptions.isEmpty || activeProfile == null
+                                  ? null
+                                  : () => showScheduleSheet(
+                                      context,
+                                      dependencies.reminders,
+                                      prescriptions,
+                                      profileId: activeProfile.id,
+                                    ),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add schedule'),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Create schedules from prescriptions you entered. Dosey does not verify dosing instructions.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 16),
+                        _ScheduleProfileSection(
+                          profiles: profiles,
+                          activeProfile: activeProfile,
+                          profileScheduleCounts: profileScheduleCounts,
+                          profilesRepository: dependencies.scheduleProfiles,
+                        ),
+                        const SizedBox(height: 16),
+                        if (schedules.isNotEmpty)
+                          for (final schedule in schedules)
+                            _ScheduleTile(
+                              schedule: schedule,
+                              prescription:
+                                  prescriptionsById[schedule.prescriptionId],
+                              prescriptions: prescriptions,
+                              reminders: dependencies.reminders,
+                            )
+                        else if (prescriptions.isEmpty)
+                          const Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text(
+                                'Add a prescription before creating a schedule.',
+                              ),
+                            ),
+                          )
+                        else
+                          const Card(
+                            child: Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text('No schedules yet.'),
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                );
+              },
+            );
+          },
         );
       },
     );
   }
 
-  static Future<void> _showReminderSheet(
+  static ScheduleProfile? _activeProfile(List<ScheduleProfile> profiles) {
+    for (final profile in profiles) {
+      if (profile.isActive) return profile;
+    }
+    return profiles.isEmpty ? null : profiles.first;
+  }
+
+  static Stream<List<ReminderSchedule>> _activeSchedulesStream(
+    ReminderRepository reminders,
+    ScheduleProfile? activeProfile,
+  ) {
+    if (activeProfile == null) {
+      return Stream<List<ReminderSchedule>>.value(const <ReminderSchedule>[]);
+    }
+    return reminders.watchSchedules(profileId: activeProfile.id);
+  }
+
+  /// Counts schedules per profile so saved routines show their scope even when
+  /// only one profile is active in the main Schedule list.
+  static Map<String, int> _profileScheduleCounts(
+    List<ReminderSchedule> schedules,
+  ) {
+    final counts = <String, int>{};
+    for (final schedule in schedules) {
+      counts.update(
+        schedule.profileId,
+        (count) => count + 1,
+        ifAbsent: () => 1,
+      );
+    }
+    return counts;
+  }
+
+  static Future<void> showScheduleSheet(
     BuildContext context,
-    ReminderRepository reminders, {
+    ReminderRepository reminders,
+    List<Prescription> prescriptions, {
     ReminderSchedule? schedule,
+    String? initialPrescriptionId,
+    String profileId = ReminderSchedule.defaultProfileId,
+  }) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _ScheduleSheet(
+        reminders: reminders,
+        prescriptions: prescriptions,
+        schedule: schedule,
+        initialPrescriptionId: initialPrescriptionId,
+        profileId: profileId,
+      ),
+    );
+  }
+}
+
+class _ScheduleProfileSection extends StatelessWidget {
+  const _ScheduleProfileSection({
+    required this.profiles,
+    required this.activeProfile,
+    required this.profileScheduleCounts,
+    required this.profilesRepository,
+  });
+
+  final List<ScheduleProfile> profiles;
+  final ScheduleProfile? activeProfile;
+  final Map<String, int> profileScheduleCounts;
+  final ScheduleProfileRepository profilesRepository;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Active schedule',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(activeProfile?.name ?? 'No active schedule'),
+                    ],
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () => _showProfileSheet(context),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add schedule profile'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            for (final profile in profiles)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(profile.name),
+                subtitle: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_profileCountLabel(profile)),
+                    Text(profile.isActive ? 'Active' : 'Saved'),
+                  ],
+                ),
+                trailing: Wrap(
+                  spacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Tooltip(
+                      message: 'Edit ${profile.name} schedule',
+                      child: IconButton(
+                        onPressed: () =>
+                            _showProfileSheet(context, profile: profile),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                    ),
+                    if (profile.isActive)
+                      const Icon(Icons.check_circle_outline)
+                    else
+                      Tooltip(
+                        message: 'Use ${profile.name} schedule',
+                        child: TextButton(
+                          onPressed: () => _setActive(context, profile.id),
+                          child: Text('Use ${profile.name}'),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _profileCountLabel(ScheduleProfile profile) {
+    final count = profileScheduleCounts[profile.id] ?? 0;
+    final noun = count == 1 ? 'schedule' : 'schedules';
+    return '${profile.name} · $count $noun';
+  }
+
+  Future<void> _showProfileSheet(
+    BuildContext context, {
+    ScheduleProfile? profile,
   }) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) =>
-          _ReminderSheet(reminders: reminders, schedule: schedule),
+          _ScheduleProfileSheet(profiles: profilesRepository, profile: profile),
     );
+  }
+
+  /// Switches the robot to one active schedule profile without deleting any
+  /// saved schedules in other profiles.
+  Future<void> _setActive(BuildContext context, String id) async {
+    try {
+      await profilesRepository.setActiveProfile(id);
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Schedule profile update failed: $error')),
+      );
+    }
   }
 }
 
-class _ReminderTile extends StatelessWidget {
-  const _ReminderTile({required this.schedule, required this.reminders});
+class _ScheduleProfileSheet extends StatefulWidget {
+  const _ScheduleProfileSheet({required this.profiles, this.profile});
+
+  final ScheduleProfileRepository profiles;
+  final ScheduleProfile? profile;
+
+  @override
+  State<_ScheduleProfileSheet> createState() => _ScheduleProfileSheetState();
+}
+
+class _ScheduleProfileSheetState extends State<_ScheduleProfileSheet> {
+  final _nameController = TextEditingController();
+  var _isSaving = false;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController.text = widget.profile?.name ?? '';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 16,
+        right: 16,
+        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.profile == null
+                ? 'Add schedule profile'
+                : 'Rename schedule profile',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 16),
+          TextFormField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Schedule name',
+              border: OutlineInputBorder(),
+            ),
+            textInputAction: TextInputAction.done,
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _errorText!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cancel'),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: _isSaving ? null : _save,
+                child: const Text('Save schedule profile'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Saves a named routine profile that can become the one active robot schedule.
+  Future<void> _save() async {
+    if (_isSaving) return;
+    final name = _nameController.text.trim();
+    if (name.isEmpty) {
+      setState(() => _errorText = 'Schedule name is required.');
+      return;
+    }
+
+    setState(() {
+      _errorText = null;
+      _isSaving = true;
+    });
+
+    final now = DateTime.now().toUtc();
+    final existing = widget.profile;
+    try {
+      await widget.profiles.upsertProfile(
+        ScheduleProfile(
+          id: existing?.id ?? 'schedule-profile-${now.microsecondsSinceEpoch}',
+          name: name,
+          isActive: existing?.isActive ?? false,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        ),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorText = 'Schedule profile save failed: $error';
+        _isSaving = false;
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+}
+
+class _ScheduleTile extends StatelessWidget {
+  const _ScheduleTile({
+    required this.schedule,
+    required this.prescription,
+    required this.prescriptions,
+    required this.reminders,
+  });
 
   final ReminderSchedule schedule;
+  final Prescription? prescription;
+  final List<Prescription> prescriptions;
   final ReminderRepository reminders;
 
   @override
   Widget build(BuildContext context) {
+    final title = prescription?.name ?? schedule.label;
     return Card(
       child: ListTile(
-        title: Text(schedule.label),
-        subtitle: Text(schedule.timeLabel),
+        title: Text(title),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(schedule.timeLabel),
+            if (prescription != null) Text(prescription!.pillType.label),
+          ],
+        ),
         leading: Icon(
           schedule.isEnabled
               ? Icons.notifications_active_outlined
@@ -95,16 +456,17 @@ class _ReminderTile extends StatelessWidget {
               onChanged: (value) => _setEnabled(context, value),
             ),
             IconButton(
-              tooltip: 'Edit reminder',
-              onPressed: () => RemindersScreen._showReminderSheet(
+              tooltip: 'Edit schedule',
+              onPressed: () => RemindersScreen.showScheduleSheet(
                 context,
                 reminders,
+                prescriptions,
                 schedule: schedule,
               ),
               icon: const Icon(Icons.edit_outlined),
             ),
             IconButton(
-              tooltip: 'Delete reminder',
+              tooltip: 'Delete schedule',
               onPressed: () => _delete(context),
               icon: const Icon(Icons.delete_outline),
             ),
@@ -123,7 +485,7 @@ class _ReminderTile extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Reminder update failed: $error')));
+      ).showSnackBar(SnackBar(content: Text('Schedule update failed: $error')));
     }
   }
 
@@ -134,25 +496,34 @@ class _ReminderTile extends StatelessWidget {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Reminder delete failed: $error')));
+      ).showSnackBar(SnackBar(content: Text('Schedule delete failed: $error')));
     }
   }
 }
 
-class _ReminderSheet extends StatefulWidget {
-  const _ReminderSheet({required this.reminders, this.schedule});
+class _ScheduleSheet extends StatefulWidget {
+  const _ScheduleSheet({
+    required this.reminders,
+    required this.prescriptions,
+    required this.profileId,
+    this.schedule,
+    this.initialPrescriptionId,
+  });
 
   final ReminderRepository reminders;
+  final List<Prescription> prescriptions;
+  final String profileId;
   final ReminderSchedule? schedule;
+  final String? initialPrescriptionId;
 
   @override
-  State<_ReminderSheet> createState() => _ReminderSheetState();
+  State<_ScheduleSheet> createState() => _ScheduleSheetState();
 }
 
-class _ReminderSheetState extends State<_ReminderSheet> {
-  late final TextEditingController _labelController;
+class _ScheduleSheetState extends State<_ScheduleSheet> {
   late final TextEditingController _hourController;
   late final TextEditingController _minuteController;
+  late String? _selectedPrescriptionId;
   late bool _isEnabled;
   var _isSaving = false;
   String? _errorText;
@@ -161,7 +532,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
   void initState() {
     super.initState();
     final schedule = widget.schedule;
-    _labelController = TextEditingController(text: schedule?.label ?? '');
+    _selectedPrescriptionId = _initialPrescriptionId(schedule);
     _hourController = TextEditingController(
       text: schedule == null ? '' : schedule.hour.toString(),
     );
@@ -173,7 +544,6 @@ class _ReminderSheetState extends State<_ReminderSheet> {
 
   @override
   void dispose() {
-    _labelController.dispose();
     _hourController.dispose();
     _minuteController.dispose();
     super.dispose();
@@ -193,18 +563,34 @@ class _ReminderSheetState extends State<_ReminderSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              widget.schedule == null ? 'Add reminder' : 'Edit reminder',
+              widget.schedule == null ? 'Add schedule' : 'Edit schedule',
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _labelController,
-              decoration: const InputDecoration(
-                labelText: 'Label',
-                border: OutlineInputBorder(),
-              ),
-              textInputAction: TextInputAction.next,
+            const SizedBox(height: 8),
+            Text(
+              'Use the medication details you already entered. Dosey does not confirm your dose is correct.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
+            const SizedBox(height: 16),
+            Text(
+              'Which prescription?',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            for (final prescription in widget.prescriptions)
+              Card.outlined(
+                child: ListTile(
+                  selected: _selectedPrescriptionId == prescription.id,
+                  title: Text(prescription.name),
+                  subtitle: Text(prescription.pillType.label),
+                  trailing: _selectedPrescriptionId == prescription.id
+                      ? const Icon(Icons.check_circle_outline)
+                      : null,
+                  onTap: () => setState(() {
+                    _selectedPrescriptionId = prescription.id;
+                  }),
+                ),
+              ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -256,7 +642,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
                 const Spacer(),
                 FilledButton(
                   onPressed: _isSaving ? null : _save,
-                  child: const Text('Save reminder'),
+                  child: const Text('Save schedule'),
                 ),
               ],
             ),
@@ -266,15 +652,17 @@ class _ReminderSheetState extends State<_ReminderSheet> {
     );
   }
 
+  /// Builds a reminder schedule from a saved prescription, preserving legacy
+  /// schedules by leaving their label-only display intact until edited.
   Future<void> _save() async {
     if (_isSaving) return;
 
-    final label = _labelController.text.trim();
+    final prescription = _selectedPrescription();
     final hour = int.tryParse(_hourController.text.trim());
     final minute = int.tryParse(_minuteController.text.trim());
 
-    if (label.isEmpty) {
-      setState(() => _errorText = 'Enter a reminder label.');
+    if (prescription == null) {
+      setState(() => _errorText = 'Choose a prescription.');
       return;
     }
     if (hour == null || hour < 0 || hour > 23) {
@@ -294,8 +682,10 @@ class _ReminderSheetState extends State<_ReminderSheet> {
     final now = DateTime.now().toUtc();
     final existing = widget.schedule;
     final schedule = ReminderSchedule(
-      id: existing?.id ?? 'reminder-${now.microsecondsSinceEpoch}',
-      label: label,
+      id: existing?.id ?? 'schedule-${now.microsecondsSinceEpoch}',
+      label: prescription.name,
+      prescriptionId: prescription.id,
+      profileId: existing?.profileId ?? widget.profileId,
       hour: hour,
       minute: minute,
       isEnabled: _isEnabled,
@@ -308,7 +698,7 @@ class _ReminderSheetState extends State<_ReminderSheet> {
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
-        _errorText = 'Reminder save failed: $error';
+        _errorText = _scheduleSaveErrorMessage(error);
         _isSaving = false;
       });
       return;
@@ -316,5 +706,43 @@ class _ReminderSheetState extends State<_ReminderSheet> {
 
     if (!mounted) return;
     Navigator.of(context).pop();
+  }
+
+  String? _initialPrescriptionId(ReminderSchedule? schedule) {
+    final savedId = schedule?.prescriptionId;
+    if (savedId != null &&
+        widget.prescriptions.any(
+          (prescription) => prescription.id == savedId,
+        )) {
+      return savedId;
+    }
+    if (schedule != null) {
+      return null;
+    }
+    final initialId = widget.initialPrescriptionId;
+    if (initialId != null &&
+        widget.prescriptions.any(
+          (prescription) => prescription.id == initialId,
+        )) {
+      return initialId;
+    }
+    return widget.prescriptions.isEmpty ? null : widget.prescriptions.first.id;
+  }
+
+  Prescription? _selectedPrescription() {
+    final selectedId = _selectedPrescriptionId;
+    if (selectedId == null) return null;
+    for (final prescription in widget.prescriptions) {
+      if (prescription.id == selectedId) return prescription;
+    }
+    return null;
+  }
+
+  /// Keeps validation failures readable while preserving raw details for unknown errors.
+  static String _scheduleSaveErrorMessage(Object error) {
+    if (error is ArgumentError && error.message is String) {
+      return error.message as String;
+    }
+    return 'Schedule save failed: $error';
   }
 }

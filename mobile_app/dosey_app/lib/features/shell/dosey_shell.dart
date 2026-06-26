@@ -1,5 +1,6 @@
 import 'package:dosey_app/features/controller/controller_screen.dart';
 import 'package:dosey_app/features/log/dose_log_screen.dart';
+import 'package:dosey_app/features/prescriptions/prescriptions_screen.dart';
 import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/today/today_screen.dart';
@@ -17,6 +18,7 @@ class _DoseyShellState extends State<DoseyShell> {
 
   static const _screens = [
     TodayScreen(),
+    PrescriptionsScreen(),
     RemindersScreen(),
     ControllerScreen(),
     DoseLogScreen(),
@@ -42,9 +44,14 @@ class _DoseyShellState extends State<DoseyShell> {
             label: 'Today',
           ),
           NavigationDestination(
+            icon: Icon(Icons.medication_outlined),
+            selectedIcon: Icon(Icons.medication),
+            label: 'Prescriptions',
+          ),
+          NavigationDestination(
             icon: Icon(Icons.alarm_outlined),
             selectedIcon: Icon(Icons.alarm),
-            label: 'Reminders',
+            label: 'Schedule',
           ),
           NavigationDestination(
             icon: Icon(Icons.memory_outlined),
