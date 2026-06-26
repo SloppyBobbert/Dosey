@@ -2,7 +2,7 @@
 
 Arduino/PlatformIO C++ firmware for the Seeed Studio XIAO controller and Grove modules.
 
-Confirm the exact final XIAO model before writing the final pin map. Current repo notes reference XIAO ESP32-C6; older plan notes mention XIAO ESP32S3.
+The confirmed controller is the Seeed Studio XIAO ESP32-C6. The confirmed Grove base is the Seeed Studio Grove Base for XIAO. Older ESP32S3 and XIAO Expansion Board references are historical notes.
 
 ## Firmware role
 
