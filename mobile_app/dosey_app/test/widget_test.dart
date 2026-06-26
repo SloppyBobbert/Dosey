@@ -239,6 +239,7 @@ void main() {
     expect(find.text('Today'), findsWidgets);
     expect(find.text('Prescriptions'), findsOneWidget);
     expect(find.text('Schedule'), findsOneWidget);
+    expect(find.text('Carousel'), findsOneWidget);
     expect(find.text('Controller'), findsOneWidget);
     expect(find.text('Log'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
@@ -247,6 +248,66 @@ void main() {
       find.text('Use candy, beads, dry beans, vitamins, or fake pills.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Carousel screen shows loading safety empty state', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Daviky loading'), findsOneWidget);
+    expect(find.text('0 loaded / 0 assigned'), findsOneWidget);
+    expect(
+      find.text(
+        'Use candy, beads, dry beans, vitamins, or fake pills for prototype testing. Do not use real prescription medication in early tests.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('No active schedules to load.'), findsOneWidget);
+  });
+
+  testWidgets('Carousel screen assigns and loads an active schedule', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Slot number'),
+      '1',
+    );
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Assign next dose'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Assign next dose'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Slot 1'), findsOneWidget);
+    expect(find.text('08:30 · Vitamin D'), findsOneWidget);
+    expect(find.text('Assigned'), findsOneWidget);
+    expect(find.text('0 loaded / 1 assigned'), findsOneWidget);
+
+    await tester.tap(find.text('Mark loaded'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Loaded'), findsOneWidget);
+    expect(find.text('1 loaded / 1 assigned'), findsOneWidget);
   });
 
   testWidgets('completed onboarding does not flash onboarding while loading', (

@@ -136,4 +136,77 @@ void main() {
     expect(profiles.single.id, 'schedule-1');
     expect(profiles.single.isActive, isTrue);
   });
+
+  test('migration from schema seven creates carousel slots table', () async {
+    final executor = NativeDatabase.memory(
+      setup: (database) {
+        database
+          ..execute('''
+            CREATE TABLE app_settings (
+              key TEXT NOT NULL PRIMARY KEY,
+              value TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE reminder_schedules (
+              id TEXT NOT NULL PRIMARY KEY,
+              label TEXT NOT NULL,
+              prescription_id TEXT NULL,
+              profile_id TEXT NOT NULL DEFAULT 'schedule-1',
+              hour INTEGER NOT NULL,
+              minute INTEGER NOT NULL,
+              is_enabled INTEGER NOT NULL CHECK (is_enabled IN (0, 1)),
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              CHECK (hour >= 0 AND hour <= 23),
+              CHECK (minute >= 0 AND minute <= 59)
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE prescriptions (
+              id TEXT NOT NULL PRIMARY KEY,
+              name TEXT NOT NULL,
+              pill_type TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE schedule_profiles (
+              id TEXT NOT NULL PRIMARY KEY,
+              name TEXT NOT NULL,
+              is_active INTEGER NOT NULL CHECK (is_active IN (0, 1)),
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE auth_sessions (
+              id TEXT NOT NULL PRIMARY KEY,
+              user_id TEXT NOT NULL,
+              email TEXT NOT NULL,
+              display_name TEXT NULL,
+              photo_url TEXT NULL,
+              provider TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE dose_log_events (
+              id TEXT NOT NULL PRIMARY KEY,
+              kind TEXT NOT NULL,
+              dose_id TEXT NOT NULL,
+              occurred_at INTEGER NOT NULL,
+              marks_dose_taken INTEGER NOT NULL CHECK (marks_dose_taken IN (0, 1))
+            );
+          ''')
+          ..execute('PRAGMA user_version = 7;');
+      },
+    );
+    final database = DoseyDatabase(executor);
+    addTearDown(database.close);
+
+    expect(await database.select(database.carouselSlots).get(), isEmpty);
+  });
 }

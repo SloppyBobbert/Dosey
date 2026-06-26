@@ -60,6 +60,24 @@ class Prescriptions extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('CarouselSlotRow')
+class CarouselSlots extends Table {
+  TextColumn get id => text()();
+  IntColumn get slotNumber => integer()();
+  TextColumn get prescriptionId => text()();
+  TextColumn get scheduleId => text()();
+  TextColumn get profileId => text()();
+  TextColumn get status => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => const ['CHECK (slot_number > 0)'];
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('AuthSessionRow')
 class AuthSessions extends Table {
   TextColumn get id => text()();
@@ -92,6 +110,7 @@ class DoseLogEvents extends Table {
     ReminderSchedules,
     Prescriptions,
     ScheduleProfiles,
+    CarouselSlots,
     AuthSessions,
     DoseLogEvents,
   ],
@@ -110,7 +129,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -150,6 +169,9 @@ class DoseyDatabase extends _$DoseyDatabase {
           );
         }
         await _seedDefaultScheduleProfile();
+      }
+      if (from < 8) {
+        await migrator.createTable(carouselSlots);
       }
     },
   );

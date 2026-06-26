@@ -1,3 +1,4 @@
+import 'package:dosey_app/features/carousel/carousel_screen.dart';
 import 'package:dosey_app/features/controller/controller_screen.dart';
 import 'package:dosey_app/features/log/dose_log_screen.dart';
 import 'package:dosey_app/features/prescriptions/prescriptions_screen.dart';
@@ -20,6 +21,7 @@ class _DoseyShellState extends State<DoseyShell> {
     TodayScreen(),
     PrescriptionsScreen(),
     RemindersScreen(),
+    CarouselScreen(),
     ControllerScreen(),
     DoseLogScreen(),
     SettingsScreen(),
@@ -52,6 +54,11 @@ class _DoseyShellState extends State<DoseyShell> {
             icon: Icon(Icons.alarm_outlined),
             selectedIcon: Icon(Icons.alarm),
             label: 'Schedule',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.view_carousel_outlined),
+            selectedIcon: Icon(Icons.view_carousel),
+            label: 'Carousel',
           ),
           NavigationDestination(
             icon: Icon(Icons.memory_outlined),
