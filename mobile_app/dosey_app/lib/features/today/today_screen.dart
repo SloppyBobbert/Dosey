@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -42,7 +43,7 @@ class TodayScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       const _SafetyCard(),
                       const SizedBox(height: 12),
-                      _ReminderPreviewCard(
+                      _ScheduleTimelineCard(
                         schedules: schedules,
                         prescriptionsById: prescriptionsById,
                       ),
@@ -177,27 +178,58 @@ class _TodayDoseContent extends StatelessWidget {
             ? null
             : TodayScreen._doseIdForToday(currentSchedule.id);
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _TodayHeroCard(
-              onConfirmDoseTaken: () => TodayScreen._logDoseAction(
-                context,
-                DoseLogEvent.doseTakenConfirmed(
-                  doseId: currentDoseId ?? 'manual-confirmation',
-                  occurredAt: DateTime.now().toUtc(),
+        final dependencies = DoseyAppScope.of(context);
+
+        return StreamBuilder<List<CarouselSlot>>(
+          stream: currentSchedule == null
+              ? Stream<List<CarouselSlot>>.value(const <CarouselSlot>[])
+              : dependencies.carouselSlots.watchSlots(
+                  profileId: currentSchedule.profileId,
                 ),
-                'Dose confirmation logged.',
-              ),
-            ),
-            const SizedBox(height: 12),
-            _CurrentDoseSection(
-              events: events,
-              currentSchedule: currentSchedule,
-              currentDoseId: currentDoseId,
-              prescriptionsById: prescriptionsById,
-            ),
-          ],
+          builder: (context, slotSnapshot) {
+            final loadedSlot = currentSchedule == null
+                ? null
+                : _CurrentDoseSection.loadedSlotForSchedule(
+                    slotSnapshot.data ?? const <CarouselSlot>[],
+                    currentSchedule,
+                  );
+            final latestEvent = currentDoseId == null
+                ? null
+                : TodayScreen._latestEventForDose(events, currentDoseId);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _TodayHeroCard(
+                  currentSchedule: currentSchedule,
+                  prescription: currentSchedule == null
+                      ? null
+                      : prescriptionsById[currentSchedule.prescriptionId],
+                  latestEvent: latestEvent,
+                  loadedSlot: loadedSlot,
+                  scheduledDoseCount: schedules
+                      .where((s) => s.isEnabled)
+                      .length,
+                  onConfirmDoseTaken: () => TodayScreen._logDoseAction(
+                    context,
+                    DoseLogEvent.doseTakenConfirmed(
+                      doseId: currentDoseId ?? 'manual-confirmation',
+                      occurredAt: DateTime.now().toUtc(),
+                    ),
+                    'Dose confirmation logged.',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _CurrentDoseSection(
+                  events: events,
+                  currentSchedule: currentSchedule,
+                  currentDoseId: currentDoseId,
+                  prescriptionsById: prescriptionsById,
+                  loadedSlot: loadedSlot,
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -210,12 +242,14 @@ class _CurrentDoseSection extends StatelessWidget {
     required this.currentSchedule,
     required this.currentDoseId,
     required this.prescriptionsById,
+    required this.loadedSlot,
   });
 
   final List<DoseLogEvent> events;
   final ReminderSchedule? currentSchedule;
   final String? currentDoseId;
   final Map<String, Prescription> prescriptionsById;
+  final CarouselSlot? loadedSlot;
 
   @override
   Widget build(BuildContext context) {
@@ -225,54 +259,42 @@ class _CurrentDoseSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
     final latestEvent = TodayScreen._latestEventForDose(events, currentDoseId);
-    final dependencies = DoseyAppScope.of(context);
-    return StreamBuilder<List<CarouselSlot>>(
-      stream: dependencies.carouselSlots.watchSlots(
-        profileId: currentSchedule.profileId,
+    return _CurrentDoseCard(
+      schedule: currentSchedule,
+      prescription: prescriptionsById[currentSchedule.prescriptionId],
+      latestEvent: latestEvent,
+      loadedSlot: loadedSlot,
+      onDispenseLoadedSlot: loadedSlot == null
+          ? null
+          : () => _dispenseLoadedSlot(context, loadedSlot!, currentDoseId),
+      onConfirmTaken: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseTakenConfirmed(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'Dose marked taken.',
       ),
-      builder: (context, slotSnapshot) {
-        final loadedSlot = _loadedSlotForSchedule(
-          slotSnapshot.data ?? const <CarouselSlot>[],
-          currentSchedule,
-        );
-        return _CurrentDoseCard(
-          schedule: currentSchedule,
-          prescription: prescriptionsById[currentSchedule.prescriptionId],
-          latestEvent: latestEvent,
-          loadedSlot: loadedSlot,
-          onDispenseLoadedSlot: loadedSlot == null
-              ? null
-              : () => _dispenseLoadedSlot(context, loadedSlot, currentDoseId),
-          onConfirmTaken: () => TodayScreen._logDoseAction(
-            context,
-            DoseLogEvent.doseTakenConfirmed(
-              doseId: currentDoseId,
-              occurredAt: DateTime.now().toUtc(),
-            ),
-            'Dose marked taken.',
-          ),
-          onSkipDose: () => TodayScreen._logDoseAction(
-            context,
-            DoseLogEvent.doseSkipped(
-              doseId: currentDoseId,
-              occurredAt: DateTime.now().toUtc(),
-            ),
-            'Dose skipped.',
-          ),
-          onMarkMissed: () => TodayScreen._logDoseAction(
-            context,
-            DoseLogEvent.doseMissed(
-              doseId: currentDoseId,
-              occurredAt: DateTime.now().toUtc(),
-            ),
-            'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-          ),
-        );
-      },
+      onSkipDose: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseSkipped(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'Dose skipped.',
+      ),
+      onMarkMissed: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseMissed(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+      ),
     );
   }
 
-  static CarouselSlot? _loadedSlotForSchedule(
+  static CarouselSlot? loadedSlotForSchedule(
     List<CarouselSlot> slots,
     ReminderSchedule schedule,
   ) {
@@ -312,14 +334,34 @@ class _CurrentDoseSection extends StatelessWidget {
 }
 
 class _TodayHeroCard extends StatelessWidget {
-  const _TodayHeroCard({required this.onConfirmDoseTaken});
+  const _TodayHeroCard({
+    required this.currentSchedule,
+    required this.prescription,
+    required this.latestEvent,
+    required this.loadedSlot,
+    required this.scheduledDoseCount,
+    required this.onConfirmDoseTaken,
+  });
 
+  final ReminderSchedule? currentSchedule;
+  final Prescription? prescription;
+  final DoseLogEvent? latestEvent;
+  final CarouselSlot? loadedSlot;
+  final int scheduledDoseCount;
   final VoidCallback onConfirmDoseTaken;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final currentSchedule = this.currentSchedule;
+    final prescription = this.prescription;
+    final doseTitle = currentSchedule == null
+        ? 'Dosey is ready for your day'
+        : prescription?.name ?? currentSchedule.label;
+    final doseSubtitle = currentSchedule == null
+        ? 'Review reminders, keep prototype checks visible, and confirm doses only after you know they were taken.'
+        : '${currentSchedule.timeLabel} · ${prescription?.pillType.label ?? 'Scheduled dose'}';
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -348,7 +390,7 @@ class _TodayHeroCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Today',
+                        currentSchedule == null ? 'Today' : 'Next dose',
                         style: theme.textTheme.labelLarge?.copyWith(
                           color: colorScheme.onPrimaryContainer,
                           fontWeight: FontWeight.w700,
@@ -357,7 +399,7 @@ class _TodayHeroCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Dosey is ready for your day',
+                        doseTitle,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           color: colorScheme.onPrimaryContainer,
                           fontWeight: FontWeight.w800,
@@ -366,11 +408,14 @@ class _TodayHeroCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Review reminders, keep prototype checks visible, and confirm doses only after you know they were taken.',
+                        doseSubtitle,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onPrimaryContainer.withValues(
                             alpha: 0.78,
                           ),
+                          fontWeight: currentSchedule == null
+                              ? FontWeight.w400
+                              : FontWeight.w700,
                           height: 1.35,
                         ),
                       ),
@@ -386,7 +431,9 @@ class _TodayHeroCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(22),
                   ),
                   child: Icon(
-                    Icons.wb_sunny_outlined,
+                    currentSchedule == null
+                        ? Icons.wb_sunny_outlined
+                        : Icons.medication_outlined,
                     color: colorScheme.primary,
                     size: 30,
                   ),
@@ -394,20 +441,11 @@ class _TodayHeroCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: const [
-                _StatusPill(icon: Icons.phone_android, label: 'Local-only'),
-                _StatusPill(
-                  icon: Icons.science_outlined,
-                  label: 'Prototype-safe',
-                ),
-                _StatusPill(
-                  icon: Icons.check_circle_outline,
-                  label: 'Manual confirmation',
-                ),
-              ],
+            _TodayHeroStatusChips(
+              scheduledDoseCount: scheduledDoseCount,
+              hasActiveDose: currentSchedule != null,
+              latestEvent: latestEvent,
+              loadedSlot: loadedSlot,
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
@@ -419,6 +457,101 @@ class _TodayHeroCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _TodayHeroStatusChips extends StatelessWidget {
+  const _TodayHeroStatusChips({
+    required this.scheduledDoseCount,
+    required this.hasActiveDose,
+    required this.latestEvent,
+    required this.loadedSlot,
+  });
+
+  final int scheduledDoseCount;
+  final bool hasActiveDose;
+  final DoseLogEvent? latestEvent;
+  final CarouselSlot? loadedSlot;
+
+  @override
+  Widget build(BuildContext context) {
+    final dependencies = DoseyAppScope.of(context);
+    return StreamBuilder<ControllerSnapshot>(
+      stream: dependencies.controller.watchController(),
+      builder: (context, controllerSnapshot) {
+        final controller =
+            controllerSnapshot.data ?? const ControllerSnapshot.disconnected();
+        return StreamBuilder<bool>(
+          stream: dependencies.settings.watchSafetyAcknowledged(),
+          builder: (context, safetySnapshot) {
+            final safetyAcknowledged = safetySnapshot.data ?? false;
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                const _StatusPill(
+                  icon: Icons.phone_android,
+                  label: 'Local-only',
+                ),
+                const _StatusPill(
+                  icon: Icons.science_outlined,
+                  label: 'Prototype-safe',
+                ),
+                const _StatusPill(
+                  icon: Icons.check_circle_outline,
+                  label: 'Manual confirmation',
+                ),
+                _StatusPill(
+                  icon: Icons.health_and_safety_outlined,
+                  label: safetyAcknowledged
+                      ? 'Safety acknowledged'
+                      : 'Safety to review',
+                ),
+                _StatusPill(
+                  icon: Icons.memory_outlined,
+                  label:
+                      controller.connectionState ==
+                          ControllerConnectionState.connected
+                      ? 'Controller connected'
+                      : 'Controller offline',
+                ),
+                _StatusPill(
+                  icon: hasActiveDose
+                      ? Icons.event_available_outlined
+                      : Icons.event_busy_outlined,
+                  label: hasActiveDose ? 'Active schedule' : 'No active dose',
+                ),
+                if (scheduledDoseCount > 0)
+                  _StatusPill(
+                    icon: Icons.timeline_outlined,
+                    label: '$scheduledDoseCount scheduled today',
+                  ),
+                if (loadedSlot != null)
+                  _StatusPill(
+                    icon: Icons.inventory_2_outlined,
+                    label: 'Loaded slot ${loadedSlot!.slotNumber}',
+                  ),
+                if (latestEvent != null)
+                  _StatusPill(
+                    icon: Icons.history_outlined,
+                    label: _latestEventLabel(latestEvent!),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  static String _latestEventLabel(DoseLogEvent event) {
+    return switch (event.kind) {
+      DoseLogEventKind.controllerDispenseSucceeded => 'Movement logged',
+      DoseLogEventKind.doseTakenConfirmed => 'Taken logged',
+      DoseLogEventKind.doseSkipped => 'Skipped logged',
+      DoseLogEventKind.doseMissed => 'Missed logged',
+      _ => 'Event logged',
+    };
   }
 }
 
@@ -619,8 +752,8 @@ class _SafetyCard extends StatelessWidget {
   }
 }
 
-class _ReminderPreviewCard extends StatelessWidget {
-  const _ReminderPreviewCard({
+class _ScheduleTimelineCard extends StatelessWidget {
+  const _ScheduleTimelineCard({
     required this.schedules,
     required this.prescriptionsById,
   });
@@ -638,20 +771,40 @@ class _ReminderPreviewCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Scheduled reminders',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Next schedule timeline',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Scheduled reminders',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const _TimelineHeaderChip(),
+              ],
             ),
             const SizedBox(height: 10),
             if (schedules.isEmpty)
               const _EmptyReminderState()
             else
-              for (final schedule in schedules.take(3))
-                _ReminderRow(
-                  schedule: schedule,
-                  prescription: prescriptionsById[schedule.prescriptionId],
+              for (final indexed in schedules.take(4).indexed)
+                _TimelineRow(
+                  statusLabel: indexed.$1 == 0 ? 'Now watching' : 'Later today',
+                  schedule: indexed.$2,
+                  prescription: prescriptionsById[indexed.$2.prescriptionId],
                 ),
           ],
         ),
@@ -699,9 +852,39 @@ class _EmptyReminderState extends StatelessWidget {
   }
 }
 
-class _ReminderRow extends StatelessWidget {
-  const _ReminderRow({required this.schedule, required this.prescription});
+class _TimelineHeaderChip extends StatelessWidget {
+  const _TimelineHeaderChip();
 
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        'Up next',
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: colorScheme.onPrimaryContainer,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _TimelineRow extends StatelessWidget {
+  const _TimelineRow({
+    required this.statusLabel,
+    required this.schedule,
+    required this.prescription,
+  });
+
+  final String statusLabel;
   final ReminderSchedule schedule;
   final Prescription? prescription;
 
@@ -721,6 +904,24 @@ class _ReminderRow extends StatelessWidget {
         ),
         child: Row(
           children: [
+            Column(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Container(
+                  width: 2,
+                  height: 52,
+                  color: colorScheme.outlineVariant,
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
@@ -741,9 +942,25 @@ class _ReminderRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
+                    statusLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
                     scheduleName,
                     style: theme.textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    schedule.isEnabled ? 'Enabled reminder' : 'Reminder paused',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                   if (prescription != null) ...[

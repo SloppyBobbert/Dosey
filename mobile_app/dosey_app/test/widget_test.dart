@@ -478,6 +478,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Dispense from slot 1'), findsOneWidget);
+    await tester.ensureVisible(find.text('Dispense from slot 1'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Dispense from slot 1'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
@@ -589,7 +591,67 @@ void main() {
 
     expect(find.text('Scheduled reminders'), findsOneWidget);
     expect(find.text('08:30'), findsOneWidget);
-    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('Vitamin D'), findsWidgets);
+  });
+
+  testWidgets('Today dashboard highlights the next dose hero', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Next dose'), findsOneWidget);
+    expect(find.text('Vitamin D'), findsWidgets);
+    expect(find.text('08:30'), findsWidgets);
+    expect(find.text('Capsule'), findsWidgets);
+    expect(find.text('Loaded slot 1'), findsOneWidget);
+    expect(find.text('Controller offline'), findsOneWidget);
+    expect(find.text('Active schedule'), findsOneWidget);
+  });
+
+  testWidgets('Today dashboard shows the next schedule timeline', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addAllergyPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: 'allergy-pill',
+        label: 'Allergy pill',
+        prescriptionId: 'allergy-pill',
+        hour: 12,
+        minute: 0,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Next schedule timeline'), 220);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Next schedule timeline'), findsOneWidget);
+    expect(find.text('Now watching'), findsOneWidget);
+    expect(find.text('Up next'), findsOneWidget);
+    expect(find.text('Later today'), findsOneWidget);
+    expect(find.text('08:30'), findsWidgets);
+    expect(find.text('Vitamin D'), findsWidgets);
+    expect(find.text('12:00'), findsOneWidget);
+    expect(find.text('Allergy pill'), findsWidgets);
   });
 
   testWidgets('Today screen only shows reminders from the active schedule', (
