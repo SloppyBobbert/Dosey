@@ -969,6 +969,32 @@ void main() {
     expect(find.text('No prescriptions yet.'), findsOneWidget);
   });
 
+  testWidgets('prescriptions tab shows medication cabinet summary', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addAllergyPrescription(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Prescriptions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Medication cabinet'), findsOneWidget);
+    expect(find.text('2 entered'), findsOneWidget);
+    expect(find.text('1 scheduled'), findsOneWidget);
+    expect(find.text('Feeds schedule builder'), findsOneWidget);
+    expect(find.text('Local label reference'), findsOneWidget);
+    expect(
+      find.text('Dosey does not verify prescriptions or identify pills.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('prescription card can start a schedule for that medication', (
     WidgetTester tester,
   ) async {
