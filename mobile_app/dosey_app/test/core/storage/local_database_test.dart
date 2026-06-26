@@ -134,5 +134,6 @@ void main() {
 
     expect(profiles, hasLength(1));
     expect(profiles.single.id, 'schedule-1');
+    expect(profiles.single.isActive, isTrue);
   });
 }
