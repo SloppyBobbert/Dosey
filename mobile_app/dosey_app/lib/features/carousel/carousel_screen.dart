@@ -136,30 +136,134 @@ class _CarouselHeader extends StatelessWidget {
     final loaded = slots
         .where((slot) => slot.status == CarouselSlotStatus.loaded)
         .length;
+    final readyToDispense = loaded;
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     return Card(
+      color: colorScheme.tertiaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.view_carousel_outlined),
-                const SizedBox(width: 10),
+                CircleAvatar(
+                  backgroundColor: colorScheme.onTertiaryContainer,
+                  foregroundColor: colorScheme.tertiaryContainer,
+                  child: const Icon(Icons.view_carousel_outlined),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    'Daviky loading',
-                    style: Theme.of(context).textTheme.titleLarge,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Loading bay',
+                        style: textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onTertiaryContainer,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'Daviky carousel',
+                        style: textTheme.titleLarge?.copyWith(
+                          color: colorScheme.onTertiaryContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            Text('$loaded loaded / ${slots.length} assigned'),
+            Text(
+              'Daviky loading',
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onTertiaryContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '$loaded loaded / ${slots.length} assigned',
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onTertiaryContainer,
+              ),
+            ),
             const SizedBox(height: 4),
             Text(
               'Loading only prepares compartments. Dosey still needs manual confirmation before a dose is marked taken.',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onTertiaryContainer,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _CarouselHeroChip(
+                  icon: Icons.inventory_2_outlined,
+                  label: '${slots.length} assigned',
+                ),
+                _CarouselHeroChip(
+                  icon: Icons.check_circle_outline,
+                  label: '$loaded loaded',
+                ),
+                _CarouselHeroChip(
+                  icon: Icons.play_circle_outline,
+                  label: '$readyToDispense ready to dispense',
+                ),
+                const _CarouselHeroChip(
+                  icon: Icons.route_outlined,
+                  label: 'Feeds dispense flow',
+                ),
+                const _CarouselHeroChip(
+                  icon: Icons.science_outlined,
+                  label: 'Prototype loading',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CarouselHeroChip extends StatelessWidget {
+  const _CarouselHeroChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: 0.70),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: colorScheme.onTertiaryContainer.withValues(alpha: 0.16),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: colorScheme.onTertiaryContainer),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: colorScheme.onTertiaryContainer,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ],
         ),

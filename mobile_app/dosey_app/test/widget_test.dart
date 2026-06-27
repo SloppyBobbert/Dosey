@@ -458,6 +458,30 @@ void main() {
     expect(find.text('1 loaded / 1 assigned'), findsOneWidget);
   });
 
+  testWidgets('Carousel tab shows loading bay summary', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Loading bay'), findsOneWidget);
+    expect(find.text('Daviky carousel'), findsOneWidget);
+    expect(find.text('1 assigned'), findsOneWidget);
+    expect(find.text('1 loaded'), findsOneWidget);
+    expect(find.text('1 ready to dispense'), findsOneWidget);
+    expect(find.text('Feeds dispense flow'), findsOneWidget);
+    expect(find.text('Prototype loading'), findsOneWidget);
+  });
+
   testWidgets('Today dispenses a loaded slot without marking the dose taken', (
     WidgetTester tester,
   ) async {
