@@ -940,6 +940,43 @@ void main() {
     expect(find.text('manual-confirmation'), findsNothing);
   });
 
+  testWidgets('Log tab shows local audit summary', (WidgetTester tester) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    final doseLog = DriftDoseLogRepository(database);
+    await doseLog.addEvent(
+      DoseLogEvent.controllerDispenseSucceeded(
+        doseId: 'vitamin-d:2026-01-01',
+        occurredAt: DateTime.utc(2026, 1, 1, 8, 30),
+      ),
+    );
+    await doseLog.addEvent(
+      DoseLogEvent.doseTakenConfirmed(
+        doseId: 'vitamin-d:2026-01-01',
+        occurredAt: DateTime.utc(2026, 1, 1, 8, 32),
+      ),
+    );
+    await doseLog.addEvent(
+      DoseLogEvent.doseSkipped(
+        doseId: 'allergy-pill:2026-01-01',
+        occurredAt: DateTime.utc(2026, 1, 1, 12),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Dose history'), findsOneWidget);
+    expect(find.text('3 local events'), findsOneWidget);
+    expect(find.text('1 confirmed taken'), findsOneWidget);
+    expect(find.text('2 movement or review'), findsOneWidget);
+    expect(find.text('Manual confirmation only'), findsOneWidget);
+    expect(find.text('Local audit trail'), findsOneWidget);
+  });
+
   testWidgets('prescriptions tab adds edits and deletes prescriptions', (
     WidgetTester tester,
   ) async {
