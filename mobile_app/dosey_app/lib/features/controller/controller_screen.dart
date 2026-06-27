@@ -31,42 +31,16 @@ class ControllerScreen extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          controller.statusLabel,
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        const Text(
-                          'Demo simulator only. Real BLE comes after protocol work.',
-                        ),
-                        const SizedBox(height: 12),
-                        Wrap(
-                          spacing: 8,
-                          children: [
-                            OutlinedButton(
-                              onPressed: () => _runControllerAction(
-                                context,
-                                dependencies.controller.connect,
-                              ),
-                              child: const Text('Connect simulator'),
-                            ),
-                            OutlinedButton(
-                              onPressed: () => _runControllerAction(
-                                context,
-                                dependencies.controller.disconnect,
-                              ),
-                              child: const Text('Disconnect'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                _ControllerHeroCard(
+                  controller: controller,
+                  role: role,
+                  onConnect: () => _runControllerAction(
+                    context,
+                    dependencies.controller.connect,
+                  ),
+                  onDisconnect: () => _runControllerAction(
+                    context,
+                    dependencies.controller.disconnect,
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -133,5 +107,172 @@ class ControllerScreen extends StatelessWidget {
         SnackBar(content: Text('Controller action failed: $error')),
       );
     }
+  }
+}
+
+class _ControllerHeroCard extends StatelessWidget {
+  const _ControllerHeroCard({
+    required this.controller,
+    required this.role,
+    required this.onConnect,
+    required this.onDisconnect,
+  });
+
+  final ControllerSnapshot controller;
+  final AppDeviceRole role;
+  final VoidCallback onConnect;
+  final VoidCallback onDisconnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final isConnected =
+        controller.connectionState == ControllerConnectionState.connected;
+    final connectionLabel = isConnected
+        ? 'Controller connected'
+        : 'Controller offline';
+    final roleLabel = role.canHostRobot ? 'Robot phone' : 'Personal phone';
+
+    return Card(
+      color: colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                CircleAvatar(
+                  backgroundColor: colorScheme.onPrimaryContainer,
+                  foregroundColor: colorScheme.primaryContainer,
+                  child: const Icon(Icons.memory_outlined),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Hardware bench',
+                        style: textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      Text(
+                        'XIAO ESP32-C6',
+                        style: textTheme.titleLarge?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              controller.statusLabel,
+              style: textTheme.bodyMedium?.copyWith(
+                color: colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Demo simulator only. Real BLE comes after protocol work.',
+              style: textTheme.bodySmall?.copyWith(
+                color: colorScheme.onPrimaryContainer,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _ControllerHeroChip(
+                  icon: isConnected
+                      ? Icons.bluetooth_connected
+                      : Icons.bluetooth_disabled,
+                  label: connectionLabel,
+                ),
+                _ControllerHeroChip(
+                  icon: Icons.smartphone_outlined,
+                  label: roleLabel,
+                ),
+                const _ControllerHeroChip(
+                  icon: Icons.lock_outline,
+                  label: 'Manual safety lock',
+                ),
+                const _ControllerHeroChip(
+                  icon: Icons.schema_outlined,
+                  label: 'BLE protocol pending',
+                ),
+                const _ControllerHeroChip(
+                  icon: Icons.cable_outlined,
+                  label: 'Simulator bridge',
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton(
+                  onPressed: onConnect,
+                  child: const Text('Connect simulator'),
+                ),
+                OutlinedButton(
+                  onPressed: onDisconnect,
+                  child: const Text('Disconnect'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ControllerHeroChip extends StatelessWidget {
+  const _ControllerHeroChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: colorScheme.onPrimaryContainer.withValues(alpha: 0.16),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: colorScheme.onPrimaryContainer),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -1367,6 +1367,27 @@ void main() {
     expect(disabledButton.onPressed, isNull);
   });
 
+  testWidgets('controller tab shows hardware bench summary', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hardware bench'), findsOneWidget);
+    expect(find.text('XIAO ESP32-C6'), findsOneWidget);
+    expect(find.text('Robot phone'), findsOneWidget);
+    expect(find.text('Controller offline'), findsOneWidget);
+    expect(find.text('Manual safety lock'), findsOneWidget);
+    expect(find.text('BLE protocol pending'), findsOneWidget);
+    expect(find.text('Simulator bridge'), findsOneWidget);
+  });
+
   testWidgets('settings only offers iOS personal role on iOS', (
     WidgetTester tester,
   ) async {
