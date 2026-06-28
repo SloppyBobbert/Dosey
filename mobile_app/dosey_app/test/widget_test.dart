@@ -735,6 +735,46 @@ void main() {
     expect(slot.status, CarouselSlotStatus.dispensed.storageValue);
   });
 
+  testWidgets(
+    'Carousel ignores duplicate dispense taps while a slot is moving',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database);
+      await _addVitaminReminder(database, id: 'vitamin-d-morning');
+      await _addLoadedVitaminSlot(database);
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controller'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Connect simulator'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Carousel'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Dispense slot'));
+      await tester.tap(find.text('Dispense slot'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      final events = await database.select(database.doseLogEvents).get();
+      expect(
+        events
+            .where(
+              (event) =>
+                  event.kind ==
+                  DoseLogEventKind.controllerDispenseSucceeded.name,
+            )
+            .length,
+        1,
+      );
+    },
+  );
+
   testWidgets('completed onboarding does not flash onboarding while loading', (
     WidgetTester tester,
   ) async {

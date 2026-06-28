@@ -36,21 +36,36 @@ class LocalReminderRepository implements ReminderRepository {
     _validateSchedule(schedule);
     await _rejectDuplicatePrescriptionTime(schedule);
 
-    await _database
-        .into(_database.reminderSchedules)
-        .insertOnConflictUpdate(
-          ReminderSchedulesCompanion.insert(
-            id: schedule.id,
-            label: schedule.label,
-            prescriptionId: Value(schedule.prescriptionId),
-            profileId: Value(schedule.profileId),
-            hour: schedule.hour,
-            minute: schedule.minute,
-            isEnabled: schedule.isEnabled,
-            createdAt: schedule.createdAt.toUtc(),
-            updatedAt: schedule.updatedAt.toUtc(),
-          ),
-        );
+    final existing = await (_database.select(
+      _database.reminderSchedules,
+    )..where((row) => row.id.equals(schedule.id))).getSingleOrNull();
+    final clearsLoadedSlot =
+        existing != null &&
+        (existing.prescriptionId != schedule.prescriptionId ||
+            existing.profileId != schedule.profileId);
+
+    await _database.transaction(() async {
+      if (clearsLoadedSlot) {
+        await (_database.delete(
+          _database.carouselSlots,
+        )..where((slot) => slot.scheduleId.equals(schedule.id))).go();
+      }
+      await _database
+          .into(_database.reminderSchedules)
+          .insertOnConflictUpdate(
+            ReminderSchedulesCompanion.insert(
+              id: schedule.id,
+              label: schedule.label,
+              prescriptionId: Value(schedule.prescriptionId),
+              profileId: Value(schedule.profileId),
+              hour: schedule.hour,
+              minute: schedule.minute,
+              isEnabled: schedule.isEnabled,
+              createdAt: schedule.createdAt.toUtc(),
+              updatedAt: schedule.updatedAt.toUtc(),
+            ),
+          );
+    });
   }
 
   @override

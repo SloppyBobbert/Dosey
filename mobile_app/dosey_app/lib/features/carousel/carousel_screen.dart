@@ -661,7 +661,7 @@ class _AssignmentCard extends StatelessWidget {
   }
 }
 
-class _SlotCard extends StatelessWidget {
+class _SlotCard extends StatefulWidget {
   const _SlotCard({
     required this.slot,
     required this.schedule,
@@ -673,20 +673,36 @@ class _SlotCard extends StatelessWidget {
   final Prescription? prescription;
 
   @override
+  State<_SlotCard> createState() => _SlotCardState();
+}
+
+class _SlotCardState extends State<_SlotCard> {
+  var _isDispensing = false;
+
+  @override
+  void didUpdateWidget(_SlotCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.slot.id != widget.slot.id ||
+        oldWidget.slot.status != widget.slot.status) {
+      _isDispensing = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
-        leading: CircleAvatar(child: Text(slot.slotNumber.toString())),
-        title: Text('Slot ${slot.slotNumber}'),
+        leading: CircleAvatar(child: Text(widget.slot.slotNumber.toString())),
+        title: Text('Slot ${widget.slot.slotNumber}'),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [Text(_doseLabel), Text(slot.status.label)],
+          children: [Text(_doseLabel), Text(widget.slot.status.label)],
         ),
         trailing: _SlotAction(
-          status: slot.status,
+          status: widget.slot.status,
           onMarkLoaded: () => _markLoaded(context),
           onMarkNeedsReview: () => _markNeedsReview(context),
-          onDispense: () => _dispense(context),
+          onDispense: _isDispensing ? null : () => _dispense(context),
         ),
       ),
     );
@@ -694,7 +710,9 @@ class _SlotCard extends StatelessWidget {
 
   Future<void> _markNeedsReview(BuildContext context) async {
     try {
-      await DoseyAppScope.of(context).carouselSlots.markNeedsReview(slot.id);
+      await DoseyAppScope.of(
+        context,
+      ).carouselSlots.markNeedsReview(widget.slot.id);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Slot marked for refill review.')),
@@ -708,14 +726,17 @@ class _SlotCard extends StatelessWidget {
   }
 
   String get _doseLabel {
-    final schedule = this.schedule;
-    final name = prescription?.name ?? schedule?.label ?? slot.prescriptionId;
+    final schedule = widget.schedule;
+    final name =
+        widget.prescription?.name ??
+        schedule?.label ??
+        widget.slot.prescriptionId;
     return schedule == null ? name : '${schedule.timeLabel} · $name';
   }
 
   Future<void> _markLoaded(BuildContext context) async {
     try {
-      await DoseyAppScope.of(context).carouselSlots.markLoaded(slot.id);
+      await DoseyAppScope.of(context).carouselSlots.markLoaded(widget.slot.id);
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -729,12 +750,18 @@ class _SlotCard extends StatelessWidget {
   }
 
   Future<void> _dispense(BuildContext context) async {
+    if (_isDispensing) return;
+    setState(() {
+      _isDispensing = true;
+    });
+    var succeeded = false;
     try {
       final dependencies = DoseyAppScope.of(context);
       await dependencies.controller.requestDispense(
-        doseId: _CarouselScreenState.doseIdForToday(slot.scheduleId),
+        doseId: _CarouselScreenState.doseIdForToday(widget.slot.scheduleId),
       );
-      await dependencies.carouselSlots.markDispensed(slot.id);
+      await dependencies.carouselSlots.markDispensed(widget.slot.id);
+      succeeded = true;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -748,6 +775,12 @@ class _SlotCard extends StatelessWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Dispense failed: $error')));
+    } finally {
+      if (mounted && !succeeded) {
+        setState(() {
+          _isDispensing = false;
+        });
+      }
     }
   }
 }
@@ -763,7 +796,7 @@ class _SlotAction extends StatelessWidget {
   final CarouselSlotStatus status;
   final VoidCallback onMarkLoaded;
   final VoidCallback onMarkNeedsReview;
-  final VoidCallback onDispense;
+  final VoidCallback? onDispense;
 
   @override
   Widget build(BuildContext context) {
