@@ -172,10 +172,6 @@ class _DoseyShellState extends State<DoseyShell> {
             Navigator.of(sheetContext).pop();
             _selectTab(_settingsTabIndex);
           },
-          onOpenSafety: () {
-            Navigator.of(sheetContext).pop();
-            _selectTab(_settingsTabIndex);
-          },
           onResetSetup: () async {
             Navigator.of(sheetContext).pop();
             try {
@@ -248,7 +244,6 @@ class _ProfileMenuSheet extends StatelessWidget {
     required this.session,
     required this.role,
     required this.onOpenSettings,
-    required this.onOpenSafety,
     required this.onResetSetup,
     required this.onSignIn,
     required this.onSignOut,
@@ -257,7 +252,6 @@ class _ProfileMenuSheet extends StatelessWidget {
   final AuthSession session;
   final AppDeviceRole role;
   final VoidCallback onOpenSettings;
-  final VoidCallback onOpenSafety;
   final Future<void> Function() onResetSetup;
   final Future<void> Function() onSignIn;
   final Future<void> Function() onSignOut;
@@ -334,12 +328,6 @@ class _ProfileMenuSheet extends StatelessWidget {
           title: const Text('Settings'),
           subtitle: const Text('Account, device mode, and setup'),
           onTap: onOpenSettings,
-        ),
-        ListTile(
-          leading: const Icon(Icons.health_and_safety_outlined),
-          title: const Text('Safety'),
-          subtitle: const Text('Prototype rules and manual confirmation'),
-          onTap: onOpenSafety,
         ),
         ListTile(
           leading: const Icon(Icons.restart_alt),

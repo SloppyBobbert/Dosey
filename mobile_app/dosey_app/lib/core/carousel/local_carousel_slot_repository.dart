@@ -40,20 +40,41 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
     await _rejectDuplicateSlot(slot);
     await _rejectDuplicateSchedule(slot);
 
-    await _database
-        .into(_database.carouselSlots)
-        .insertOnConflictUpdate(
-          CarouselSlotsCompanion.insert(
-            id: slot.id,
-            slotNumber: slot.slotNumber,
-            prescriptionId: slot.prescriptionId,
-            scheduleId: slot.scheduleId,
-            profileId: slot.profileId,
-            status: slot.status.storageValue,
-            createdAt: slot.createdAt.toUtc(),
-            updatedAt: slot.updatedAt.toUtc(),
-          ),
+    try {
+      final existing = await (_database.select(
+        _database.carouselSlots,
+      )..where((row) => row.id.equals(slot.id))).getSingleOrNull();
+      if (existing == null) {
+        await _database
+            .into(_database.carouselSlots)
+            .insert(_companionFor(slot));
+        return;
+      }
+
+      final updated =
+          await (_database.update(
+            _database.carouselSlots,
+          )..where((row) => row.id.equals(slot.id))).write(
+            CarouselSlotsCompanion(
+              slotNumber: Value(slot.slotNumber),
+              prescriptionId: Value(slot.prescriptionId),
+              scheduleId: Value(slot.scheduleId),
+              profileId: Value(slot.profileId),
+              status: Value(slot.status.storageValue),
+              updatedAt: Value(slot.updatedAt.toUtc()),
+            ),
+          );
+      if (updated == 0) {
+        throw ArgumentError(
+          'No carousel slot was updated for id "${slot.id}".',
         );
+      }
+    } on Object catch (error) {
+      if (_isConstraintFailure(error)) {
+        await _throwDuplicateConflict(slot);
+      }
+      rethrow;
+    }
   }
 
   @override
@@ -85,17 +106,34 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
     )..where((slot) => slot.profileId.equals(profileId))).go();
   }
 
-  Future<void> _updateStatus(String id, CarouselSlotStatus status) {
+  Future<void> _updateStatus(String id, CarouselSlotStatus status) async {
     if (id.trim().isEmpty) {
       throw ArgumentError.value(id, 'id', 'Slot id is required.');
     }
-    return (_database.update(
-      _database.carouselSlots,
-    )..where((slot) => slot.id.equals(id))).write(
-      CarouselSlotsCompanion(
-        status: Value(status.storageValue),
-        updatedAt: Value(DateTime.now().toUtc()),
-      ),
+    final updated =
+        await (_database.update(
+          _database.carouselSlots,
+        )..where((slot) => slot.id.equals(id))).write(
+          CarouselSlotsCompanion(
+            status: Value(status.storageValue),
+            updatedAt: Value(DateTime.now().toUtc()),
+          ),
+        );
+    if (updated == 0) {
+      throw ArgumentError('No carousel slot was updated for id "$id".');
+    }
+  }
+
+  static CarouselSlotsCompanion _companionFor(CarouselSlot slot) {
+    return CarouselSlotsCompanion.insert(
+      id: slot.id,
+      slotNumber: slot.slotNumber,
+      prescriptionId: slot.prescriptionId,
+      scheduleId: slot.scheduleId,
+      profileId: slot.profileId,
+      status: slot.status.storageValue,
+      createdAt: slot.createdAt.toUtc(),
+      updatedAt: slot.updatedAt.toUtc(),
     );
   }
 
@@ -115,6 +153,20 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
     throw ArgumentError(
       'Slot ${slot.slotNumber} is already assigned for this schedule profile.',
     );
+  }
+
+  Future<void> _throwDuplicateConflict(CarouselSlot slot) async {
+    await _rejectDuplicateSlot(slot);
+    await _rejectDuplicateSchedule(slot);
+    throw ArgumentError(
+      'Carousel slot assignment conflicts with an existing slot.',
+    );
+  }
+
+  static bool _isConstraintFailure(Object error) {
+    final message = error.toString();
+    return message.contains('UNIQUE constraint failed') ||
+        message.contains('constraint failed');
   }
 
   Future<void> _rejectDuplicateSchedule(CarouselSlot slot) async {

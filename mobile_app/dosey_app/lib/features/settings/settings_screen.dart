@@ -32,7 +32,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             Text('Settings', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
-            _ProfileSummaryCard(session: session),
+            _ProfileSummaryCard(session: session, platform: platform),
             const SizedBox(height: 12),
             _SettingsSectionCard(
               icon: Icons.account_circle_outlined,
@@ -148,9 +148,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 }
 
 class _ProfileSummaryCard extends StatelessWidget {
-  const _ProfileSummaryCard({required this.session});
+  const _ProfileSummaryCard({required this.session, required this.platform});
 
   final AuthSession session;
+  final AppDevicePlatform platform;
 
   @override
   Widget build(BuildContext context) {
@@ -164,7 +165,9 @@ class _ProfileSummaryCard extends StatelessWidget {
         ? displayName
         : user.email;
     final subtitle = user == null
-        ? 'Robot Mode can run locally. Personal Mode sign-in is local-only for now.'
+        ? platform == AppDevicePlatform.ios
+              ? 'iOS uses Personal Mode only. Sign-in stays local-only for now.'
+              : 'Robot Mode can run locally. Personal Mode sign-in is local-only for now.'
         : user.email;
 
     return Card(
@@ -257,29 +260,11 @@ class _DeviceModeCard extends StatelessWidget {
           icon: Icons.phone_android_outlined,
           title: 'Device mode',
           children: [
-            DropdownButtonFormField<AppDeviceRole>(
+            _DeviceModeDropdown(
               key: ValueKey('${platform.name}:${role.storageValue}'),
-              initialValue: role,
-              decoration: const InputDecoration(labelText: 'Mode'),
-              items: allowedRoles
-                  .map(
-                    (role) =>
-                        DropdownMenuItem(value: role, child: Text(role.label)),
-                  )
-                  .toList(),
-              onChanged: (newRole) async {
-                if (newRole == null) return;
-                try {
-                  await dependencies.settings.setDeviceRole(newRole);
-                } on Object catch (error) {
-                  if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Device role update failed: $error'),
-                    ),
-                  );
-                }
-              },
+              role: role,
+              allowedRoles: allowedRoles,
+              onChanged: dependencies.settings.setDeviceRole,
             ),
             const SizedBox(height: 10),
             Text(
@@ -293,6 +278,58 @@ class _DeviceModeCard extends StatelessWidget {
             ],
           ],
         );
+      },
+    );
+  }
+}
+
+class _DeviceModeDropdown extends StatefulWidget {
+  const _DeviceModeDropdown({
+    super.key,
+    required this.role,
+    required this.allowedRoles,
+    required this.onChanged,
+  });
+
+  final AppDeviceRole role;
+  final List<AppDeviceRole> allowedRoles;
+  final Future<void> Function(AppDeviceRole role) onChanged;
+
+  @override
+  State<_DeviceModeDropdown> createState() => _DeviceModeDropdownState();
+}
+
+class _DeviceModeDropdownState extends State<_DeviceModeDropdown> {
+  final _fieldKey = GlobalKey<FormFieldState<AppDeviceRole>>();
+
+  @override
+  void didUpdateWidget(_DeviceModeDropdown oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.role != widget.role) {
+      _fieldKey.currentState?.didChange(widget.role);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<AppDeviceRole>(
+      key: _fieldKey,
+      initialValue: widget.role,
+      decoration: const InputDecoration(labelText: 'Mode'),
+      items: widget.allowedRoles
+          .map((role) => DropdownMenuItem(value: role, child: Text(role.label)))
+          .toList(),
+      onChanged: (newRole) async {
+        if (newRole == null) return;
+        try {
+          await widget.onChanged(newRole);
+        } on Object catch (error) {
+          _fieldKey.currentState?.didChange(widget.role);
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Device role update failed: $error')),
+          );
+        }
       },
     );
   }

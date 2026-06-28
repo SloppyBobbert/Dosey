@@ -72,7 +72,11 @@ class CarouselSlots extends Table {
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
-  List<String> get customConstraints => const ['CHECK (slot_number > 0)'];
+  List<String> get customConstraints => const [
+    'CHECK (slot_number > 0)',
+    'UNIQUE (profile_id, slot_number)',
+    'UNIQUE (profile_id, schedule_id)',
+  ];
 
   @override
   Set<Column> get primaryKey => {id};
@@ -129,7 +133,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -172,6 +176,9 @@ class DoseyDatabase extends _$DoseyDatabase {
       }
       if (from < 8) {
         await migrator.createTable(carouselSlots);
+      }
+      if (from >= 8 && from < 9) {
+        await migrator.alterTable(TableMigration(carouselSlots));
       }
     },
   );

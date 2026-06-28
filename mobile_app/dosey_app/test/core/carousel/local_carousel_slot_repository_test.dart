@@ -20,6 +20,13 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _seedPrescriptionSchedule(database);
+    await _seedPrescriptionSchedule(
+      database,
+      prescriptionId: 'travel-vitamin',
+      scheduleId: 'travel-vitamin-morning',
+      profileId: 'travel',
+      hour: 9,
+    );
     final repository = LocalCarouselSlotRepository(database);
     final now = DateTime.utc(2026, 6, 25, 8);
 
@@ -72,6 +79,23 @@ void main() {
     final slots = await repository.watchSlots().first;
     expect(slots.single.status, CarouselSlotStatus.dispensed);
     expect(slots.single.updatedAt.isAfter(now), isTrue);
+  });
+
+  test('local carousel slot repository reports missing slot updates', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalCarouselSlotRepository(database);
+
+    expect(
+      () => repository.markLoaded('missing-slot'),
+      throwsA(
+        isA<ArgumentError>().having(
+          (error) => error.message,
+          'message',
+          'No carousel slot was updated for id "missing-slot".',
+        ),
+      ),
+    );
   });
 
   test('local carousel slot repository rejects duplicate slots', () async {
@@ -219,10 +243,25 @@ void main() {
         updatedAt: now,
       ),
     );
+    await repository.assignSlot(
+      CarouselSlot(
+        id: 'travel-slot-1',
+        slotNumber: 1,
+        prescriptionId: 'travel-vitamin',
+        scheduleId: 'travel-vitamin-morning',
+        profileId: 'travel',
+        status: CarouselSlotStatus.assigned,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
 
     await repository.clearProfile('schedule-1');
 
-    expect(await repository.watchSlots().first, isEmpty);
+    expect(await repository.watchSlots(profileId: 'schedule-1').first, isEmpty);
+    final travelSlots = await repository.watchSlots(profileId: 'travel').first;
+    expect(travelSlots, hasLength(1));
+    expect(travelSlots.single.id, 'travel-slot-1');
   });
 
   test('local carousel slot repository rejects invalid slot numbers', () async {
@@ -254,6 +293,7 @@ Future<void> _seedPrescriptionSchedule(
   DoseyDatabase database, {
   String prescriptionId = 'vitamin-d',
   String scheduleId = 'vitamin-d-morning',
+  String profileId = ReminderSchedule.defaultProfileId,
   int hour = 8,
 }) async {
   final now = DateTime.utc(2026, 6, 25, hour);
@@ -271,6 +311,7 @@ Future<void> _seedPrescriptionSchedule(
       id: scheduleId,
       label: prescriptionId,
       prescriptionId: prescriptionId,
+      profileId: profileId,
       hour: hour,
       minute: 0,
       isEnabled: true,

@@ -55,7 +55,14 @@ class _CarouselScreenState extends State<CarouselScreen> {
                           profileId: activeProfile.id,
                         ),
                   builder: (context, slotSnapshot) {
-                    final slots = slotSnapshot.data ?? const <CarouselSlot>[];
+                    final slotRows =
+                        slotSnapshot.data ?? const <CarouselSlot>[];
+                    final scheduleIds = {
+                      for (final schedule in schedules) schedule.id,
+                    };
+                    final slots = slotRows
+                        .where((slot) => scheduleIds.contains(slot.scheduleId))
+                        .toList();
                     return ListView(
                       padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
                       children: [
@@ -593,7 +600,8 @@ class _AssignmentCard extends StatelessWidget {
   ReminderSchedule? _nextUnassignedSchedule() {
     final assignedScheduleIds = {for (final slot in slots) slot.scheduleId};
     for (final schedule in schedules) {
-      if (schedule.prescriptionId != null &&
+      if (schedule.isEnabled &&
+          schedule.prescriptionId != null &&
           !assignedScheduleIds.contains(schedule.id)) {
         return schedule;
       }
@@ -677,10 +685,26 @@ class _SlotCard extends StatelessWidget {
         trailing: _SlotAction(
           status: slot.status,
           onMarkLoaded: () => _markLoaded(context),
+          onMarkNeedsReview: () => _markNeedsReview(context),
           onDispense: () => _dispense(context),
         ),
       ),
     );
+  }
+
+  Future<void> _markNeedsReview(BuildContext context) async {
+    try {
+      await DoseyAppScope.of(context).carouselSlots.markNeedsReview(slot.id);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Slot marked for refill review.')),
+      );
+    } on ArgumentError catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message.toString())));
+    }
   }
 
   String get _doseLabel {
@@ -732,11 +756,13 @@ class _SlotAction extends StatelessWidget {
   const _SlotAction({
     required this.status,
     required this.onMarkLoaded,
+    required this.onMarkNeedsReview,
     required this.onDispense,
   });
 
   final CarouselSlotStatus status;
   final VoidCallback onMarkLoaded;
+  final VoidCallback onMarkNeedsReview;
   final VoidCallback onDispense;
 
   @override
@@ -746,11 +772,18 @@ class _SlotAction extends StatelessWidget {
         onPressed: onMarkLoaded,
         child: const Text('Mark loaded'),
       ),
+      CarouselSlotStatus.needsReview => TextButton(
+        onPressed: onMarkLoaded,
+        child: const Text('Mark loaded'),
+      ),
       CarouselSlotStatus.loaded => TextButton(
         onPressed: onDispense,
         child: const Text('Dispense slot'),
       ),
-      _ => const SizedBox.shrink(),
+      CarouselSlotStatus.dispensed => TextButton(
+        onPressed: onMarkNeedsReview,
+        child: const Text('Review refill'),
+      ),
     };
   }
 }

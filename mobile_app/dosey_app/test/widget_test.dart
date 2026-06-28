@@ -300,7 +300,6 @@ void main() {
     expect(find.text('Not signed in'), findsOneWidget);
     expect(find.text('Local prototype'), findsOneWidget);
     expect(find.text('Android robot phone'), findsOneWidget);
-    expect(find.text('Safety'), findsOneWidget);
     expect(find.text('Start over setup'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(ListTile, 'Settings'));
@@ -551,6 +550,84 @@ void main() {
     expect(reviewedSlot.status, CarouselSlotStatus.needsReview.storageValue);
   });
 
+  testWidgets('Carousel can review and reload a dispensed slot', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await LocalCarouselSlotRepository(database).assignSlot(
+      CarouselSlot(
+        id: 'schedule-1-vitamin-d-morning',
+        slotNumber: 1,
+        prescriptionId: 'vitamin-d',
+        scheduleId: 'vitamin-d-morning',
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.dispensed,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Review refill'), 220);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Review refill'));
+    await tester.pumpAndSettle();
+    expect(find.text('Needs review'), findsOneWidget);
+    expect(find.text('Mark loaded'), findsOneWidget);
+
+    await tester.tap(find.text('Mark loaded'));
+    await tester.pumpAndSettle();
+
+    final slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.loaded.storageValue);
+  });
+
+  testWidgets('Carousel skips disabled schedules when assigning slots', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addAllergyPrescription(database);
+    await _addVitaminReminder(
+      database,
+      id: 'disabled-vitamin-d',
+      isEnabled: false,
+    );
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: 'allergy-noon',
+        label: 'Allergy pill',
+        prescriptionId: 'allergy-pill',
+        hour: 12,
+        minute: 0,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('12:00 · Allergy pill'), findsOneWidget);
+    expect(find.text('08:30 · Vitamin D'), findsNothing);
+  });
+
   testWidgets('Today dispenses a loaded slot without marking the dose taken', (
     WidgetTester tester,
   ) async {
@@ -586,6 +663,11 @@ void main() {
       DoseLogEventKind.controllerDispenseSucceeded.name,
     );
     expect(events.single.marksDoseTaken, isFalse);
+    var slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.dispensed.storageValue);
 
     await tester.pump(const Duration(seconds: 4));
 
@@ -646,6 +728,11 @@ void main() {
       DoseLogEventKind.controllerDispenseSucceeded.name,
     );
     expect(events.single.marksDoseTaken, isFalse);
+    final slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.dispensed.storageValue);
   });
 
   testWidgets('completed onboarding does not flash onboarding while loading', (
@@ -909,7 +996,7 @@ void main() {
     expect(find.text('Current dose'), findsOneWidget);
     expect(find.text('08:30 · Vitamin D'), findsOneWidget);
     expect(find.text('Confirm taken'), findsOneWidget);
-    expect(find.text('Snooze 10 min'), findsOneWidget);
+    expect(find.text('Log snooze'), findsOneWidget);
     expect(find.text('Already taken'), findsOneWidget);
     expect(find.text('Taken early'), findsOneWidget);
     expect(find.text('Taken late'), findsOneWidget);
@@ -928,11 +1015,14 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Snooze 10 min'));
-    await tester.tap(find.text('Snooze 10 min'));
+    await tester.ensureVisible(find.text('Log snooze'));
+    await tester.tap(find.text('Log snooze'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Reminder snoozed for 10 minutes.'), findsOneWidget);
+    expect(
+      find.text('Snooze logged locally; reminder timing is unchanged.'),
+      findsOneWidget,
+    );
     expect(find.text('Snoozed logged'), findsOneWidget);
     expect(find.text('Current dose'), findsOneWidget);
 
@@ -1120,7 +1210,7 @@ void main() {
     expect(find.text('Controller'), findsNothing);
   });
 
-  testWidgets('Today manual confirmation still writes dose log entry', (
+  testWidgets('Today hero hides manual confirmation without current dose', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -1129,13 +1219,9 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Confirm dose taken manually'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Log'));
-    await tester.pumpAndSettle();
 
-    expect(find.text('Dose taken confirmed'), findsOneWidget);
-    expect(find.text('manual-confirmation'), findsOneWidget);
+    expect(find.text('Confirm dose taken manually'), findsNothing);
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
   });
 
   testWidgets('Today hero manual confirmation confirms the current dose', (
@@ -1884,6 +1970,7 @@ Future<void> _addVitaminReminder(
   String profileId = ReminderSchedule.defaultProfileId,
   int hour = 8,
   int minute = 30,
+  bool isEnabled = true,
 }) {
   return LocalReminderRepository(database).upsertSchedule(
     ReminderSchedule(
@@ -1893,7 +1980,7 @@ Future<void> _addVitaminReminder(
       profileId: profileId,
       hour: hour,
       minute: minute,
-      isEnabled: true,
+      isEnabled: isEnabled,
       createdAt: DateTime.utc(2026),
       updatedAt: DateTime.utc(2026),
     ),

@@ -55,9 +55,14 @@ class LocalReminderRepository implements ReminderRepository {
 
   @override
   Future<void> deleteSchedule(String id) {
-    return (_database.delete(
-      _database.reminderSchedules,
-    )..where((schedule) => schedule.id.equals(id))).go();
+    return _database.transaction(() async {
+      await (_database.delete(
+        _database.carouselSlots,
+      )..where((slot) => slot.scheduleId.equals(id))).go();
+      await (_database.delete(
+        _database.reminderSchedules,
+      )..where((schedule) => schedule.id.equals(id))).go();
+    });
   }
 
   static ReminderSchedule _fromRow(ReminderScheduleRow row) {
