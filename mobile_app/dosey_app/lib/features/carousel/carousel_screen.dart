@@ -58,7 +58,8 @@ class _CarouselScreenState extends State<CarouselScreen> {
                     final slotRows =
                         slotSnapshot.data ?? const <CarouselSlot>[];
                     final scheduleIds = {
-                      for (final schedule in schedules) schedule.id,
+                      for (final schedule in schedules)
+                        if (schedule.isEnabled) schedule.id,
                     };
                     final slots = slotRows
                         .where((slot) => scheduleIds.contains(slot.scheduleId))

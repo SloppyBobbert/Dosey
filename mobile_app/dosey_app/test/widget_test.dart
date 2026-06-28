@@ -628,6 +628,41 @@ void main() {
     expect(find.text('08:30 · Vitamin D'), findsNothing);
   });
 
+  testWidgets('Carousel hides loaded slots for disabled schedules', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(
+      database,
+      id: 'disabled-vitamin-d',
+      isEnabled: false,
+    );
+    await LocalCarouselSlotRepository(database).assignSlot(
+      CarouselSlot(
+        id: 'schedule-1-disabled-vitamin-d',
+        slotNumber: 1,
+        prescriptionId: 'vitamin-d',
+        scheduleId: 'disabled-vitamin-d',
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.loaded,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Slot 1'), findsNothing);
+    expect(find.text('Dispense slot'), findsNothing);
+    expect(find.text('0 loaded / 0 assigned'), findsOneWidget);
+  });
+
   testWidgets('Today dispenses a loaded slot without marking the dose taken', (
     WidgetTester tester,
   ) async {
