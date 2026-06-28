@@ -43,9 +43,15 @@ class TodayScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       const _SafetyCard(),
                       const SizedBox(height: 12),
-                      _ScheduleTimelineCard(
-                        schedules: schedules,
-                        prescriptionsById: prescriptionsById,
+                      StreamBuilder<List<DoseLogEvent>>(
+                        stream: dependencies.doseLog.watchEvents(),
+                        builder: (context, logSnapshot) =>
+                            _ScheduleTimelineCard(
+                              schedules: schedules,
+                              events:
+                                  logSnapshot.data ?? const <DoseLogEvent>[],
+                              prescriptionsById: prescriptionsById,
+                            ),
                       ),
                     ],
                   ),
@@ -291,92 +297,103 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     final dispenseKey = loadedSlot == null
         ? null
         : '${loadedSlot.id}:$currentDoseId';
-    return _CurrentDoseCard(
-      schedule: currentSchedule,
-      prescription: widget.prescriptionsById[currentSchedule.prescriptionId],
-      latestEvent: latestEvent,
-      loadedSlot: widget.loadedSlot,
-      onDispenseLoadedSlot:
-          loadedSlot == null ||
-              dispenseKey == null ||
-              _dispenseRequestsInFlight.contains(dispenseKey)
-          ? null
-          : () => _dispenseLoadedSlot(context, loadedSlot, currentDoseId),
-      onSnoozeDose: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseSnoozed(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Snooze logged locally; reminder timing is unchanged.',
-      ),
-      onConfirmTaken: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseTakenConfirmed(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Dose marked taken.',
-      ),
-      onAlreadyTaken: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseAlreadyTaken(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Already-taken dose logged.',
-      ),
-      onTakenEarly: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseTakenEarly(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Early dose logged.',
-      ),
-      onTakenLate: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseTakenLate(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Late dose logged.',
-      ),
-      onConfirmVisible:
-          latestEvent?.kind == DoseLogEventKind.controllerDispenseSucceeded
-          ? () => TodayScreen._logDoseAction(
-              context,
-              DoseLogEvent.doseVisibleConfirmed(
-                doseId: currentDoseId,
-                occurredAt: DateTime.now().toUtc(),
-              ),
-              'Visible dose logged. Confirm taken only after the dose is taken.',
-            )
-          : null,
-      onAskCaregiver: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.caregiverHelpRequested(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Caregiver request noted locally. Contact your caregiver, pharmacist, or doctor if you are unsure what to do.',
-      ),
-      onSkipDose: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseSkipped(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Dose skipped.',
-      ),
-      onMarkMissed: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseMissed(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-      ),
+    final dependencies = DoseyAppScope.of(context);
+    return StreamBuilder<ControllerSnapshot>(
+      stream: dependencies.controller.watchController(),
+      builder: (context, controllerSnapshot) {
+        final controller =
+            controllerSnapshot.data ?? const ControllerSnapshot.disconnected();
+        final canDispense = controller.canRequestDispense;
+        return _CurrentDoseCard(
+          schedule: currentSchedule,
+          prescription:
+              widget.prescriptionsById[currentSchedule.prescriptionId],
+          latestEvent: latestEvent,
+          loadedSlot: widget.loadedSlot,
+          onDispenseLoadedSlot:
+              !canDispense ||
+                  loadedSlot == null ||
+                  dispenseKey == null ||
+                  _dispenseRequestsInFlight.contains(dispenseKey)
+              ? null
+              : () => _dispenseLoadedSlot(context, loadedSlot, currentDoseId),
+          onSnoozeDose: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseSnoozed(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Snooze logged locally; reminder timing is unchanged.',
+          ),
+          onConfirmTaken: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseTakenConfirmed(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Dose marked taken.',
+          ),
+          onAlreadyTaken: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseAlreadyTaken(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Already-taken dose logged.',
+          ),
+          onTakenEarly: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseTakenEarly(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Early dose logged.',
+          ),
+          onTakenLate: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseTakenLate(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Late dose logged.',
+          ),
+          onConfirmVisible:
+              latestEvent?.kind == DoseLogEventKind.controllerDispenseSucceeded
+              ? () => TodayScreen._logDoseAction(
+                  context,
+                  DoseLogEvent.doseVisibleConfirmed(
+                    doseId: currentDoseId,
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                  'Visible dose logged. Confirm taken only after the dose is taken.',
+                )
+              : null,
+          onAskCaregiver: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.caregiverHelpRequested(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Caregiver request noted locally. Contact your caregiver, pharmacist, or doctor if you are unsure what to do.',
+          ),
+          onSkipDose: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseSkipped(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'Dose skipped.',
+          ),
+          onMarkMissed: () => TodayScreen._logDoseAction(
+            context,
+            DoseLogEvent.doseMissed(
+              doseId: currentDoseId,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+          ),
+        );
+      },
     );
   }
 
@@ -910,15 +927,18 @@ class _SafetyCard extends StatelessWidget {
 class _ScheduleTimelineCard extends StatelessWidget {
   const _ScheduleTimelineCard({
     required this.schedules,
+    required this.events,
     required this.prescriptionsById,
   });
 
   final List<ReminderSchedule> schedules;
+  final List<DoseLogEvent> events;
   final Map<String, Prescription> prescriptionsById;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final timelineRows = _timelineRows(schedules, events).take(4).toList();
 
     return Card(
       child: Padding(
@@ -952,10 +972,10 @@ class _ScheduleTimelineCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            if (schedules.isEmpty)
+            if (timelineRows.isEmpty)
               const _EmptyReminderState()
             else
-              for (final row in _timelineRows(schedules.take(4)))
+              for (final row in timelineRows)
                 _TimelineRow(
                   statusLabel: row.statusLabel,
                   schedule: row.schedule,
@@ -968,9 +988,16 @@ class _ScheduleTimelineCard extends StatelessWidget {
   }
 
   static Iterable<({ReminderSchedule schedule, String statusLabel})>
-  _timelineRows(Iterable<ReminderSchedule> schedules) sync* {
+  _timelineRows(
+    Iterable<ReminderSchedule> schedules,
+    List<DoseLogEvent> events,
+  ) sync* {
     var foundFirstEnabled = false;
     for (final schedule in schedules) {
+      final doseId = TodayScreen._doseIdForToday(schedule.id);
+      if (TodayScreen._hasTerminalEventForDose(events, doseId)) {
+        continue;
+      }
       if (!schedule.isEnabled) {
         yield (schedule: schedule, statusLabel: 'Reminder paused');
         continue;
