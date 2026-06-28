@@ -5,6 +5,8 @@ import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
+import 'package:dosey_app/core/settings/current_device_platform.dart';
+import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:flutter/material.dart';
 
 class CarouselScreen extends StatefulWidget {
@@ -65,47 +67,64 @@ class _CarouselScreenState extends State<CarouselScreen> {
                     final slots = slotRows
                         .where((slot) => scheduleIds.contains(slot.scheduleId))
                         .toList();
-                    return StreamBuilder<ControllerSnapshot>(
-                      stream: dependencies.controller.watchController(),
-                      builder: (context, controllerSnapshot) {
-                        final controller =
-                            controllerSnapshot.data ??
-                            const ControllerSnapshot.disconnected();
-                        return ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                          children: [
-                            _CarouselHeader(slots: slots),
-                            const SizedBox(height: 12),
-                            const _PrototypeSafetyCard(),
-                            const SizedBox(height: 12),
-                            _AssignmentCard(
-                              slotController: _slotController,
-                              activeProfile: activeProfile,
-                              schedules: schedules,
-                              slots: slots,
-                              prescriptionsById: prescriptionsById,
-                            ),
-                            const SizedBox(height: 12),
-                            _RefillCountdownCard(slots: slots),
-                            const SizedBox(height: 12),
-                            if (slots.isEmpty)
-                              const Card(
-                                child: Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Text('No slots assigned yet.'),
+                    return StreamBuilder<AppDeviceRole>(
+                      stream: dependencies.settings.watchDeviceRole(),
+                      builder: (context, roleSnapshot) {
+                        return StreamBuilder<ControllerSnapshot>(
+                          stream: dependencies.controller.watchController(),
+                          builder: (context, controllerSnapshot) {
+                            final controller =
+                                controllerSnapshot.data ??
+                                const ControllerSnapshot.disconnected();
+                            final canRequestDispense = _canRequestDispense(
+                              roleSnapshot.data,
+                              controller,
+                            );
+                            return ListView(
+                              padding: const EdgeInsets.fromLTRB(
+                                16,
+                                18,
+                                16,
+                                24,
+                              ),
+                              children: [
+                                _CarouselHeader(slots: slots),
+                                const SizedBox(height: 12),
+                                const _PrototypeSafetyCard(),
+                                const SizedBox(height: 12),
+                                _AssignmentCard(
+                                  slotController: _slotController,
+                                  activeProfile: activeProfile,
+                                  schedules: schedules,
+                                  slots: slots,
+                                  prescriptionsById: prescriptionsById,
                                 ),
-                              )
-                            else
-                              for (final slot in slots)
-                                _SlotCard(
-                                  slot: slot,
-                                  schedule: _scheduleForSlot(schedules, slot),
-                                  prescription:
-                                      prescriptionsById[slot.prescriptionId],
-                                  canRequestDispense:
-                                      controller.canRequestDispense,
-                                ),
-                          ],
+                                const SizedBox(height: 12),
+                                _RefillCountdownCard(slots: slots),
+                                const SizedBox(height: 12),
+                                if (slots.isEmpty)
+                                  const Card(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(16),
+                                      child: Text('No slots assigned yet.'),
+                                    ),
+                                  )
+                                else
+                                  for (final slot in slots)
+                                    _SlotCard(
+                                      slot: slot,
+                                      schedule: _scheduleForSlot(
+                                        schedules,
+                                        slot,
+                                      ),
+                                      prescription:
+                                          prescriptionsById[slot
+                                              .prescriptionId],
+                                      canRequestDispense: canRequestDispense,
+                                    ),
+                              ],
+                            );
+                          },
                         );
                       },
                     );
@@ -127,6 +146,17 @@ class _CarouselScreenState extends State<CarouselScreen> {
       return Stream<List<ReminderSchedule>>.value(const <ReminderSchedule>[]);
     }
     return reminders.watchSchedules(profileId: activeProfile.id);
+  }
+
+  static bool _canRequestDispense(
+    AppDeviceRole? storedRole,
+    ControllerSnapshot controller,
+  ) {
+    final platform = currentAppDevicePlatform();
+    final role = storedRole != null && storedRole.isAllowedOn(platform)
+        ? storedRole
+        : AppDeviceRole.defaultFor(platform);
+    return role.canHostRobot && controller.canRequestDispense;
   }
 
   static ReminderSchedule? _scheduleForSlot(

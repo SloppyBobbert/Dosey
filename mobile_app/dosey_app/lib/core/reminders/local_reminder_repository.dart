@@ -41,7 +41,8 @@ class LocalReminderRepository implements ReminderRepository {
     )..where((row) => row.id.equals(schedule.id))).getSingleOrNull();
     final clearsLoadedSlot =
         existing != null &&
-        (existing.prescriptionId != schedule.prescriptionId ||
+        (!schedule.isEnabled ||
+            existing.prescriptionId != schedule.prescriptionId ||
             existing.profileId != schedule.profileId);
 
     await _database.transaction(() async {

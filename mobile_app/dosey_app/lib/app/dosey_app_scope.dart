@@ -53,12 +53,13 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     _ownsDatabase = widget.database == null;
     final doseLog = DriftDoseLogRepository(_database);
     final localAuth = LocalAuthRepository(_database);
+    final settings = LocalAppSettingsRepository(
+      _database,
+      defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
+    );
     _dependencies = DoseyAppDependencies(
       database: _database,
-      settings: LocalAppSettingsRepository(
-        _database,
-        defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
-      ),
+      settings: settings,
       prescriptions: LocalPrescriptionRepository(_database),
       scheduleProfiles: LocalScheduleProfileRepository(_database),
       reminders: LocalReminderRepository(_database),
@@ -66,7 +67,17 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       doseLog: doseLog,
       localAuth: localAuth,
       auth: AppAuthService(localAuth: localAuth),
-      controller: SimulatedControllerGateway(doseLog),
+      controller: SimulatedControllerGateway(
+        doseLog,
+        canHostRobot: () async {
+          final platform = currentAppDevicePlatform();
+          final storedRole = await settings.getDeviceRole();
+          final role = storedRole.isAllowedOn(platform)
+              ? storedRole
+              : AppDeviceRole.defaultFor(platform);
+          return role.canHostRobot;
+        },
+      ),
       ble: FlutterBluePlusBleGateway(),
       connectivity: ConnectivityPlusGateway(),
       reminderScheduler: FlutterLocalNotificationScheduler(),

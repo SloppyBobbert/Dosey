@@ -39,4 +39,22 @@ void main() {
     expect(events.single.kind, DoseLogEventKind.controllerDispenseSucceeded);
     expect(events.single.marksDoseTaken, isFalse);
   });
+
+  test('simulated controller rejects dispense outside Robot Mode', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final doseLog = DriftDoseLogRepository(database);
+    final gateway = SimulatedControllerGateway(
+      doseLog,
+      canHostRobot: () async => false,
+    );
+    addTearDown(gateway.close);
+
+    await gateway.connect();
+
+    expect(gateway.requestDispense(doseId: 'morning'), throwsStateError);
+
+    final events = await doseLog.watchEvents().first;
+    expect(events, isEmpty);
+  });
 }

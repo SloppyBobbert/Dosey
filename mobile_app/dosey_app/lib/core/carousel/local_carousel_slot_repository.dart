@@ -37,6 +37,7 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
   @override
   Future<void> assignSlot(CarouselSlot slot) async {
     _validateSlot(slot);
+    await _clearDisabledScheduleSlots(slot.profileId);
     await _rejectDuplicateSlot(slot);
     await _rejectDuplicateSchedule(slot);
 
@@ -153,6 +154,26 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
     throw ArgumentError(
       'Slot ${slot.slotNumber} is already assigned for this schedule profile.',
     );
+  }
+
+  Future<void> _clearDisabledScheduleSlots(String profileId) async {
+    final disabledSchedules =
+        await (_database.select(_database.reminderSchedules)..where(
+              (schedule) =>
+                  schedule.profileId.equals(profileId) &
+                  schedule.isEnabled.equals(false),
+            ))
+            .get();
+    if (disabledSchedules.isEmpty) return;
+
+    await (_database.delete(_database.carouselSlots)..where(
+          (slot) =>
+              slot.profileId.equals(profileId) &
+              slot.scheduleId.isIn(
+                disabledSchedules.map((schedule) => schedule.id),
+              ),
+        ))
+        .go();
   }
 
   Future<void> _throwDuplicateConflict(CarouselSlot slot) async {

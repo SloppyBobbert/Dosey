@@ -663,6 +663,67 @@ void main() {
     expect(find.text('0 loaded / 0 assigned'), findsOneWidget);
   });
 
+  test('Carousel reuses slot numbers after a schedule is disabled', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final reminders = LocalReminderRepository(database);
+    final carouselSlots = LocalCarouselSlotRepository(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await reminders.upsertSchedule(
+      ReminderSchedule(
+        id: 'allergy-noon',
+        label: 'Allergy pill',
+        prescriptionId: 'allergy-pill',
+        hour: 12,
+        minute: 0,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    await carouselSlots.assignSlot(
+      CarouselSlot(
+        id: 'schedule-1-vitamin-d-morning',
+        slotNumber: 1,
+        prescriptionId: 'vitamin-d',
+        scheduleId: 'vitamin-d-morning',
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.loaded,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await reminders.upsertSchedule(
+      ReminderSchedule(
+        id: 'vitamin-d-morning',
+        label: 'Vitamin D',
+        prescriptionId: 'vitamin-d',
+        hour: 8,
+        minute: 30,
+        isEnabled: false,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026, 1, 2),
+      ),
+    );
+    await carouselSlots.assignSlot(
+      CarouselSlot(
+        id: 'schedule-1-allergy-noon',
+        slotNumber: 1,
+        prescriptionId: 'allergy-pill',
+        scheduleId: 'allergy-noon',
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.assigned,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    final slots = await database.select(database.carouselSlots).get();
+    expect(slots, hasLength(1));
+    expect(slots.single.scheduleId, 'allergy-noon');
+  });
+
   testWidgets('Today dispenses a loaded slot without marking the dose taken', (
     WidgetTester tester,
   ) async {
@@ -683,9 +744,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Dispense from slot 1'), findsOneWidget);
+    final dispenseButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Dispense from slot 1'),
+    );
+    expect(dispenseButton.onPressed, isNotNull);
     await tester.ensureVisible(find.text('Dispense from slot 1'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Dispense from slot 1'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Dispense from slot 1'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
@@ -751,6 +816,38 @@ void main() {
     expect(dispenseButton.onPressed, isNull);
   });
 
+  testWidgets('Today disables connected dispense outside Robot Mode', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    await _saveSignedInUser(database, provider: AuthProvider.google);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Today'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Dispense from slot 1'));
+    await tester.pumpAndSettle();
+
+    final dispenseButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Dispense from slot 1'),
+    );
+    expect(dispenseButton.onPressed, isNull);
+  });
+
   testWidgets('Carousel dispenses loaded slots through the controller', (
     WidgetTester tester,
   ) async {
@@ -803,6 +900,37 @@ void main() {
     await _addLoadedVitaminSlot(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
+    await tester.pumpAndSettle();
+
+    final dispenseButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Dispense slot'),
+    );
+    expect(dispenseButton.onPressed, isNull);
+  });
+
+  testWidgets('Carousel disables connected dispense outside Robot Mode', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    await _saveSignedInUser(database, provider: AuthProvider.google);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Carousel'));
     await tester.pumpAndSettle();
