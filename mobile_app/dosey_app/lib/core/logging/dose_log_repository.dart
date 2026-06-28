@@ -4,6 +4,12 @@ import 'package:drift/drift.dart';
 enum DoseLogEventKind {
   controllerDispenseSucceeded,
   doseTakenConfirmed,
+  doseAlreadyTaken,
+  doseTakenEarly,
+  doseTakenLate,
+  doseVisibleConfirmed,
+  doseSnoozed,
+  caregiverHelpRequested,
   doseSkipped,
   doseMissed,
   error,
@@ -47,6 +53,78 @@ class DoseLogEvent {
   }) {
     return DoseLogEvent(
       kind: DoseLogEventKind.doseSkipped,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: false,
+    );
+  }
+
+  factory DoseLogEvent.doseAlreadyTaken({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.doseAlreadyTaken,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: true,
+    );
+  }
+
+  factory DoseLogEvent.doseTakenEarly({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.doseTakenEarly,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: true,
+    );
+  }
+
+  factory DoseLogEvent.doseTakenLate({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.doseTakenLate,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: true,
+    );
+  }
+
+  factory DoseLogEvent.doseVisibleConfirmed({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.doseVisibleConfirmed,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: false,
+    );
+  }
+
+  factory DoseLogEvent.doseSnoozed({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.doseSnoozed,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: false,
+    );
+  }
+
+  factory DoseLogEvent.caregiverHelpRequested({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.caregiverHelpRequested,
       doseId: doseId,
       occurredAt: occurredAt,
       marksDoseTaken: false,

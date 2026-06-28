@@ -449,12 +449,18 @@ void main() {
     expect(find.text('Slot 1'), findsOneWidget);
     expect(find.text('08:30 · Vitamin D'), findsOneWidget);
     expect(find.text('Assigned'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('0 loaded / 1 assigned'), -220);
+    await tester.pumpAndSettle();
     expect(find.text('0 loaded / 1 assigned'), findsOneWidget);
 
+    await tester.scrollUntilVisible(find.text('Mark loaded'), 220);
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Mark loaded'));
     await tester.pumpAndSettle();
 
     expect(find.text('Loaded'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('1 loaded / 1 assigned'), -220);
+    await tester.pumpAndSettle();
     expect(find.text('1 loaded / 1 assigned'), findsOneWidget);
   });
 
@@ -480,6 +486,69 @@ void main() {
     expect(find.text('1 ready to dispense'), findsOneWidget);
     expect(find.text('Feeds dispense flow'), findsOneWidget);
     expect(find.text('Prototype loading'), findsOneWidget);
+  });
+
+  testWidgets('Carousel tab shows local refill countdown', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addAllergyPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: 'allergy-noon',
+        label: 'Allergy pill',
+        prescriptionId: 'allergy-pill',
+        hour: 12,
+        minute: 0,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    await _addLoadedVitaminSlot(database);
+    await LocalCarouselSlotRepository(database).assignSlot(
+      CarouselSlot(
+        id: 'schedule-1-allergy-noon',
+        slotNumber: 2,
+        prescriptionId: 'allergy-pill',
+        scheduleId: 'allergy-noon',
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.dispensed,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Refill countdown'), 220);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Refill countdown'), findsOneWidget);
+    expect(find.text('1 dose remaining'), findsOneWidget);
+    expect(find.text('Refill soon'), findsOneWidget);
+    expect(find.text('1 slot dispensed'), findsOneWidget);
+    expect(find.text('Review dispensed slots'), findsOneWidget);
+
+    await tester.tap(find.text('Review dispensed slots'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 needs review'), findsOneWidget);
+    expect(
+      find.text('Dispensed slots marked for refill review.'),
+      findsOneWidget,
+    );
+    final slots = await database.select(database.carouselSlots).get();
+    final reviewedSlot = slots.singleWhere(
+      (slot) => slot.id == 'schedule-1-allergy-noon',
+    );
+    expect(reviewedSlot.status, CarouselSlotStatus.needsReview.storageValue);
   });
 
   testWidgets('Today dispenses a loaded slot without marking the dose taken', (
@@ -509,13 +578,38 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text('Dispense moved'), findsOneWidget);
+    expect(find.text('Dose visible'), findsOneWidget);
     expect(find.text('Confirm taken'), findsOneWidget);
-    final events = await database.select(database.doseLogEvents).get();
+    var events = await database.select(database.doseLogEvents).get();
     expect(
       events.single.kind,
       DoseLogEventKind.controllerDispenseSucceeded.name,
     );
     expect(events.single.marksDoseTaken, isFalse);
+
+    await tester.pump(const Duration(seconds: 4));
+
+    await tester.ensureVisible(find.text('Dose visible'));
+    await tester.tap(find.text('Dose visible'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    events = await database.select(database.doseLogEvents).get();
+    expect(
+      events.map((event) => event.kind),
+      contains(DoseLogEventKind.doseVisibleConfirmed.name),
+    );
+    expect(
+      events
+          .singleWhere(
+            (event) => event.kind == DoseLogEventKind.doseVisibleConfirmed.name,
+          )
+          .marksDoseTaken,
+      isFalse,
+    );
+    await tester.pump(const Duration(milliseconds: 250));
+    expect(find.text('Dose visible'), findsWidgets);
+    expect(find.text('Current dose'), findsOneWidget);
   });
 
   testWidgets('Carousel dispenses loaded slots through the controller', (
@@ -536,7 +630,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Carousel'));
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView), const Offset(0, -320));
+    await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
     await tester.pumpAndSettle();
 
     expect(find.text('Loaded'), findsOneWidget);
@@ -815,8 +909,36 @@ void main() {
     expect(find.text('Current dose'), findsOneWidget);
     expect(find.text('08:30 · Vitamin D'), findsOneWidget);
     expect(find.text('Confirm taken'), findsOneWidget);
+    expect(find.text('Snooze 10 min'), findsOneWidget);
+    expect(find.text('Already taken'), findsOneWidget);
+    expect(find.text('Taken early'), findsOneWidget);
+    expect(find.text('Taken late'), findsOneWidget);
+    expect(find.text('Ask caregiver'), findsOneWidget);
     expect(find.text('Skip dose'), findsOneWidget);
     expect(find.text('Mark missed'), findsOneWidget);
+  });
+
+  testWidgets('Today snooze logs reminder delay without marking taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Snooze 10 min'));
+    await tester.tap(find.text('Snooze 10 min'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reminder snoozed for 10 minutes.'), findsOneWidget);
+    expect(find.text('Snoozed logged'), findsOneWidget);
+    expect(find.text('Current dose'), findsOneWidget);
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(events.single.kind, DoseLogEventKind.doseSnoozed.name);
+    expect(events.single.marksDoseTaken, isFalse);
   });
 
   testWidgets('Today confirm taken logs current dose as taken', (
@@ -838,6 +960,100 @@ void main() {
     expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
   });
 
+  testWidgets('Today already taken logs manual taken without dispensing', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Already taken'));
+    await tester.tap(find.text('Already taken'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Already-taken dose logged.'), findsOneWidget);
+    expect(find.text('Current dose'), findsNothing);
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(events.single.kind, DoseLogEventKind.doseAlreadyTaken.name);
+    expect(events.single.marksDoseTaken, isTrue);
+  });
+
+  testWidgets('Today taken early logs manual early dose as taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Taken early'));
+    await tester.tap(find.text('Taken early'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Early dose logged.'), findsOneWidget);
+    expect(find.text('Current dose'), findsNothing);
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(events.single.kind, DoseLogEventKind.doseTakenEarly.name);
+    expect(events.single.marksDoseTaken, isTrue);
+  });
+
+  testWidgets('Today taken late logs manual late dose as taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Taken late'));
+    await tester.tap(find.text('Taken late'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Late dose logged.'), findsOneWidget);
+    expect(find.text('Current dose'), findsNothing);
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(events.single.kind, DoseLogEventKind.doseTakenLate.name);
+    expect(events.single.marksDoseTaken, isTrue);
+  });
+
+  testWidgets('Today ask caregiver logs non-terminal help request', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Ask caregiver'));
+    await tester.tap(find.text('Ask caregiver'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Caregiver request noted locally. Contact your caregiver, pharmacist, or doctor if you are unsure what to do.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Caregiver asked'), findsWidgets);
+    expect(find.text('Current dose'), findsOneWidget);
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(events.single.kind, DoseLogEventKind.caregiverHelpRequested.name);
+    expect(events.single.marksDoseTaken, isFalse);
+  });
+
   testWidgets('Today skip dose logs skipped without marking taken', (
     WidgetTester tester,
   ) async {
@@ -848,6 +1064,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Skip dose'));
     await tester.tap(find.text('Skip dose'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Log'));
@@ -867,6 +1084,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Mark missed'));
     await tester.tap(find.text('Mark missed'));
     await tester.pumpAndSettle();
 

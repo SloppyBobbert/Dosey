@@ -121,6 +121,9 @@ class TodayScreen extends StatelessWidget {
   static bool _isTerminalDoseEvent(DoseLogEvent event) {
     return switch (event.kind) {
       DoseLogEventKind.doseTakenConfirmed ||
+      DoseLogEventKind.doseAlreadyTaken ||
+      DoseLogEventKind.doseTakenEarly ||
+      DoseLogEventKind.doseTakenLate ||
       DoseLogEventKind.doseSkipped ||
       DoseLogEventKind.doseMissed => true,
       _ => false,
@@ -144,16 +147,16 @@ class TodayScreen extends StatelessWidget {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(successMessage)));
+      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      messenger.showSnackBar(SnackBar(content: Text(successMessage)));
     } on Object catch (error) {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Dose action failed: $error')));
+      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Dose action failed: $error')),
+      );
     }
   }
 }
@@ -267,6 +270,14 @@ class _CurrentDoseSection extends StatelessWidget {
       onDispenseLoadedSlot: loadedSlot == null
           ? null
           : () => _dispenseLoadedSlot(context, loadedSlot!, currentDoseId),
+      onSnoozeDose: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseSnoozed(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'Reminder snoozed for 10 minutes.',
+      ),
       onConfirmTaken: () => TodayScreen._logDoseAction(
         context,
         DoseLogEvent.doseTakenConfirmed(
@@ -274,6 +285,49 @@ class _CurrentDoseSection extends StatelessWidget {
           occurredAt: DateTime.now().toUtc(),
         ),
         'Dose marked taken.',
+      ),
+      onAlreadyTaken: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseAlreadyTaken(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'Already-taken dose logged.',
+      ),
+      onTakenEarly: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseTakenEarly(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'Early dose logged.',
+      ),
+      onTakenLate: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.doseTakenLate(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'Late dose logged.',
+      ),
+      onConfirmVisible:
+          latestEvent?.kind == DoseLogEventKind.controllerDispenseSucceeded
+          ? () => TodayScreen._logDoseAction(
+              context,
+              DoseLogEvent.doseVisibleConfirmed(
+                doseId: currentDoseId,
+                occurredAt: DateTime.now().toUtc(),
+              ),
+              'Visible dose logged. Confirm taken only after the dose is taken.',
+            )
+          : null,
+      onAskCaregiver: () => TodayScreen._logDoseAction(
+        context,
+        DoseLogEvent.caregiverHelpRequested(
+          doseId: currentDoseId,
+          occurredAt: DateTime.now().toUtc(),
+        ),
+        'Caregiver request noted locally. Contact your caregiver, pharmacist, or doctor if you are unsure what to do.',
       ),
       onSkipDose: () => TodayScreen._logDoseAction(
         context,
@@ -548,6 +602,12 @@ class _TodayHeroStatusChips extends StatelessWidget {
     return switch (event.kind) {
       DoseLogEventKind.controllerDispenseSucceeded => 'Movement logged',
       DoseLogEventKind.doseTakenConfirmed => 'Taken logged',
+      DoseLogEventKind.doseAlreadyTaken => 'Already taken logged',
+      DoseLogEventKind.doseTakenEarly => 'Taken early logged',
+      DoseLogEventKind.doseTakenLate => 'Taken late logged',
+      DoseLogEventKind.doseVisibleConfirmed => 'Visible logged',
+      DoseLogEventKind.doseSnoozed => 'Snoozed logged',
+      DoseLogEventKind.caregiverHelpRequested => 'Caregiver asked',
       DoseLogEventKind.doseSkipped => 'Skipped logged',
       DoseLogEventKind.doseMissed => 'Missed logged',
       _ => 'Event logged',
@@ -562,7 +622,13 @@ class _CurrentDoseCard extends StatelessWidget {
     required this.latestEvent,
     required this.loadedSlot,
     required this.onDispenseLoadedSlot,
+    required this.onSnoozeDose,
     required this.onConfirmTaken,
+    required this.onAlreadyTaken,
+    required this.onTakenEarly,
+    required this.onTakenLate,
+    required this.onConfirmVisible,
+    required this.onAskCaregiver,
     required this.onSkipDose,
     required this.onMarkMissed,
   });
@@ -572,7 +638,13 @@ class _CurrentDoseCard extends StatelessWidget {
   final DoseLogEvent? latestEvent;
   final CarouselSlot? loadedSlot;
   final VoidCallback? onDispenseLoadedSlot;
+  final VoidCallback onSnoozeDose;
   final VoidCallback onConfirmTaken;
+  final VoidCallback onAlreadyTaken;
+  final VoidCallback onTakenEarly;
+  final VoidCallback onTakenLate;
+  final VoidCallback? onConfirmVisible;
+  final VoidCallback onAskCaregiver;
   final VoidCallback onSkipDose;
   final VoidCallback onMarkMissed;
 
@@ -637,12 +709,43 @@ class _CurrentDoseCard extends StatelessWidget {
                   icon: const Icon(Icons.check_circle_outline),
                   label: const Text('Confirm taken'),
                 ),
+                OutlinedButton.icon(
+                  onPressed: onAlreadyTaken,
+                  icon: const Icon(Icons.task_alt_outlined),
+                  label: const Text('Already taken'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onTakenEarly,
+                  icon: const Icon(Icons.fast_forward_outlined),
+                  label: const Text('Taken early'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onTakenLate,
+                  icon: const Icon(Icons.history_toggle_off_outlined),
+                  label: const Text('Taken late'),
+                ),
                 if (loadedSlot != null)
                   FilledButton.tonalIcon(
                     onPressed: onDispenseLoadedSlot,
                     icon: const Icon(Icons.play_arrow),
                     label: Text('Dispense from slot ${loadedSlot!.slotNumber}'),
                   ),
+                if (onConfirmVisible != null)
+                  FilledButton.tonalIcon(
+                    onPressed: onConfirmVisible,
+                    icon: const Icon(Icons.visibility_outlined),
+                    label: const Text('Dose visible'),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: onSnoozeDose,
+                  icon: const Icon(Icons.snooze_outlined),
+                  label: const Text('Snooze 10 min'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onAskCaregiver,
+                  icon: const Icon(Icons.support_agent_outlined),
+                  label: const Text('Ask caregiver'),
+                ),
                 OutlinedButton.icon(
                   onPressed: onSkipDose,
                   icon: const Icon(Icons.skip_next_outlined),
@@ -675,6 +778,27 @@ class _DoseStatusBanner extends StatelessWidget {
       DoseLogEventKind.doseTakenConfirmed => (
         Icons.check_circle_outline,
         'Confirmed taken',
+      ),
+      DoseLogEventKind.doseAlreadyTaken => (
+        Icons.task_alt_outlined,
+        'Already taken',
+      ),
+      DoseLogEventKind.doseTakenEarly => (
+        Icons.fast_forward_outlined,
+        'Taken early',
+      ),
+      DoseLogEventKind.doseTakenLate => (
+        Icons.history_toggle_off_outlined,
+        'Taken late',
+      ),
+      DoseLogEventKind.doseVisibleConfirmed => (
+        Icons.visibility_outlined,
+        'Dose visible',
+      ),
+      DoseLogEventKind.doseSnoozed => (Icons.snooze_outlined, 'Snoozed'),
+      DoseLogEventKind.caregiverHelpRequested => (
+        Icons.support_agent_outlined,
+        'Caregiver asked',
       ),
       DoseLogEventKind.doseSkipped => (Icons.skip_next_outlined, 'Skipped'),
       DoseLogEventKind.doseMissed => (Icons.schedule_outlined, 'Missed'),
