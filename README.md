@@ -24,7 +24,7 @@ This is a prototype and research build. It is not a medical-grade device.
 | Mechanism | Grove servo pusher with a ratchet or physical stop; basic servo movement is confirmed |
 | Shell | Fully LEGO body around the carousel, phone, electronics, cup opening, and service panels |
 | App data | Drift/SQLite on the phone only; no backend or cloud sync yet |
-| App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, Settings, and profile menu |
+| App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, Settings, profile menu, and polished section headers |
 | Safety status | Fake-pill testing only; not for real medication |
 
 ## Safety
@@ -134,7 +134,7 @@ No firmware build command exists yet.
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the practical platform for Robot Mode because the phone lives inside Dosey; iOS remains supported for Personal Mode.
 
-The current app has a seven-section shell: Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, with a top-right profile menu. It includes safety acknowledgement storage, local prescription and schedule profile management, Daviky carousel loading assignments, local Drift/SQLite storage, a controller simulator, Google and Apple sign-in plumbing, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
+The current app has a seven-section shell: Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, with a top-right profile menu and active app-bar section titles. Its main surfaces now have clearer dashboard cards: a Today next-dose/timeline view, a Prescriptions medication-cabinet summary, a Schedule routine-builder summary, a Carousel loading-bay summary, a Controller hardware-bench summary, a Log dose-history summary, and a Settings profile/account hub. It includes safety acknowledgement storage, local prescription and schedule profile management, Daviky carousel loading assignments, local Drift/SQLite storage, a controller simulator, Google and Apple sign-in plumbing, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
 
 BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
 
@@ -187,13 +187,14 @@ The servo has already been tested as strong enough for the current mechanism, so
 
 ## Project status
 
-Early prototype. The repo has a safety-first Flutter app shell, local prescription and schedule controls, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
+Early prototype. The repo has a safety-first Flutter app shell, polished setup/status surfaces, local prescription and schedule controls, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
 
 Near-term work:
 
 - Record the ESP32-C6 and Grove Base wiring, power paths, and servo power behavior.
 - Build the Stage 2 servo/carousel rig and run repeated one-slot tests.
 - Draft and test the Bluetooth command/status/heartbeat protocol.
+- Round out the next app PR with any remaining polish, screenshots or manual QA notes, and README updates.
 - Expand Robot Mode around loading, dispense confirmation, refill tracking, and hardware tests.
 - Integrate the working rig into a fully LEGO shell only after movement is repeatable.
 
