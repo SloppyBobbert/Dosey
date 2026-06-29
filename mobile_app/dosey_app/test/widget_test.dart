@@ -894,10 +894,13 @@ void main() {
     expect(confirmButton.onPressed, isNotNull);
 
     final pendingDispense = (dispenseButton.onPressed as dynamic)();
-    (confirmButton.onPressed as dynamic)();
+    final pendingConfirm = (confirmButton.onPressed as dynamic)();
 
     if (pendingDispense is Future<void>) {
       await pendingDispense;
+    }
+    if (pendingConfirm is Future<void>) {
+      await pendingConfirm;
     }
     await tester.pumpAndSettle();
 
@@ -1022,6 +1025,39 @@ void main() {
 
     expect(find.text('Needs review'), findsOneWidget);
     expect(find.text('Dispense slot'), findsNothing);
+  });
+
+  testWidgets('Today keeps slot loaded when terminal dose log fails', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+    await database.customStatement('''
+      CREATE TRIGGER fail_confirm_taken_log
+      BEFORE INSERT ON dose_log_events
+      WHEN NEW.kind = 'doseTakenConfirmed'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced dose log failure');
+      END;
+    ''');
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Confirm taken'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Confirm taken'));
+    await tester.pumpAndSettle();
+
+    final slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.loaded.storageValue);
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
   });
 
   testWidgets('Today skip dose retires loaded carousel slot', (

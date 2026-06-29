@@ -167,10 +167,16 @@ class TodayScreen extends StatelessWidget {
   }) async {
     try {
       final dependencies = DoseyAppScope.of(context);
-      if (retireLoadedSlot != null && _isTerminalDoseEvent(event)) {
-        await dependencies.carouselSlots.markNeedsReview(retireLoadedSlot.id);
+      final retiresLoadedSlot =
+          retireLoadedSlot != null && _isTerminalDoseEvent(event);
+      if (retiresLoadedSlot) {
+        await dependencies.database.transaction(() async {
+          await dependencies.carouselSlots.markNeedsReview(retireLoadedSlot.id);
+          await dependencies.doseLog.addEvent(event);
+        });
+      } else {
+        await dependencies.doseLog.addEvent(event);
       }
-      await dependencies.doseLog.addEvent(event);
       if (!context.mounted) {
         return;
       }
