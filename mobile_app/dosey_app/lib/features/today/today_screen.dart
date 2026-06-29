@@ -126,6 +126,19 @@ class TodayScreen extends StatelessWidget {
     return false;
   }
 
+  static bool _hasEventKindForDose(
+    List<DoseLogEvent> events,
+    String doseId,
+    DoseLogEventKind kind,
+  ) {
+    for (final event in events) {
+      if (event.doseId == doseId && event.kind == kind) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static bool _isTerminalDoseEvent(DoseLogEvent event) {
     return switch (event.kind) {
       DoseLogEventKind.doseTakenConfirmed ||
@@ -285,6 +298,16 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
   final Set<String> _dispenseRequestsInFlight = <String>{};
 
   @override
+  void didUpdateWidget(_CurrentDoseSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentDoseId != widget.currentDoseId ||
+        oldWidget.loadedSlot?.id != widget.loadedSlot?.id ||
+        oldWidget.loadedSlot?.status != widget.loadedSlot?.status) {
+      _dispenseRequestsInFlight.clear();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentSchedule = widget.currentSchedule;
     final currentDoseId = widget.currentDoseId;
@@ -294,6 +317,16 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     final latestEvent = TodayScreen._latestEventForDose(
       widget.events,
       currentDoseId,
+    );
+    final hasDispenseSucceeded = TodayScreen._hasEventKindForDose(
+      widget.events,
+      currentDoseId,
+      DoseLogEventKind.controllerDispenseSucceeded,
+    );
+    final hasVisibleConfirmed = TodayScreen._hasEventKindForDose(
+      widget.events,
+      currentDoseId,
+      DoseLogEventKind.doseVisibleConfirmed,
     );
     final loadedSlot = widget.loadedSlot;
     final dispenseKey = loadedSlot == null
@@ -367,9 +400,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                 ),
                 'Late dose logged.',
               ),
-              onConfirmVisible:
-                  latestEvent?.kind ==
-                      DoseLogEventKind.controllerDispenseSucceeded
+              onConfirmVisible: hasDispenseSucceeded && !hasVisibleConfirmed
                   ? () => TodayScreen._logDoseAction(
                       context,
                       DoseLogEvent.doseVisibleConfirmed(
@@ -431,10 +462,12 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     setState(() {
       _dispenseRequestsInFlight.add(dispenseKey);
     });
+    var succeeded = false;
     try {
       final dependencies = DoseyAppScope.of(context);
-      await dependencies.controller.requestDispense(doseId: doseId);
       await dependencies.carouselSlots.markDispensed(slot.id);
+      await dependencies.controller.requestDispense(doseId: doseId);
+      succeeded = true;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -449,7 +482,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
         context,
       ).showSnackBar(SnackBar(content: Text('Dispense failed: $error')));
     } finally {
-      if (mounted) {
+      if (mounted && !succeeded) {
         setState(() {
           _dispenseRequestsInFlight.remove(dispenseKey);
         });

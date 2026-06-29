@@ -803,10 +803,10 @@ class _SlotCardState extends State<_SlotCard> {
     var succeeded = false;
     try {
       final dependencies = DoseyAppScope.of(context);
+      await dependencies.carouselSlots.markDispensed(widget.slot.id);
       await dependencies.controller.requestDispense(
         doseId: _CarouselScreenState.doseIdForToday(widget.slot.scheduleId),
       );
-      await dependencies.carouselSlots.markDispensed(widget.slot.id);
       succeeded = true;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -790,8 +790,118 @@ void main() {
       isFalse,
     );
     await tester.pump(const Duration(milliseconds: 250));
-    expect(find.text('Dose visible'), findsWidgets);
+    expect(find.widgetWithText(FilledButton, 'Dose visible'), findsNothing);
     expect(find.text('Current dose'), findsOneWidget);
+  });
+
+  testWidgets('Today does not log movement when slot update fails', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Today'));
+    await tester.pumpAndSettle();
+
+    final dispenseButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Dispense from slot 1'),
+    );
+    expect(dispenseButton.onPressed, isNotNull);
+    await (database.delete(
+      database.carouselSlots,
+    )..where((row) => row.id.equals('schedule-1-vitamin-d-morning'))).go();
+
+    dispenseButton.onPressed!();
+    await _letAsyncCallbacksComplete(tester);
+
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
+  });
+
+  testWidgets('Today ignores stale duplicate dispense callbacks', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Today'));
+    await tester.pumpAndSettle();
+
+    final dispenseButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Dispense from slot 1'),
+    );
+    expect(dispenseButton.onPressed, isNotNull);
+
+    dispenseButton.onPressed!();
+    await _letAsyncCallbacksComplete(tester);
+    dispenseButton.onPressed!();
+    await _letAsyncCallbacksComplete(tester);
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(
+      events.where(
+        (event) =>
+            event.kind == DoseLogEventKind.controllerDispenseSucceeded.name,
+      ),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('Today keeps Dose visible after later non-terminal notes', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Today'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Dispense from slot 1'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Dispense from slot 1'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.widgetWithText(FilledButton, 'Dose visible'), findsOneWidget);
+
+    await DriftDoseLogRepository(database).addEvent(
+      DoseLogEvent.doseSnoozed(
+        doseId: _todayDoseId('vitamin-d-morning'),
+        occurredAt: DateTime.now().toUtc().add(const Duration(minutes: 1)),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.widgetWithText(FilledButton, 'Dose visible'), findsOneWidget);
   });
 
   testWidgets('Today disables loaded-slot dispense while offline', (
@@ -887,6 +997,41 @@ void main() {
               ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
             .getSingle();
     expect(slot.status, CarouselSlotStatus.dispensed.storageValue);
+  });
+
+  testWidgets('Carousel does not log movement when slot update fails', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
+    await tester.pumpAndSettle();
+
+    final dispenseButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Dispense slot'),
+    );
+    expect(dispenseButton.onPressed, isNotNull);
+    await (database.delete(
+      database.carouselSlots,
+    )..where((row) => row.id.equals('schedule-1-vitamin-d-morning'))).go();
+
+    dispenseButton.onPressed!();
+    await _letAsyncCallbacksComplete(tester);
+
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
   });
 
   testWidgets('Carousel disables slot dispense while offline', (
@@ -2337,4 +2482,10 @@ String _todayDoseId(String scheduleId) {
   final month = now.month.toString().padLeft(2, '0');
   final day = now.day.toString().padLeft(2, '0');
   return '$scheduleId:${now.year}-$month-$day';
+}
+
+Future<void> _letAsyncCallbacksComplete(WidgetTester tester) {
+  return tester.runAsync(
+    () => Future<void>.delayed(const Duration(milliseconds: 50)),
+  );
 }

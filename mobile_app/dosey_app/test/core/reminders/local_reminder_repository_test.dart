@@ -237,12 +237,37 @@ void main() {
           updatedAt: now,
         ),
       );
-      await LocalCarouselSlotRepository(database).assignSlot(
+      await repository.upsertSchedule(
+        ReminderSchedule(
+          id: 'noon',
+          label: 'Allergy pill',
+          prescriptionId: 'allergy-pill',
+          hour: 12,
+          minute: 0,
+          isEnabled: true,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      final carouselSlots = LocalCarouselSlotRepository(database);
+      await carouselSlots.assignSlot(
         CarouselSlot(
           id: 'slot-1',
           slotNumber: 1,
           prescriptionId: 'vitamin-d',
           scheduleId: 'morning',
+          profileId: ReminderSchedule.defaultProfileId,
+          status: CarouselSlotStatus.loaded,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await carouselSlots.assignSlot(
+        CarouselSlot(
+          id: 'slot-2',
+          slotNumber: 2,
+          prescriptionId: 'allergy-pill',
+          scheduleId: 'noon',
           profileId: ReminderSchedule.defaultProfileId,
           status: CarouselSlotStatus.loaded,
           createdAt: now,
@@ -263,9 +288,18 @@ void main() {
         ),
       );
 
-      final schedule = (await repository.watchSchedules().first).single;
+      final schedules = await repository.watchSchedules().first;
+      expect(schedules, hasLength(2));
+      final schedule = schedules.singleWhere(
+        (schedule) => schedule.id == 'morning',
+      );
       expect(schedule.prescriptionId, 'allergy-pill');
-      expect(await database.select(database.carouselSlots).get(), isEmpty);
+
+      final slots = await database.select(database.carouselSlots).get();
+      expect(slots, hasLength(1));
+      expect(slots.single.id, 'slot-2');
+      expect(slots.single.scheduleId, 'noon');
+      expect(slots.single.prescriptionId, 'allergy-pill');
     },
   );
 
