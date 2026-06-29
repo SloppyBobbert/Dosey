@@ -23,7 +23,10 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     final doseLog = DriftDoseLogRepository(database);
-    final gateway = SimulatedControllerGateway(doseLog);
+    final gateway = SimulatedControllerGateway(
+      doseLog,
+      canHostRobot: () => true,
+    );
     addTearDown(gateway.close);
 
     expect(gateway.requestDispense(doseId: 'morning'), throwsStateError);
@@ -39,6 +42,24 @@ void main() {
     expect(events.single.kind, DoseLogEventKind.controllerDispenseSucceeded);
     expect(events.single.marksDoseTaken, isFalse);
   });
+
+  test(
+    'simulated controller rejects dispense without Robot Mode access',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final doseLog = DriftDoseLogRepository(database);
+      final gateway = SimulatedControllerGateway(doseLog);
+      addTearDown(gateway.close);
+
+      await gateway.connect();
+
+      expect(gateway.requestDispense(doseId: 'morning'), throwsStateError);
+
+      final events = await doseLog.watchEvents().first;
+      expect(events, isEmpty);
+    },
+  );
 
   test('simulated controller rejects dispense outside Robot Mode', () async {
     final database = DoseyDatabase.inMemory();

@@ -7,7 +7,7 @@ typedef RobotModeAccess = FutureOr<bool> Function();
 
 class SimulatedControllerGateway implements ControllerGateway {
   SimulatedControllerGateway(this._doseLog, {RobotModeAccess? canHostRobot})
-    : _canHostRobot = canHostRobot ?? _allowRobotMode;
+    : _canHostRobot = canHostRobot ?? _denyRobotMode;
 
   final DoseLogRepository _doseLog;
   final RobotModeAccess _canHostRobot;
@@ -59,5 +59,5 @@ class SimulatedControllerGateway implements ControllerGateway {
     _controller.add(snapshot);
   }
 
-  static bool _allowRobotMode() => true;
+  static bool _denyRobotMode() => false;
 }

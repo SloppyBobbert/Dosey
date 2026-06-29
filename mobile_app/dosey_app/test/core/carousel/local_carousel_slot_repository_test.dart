@@ -191,6 +191,61 @@ void main() {
   });
 
   test(
+    'local carousel slot repository rejects stale schedule details',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _seedPrescriptionSchedule(database);
+      final repository = LocalCarouselSlotRepository(database);
+      final now = DateTime.utc(2026, 6, 25, 8);
+
+      expect(
+        () => repository.assignSlot(
+          CarouselSlot(
+            id: 'slot-stale-prescription',
+            slotNumber: 1,
+            prescriptionId: 'wrong-prescription',
+            scheduleId: 'vitamin-d-morning',
+            profileId: 'schedule-1',
+            status: CarouselSlotStatus.assigned,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ),
+        throwsArgumentError,
+      );
+
+      expect(await repository.watchSlots().first, isEmpty);
+    },
+  );
+
+  test('local carousel slot repository rejects disabled schedules', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _seedPrescriptionSchedule(database, isEnabled: false);
+    final repository = LocalCarouselSlotRepository(database);
+    final now = DateTime.utc(2026, 6, 25, 8);
+
+    expect(
+      () => repository.assignSlot(
+        CarouselSlot(
+          id: 'slot-disabled-schedule',
+          slotNumber: 1,
+          prescriptionId: 'vitamin-d',
+          scheduleId: 'vitamin-d-morning',
+          profileId: 'schedule-1',
+          status: CarouselSlotStatus.assigned,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      ),
+      throwsArgumentError,
+    );
+
+    expect(await repository.watchSlots().first, isEmpty);
+  });
+
+  test(
     'local carousel slot repository marks review and clears slots',
     () async {
       final database = DoseyDatabase.inMemory();
@@ -228,6 +283,13 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _seedPrescriptionSchedule(database);
+    await _seedPrescriptionSchedule(
+      database,
+      prescriptionId: 'travel-vitamin',
+      scheduleId: 'travel-vitamin-morning',
+      profileId: 'travel',
+      hour: 9,
+    );
     final repository = LocalCarouselSlotRepository(database);
     final now = DateTime.utc(2026, 6, 25, 8);
 
@@ -295,6 +357,7 @@ Future<void> _seedPrescriptionSchedule(
   String scheduleId = 'vitamin-d-morning',
   String profileId = ReminderSchedule.defaultProfileId,
   int hour = 8,
+  bool isEnabled = true,
 }) async {
   final now = DateTime.utc(2026, 6, 25, hour);
   await LocalPrescriptionRepository(database).upsertPrescription(
@@ -314,7 +377,7 @@ Future<void> _seedPrescriptionSchedule(
       profileId: profileId,
       hour: hour,
       minute: 0,
-      isEnabled: true,
+      isEnabled: isEnabled,
       createdAt: now,
       updatedAt: now,
     ),

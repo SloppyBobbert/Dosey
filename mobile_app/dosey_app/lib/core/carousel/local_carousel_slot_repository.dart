@@ -36,7 +36,7 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
 
   @override
   Future<void> assignSlot(CarouselSlot slot) async {
-    _validateSlot(slot);
+    await _validateSlot(slot);
     await _clearDisabledScheduleSlots(slot.profileId);
     await _rejectDuplicateSlot(slot);
     await _rejectDuplicateSchedule(slot);
@@ -221,7 +221,7 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
     );
   }
 
-  static void _validateSlot(CarouselSlot slot) {
+  Future<void> _validateSlot(CarouselSlot slot) async {
     if (slot.id.trim().isEmpty) {
       throw ArgumentError.value(slot.id, 'id', 'Slot id is required.');
     }
@@ -251,6 +251,39 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
         slot.profileId,
         'profileId',
         'Schedule profile id is required.',
+      );
+    }
+
+    final schedule =
+        await (_database.select(_database.reminderSchedules)
+              ..where((schedule) => schedule.id.equals(slot.scheduleId)))
+            .getSingleOrNull();
+    if (schedule == null) {
+      throw ArgumentError.value(
+        slot.scheduleId,
+        'scheduleId',
+        'Schedule must exist before assigning a carousel slot.',
+      );
+    }
+    if (!schedule.isEnabled) {
+      throw ArgumentError.value(
+        slot.scheduleId,
+        'scheduleId',
+        'Schedule must be enabled before assigning a carousel slot.',
+      );
+    }
+    if (schedule.profileId != slot.profileId) {
+      throw ArgumentError.value(
+        slot.profileId,
+        'profileId',
+        'Carousel slot profile must match the schedule profile.',
+      );
+    }
+    if (schedule.prescriptionId != slot.prescriptionId) {
+      throw ArgumentError.value(
+        slot.prescriptionId,
+        'prescriptionId',
+        'Carousel slot prescription must match the schedule prescription.',
       );
     }
   }

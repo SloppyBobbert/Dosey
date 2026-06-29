@@ -636,11 +636,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
     await _addVitaminPrescription(database);
-    await _addVitaminReminder(
-      database,
-      id: 'disabled-vitamin-d',
-      isEnabled: false,
-    );
+    await _addVitaminReminder(database, id: 'disabled-vitamin-d');
     await LocalCarouselSlotRepository(database).assignSlot(
       CarouselSlot(
         id: 'schedule-1-disabled-vitamin-d',
@@ -652,6 +648,11 @@ void main() {
         createdAt: DateTime.utc(2026),
         updatedAt: DateTime.utc(2026),
       ),
+    );
+    await _addVitaminReminder(
+      database,
+      id: 'disabled-vitamin-d',
+      isEnabled: false,
     );
 
     await tester.pumpWidget(DoseyApp(database: database));
@@ -822,8 +823,7 @@ void main() {
       database.carouselSlots,
     )..where((row) => row.id.equals('schedule-1-vitamin-d-morning'))).go();
 
-    dispenseButton.onPressed!();
-    await _letAsyncCallbacksComplete(tester);
+    await _runAsyncCallback(dispenseButton.onPressed!);
 
     expect(await database.select(database.doseLogEvents).get(), isEmpty);
   });
@@ -855,8 +855,7 @@ void main() {
       tester.element(find.byType(OnboardingGate)),
     ).controller.disconnect();
 
-    dispenseButton.onPressed!();
-    await _letAsyncCallbacksComplete(tester);
+    await _runAsyncCallback(dispenseButton.onPressed!);
 
     expect(await database.select(database.doseLogEvents).get(), isEmpty);
     final slot =
@@ -890,10 +889,8 @@ void main() {
     );
     expect(dispenseButton.onPressed, isNotNull);
 
-    dispenseButton.onPressed!();
-    await _letAsyncCallbacksComplete(tester);
-    dispenseButton.onPressed!();
-    await _letAsyncCallbacksComplete(tester);
+    await _runAsyncCallback(dispenseButton.onPressed!);
+    await _runAsyncCallback(dispenseButton.onPressed!);
 
     final events = await database.select(database.doseLogEvents).get();
     expect(
@@ -1067,8 +1064,7 @@ void main() {
       database.carouselSlots,
     )..where((row) => row.id.equals('schedule-1-vitamin-d-morning'))).go();
 
-    dispenseButton.onPressed!();
-    await _letAsyncCallbacksComplete(tester);
+    await _runAsyncCallback(dispenseButton.onPressed!);
 
     expect(await database.select(database.doseLogEvents).get(), isEmpty);
   });
@@ -1102,8 +1098,7 @@ void main() {
       tester.element(find.byType(OnboardingGate)),
     ).controller.disconnect();
 
-    dispenseButton.onPressed!();
-    await _letAsyncCallbacksComplete(tester);
+    await _runAsyncCallback(dispenseButton.onPressed!);
 
     expect(await database.select(database.doseLogEvents).get(), isEmpty);
     final slot =
@@ -2563,8 +2558,9 @@ String _todayDoseId(String scheduleId) {
   return '$scheduleId:${now.year}-$month-$day';
 }
 
-Future<void> _letAsyncCallbacksComplete(WidgetTester tester) {
-  return tester.runAsync(
-    () => Future<void>.delayed(const Duration(milliseconds: 50)),
-  );
+Future<void> _runAsyncCallback(VoidCallback callback) async {
+  final result = (callback as dynamic)();
+  if (result is Future<void>) {
+    await result;
+  }
 }

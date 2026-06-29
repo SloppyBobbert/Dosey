@@ -1,3 +1,4 @@
+import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
@@ -208,5 +209,142 @@ void main() {
     addTearDown(database.close);
 
     expect(await database.select(database.carouselSlots).get(), isEmpty);
+  });
+
+  test('carousel slot status rejects invalid storage values', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    expect(
+      () => database
+          .into(database.carouselSlots)
+          .insert(
+            CarouselSlotsCompanion.insert(
+              id: 'slot-invalid-status',
+              slotNumber: 1,
+              prescriptionId: 'vitamin-d',
+              scheduleId: 'vitamin-d-morning',
+              profileId: 'schedule-1',
+              status: 'invalid-status',
+              createdAt: DateTime.utc(2026),
+              updatedAt: DateTime.utc(2026),
+            ),
+          ),
+      throwsA(isA<Exception>()),
+    );
+  });
+
+  test('migration from schema eight preserves carousel slots', () async {
+    final now = DateTime.utc(2026, 6, 25).millisecondsSinceEpoch ~/ 1000;
+    final executor = NativeDatabase.memory(
+      setup: (database) {
+        database
+          ..execute('''
+            CREATE TABLE app_settings (
+              key TEXT NOT NULL PRIMARY KEY,
+              value TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE reminder_schedules (
+              id TEXT NOT NULL PRIMARY KEY,
+              label TEXT NOT NULL,
+              prescription_id TEXT NULL,
+              profile_id TEXT NOT NULL DEFAULT 'schedule-1',
+              hour INTEGER NOT NULL,
+              minute INTEGER NOT NULL,
+              is_enabled INTEGER NOT NULL CHECK (is_enabled IN (0, 1)),
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              CHECK (hour >= 0 AND hour <= 23),
+              CHECK (minute >= 0 AND minute <= 59)
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE prescriptions (
+              id TEXT NOT NULL PRIMARY KEY,
+              name TEXT NOT NULL,
+              pill_type TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE schedule_profiles (
+              id TEXT NOT NULL PRIMARY KEY,
+              name TEXT NOT NULL,
+              is_active INTEGER NOT NULL CHECK (is_active IN (0, 1)),
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE carousel_slots (
+              id TEXT NOT NULL PRIMARY KEY,
+              slot_number INTEGER NOT NULL,
+              prescription_id TEXT NOT NULL,
+              schedule_id TEXT NOT NULL,
+              profile_id TEXT NOT NULL,
+              status TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              CHECK (slot_number > 0),
+              UNIQUE (profile_id, slot_number),
+              UNIQUE (profile_id, schedule_id)
+            );
+          ''')
+          ..execute('''
+            INSERT INTO carousel_slots (
+              id,
+              slot_number,
+              prescription_id,
+              schedule_id,
+              profile_id,
+              status,
+              created_at,
+              updated_at
+            ) VALUES (
+              'slot-1',
+              1,
+              'vitamin-d',
+              'vitamin-d-morning',
+              'schedule-1',
+              '${CarouselSlotStatus.loaded.storageValue}',
+              $now,
+              $now
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE auth_sessions (
+              id TEXT NOT NULL PRIMARY KEY,
+              user_id TEXT NOT NULL,
+              email TEXT NOT NULL,
+              display_name TEXT NULL,
+              photo_url TEXT NULL,
+              provider TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+          ..execute('''
+            CREATE TABLE dose_log_events (
+              id TEXT NOT NULL PRIMARY KEY,
+              kind TEXT NOT NULL,
+              dose_id TEXT NOT NULL,
+              occurred_at INTEGER NOT NULL,
+              marks_dose_taken INTEGER NOT NULL CHECK (marks_dose_taken IN (0, 1))
+            );
+          ''')
+          ..execute('PRAGMA user_version = 8;');
+      },
+    );
+    final database = DoseyDatabase(executor);
+    addTearDown(database.close);
+
+    final slots = await database.select(database.carouselSlots).get();
+
+    expect(slots, hasLength(1));
+    expect(slots.single.id, 'slot-1');
+    expect(slots.single.status, CarouselSlotStatus.loaded.storageValue);
   });
 }

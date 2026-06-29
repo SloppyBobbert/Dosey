@@ -74,6 +74,7 @@ class CarouselSlots extends Table {
   @override
   List<String> get customConstraints => const [
     'CHECK (slot_number > 0)',
+    "CHECK (status IN ('assigned', 'loaded', 'dispensed', 'needs_review'))",
     'UNIQUE (profile_id, slot_number)',
     'UNIQUE (profile_id, schedule_id)',
   ];
