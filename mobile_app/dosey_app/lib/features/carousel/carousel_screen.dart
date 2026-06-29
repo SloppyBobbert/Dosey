@@ -801,9 +801,11 @@ class _SlotCardState extends State<_SlotCard> {
       _isDispensing = true;
     });
     var succeeded = false;
+    var slotMarkedDispensed = false;
+    final dependencies = DoseyAppScope.of(context);
     try {
-      final dependencies = DoseyAppScope.of(context);
       await dependencies.carouselSlots.markDispensed(widget.slot.id);
+      slotMarkedDispensed = true;
       await dependencies.controller.requestDispense(
         doseId: _CarouselScreenState.doseIdForToday(widget.slot.scheduleId),
       );
@@ -817,6 +819,9 @@ class _SlotCardState extends State<_SlotCard> {
         ),
       );
     } on Object catch (error) {
+      if (slotMarkedDispensed) {
+        await dependencies.carouselSlots.markLoaded(widget.slot.id);
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,

@@ -1,3 +1,4 @@
+import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/main.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
@@ -827,6 +828,44 @@ void main() {
     expect(await database.select(database.doseLogEvents).get(), isEmpty);
   });
 
+  testWidgets('Today keeps slot loaded when controller rejects dispense', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Today'));
+    await tester.pumpAndSettle();
+
+    final dispenseButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Dispense from slot 1'),
+    );
+    expect(dispenseButton.onPressed, isNotNull);
+    await DoseyAppScope.of(
+      tester.element(find.byType(OnboardingGate)),
+    ).controller.disconnect();
+
+    dispenseButton.onPressed!();
+    await _letAsyncCallbacksComplete(tester);
+
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
+    final slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.loaded.storageValue);
+  });
+
   testWidgets('Today ignores stale duplicate dispense callbacks', (
     WidgetTester tester,
   ) async {
@@ -1032,6 +1071,46 @@ void main() {
     await _letAsyncCallbacksComplete(tester);
 
     expect(await database.select(database.doseLogEvents).get(), isEmpty);
+  });
+
+  testWidgets('Carousel keeps slot loaded when controller rejects dispense', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
+    await tester.pumpAndSettle();
+
+    final dispenseButton = tester.widget<TextButton>(
+      find.widgetWithText(TextButton, 'Dispense slot'),
+    );
+    expect(dispenseButton.onPressed, isNotNull);
+    await DoseyAppScope.of(
+      tester.element(find.byType(OnboardingGate)),
+    ).controller.disconnect();
+
+    dispenseButton.onPressed!();
+    await _letAsyncCallbacksComplete(tester);
+
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
+    final slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.loaded.storageValue);
   });
 
   testWidgets('Carousel disables slot dispense while offline', (

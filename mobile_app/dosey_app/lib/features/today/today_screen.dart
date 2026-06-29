@@ -463,9 +463,11 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
       _dispenseRequestsInFlight.add(dispenseKey);
     });
     var succeeded = false;
+    var slotMarkedDispensed = false;
+    final dependencies = DoseyAppScope.of(context);
     try {
-      final dependencies = DoseyAppScope.of(context);
       await dependencies.carouselSlots.markDispensed(slot.id);
+      slotMarkedDispensed = true;
       await dependencies.controller.requestDispense(doseId: doseId);
       succeeded = true;
       if (!context.mounted) return;
@@ -477,6 +479,9 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
         ),
       );
     } on Object catch (error) {
+      if (slotMarkedDispensed) {
+        await dependencies.carouselSlots.markLoaded(slot.id);
+      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
