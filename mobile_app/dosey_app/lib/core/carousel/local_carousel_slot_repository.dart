@@ -87,7 +87,11 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
 
   @override
   Future<void> markDispensed(String id) {
-    return _updateStatus(id, CarouselSlotStatus.dispensed);
+    return _updateStatus(
+      id,
+      CarouselSlotStatus.dispensed,
+      fromStatus: CarouselSlotStatus.loaded,
+    );
   }
 
   @override
@@ -109,20 +113,31 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
     )..where((slot) => slot.profileId.equals(profileId))).go();
   }
 
-  Future<void> _updateStatus(String id, CarouselSlotStatus status) async {
+  Future<void> _updateStatus(
+    String id,
+    CarouselSlotStatus status, {
+    CarouselSlotStatus? fromStatus,
+  }) async {
     if (id.trim().isEmpty) {
       throw ArgumentError.value(id, 'id', 'Slot id is required.');
     }
-    final updated =
-        await (_database.update(
-          _database.carouselSlots,
-        )..where((slot) => slot.id.equals(id))).write(
-          CarouselSlotsCompanion(
-            status: Value(status.storageValue),
-            updatedAt: Value(DateTime.now().toUtc()),
-          ),
-        );
+    final update = _database.update(_database.carouselSlots)
+      ..where((slot) => slot.id.equals(id));
+    if (fromStatus != null) {
+      update.where((slot) => slot.status.equals(fromStatus.storageValue));
+    }
+    final updated = await update.write(
+      CarouselSlotsCompanion(
+        status: Value(status.storageValue),
+        updatedAt: Value(DateTime.now().toUtc()),
+      ),
+    );
     if (updated == 0) {
+      if (fromStatus != null) {
+        throw ArgumentError(
+          'No ${fromStatus.label.toLowerCase()} carousel slot was updated for id "$id".',
+        );
+      }
       throw ArgumentError('No carousel slot was updated for id "$id".');
     }
   }

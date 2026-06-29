@@ -865,6 +865,58 @@ void main() {
     expect(slot.status, CarouselSlotStatus.loaded.storageValue);
   });
 
+  testWidgets('Today ignores dose actions while dispense is pending', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Today'));
+    await tester.pumpAndSettle();
+
+    final dispenseButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Dispense from slot 1'),
+    );
+    final confirmButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Confirm taken'),
+    );
+    expect(dispenseButton.onPressed, isNotNull);
+    expect(confirmButton.onPressed, isNotNull);
+
+    final pendingDispense = (dispenseButton.onPressed as dynamic)();
+    (confirmButton.onPressed as dynamic)();
+
+    if (pendingDispense is Future<void>) {
+      await pendingDispense;
+    }
+    await tester.pumpAndSettle();
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(
+      events.where(
+        (event) => event.kind == DoseLogEventKind.doseTakenConfirmed.name,
+      ),
+      isEmpty,
+    );
+    expect(
+      events.where(
+        (event) =>
+            event.kind == DoseLogEventKind.controllerDispenseSucceeded.name,
+      ),
+      hasLength(1),
+    );
+  });
+
   testWidgets('Today ignores stale duplicate dispense callbacks', (
     WidgetTester tester,
   ) async {
@@ -938,6 +990,62 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.widgetWithText(FilledButton, 'Dose visible'), findsOneWidget);
+  });
+
+  testWidgets('Today confirm taken retires loaded carousel slot', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Confirm taken'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Confirm taken'));
+    await tester.pumpAndSettle();
+
+    final slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.needsReview.storageValue);
+
+    await tester.tap(find.text('Carousel'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Slot 1'), 420);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Needs review'), findsOneWidget);
+    expect(find.text('Dispense slot'), findsNothing);
+  });
+
+  testWidgets('Today skip dose retires loaded carousel slot', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Skip dose'));
+    await tester.tap(find.text('Skip dose'));
+    await tester.pumpAndSettle();
+
+    final slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.needsReview.storageValue);
   });
 
   testWidgets('Today disables loaded-slot dispense while offline', (
