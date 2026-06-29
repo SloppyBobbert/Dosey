@@ -178,11 +178,35 @@ class DoseyDatabase extends _$DoseyDatabase {
       if (from < 8) {
         await migrator.createTable(carouselSlots);
       }
+      if (from < 9) {
+        await _createDoseLogEventsIfMissing();
+      }
       if (from >= 8 && from < 9) {
+        await _normalizeLegacyCarouselSlotStatuses();
         await migrator.alterTable(TableMigration(carouselSlots));
       }
     },
   );
+
+  Future<void> _createDoseLogEventsIfMissing() {
+    return customStatement('''
+      CREATE TABLE IF NOT EXISTS dose_log_events (
+        id TEXT NOT NULL PRIMARY KEY,
+        kind TEXT NOT NULL,
+        dose_id TEXT NOT NULL,
+        occurred_at INTEGER NOT NULL,
+        marks_dose_taken INTEGER NOT NULL CHECK (marks_dose_taken IN (0, 1))
+      );
+    ''');
+  }
+
+  Future<void> _normalizeLegacyCarouselSlotStatuses() {
+    return customStatement('''
+      UPDATE carousel_slots
+      SET status = 'needs_review'
+      WHERE status NOT IN ('assigned', 'loaded', 'dispensed', 'needs_review');
+    ''');
+  }
 
   Future<void> _seedOnboardingCompleted({required bool completed}) async {
     await into(appSettings).insert(

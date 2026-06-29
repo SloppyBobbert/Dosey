@@ -191,6 +191,65 @@ void main() {
   });
 
   test(
+    'local carousel slot repository rolls back cleanup on assign failure',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _seedPrescriptionSchedule(database);
+      await _seedPrescriptionSchedule(
+        database,
+        prescriptionId: 'paused-vitamin',
+        scheduleId: 'paused-vitamin-morning',
+        hour: 10,
+        isEnabled: false,
+      );
+      final repository = LocalCarouselSlotRepository(database);
+      final now = DateTime.utc(2026, 6, 25, 8);
+      await database
+          .into(database.carouselSlots)
+          .insert(
+            CarouselSlotsCompanion.insert(
+              id: 'paused-slot',
+              slotNumber: 2,
+              prescriptionId: 'paused-vitamin',
+              scheduleId: 'paused-vitamin-morning',
+              profileId: 'schedule-1',
+              status: CarouselSlotStatus.loaded.storageValue,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          );
+      await database.customStatement('''
+        CREATE TRIGGER fail_conflicting_slot_insert
+        BEFORE INSERT ON carousel_slots
+        WHEN NEW.id = 'conflicting-slot'
+        BEGIN
+          SELECT RAISE(ABORT, 'forced assign failure');
+        END;
+      ''');
+
+      expect(
+        () => repository.assignSlot(
+          CarouselSlot(
+            id: 'conflicting-slot',
+            slotNumber: 1,
+            prescriptionId: 'vitamin-d',
+            scheduleId: 'vitamin-d-morning',
+            profileId: 'schedule-1',
+            status: CarouselSlotStatus.assigned,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ),
+        throwsArgumentError,
+      );
+
+      final rows = await database.select(database.carouselSlots).get();
+      expect(rows.map((slot) => slot.id), contains('paused-slot'));
+    },
+  );
+
+  test(
     'local carousel slot repository rejects stale schedule details',
     () async {
       final database = DoseyDatabase.inMemory();

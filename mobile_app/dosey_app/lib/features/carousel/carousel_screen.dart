@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
@@ -726,8 +727,7 @@ class _SlotCardState extends State<_SlotCard> {
   @override
   void didUpdateWidget(_SlotCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.slot.id != widget.slot.id ||
-        oldWidget.slot.status != widget.slot.status) {
+    if (oldWidget.slot.id != widget.slot.id) {
       _isDispensing = false;
     }
   }
@@ -744,8 +744,10 @@ class _SlotCardState extends State<_SlotCard> {
         ),
         trailing: _SlotAction(
           status: widget.slot.status,
-          onMarkLoaded: () => _markLoaded(context),
-          onMarkNeedsReview: () => _markNeedsReview(context),
+          onMarkLoaded: _isDispensing ? null : () => _markLoaded(context),
+          onMarkNeedsReview: _isDispensing
+              ? null
+              : () => _markNeedsReview(context),
           onDispense: _isDispensing || !widget.canRequestDispense
               ? null
               : () => _dispense(context),
@@ -800,16 +802,15 @@ class _SlotCardState extends State<_SlotCard> {
     setState(() {
       _isDispensing = true;
     });
-    var succeeded = false;
-    var slotMarkedDispensed = false;
     final dependencies = DoseyAppScope.of(context);
     try {
-      await dependencies.carouselSlots.markDispensed(widget.slot.id);
-      slotMarkedDispensed = true;
-      await dependencies.controller.requestDispense(
+      await CarouselDispenseCoordinator(
+        carouselSlots: dependencies.carouselSlots,
+        controller: dependencies.controller,
+      ).dispenseLoadedSlot(
+        slotId: widget.slot.id,
         doseId: _CarouselScreenState.doseIdForToday(widget.slot.scheduleId),
       );
-      succeeded = true;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -819,15 +820,12 @@ class _SlotCardState extends State<_SlotCard> {
         ),
       );
     } on Object catch (error) {
-      if (slotMarkedDispensed) {
-        await dependencies.carouselSlots.markLoaded(widget.slot.id);
-      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('Dispense failed: $error')));
     } finally {
-      if (mounted && !succeeded) {
+      if (mounted) {
         setState(() {
           _isDispensing = false;
         });
@@ -845,8 +843,8 @@ class _SlotAction extends StatelessWidget {
   });
 
   final CarouselSlotStatus status;
-  final VoidCallback onMarkLoaded;
-  final VoidCallback onMarkNeedsReview;
+  final VoidCallback? onMarkLoaded;
+  final VoidCallback? onMarkNeedsReview;
   final VoidCallback? onDispense;
 
   @override

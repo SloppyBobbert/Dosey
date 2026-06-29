@@ -36,46 +36,48 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
 
   @override
   Future<void> assignSlot(CarouselSlot slot) async {
-    await _validateSlot(slot);
-    await _clearDisabledScheduleSlots(slot.profileId);
-    await _rejectDuplicateSlot(slot);
-    await _rejectDuplicateSchedule(slot);
+    await _database.transaction(() async {
+      await _validateSlot(slot);
+      await _clearDisabledScheduleSlots(slot.profileId);
+      await _rejectDuplicateSlot(slot);
+      await _rejectDuplicateSchedule(slot);
 
-    try {
-      final existing = await (_database.select(
-        _database.carouselSlots,
-      )..where((row) => row.id.equals(slot.id))).getSingleOrNull();
-      if (existing == null) {
-        await _database
-            .into(_database.carouselSlots)
-            .insert(_companionFor(slot));
-        return;
-      }
+      try {
+        final existing = await (_database.select(
+          _database.carouselSlots,
+        )..where((row) => row.id.equals(slot.id))).getSingleOrNull();
+        if (existing == null) {
+          await _database
+              .into(_database.carouselSlots)
+              .insert(_companionFor(slot));
+          return;
+        }
 
-      final updated =
-          await (_database.update(
-            _database.carouselSlots,
-          )..where((row) => row.id.equals(slot.id))).write(
-            CarouselSlotsCompanion(
-              slotNumber: Value(slot.slotNumber),
-              prescriptionId: Value(slot.prescriptionId),
-              scheduleId: Value(slot.scheduleId),
-              profileId: Value(slot.profileId),
-              status: Value(slot.status.storageValue),
-              updatedAt: Value(slot.updatedAt.toUtc()),
-            ),
+        final updated =
+            await (_database.update(
+              _database.carouselSlots,
+            )..where((row) => row.id.equals(slot.id))).write(
+              CarouselSlotsCompanion(
+                slotNumber: Value(slot.slotNumber),
+                prescriptionId: Value(slot.prescriptionId),
+                scheduleId: Value(slot.scheduleId),
+                profileId: Value(slot.profileId),
+                status: Value(slot.status.storageValue),
+                updatedAt: Value(slot.updatedAt.toUtc()),
+              ),
+            );
+        if (updated == 0) {
+          throw ArgumentError(
+            'No carousel slot was updated for id "${slot.id}".',
           );
-      if (updated == 0) {
-        throw ArgumentError(
-          'No carousel slot was updated for id "${slot.id}".',
-        );
+        }
+      } on Object catch (error) {
+        if (_isConstraintFailure(error)) {
+          await _throwDuplicateConflict(slot);
+        }
+        rethrow;
       }
-    } on Object catch (error) {
-      if (_isConstraintFailure(error)) {
-        await _throwDuplicateConflict(slot);
-      }
-      rethrow;
-    }
+    });
   }
 
   @override

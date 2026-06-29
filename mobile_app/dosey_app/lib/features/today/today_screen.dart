@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -463,12 +464,12 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
       _dispenseRequestsInFlight.add(dispenseKey);
     });
     var succeeded = false;
-    var slotMarkedDispensed = false;
     final dependencies = DoseyAppScope.of(context);
     try {
-      await dependencies.carouselSlots.markDispensed(slot.id);
-      slotMarkedDispensed = true;
-      await dependencies.controller.requestDispense(doseId: doseId);
+      await CarouselDispenseCoordinator(
+        carouselSlots: dependencies.carouselSlots,
+        controller: dependencies.controller,
+      ).dispenseLoadedSlot(slotId: slot.id, doseId: doseId);
       succeeded = true;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -479,9 +480,6 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
         ),
       );
     } on Object catch (error) {
-      if (slotMarkedDispensed) {
-        await dependencies.carouselSlots.markLoaded(slot.id);
-      }
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
