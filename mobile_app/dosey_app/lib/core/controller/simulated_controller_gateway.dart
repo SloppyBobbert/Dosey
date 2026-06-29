@@ -3,10 +3,14 @@ import 'dart:async';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 
+typedef RobotModeAccess = FutureOr<bool> Function();
+
 class SimulatedControllerGateway implements ControllerGateway {
-  SimulatedControllerGateway(this._doseLog);
+  SimulatedControllerGateway(this._doseLog, {RobotModeAccess? canHostRobot})
+    : _canHostRobot = canHostRobot ?? _denyRobotMode;
 
   final DoseLogRepository _doseLog;
+  final RobotModeAccess _canHostRobot;
   final _controller = StreamController<ControllerSnapshot>.broadcast();
 
   ControllerSnapshot _snapshot = const ControllerSnapshot.disconnected();
@@ -32,6 +36,9 @@ class SimulatedControllerGateway implements ControllerGateway {
     if (!_snapshot.canRequestDispense) {
       throw StateError('Controller must be connected before dispense.');
     }
+    if (!await Future<bool>.value(_canHostRobot())) {
+      throw StateError('Robot Mode must be active before dispense.');
+    }
 
     await _doseLog.addEvent(
       DoseLogEvent.controllerDispenseSucceeded(
@@ -51,4 +58,6 @@ class SimulatedControllerGateway implements ControllerGateway {
     _snapshot = snapshot;
     _controller.add(snapshot);
   }
+
+  static bool _denyRobotMode() => false;
 }

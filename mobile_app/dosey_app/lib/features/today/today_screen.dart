@@ -1,9 +1,14 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
+import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
+import 'package:dosey_app/core/settings/current_device_platform.dart';
+import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:flutter/material.dart';
 
 class TodayScreen extends StatelessWidget {
@@ -41,9 +46,15 @@ class TodayScreen extends StatelessWidget {
                       const SizedBox(height: 12),
                       const _SafetyCard(),
                       const SizedBox(height: 12),
-                      _ReminderPreviewCard(
-                        schedules: schedules,
-                        prescriptionsById: prescriptionsById,
+                      StreamBuilder<List<DoseLogEvent>>(
+                        stream: dependencies.doseLog.watchEvents(),
+                        builder: (context, logSnapshot) =>
+                            _ScheduleTimelineCard(
+                              schedules: schedules,
+                              events:
+                                  logSnapshot.data ?? const <DoseLogEvent>[],
+                              prescriptionsById: prescriptionsById,
+                            ),
                       ),
                     ],
                   ),
@@ -116,9 +127,25 @@ class TodayScreen extends StatelessWidget {
     return false;
   }
 
+  static bool _hasEventKindForDose(
+    List<DoseLogEvent> events,
+    String doseId,
+    DoseLogEventKind kind,
+  ) {
+    for (final event in events) {
+      if (event.doseId == doseId && event.kind == kind) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static bool _isTerminalDoseEvent(DoseLogEvent event) {
     return switch (event.kind) {
       DoseLogEventKind.doseTakenConfirmed ||
+      DoseLogEventKind.doseAlreadyTaken ||
+      DoseLogEventKind.doseTakenEarly ||
+      DoseLogEventKind.doseTakenLate ||
       DoseLogEventKind.doseSkipped ||
       DoseLogEventKind.doseMissed => true,
       _ => false,
@@ -135,23 +162,34 @@ class TodayScreen extends StatelessWidget {
   static Future<void> _logDoseAction(
     BuildContext context,
     DoseLogEvent event,
-    String successMessage,
-  ) async {
+    String successMessage, {
+    CarouselSlot? retireLoadedSlot,
+  }) async {
     try {
-      await DoseyAppScope.of(context).doseLog.addEvent(event);
+      final dependencies = DoseyAppScope.of(context);
+      final retiresLoadedSlot =
+          retireLoadedSlot != null && _isTerminalDoseEvent(event);
+      if (retiresLoadedSlot) {
+        await dependencies.database.transaction(() async {
+          await dependencies.carouselSlots.markNeedsReview(retireLoadedSlot.id);
+          await dependencies.doseLog.addEvent(event);
+        });
+      } else {
+        await dependencies.doseLog.addEvent(event);
+      }
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(successMessage)));
+      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      messenger.showSnackBar(SnackBar(content: Text(successMessage)));
     } on Object catch (error) {
       if (!context.mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Dose action failed: $error')));
+      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Dose action failed: $error')),
+      );
     }
   }
 }
@@ -176,95 +214,364 @@ class _TodayDoseContent extends StatelessWidget {
             ? null
             : TodayScreen._doseIdForToday(currentSchedule.id);
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _TodayHeroCard(
-              onConfirmDoseTaken: () => TodayScreen._logDoseAction(
-                context,
-                DoseLogEvent.doseTakenConfirmed(
-                  doseId: currentDoseId ?? 'manual-confirmation',
-                  occurredAt: DateTime.now().toUtc(),
+        final dependencies = DoseyAppScope.of(context);
+
+        return StreamBuilder<List<CarouselSlot>>(
+          stream: currentSchedule == null
+              ? Stream<List<CarouselSlot>>.value(const <CarouselSlot>[])
+              : dependencies.carouselSlots.watchSlots(
+                  profileId: currentSchedule.profileId,
                 ),
-                'Dose confirmation logged.',
-              ),
-            ),
-            const SizedBox(height: 12),
-            _CurrentDoseSection(
-              events: events,
-              currentSchedule: currentSchedule,
-              currentDoseId: currentDoseId,
-              prescriptionsById: prescriptionsById,
-            ),
-          ],
+          builder: (context, slotSnapshot) {
+            final loadedSlot = currentSchedule == null
+                ? null
+                : _CurrentDoseSection.loadedSlotForSchedule(
+                    slotSnapshot.data ?? const <CarouselSlot>[],
+                    currentSchedule,
+                  );
+            final latestEvent = currentDoseId == null
+                ? null
+                : TodayScreen._latestEventForDose(events, currentDoseId);
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _TodayHeroCard(
+                  currentSchedule: currentSchedule,
+                  prescription: currentSchedule == null
+                      ? null
+                      : prescriptionsById[currentSchedule.prescriptionId],
+                  latestEvent: latestEvent,
+                  loadedSlot: loadedSlot,
+                  scheduledDoseCount: schedules
+                      .where((s) => s.isEnabled)
+                      .length,
+                  onConfirmDoseTaken: currentDoseId == null
+                      ? null
+                      : () => TodayScreen._logDoseAction(
+                          context,
+                          DoseLogEvent.doseTakenConfirmed(
+                            doseId: currentDoseId,
+                            occurredAt: DateTime.now().toUtc(),
+                          ),
+                          'Dose confirmation logged.',
+                          retireLoadedSlot: loadedSlot,
+                        ),
+                ),
+                const SizedBox(height: 12),
+                _CurrentDoseSection(
+                  events: events,
+                  currentSchedule: currentSchedule,
+                  currentDoseId: currentDoseId,
+                  prescriptionsById: prescriptionsById,
+                  loadedSlot: loadedSlot,
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 }
 
-class _CurrentDoseSection extends StatelessWidget {
+class _CurrentDoseSection extends StatefulWidget {
   const _CurrentDoseSection({
     required this.events,
     required this.currentSchedule,
     required this.currentDoseId,
     required this.prescriptionsById,
+    required this.loadedSlot,
   });
 
   final List<DoseLogEvent> events;
   final ReminderSchedule? currentSchedule;
   final String? currentDoseId;
   final Map<String, Prescription> prescriptionsById;
+  final CarouselSlot? loadedSlot;
+
+  @override
+  State<_CurrentDoseSection> createState() => _CurrentDoseSectionState();
+
+  static CarouselSlot? loadedSlotForSchedule(
+    List<CarouselSlot> slots,
+    ReminderSchedule schedule,
+  ) {
+    for (final slot in slots) {
+      if (slot.scheduleId == schedule.id &&
+          slot.status == CarouselSlotStatus.loaded) {
+        return slot;
+      }
+    }
+    return null;
+  }
+}
+
+class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
+  final Set<String> _dispenseRequestsInFlight = <String>{};
+
+  @override
+  void didUpdateWidget(_CurrentDoseSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentDoseId != widget.currentDoseId ||
+        oldWidget.loadedSlot?.id != widget.loadedSlot?.id ||
+        oldWidget.loadedSlot?.status != widget.loadedSlot?.status) {
+      _dispenseRequestsInFlight.clear();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final currentSchedule = this.currentSchedule;
-    final currentDoseId = this.currentDoseId;
+    final currentSchedule = widget.currentSchedule;
+    final currentDoseId = widget.currentDoseId;
     if (currentSchedule == null || currentDoseId == null) {
       return const SizedBox.shrink();
     }
-    final latestEvent = TodayScreen._latestEventForDose(events, currentDoseId);
-    return _CurrentDoseCard(
-      schedule: currentSchedule,
-      prescription: prescriptionsById[currentSchedule.prescriptionId],
-      latestEvent: latestEvent,
-      onConfirmTaken: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseTakenConfirmed(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Dose marked taken.',
-      ),
-      onSkipDose: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseSkipped(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'Dose skipped.',
-      ),
-      onMarkMissed: () => TodayScreen._logDoseAction(
-        context,
-        DoseLogEvent.doseMissed(
-          doseId: currentDoseId,
-          occurredAt: DateTime.now().toUtc(),
-        ),
-        'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-      ),
+    final latestEvent = TodayScreen._latestEventForDose(
+      widget.events,
+      currentDoseId,
     );
+    final hasDispenseSucceeded = TodayScreen._hasEventKindForDose(
+      widget.events,
+      currentDoseId,
+      DoseLogEventKind.controllerDispenseSucceeded,
+    );
+    final hasVisibleConfirmed = TodayScreen._hasEventKindForDose(
+      widget.events,
+      currentDoseId,
+      DoseLogEventKind.doseVisibleConfirmed,
+    );
+    final loadedSlot = widget.loadedSlot;
+    final dispenseKey = loadedSlot == null
+        ? null
+        : '${loadedSlot.id}:$currentDoseId';
+    final isDispenseInFlight =
+        dispenseKey != null && _dispenseRequestsInFlight.contains(dispenseKey);
+    VoidCallback? doseAction(Future<void> Function() action) {
+      if (isDispenseInFlight) return null;
+      return () {
+        if (dispenseKey != null &&
+            _dispenseRequestsInFlight.contains(dispenseKey)) {
+          return;
+        }
+        action();
+      };
+    }
+
+    final dependencies = DoseyAppScope.of(context);
+    return StreamBuilder<AppDeviceRole>(
+      stream: dependencies.settings.watchDeviceRole(),
+      builder: (context, roleSnapshot) {
+        return StreamBuilder<ControllerSnapshot>(
+          stream: dependencies.controller.watchController(),
+          builder: (context, controllerSnapshot) {
+            final controller =
+                controllerSnapshot.data ??
+                const ControllerSnapshot.disconnected();
+            final canDispense = _canRequestDispense(
+              roleSnapshot.data,
+              controller,
+            );
+            return _CurrentDoseCard(
+              schedule: currentSchedule,
+              prescription:
+                  widget.prescriptionsById[currentSchedule.prescriptionId],
+              latestEvent: latestEvent,
+              loadedSlot: widget.loadedSlot,
+              onDispenseLoadedSlot:
+                  !canDispense ||
+                      loadedSlot == null ||
+                      dispenseKey == null ||
+                      isDispenseInFlight
+                  ? null
+                  : () =>
+                        _dispenseLoadedSlot(context, loadedSlot, currentDoseId),
+              onSnoozeDose: doseAction(
+                () => TodayScreen._logDoseAction(
+                  context,
+                  DoseLogEvent.doseSnoozed(
+                    doseId: currentDoseId,
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                  'Snooze logged locally; reminder timing is unchanged.',
+                ),
+              ),
+              onConfirmTaken: doseAction(
+                () => TodayScreen._logDoseAction(
+                  context,
+                  DoseLogEvent.doseTakenConfirmed(
+                    doseId: currentDoseId,
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                  'Dose marked taken.',
+                  retireLoadedSlot: loadedSlot,
+                ),
+              ),
+              onAlreadyTaken: doseAction(
+                () => TodayScreen._logDoseAction(
+                  context,
+                  DoseLogEvent.doseAlreadyTaken(
+                    doseId: currentDoseId,
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                  'Already-taken dose logged.',
+                  retireLoadedSlot: loadedSlot,
+                ),
+              ),
+              onTakenEarly: doseAction(
+                () => TodayScreen._logDoseAction(
+                  context,
+                  DoseLogEvent.doseTakenEarly(
+                    doseId: currentDoseId,
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                  'Early dose logged.',
+                  retireLoadedSlot: loadedSlot,
+                ),
+              ),
+              onTakenLate: doseAction(
+                () => TodayScreen._logDoseAction(
+                  context,
+                  DoseLogEvent.doseTakenLate(
+                    doseId: currentDoseId,
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                  'Late dose logged.',
+                  retireLoadedSlot: loadedSlot,
+                ),
+              ),
+              onConfirmVisible: hasDispenseSucceeded && !hasVisibleConfirmed
+                  ? doseAction(
+                      () => TodayScreen._logDoseAction(
+                        context,
+                        DoseLogEvent.doseVisibleConfirmed(
+                          doseId: currentDoseId,
+                          occurredAt: DateTime.now().toUtc(),
+                        ),
+                        'Visible dose logged. Confirm taken only after the dose is taken.',
+                      ),
+                    )
+                  : null,
+              onAskCaregiver: doseAction(
+                () => TodayScreen._logDoseAction(
+                  context,
+                  DoseLogEvent.caregiverHelpRequested(
+                    doseId: currentDoseId,
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                  'Caregiver request noted locally. Contact your caregiver, pharmacist, or doctor if you are unsure what to do.',
+                ),
+              ),
+              onSkipDose: doseAction(
+                () => TodayScreen._logDoseAction(
+                  context,
+                  DoseLogEvent.doseSkipped(
+                    doseId: currentDoseId,
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                  'Dose skipped.',
+                  retireLoadedSlot: loadedSlot,
+                ),
+              ),
+              onMarkMissed: doseAction(
+                () => TodayScreen._logDoseAction(
+                  context,
+                  DoseLogEvent.doseMissed(
+                    doseId: currentDoseId,
+                    occurredAt: DateTime.now().toUtc(),
+                  ),
+                  'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+                  retireLoadedSlot: loadedSlot,
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  static bool _canRequestDispense(
+    AppDeviceRole? storedRole,
+    ControllerSnapshot controller,
+  ) {
+    final platform = currentAppDevicePlatform();
+    final role = storedRole != null && storedRole.isAllowedOn(platform)
+        ? storedRole
+        : AppDeviceRole.defaultFor(platform);
+    return role.canHostRobot && controller.canRequestDispense;
+  }
+
+  Future<void> _dispenseLoadedSlot(
+    BuildContext context,
+    CarouselSlot slot,
+    String doseId,
+  ) async {
+    final dispenseKey = '${slot.id}:$doseId';
+    if (_dispenseRequestsInFlight.contains(dispenseKey)) return;
+    setState(() {
+      _dispenseRequestsInFlight.add(dispenseKey);
+    });
+    var succeeded = false;
+    final dependencies = DoseyAppScope.of(context);
+    try {
+      await CarouselDispenseCoordinator(
+        carouselSlots: dependencies.carouselSlots,
+        controller: dependencies.controller,
+      ).dispenseLoadedSlot(slotId: slot.id, doseId: doseId);
+      succeeded = true;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Dispense command logged. Confirm taken only after the dose is verified.',
+          ),
+        ),
+      );
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Dispense failed: $error')));
+    } finally {
+      if (mounted && !succeeded) {
+        setState(() {
+          _dispenseRequestsInFlight.remove(dispenseKey);
+        });
+      }
+    }
   }
 }
 
 class _TodayHeroCard extends StatelessWidget {
-  const _TodayHeroCard({required this.onConfirmDoseTaken});
+  const _TodayHeroCard({
+    required this.currentSchedule,
+    required this.prescription,
+    required this.latestEvent,
+    required this.loadedSlot,
+    required this.scheduledDoseCount,
+    required this.onConfirmDoseTaken,
+  });
 
-  final VoidCallback onConfirmDoseTaken;
+  final ReminderSchedule? currentSchedule;
+  final Prescription? prescription;
+  final DoseLogEvent? latestEvent;
+  final CarouselSlot? loadedSlot;
+  final int scheduledDoseCount;
+  final VoidCallback? onConfirmDoseTaken;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final currentSchedule = this.currentSchedule;
+    final prescription = this.prescription;
+    final doseTitle = currentSchedule == null
+        ? 'Dosey is ready for your day'
+        : prescription?.name ?? currentSchedule.label;
+    final doseSubtitle = currentSchedule == null
+        ? 'Review reminders, keep prototype checks visible, and confirm doses only after you know they were taken.'
+        : '${currentSchedule.timeLabel} · ${prescription?.pillType.label ?? 'Scheduled dose'}';
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -293,7 +600,7 @@ class _TodayHeroCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Today',
+                        currentSchedule == null ? 'Today' : 'Next dose',
                         style: theme.textTheme.labelLarge?.copyWith(
                           color: colorScheme.onPrimaryContainer,
                           fontWeight: FontWeight.w700,
@@ -302,7 +609,7 @@ class _TodayHeroCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Dosey is ready for your day',
+                        doseTitle,
                         style: theme.textTheme.headlineSmall?.copyWith(
                           color: colorScheme.onPrimaryContainer,
                           fontWeight: FontWeight.w800,
@@ -311,11 +618,14 @@ class _TodayHeroCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Review reminders, keep prototype checks visible, and confirm doses only after you know they were taken.',
+                        doseSubtitle,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: colorScheme.onPrimaryContainer.withValues(
                             alpha: 0.78,
                           ),
+                          fontWeight: currentSchedule == null
+                              ? FontWeight.w400
+                              : FontWeight.w700,
                           height: 1.35,
                         ),
                       ),
@@ -331,7 +641,9 @@ class _TodayHeroCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(22),
                   ),
                   child: Icon(
-                    Icons.wb_sunny_outlined,
+                    currentSchedule == null
+                        ? Icons.wb_sunny_outlined
+                        : Icons.medication_outlined,
                     color: colorScheme.primary,
                     size: 30,
                   ),
@@ -339,31 +651,124 @@ class _TodayHeroCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 18),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: const [
-                _StatusPill(icon: Icons.phone_android, label: 'Local-only'),
-                _StatusPill(
-                  icon: Icons.science_outlined,
-                  label: 'Prototype-safe',
-                ),
-                _StatusPill(
-                  icon: Icons.check_circle_outline,
-                  label: 'Manual confirmation',
-                ),
-              ],
+            _TodayHeroStatusChips(
+              scheduledDoseCount: scheduledDoseCount,
+              hasActiveDose: currentSchedule != null,
+              latestEvent: latestEvent,
+              loadedSlot: loadedSlot,
             ),
             const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: onConfirmDoseTaken,
-              icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Confirm dose taken manually'),
-            ),
+            if (onConfirmDoseTaken != null)
+              FilledButton.icon(
+                onPressed: onConfirmDoseTaken,
+                icon: const Icon(Icons.check_circle_outline),
+                label: const Text('Confirm dose taken manually'),
+              ),
           ],
         ),
       ),
     );
+  }
+}
+
+class _TodayHeroStatusChips extends StatelessWidget {
+  const _TodayHeroStatusChips({
+    required this.scheduledDoseCount,
+    required this.hasActiveDose,
+    required this.latestEvent,
+    required this.loadedSlot,
+  });
+
+  final int scheduledDoseCount;
+  final bool hasActiveDose;
+  final DoseLogEvent? latestEvent;
+  final CarouselSlot? loadedSlot;
+
+  @override
+  Widget build(BuildContext context) {
+    final dependencies = DoseyAppScope.of(context);
+    return StreamBuilder<ControllerSnapshot>(
+      stream: dependencies.controller.watchController(),
+      builder: (context, controllerSnapshot) {
+        final controller =
+            controllerSnapshot.data ?? const ControllerSnapshot.disconnected();
+        return StreamBuilder<bool>(
+          stream: dependencies.settings.watchSafetyAcknowledged(),
+          builder: (context, safetySnapshot) {
+            final safetyAcknowledged = safetySnapshot.data ?? false;
+            return Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                const _StatusPill(
+                  icon: Icons.phone_android,
+                  label: 'Local-only',
+                ),
+                const _StatusPill(
+                  icon: Icons.science_outlined,
+                  label: 'Prototype-safe',
+                ),
+                const _StatusPill(
+                  icon: Icons.check_circle_outline,
+                  label: 'Manual confirmation',
+                ),
+                _StatusPill(
+                  icon: Icons.health_and_safety_outlined,
+                  label: safetyAcknowledged
+                      ? 'Safety acknowledged'
+                      : 'Safety to review',
+                ),
+                _StatusPill(
+                  icon: Icons.memory_outlined,
+                  label:
+                      controller.connectionState ==
+                          ControllerConnectionState.connected
+                      ? 'Controller connected'
+                      : 'Controller offline',
+                ),
+                _StatusPill(
+                  icon: hasActiveDose
+                      ? Icons.event_available_outlined
+                      : Icons.event_busy_outlined,
+                  label: hasActiveDose ? 'Active schedule' : 'No active dose',
+                ),
+                if (scheduledDoseCount > 0)
+                  _StatusPill(
+                    icon: Icons.timeline_outlined,
+                    label: '$scheduledDoseCount scheduled today',
+                  ),
+                if (loadedSlot != null)
+                  _StatusPill(
+                    icon: Icons.inventory_2_outlined,
+                    label: 'Loaded slot ${loadedSlot!.slotNumber}',
+                  ),
+                if (latestEvent != null)
+                  _StatusPill(
+                    icon: Icons.history_outlined,
+                    label: _latestEventLabel(latestEvent!),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  static String _latestEventLabel(DoseLogEvent event) {
+    return switch (event.kind) {
+      DoseLogEventKind.controllerDispenseSucceeded => 'Movement logged',
+      DoseLogEventKind.doseTakenConfirmed => 'Taken logged',
+      DoseLogEventKind.doseAlreadyTaken => 'Already taken logged',
+      DoseLogEventKind.doseTakenEarly => 'Taken early logged',
+      DoseLogEventKind.doseTakenLate => 'Taken late logged',
+      DoseLogEventKind.doseVisibleConfirmed => 'Visible logged',
+      DoseLogEventKind.doseSnoozed => 'Snoozed logged',
+      DoseLogEventKind.caregiverHelpRequested => 'Caregiver asked',
+      DoseLogEventKind.doseSkipped => 'Skipped logged',
+      DoseLogEventKind.doseMissed => 'Missed logged',
+      _ => 'Event logged',
+    };
   }
 }
 
@@ -372,7 +777,15 @@ class _CurrentDoseCard extends StatelessWidget {
     required this.schedule,
     required this.prescription,
     required this.latestEvent,
+    required this.loadedSlot,
+    required this.onDispenseLoadedSlot,
+    required this.onSnoozeDose,
     required this.onConfirmTaken,
+    required this.onAlreadyTaken,
+    required this.onTakenEarly,
+    required this.onTakenLate,
+    required this.onConfirmVisible,
+    required this.onAskCaregiver,
     required this.onSkipDose,
     required this.onMarkMissed,
   });
@@ -380,9 +793,17 @@ class _CurrentDoseCard extends StatelessWidget {
   final ReminderSchedule schedule;
   final Prescription? prescription;
   final DoseLogEvent? latestEvent;
-  final VoidCallback onConfirmTaken;
-  final VoidCallback onSkipDose;
-  final VoidCallback onMarkMissed;
+  final CarouselSlot? loadedSlot;
+  final VoidCallback? onDispenseLoadedSlot;
+  final VoidCallback? onSnoozeDose;
+  final VoidCallback? onConfirmTaken;
+  final VoidCallback? onAlreadyTaken;
+  final VoidCallback? onTakenEarly;
+  final VoidCallback? onTakenLate;
+  final VoidCallback? onConfirmVisible;
+  final VoidCallback? onAskCaregiver;
+  final VoidCallback? onSkipDose;
+  final VoidCallback? onMarkMissed;
 
   @override
   Widget build(BuildContext context) {
@@ -446,6 +867,43 @@ class _CurrentDoseCard extends StatelessWidget {
                   label: const Text('Confirm taken'),
                 ),
                 OutlinedButton.icon(
+                  onPressed: onAlreadyTaken,
+                  icon: const Icon(Icons.task_alt_outlined),
+                  label: const Text('Already taken'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onTakenEarly,
+                  icon: const Icon(Icons.fast_forward_outlined),
+                  label: const Text('Taken early'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onTakenLate,
+                  icon: const Icon(Icons.history_toggle_off_outlined),
+                  label: const Text('Taken late'),
+                ),
+                if (loadedSlot != null)
+                  FilledButton.tonalIcon(
+                    onPressed: onDispenseLoadedSlot,
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text('Dispense from slot ${loadedSlot!.slotNumber}'),
+                  ),
+                if (onConfirmVisible != null)
+                  FilledButton.tonalIcon(
+                    onPressed: onConfirmVisible,
+                    icon: const Icon(Icons.visibility_outlined),
+                    label: const Text('Dose visible'),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: onSnoozeDose,
+                  icon: const Icon(Icons.snooze_outlined),
+                  label: const Text('Log snooze'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: onAskCaregiver,
+                  icon: const Icon(Icons.support_agent_outlined),
+                  label: const Text('Ask caregiver'),
+                ),
+                OutlinedButton.icon(
                   onPressed: onSkipDose,
                   icon: const Icon(Icons.skip_next_outlined),
                   label: const Text('Skip dose'),
@@ -478,8 +936,33 @@ class _DoseStatusBanner extends StatelessWidget {
         Icons.check_circle_outline,
         'Confirmed taken',
       ),
+      DoseLogEventKind.doseAlreadyTaken => (
+        Icons.task_alt_outlined,
+        'Already taken',
+      ),
+      DoseLogEventKind.doseTakenEarly => (
+        Icons.fast_forward_outlined,
+        'Taken early',
+      ),
+      DoseLogEventKind.doseTakenLate => (
+        Icons.history_toggle_off_outlined,
+        'Taken late',
+      ),
+      DoseLogEventKind.doseVisibleConfirmed => (
+        Icons.visibility_outlined,
+        'Dose visible',
+      ),
+      DoseLogEventKind.doseSnoozed => (Icons.snooze_outlined, 'Snoozed'),
+      DoseLogEventKind.caregiverHelpRequested => (
+        Icons.support_agent_outlined,
+        'Caregiver asked',
+      ),
       DoseLogEventKind.doseSkipped => (Icons.skip_next_outlined, 'Skipped'),
       DoseLogEventKind.doseMissed => (Icons.schedule_outlined, 'Missed'),
+      DoseLogEventKind.controllerDispenseSucceeded => (
+        Icons.play_circle_outline,
+        'Dispense moved',
+      ),
       _ => (Icons.info_outline, 'Logged'),
     };
 
@@ -550,18 +1033,21 @@ class _SafetyCard extends StatelessWidget {
   }
 }
 
-class _ReminderPreviewCard extends StatelessWidget {
-  const _ReminderPreviewCard({
+class _ScheduleTimelineCard extends StatelessWidget {
+  const _ScheduleTimelineCard({
     required this.schedules,
+    required this.events,
     required this.prescriptionsById,
   });
 
   final List<ReminderSchedule> schedules;
+  final List<DoseLogEvent> events;
   final Map<String, Prescription> prescriptionsById;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final timelineRows = _timelineRows(schedules, events).take(4).toList();
 
     return Card(
       child: Padding(
@@ -569,25 +1055,69 @@ class _ReminderPreviewCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Scheduled reminders',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Next schedule timeline',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Scheduled reminders',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const _TimelineHeaderChip(),
+              ],
             ),
             const SizedBox(height: 10),
-            if (schedules.isEmpty)
+            if (timelineRows.isEmpty)
               const _EmptyReminderState()
             else
-              for (final schedule in schedules.take(3))
-                _ReminderRow(
-                  schedule: schedule,
-                  prescription: prescriptionsById[schedule.prescriptionId],
+              for (final row in timelineRows)
+                _TimelineRow(
+                  statusLabel: row.statusLabel,
+                  schedule: row.schedule,
+                  prescription: prescriptionsById[row.schedule.prescriptionId],
                 ),
           ],
         ),
       ),
     );
+  }
+
+  static Iterable<({ReminderSchedule schedule, String statusLabel})>
+  _timelineRows(
+    Iterable<ReminderSchedule> schedules,
+    List<DoseLogEvent> events,
+  ) sync* {
+    var foundFirstEnabled = false;
+    for (final schedule in schedules) {
+      final doseId = TodayScreen._doseIdForToday(schedule.id);
+      if (TodayScreen._hasTerminalEventForDose(events, doseId)) {
+        continue;
+      }
+      if (!schedule.isEnabled) {
+        yield (schedule: schedule, statusLabel: 'Reminder paused');
+        continue;
+      }
+      if (!foundFirstEnabled) {
+        foundFirstEnabled = true;
+        yield (schedule: schedule, statusLabel: 'Now watching');
+        continue;
+      }
+      yield (schedule: schedule, statusLabel: 'Later today');
+    }
   }
 }
 
@@ -630,9 +1160,39 @@ class _EmptyReminderState extends StatelessWidget {
   }
 }
 
-class _ReminderRow extends StatelessWidget {
-  const _ReminderRow({required this.schedule, required this.prescription});
+class _TimelineHeaderChip extends StatelessWidget {
+  const _TimelineHeaderChip();
 
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        'Up next',
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: colorScheme.onPrimaryContainer,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
+class _TimelineRow extends StatelessWidget {
+  const _TimelineRow({
+    required this.statusLabel,
+    required this.schedule,
+    required this.prescription,
+  });
+
+  final String statusLabel;
   final ReminderSchedule schedule;
   final Prescription? prescription;
 
@@ -652,6 +1212,24 @@ class _ReminderRow extends StatelessWidget {
         ),
         child: Row(
           children: [
+            Column(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: colorScheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                Container(
+                  width: 2,
+                  height: 52,
+                  color: colorScheme.outlineVariant,
+                ),
+              ],
+            ),
+            const SizedBox(width: 12),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               decoration: BoxDecoration(
@@ -672,9 +1250,25 @@ class _ReminderRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
+                    statusLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colorScheme.primary,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
                     scheduleName,
                     style: theme.textTheme.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    schedule.isEnabled ? 'Enabled reminder' : 'Reminder paused',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                   if (prescription != null) ...[

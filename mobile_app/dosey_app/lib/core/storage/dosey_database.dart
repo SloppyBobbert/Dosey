@@ -60,6 +60,29 @@ class Prescriptions extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('CarouselSlotRow')
+class CarouselSlots extends Table {
+  TextColumn get id => text()();
+  IntColumn get slotNumber => integer()();
+  TextColumn get prescriptionId => text()();
+  TextColumn get scheduleId => text()();
+  TextColumn get profileId => text()();
+  TextColumn get status => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (slot_number > 0)',
+    "CHECK (status IN ('assigned', 'loaded', 'dispensed', 'needs_review'))",
+    'UNIQUE (profile_id, slot_number)',
+    'UNIQUE (profile_id, schedule_id)',
+  ];
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('AuthSessionRow')
 class AuthSessions extends Table {
   TextColumn get id => text()();
@@ -92,6 +115,7 @@ class DoseLogEvents extends Table {
     ReminderSchedules,
     Prescriptions,
     ScheduleProfiles,
+    CarouselSlots,
     AuthSessions,
     DoseLogEvents,
   ],
@@ -110,7 +134,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -151,8 +175,38 @@ class DoseyDatabase extends _$DoseyDatabase {
         }
         await _seedDefaultScheduleProfile();
       }
+      if (from < 8) {
+        await migrator.createTable(carouselSlots);
+      }
+      if (from < 9) {
+        await _createDoseLogEventsIfMissing();
+      }
+      if (from >= 8 && from < 9) {
+        await _normalizeLegacyCarouselSlotStatuses();
+        await migrator.alterTable(TableMigration(carouselSlots));
+      }
     },
   );
+
+  Future<void> _createDoseLogEventsIfMissing() {
+    return customStatement('''
+      CREATE TABLE IF NOT EXISTS dose_log_events (
+        id TEXT NOT NULL PRIMARY KEY,
+        kind TEXT NOT NULL,
+        dose_id TEXT NOT NULL,
+        occurred_at INTEGER NOT NULL,
+        marks_dose_taken INTEGER NOT NULL CHECK (marks_dose_taken IN (0, 1))
+      );
+    ''');
+  }
+
+  Future<void> _normalizeLegacyCarouselSlotStatuses() {
+    return customStatement('''
+      UPDATE carousel_slots
+      SET status = 'needs_review'
+      WHERE status NOT IN ('assigned', 'loaded', 'dispensed', 'needs_review');
+    ''');
+  }
 
   Future<void> _seedOnboardingCompleted({required bool completed}) async {
     await into(appSettings).insert(

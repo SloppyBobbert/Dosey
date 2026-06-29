@@ -1553,6 +1553,525 @@ class ScheduleProfilesCompanion extends UpdateCompanion<ScheduleProfileRow> {
   }
 }
 
+class $CarouselSlotsTable extends CarouselSlots
+    with TableInfo<$CarouselSlotsTable, CarouselSlotRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CarouselSlotsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _slotNumberMeta = const VerificationMeta(
+    'slotNumber',
+  );
+  @override
+  late final GeneratedColumn<int> slotNumber = GeneratedColumn<int>(
+    'slot_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _prescriptionIdMeta = const VerificationMeta(
+    'prescriptionId',
+  );
+  @override
+  late final GeneratedColumn<String> prescriptionId = GeneratedColumn<String>(
+    'prescription_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scheduleIdMeta = const VerificationMeta(
+    'scheduleId',
+  );
+  @override
+  late final GeneratedColumn<String> scheduleId = GeneratedColumn<String>(
+    'schedule_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _profileIdMeta = const VerificationMeta(
+    'profileId',
+  );
+  @override
+  late final GeneratedColumn<String> profileId = GeneratedColumn<String>(
+    'profile_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    slotNumber,
+    prescriptionId,
+    scheduleId,
+    profileId,
+    status,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'carousel_slots';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CarouselSlotRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('slot_number')) {
+      context.handle(
+        _slotNumberMeta,
+        slotNumber.isAcceptableOrUnknown(data['slot_number']!, _slotNumberMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_slotNumberMeta);
+    }
+    if (data.containsKey('prescription_id')) {
+      context.handle(
+        _prescriptionIdMeta,
+        prescriptionId.isAcceptableOrUnknown(
+          data['prescription_id']!,
+          _prescriptionIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_prescriptionIdMeta);
+    }
+    if (data.containsKey('schedule_id')) {
+      context.handle(
+        _scheduleIdMeta,
+        scheduleId.isAcceptableOrUnknown(data['schedule_id']!, _scheduleIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_scheduleIdMeta);
+    }
+    if (data.containsKey('profile_id')) {
+      context.handle(
+        _profileIdMeta,
+        profileId.isAcceptableOrUnknown(data['profile_id']!, _profileIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_profileIdMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CarouselSlotRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CarouselSlotRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      slotNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}slot_number'],
+      )!,
+      prescriptionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prescription_id'],
+      )!,
+      scheduleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}schedule_id'],
+      )!,
+      profileId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}profile_id'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CarouselSlotsTable createAlias(String alias) {
+    return $CarouselSlotsTable(attachedDatabase, alias);
+  }
+}
+
+class CarouselSlotRow extends DataClass implements Insertable<CarouselSlotRow> {
+  final String id;
+  final int slotNumber;
+  final String prescriptionId;
+  final String scheduleId;
+  final String profileId;
+  final String status;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const CarouselSlotRow({
+    required this.id,
+    required this.slotNumber,
+    required this.prescriptionId,
+    required this.scheduleId,
+    required this.profileId,
+    required this.status,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['slot_number'] = Variable<int>(slotNumber);
+    map['prescription_id'] = Variable<String>(prescriptionId);
+    map['schedule_id'] = Variable<String>(scheduleId);
+    map['profile_id'] = Variable<String>(profileId);
+    map['status'] = Variable<String>(status);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CarouselSlotsCompanion toCompanion(bool nullToAbsent) {
+    return CarouselSlotsCompanion(
+      id: Value(id),
+      slotNumber: Value(slotNumber),
+      prescriptionId: Value(prescriptionId),
+      scheduleId: Value(scheduleId),
+      profileId: Value(profileId),
+      status: Value(status),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CarouselSlotRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CarouselSlotRow(
+      id: serializer.fromJson<String>(json['id']),
+      slotNumber: serializer.fromJson<int>(json['slotNumber']),
+      prescriptionId: serializer.fromJson<String>(json['prescriptionId']),
+      scheduleId: serializer.fromJson<String>(json['scheduleId']),
+      profileId: serializer.fromJson<String>(json['profileId']),
+      status: serializer.fromJson<String>(json['status']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'slotNumber': serializer.toJson<int>(slotNumber),
+      'prescriptionId': serializer.toJson<String>(prescriptionId),
+      'scheduleId': serializer.toJson<String>(scheduleId),
+      'profileId': serializer.toJson<String>(profileId),
+      'status': serializer.toJson<String>(status),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CarouselSlotRow copyWith({
+    String? id,
+    int? slotNumber,
+    String? prescriptionId,
+    String? scheduleId,
+    String? profileId,
+    String? status,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => CarouselSlotRow(
+    id: id ?? this.id,
+    slotNumber: slotNumber ?? this.slotNumber,
+    prescriptionId: prescriptionId ?? this.prescriptionId,
+    scheduleId: scheduleId ?? this.scheduleId,
+    profileId: profileId ?? this.profileId,
+    status: status ?? this.status,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CarouselSlotRow copyWithCompanion(CarouselSlotsCompanion data) {
+    return CarouselSlotRow(
+      id: data.id.present ? data.id.value : this.id,
+      slotNumber: data.slotNumber.present
+          ? data.slotNumber.value
+          : this.slotNumber,
+      prescriptionId: data.prescriptionId.present
+          ? data.prescriptionId.value
+          : this.prescriptionId,
+      scheduleId: data.scheduleId.present
+          ? data.scheduleId.value
+          : this.scheduleId,
+      profileId: data.profileId.present ? data.profileId.value : this.profileId,
+      status: data.status.present ? data.status.value : this.status,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CarouselSlotRow(')
+          ..write('id: $id, ')
+          ..write('slotNumber: $slotNumber, ')
+          ..write('prescriptionId: $prescriptionId, ')
+          ..write('scheduleId: $scheduleId, ')
+          ..write('profileId: $profileId, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    slotNumber,
+    prescriptionId,
+    scheduleId,
+    profileId,
+    status,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CarouselSlotRow &&
+          other.id == this.id &&
+          other.slotNumber == this.slotNumber &&
+          other.prescriptionId == this.prescriptionId &&
+          other.scheduleId == this.scheduleId &&
+          other.profileId == this.profileId &&
+          other.status == this.status &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CarouselSlotsCompanion extends UpdateCompanion<CarouselSlotRow> {
+  final Value<String> id;
+  final Value<int> slotNumber;
+  final Value<String> prescriptionId;
+  final Value<String> scheduleId;
+  final Value<String> profileId;
+  final Value<String> status;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const CarouselSlotsCompanion({
+    this.id = const Value.absent(),
+    this.slotNumber = const Value.absent(),
+    this.prescriptionId = const Value.absent(),
+    this.scheduleId = const Value.absent(),
+    this.profileId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CarouselSlotsCompanion.insert({
+    required String id,
+    required int slotNumber,
+    required String prescriptionId,
+    required String scheduleId,
+    required String profileId,
+    required String status,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       slotNumber = Value(slotNumber),
+       prescriptionId = Value(prescriptionId),
+       scheduleId = Value(scheduleId),
+       profileId = Value(profileId),
+       status = Value(status),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<CarouselSlotRow> custom({
+    Expression<String>? id,
+    Expression<int>? slotNumber,
+    Expression<String>? prescriptionId,
+    Expression<String>? scheduleId,
+    Expression<String>? profileId,
+    Expression<String>? status,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (slotNumber != null) 'slot_number': slotNumber,
+      if (prescriptionId != null) 'prescription_id': prescriptionId,
+      if (scheduleId != null) 'schedule_id': scheduleId,
+      if (profileId != null) 'profile_id': profileId,
+      if (status != null) 'status': status,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CarouselSlotsCompanion copyWith({
+    Value<String>? id,
+    Value<int>? slotNumber,
+    Value<String>? prescriptionId,
+    Value<String>? scheduleId,
+    Value<String>? profileId,
+    Value<String>? status,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return CarouselSlotsCompanion(
+      id: id ?? this.id,
+      slotNumber: slotNumber ?? this.slotNumber,
+      prescriptionId: prescriptionId ?? this.prescriptionId,
+      scheduleId: scheduleId ?? this.scheduleId,
+      profileId: profileId ?? this.profileId,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (slotNumber.present) {
+      map['slot_number'] = Variable<int>(slotNumber.value);
+    }
+    if (prescriptionId.present) {
+      map['prescription_id'] = Variable<String>(prescriptionId.value);
+    }
+    if (scheduleId.present) {
+      map['schedule_id'] = Variable<String>(scheduleId.value);
+    }
+    if (profileId.present) {
+      map['profile_id'] = Variable<String>(profileId.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CarouselSlotsCompanion(')
+          ..write('id: $id, ')
+          ..write('slotNumber: $slotNumber, ')
+          ..write('prescriptionId: $prescriptionId, ')
+          ..write('scheduleId: $scheduleId, ')
+          ..write('profileId: $profileId, ')
+          ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AuthSessionsTable extends AuthSessions
     with TableInfo<$AuthSessionsTable, AuthSessionRow> {
   @override
@@ -2398,6 +2917,7 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
   late final $ScheduleProfilesTable scheduleProfiles = $ScheduleProfilesTable(
     this,
   );
+  late final $CarouselSlotsTable carouselSlots = $CarouselSlotsTable(this);
   late final $AuthSessionsTable authSessions = $AuthSessionsTable(this);
   late final $DoseLogEventsTable doseLogEvents = $DoseLogEventsTable(this);
   @override
@@ -2409,6 +2929,7 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     reminderSchedules,
     prescriptions,
     scheduleProfiles,
+    carouselSlots,
     authSessions,
     doseLogEvents,
   ];
@@ -3283,6 +3804,275 @@ typedef $$ScheduleProfilesTableProcessedTableManager =
       ScheduleProfileRow,
       PrefetchHooks Function()
     >;
+typedef $$CarouselSlotsTableCreateCompanionBuilder =
+    CarouselSlotsCompanion Function({
+      required String id,
+      required int slotNumber,
+      required String prescriptionId,
+      required String scheduleId,
+      required String profileId,
+      required String status,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$CarouselSlotsTableUpdateCompanionBuilder =
+    CarouselSlotsCompanion Function({
+      Value<String> id,
+      Value<int> slotNumber,
+      Value<String> prescriptionId,
+      Value<String> scheduleId,
+      Value<String> profileId,
+      Value<String> status,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$CarouselSlotsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $CarouselSlotsTable> {
+  $$CarouselSlotsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get slotNumber => $composableBuilder(
+    column: $table.slotNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prescriptionId => $composableBuilder(
+    column: $table.prescriptionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scheduleId => $composableBuilder(
+    column: $table.scheduleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CarouselSlotsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $CarouselSlotsTable> {
+  $$CarouselSlotsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get slotNumber => $composableBuilder(
+    column: $table.slotNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get prescriptionId => $composableBuilder(
+    column: $table.prescriptionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scheduleId => $composableBuilder(
+    column: $table.scheduleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CarouselSlotsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $CarouselSlotsTable> {
+  $$CarouselSlotsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get slotNumber => $composableBuilder(
+    column: $table.slotNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get prescriptionId => $composableBuilder(
+    column: $table.prescriptionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get scheduleId => $composableBuilder(
+    column: $table.scheduleId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get profileId =>
+      $composableBuilder(column: $table.profileId, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CarouselSlotsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $CarouselSlotsTable,
+          CarouselSlotRow,
+          $$CarouselSlotsTableFilterComposer,
+          $$CarouselSlotsTableOrderingComposer,
+          $$CarouselSlotsTableAnnotationComposer,
+          $$CarouselSlotsTableCreateCompanionBuilder,
+          $$CarouselSlotsTableUpdateCompanionBuilder,
+          (
+            CarouselSlotRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $CarouselSlotsTable,
+              CarouselSlotRow
+            >,
+          ),
+          CarouselSlotRow,
+          PrefetchHooks Function()
+        > {
+  $$CarouselSlotsTableTableManager(
+    _$DoseyDatabase db,
+    $CarouselSlotsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CarouselSlotsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CarouselSlotsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CarouselSlotsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<int> slotNumber = const Value.absent(),
+                Value<String> prescriptionId = const Value.absent(),
+                Value<String> scheduleId = const Value.absent(),
+                Value<String> profileId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CarouselSlotsCompanion(
+                id: id,
+                slotNumber: slotNumber,
+                prescriptionId: prescriptionId,
+                scheduleId: scheduleId,
+                profileId: profileId,
+                status: status,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required int slotNumber,
+                required String prescriptionId,
+                required String scheduleId,
+                required String profileId,
+                required String status,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CarouselSlotsCompanion.insert(
+                id: id,
+                slotNumber: slotNumber,
+                prescriptionId: prescriptionId,
+                scheduleId: scheduleId,
+                profileId: profileId,
+                status: status,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CarouselSlotsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $CarouselSlotsTable,
+      CarouselSlotRow,
+      $$CarouselSlotsTableFilterComposer,
+      $$CarouselSlotsTableOrderingComposer,
+      $$CarouselSlotsTableAnnotationComposer,
+      $$CarouselSlotsTableCreateCompanionBuilder,
+      $$CarouselSlotsTableUpdateCompanionBuilder,
+      (
+        CarouselSlotRow,
+        BaseReferences<_$DoseyDatabase, $CarouselSlotsTable, CarouselSlotRow>,
+      ),
+      CarouselSlotRow,
+      PrefetchHooks Function()
+    >;
 typedef $$AuthSessionsTableCreateCompanionBuilder =
     AuthSessionsCompanion Function({
       required String id,
@@ -3745,6 +4535,8 @@ class $DoseyDatabaseManager {
       $$PrescriptionsTableTableManager(_db, _db.prescriptions);
   $$ScheduleProfilesTableTableManager get scheduleProfiles =>
       $$ScheduleProfilesTableTableManager(_db, _db.scheduleProfiles);
+  $$CarouselSlotsTableTableManager get carouselSlots =>
+      $$CarouselSlotsTableTableManager(_db, _db.carouselSlots);
   $$AuthSessionsTableTableManager get authSessions =>
       $$AuthSessionsTableTableManager(_db, _db.authSessions);
   $$DoseLogEventsTableTableManager get doseLogEvents =>

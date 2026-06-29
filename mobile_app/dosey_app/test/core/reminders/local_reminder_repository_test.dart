@@ -1,3 +1,5 @@
+import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -177,6 +179,129 @@ void main() {
 
     expect(await repository.watchSchedules().first, isEmpty);
   });
+
+  test('local reminder repository deletes linked carousel slots', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalReminderRepository(database);
+    final now = DateTime.utc(2026, 6, 9, 8);
+
+    await repository.upsertSchedule(
+      ReminderSchedule(
+        id: 'morning',
+        label: 'Morning dose',
+        prescriptionId: 'vitamin-d',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await LocalCarouselSlotRepository(database).assignSlot(
+      CarouselSlot(
+        id: 'slot-1',
+        slotNumber: 1,
+        prescriptionId: 'vitamin-d',
+        scheduleId: 'morning',
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.loaded,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    await repository.deleteSchedule('morning');
+
+    expect(await repository.watchSchedules().first, isEmpty);
+    expect(await database.select(database.carouselSlots).get(), isEmpty);
+  });
+
+  test(
+    'local reminder repository clears carousel slots when prescription changes',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalReminderRepository(database);
+      final now = DateTime.utc(2026, 6, 9, 8);
+
+      await repository.upsertSchedule(
+        ReminderSchedule(
+          id: 'morning',
+          label: 'Vitamin D',
+          prescriptionId: 'vitamin-d',
+          hour: 8,
+          minute: 30,
+          isEnabled: true,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await repository.upsertSchedule(
+        ReminderSchedule(
+          id: 'noon',
+          label: 'Allergy pill',
+          prescriptionId: 'allergy-pill',
+          hour: 12,
+          minute: 0,
+          isEnabled: true,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      final carouselSlots = LocalCarouselSlotRepository(database);
+      await carouselSlots.assignSlot(
+        CarouselSlot(
+          id: 'slot-1',
+          slotNumber: 1,
+          prescriptionId: 'vitamin-d',
+          scheduleId: 'morning',
+          profileId: ReminderSchedule.defaultProfileId,
+          status: CarouselSlotStatus.loaded,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+      await carouselSlots.assignSlot(
+        CarouselSlot(
+          id: 'slot-2',
+          slotNumber: 2,
+          prescriptionId: 'allergy-pill',
+          scheduleId: 'noon',
+          profileId: ReminderSchedule.defaultProfileId,
+          status: CarouselSlotStatus.loaded,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      await repository.upsertSchedule(
+        ReminderSchedule(
+          id: 'morning',
+          label: 'Allergy pill',
+          prescriptionId: 'allergy-pill',
+          hour: 8,
+          minute: 30,
+          isEnabled: true,
+          createdAt: now,
+          updatedAt: now.add(const Duration(minutes: 1)),
+        ),
+      );
+
+      final schedules = await repository.watchSchedules().first;
+      expect(schedules, hasLength(2));
+      final schedule = schedules.singleWhere(
+        (schedule) => schedule.id == 'morning',
+      );
+      expect(schedule.prescriptionId, 'allergy-pill');
+
+      final slots = await database.select(database.carouselSlots).get();
+      expect(slots, hasLength(1));
+      expect(slots.single.id, 'slot-2');
+      expect(slots.single.scheduleId, 'noon');
+      expect(slots.single.prescriptionId, 'allergy-pill');
+    },
+  );
 
   test('local reminder repository rejects invalid reminder times', () async {
     final database = DoseyDatabase.inMemory();

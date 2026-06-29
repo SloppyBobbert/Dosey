@@ -46,6 +46,9 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
   Future<void> deletePrescription(String id) {
     return _database.transaction(() async {
       await (_database.delete(
+        _database.carouselSlots,
+      )..where((slot) => slot.prescriptionId.equals(id))).go();
+      await (_database.delete(
         _database.reminderSchedules,
       )..where((schedule) => schedule.prescriptionId.equals(id))).go();
       await (_database.delete(

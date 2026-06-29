@@ -32,31 +32,14 @@ class PrescriptionsScreen extends StatelessWidget {
                 return ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Prescriptions',
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        FilledButton.icon(
-                          onPressed: () =>
-                              _showPrescriptionSheet(context, prescriptions),
-                          icon: const Icon(Icons.add),
-                          label: const Text('Add prescription'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Enter what is on your prescription label.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Dosey does not verify prescriptions or identify pills.',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    _PrescriptionHeroCard(
+                      prescriptionCount: items.length,
+                      scheduledPrescriptionCount: _scheduledPrescriptionCount(
+                        items,
+                        schedules,
+                      ),
+                      onAddPrescription: () =>
+                          _showPrescriptionSheet(context, prescriptions),
                     ),
                     const SizedBox(height: 16),
                     if (items.isEmpty)
@@ -140,6 +123,18 @@ class PrescriptionsScreen extends StatelessWidget {
         : profiles.first.id;
   }
 
+  static int _scheduledPrescriptionCount(
+    List<Prescription> prescriptions,
+    List<ReminderSchedule> schedules,
+  ) {
+    final prescriptionIds = prescriptions.map((item) => item.id).toSet();
+    return schedules
+        .where((schedule) => prescriptionIds.contains(schedule.prescriptionId))
+        .map((schedule) => schedule.prescriptionId)
+        .toSet()
+        .length;
+  }
+
   static List<_PrescriptionScheduleDetail> _profileDetailsFor(
     List<ReminderSchedule> schedules,
     List<ScheduleProfile> profiles,
@@ -192,6 +187,146 @@ class PrescriptionsScreen extends StatelessWidget {
       builder: (context) => _PrescriptionSheet(
         prescriptions: prescriptions,
         prescription: prescription,
+      ),
+    );
+  }
+}
+
+class _PrescriptionHeroCard extends StatelessWidget {
+  const _PrescriptionHeroCard({
+    required this.prescriptionCount,
+    required this.scheduledPrescriptionCount,
+    required this.onAddPrescription,
+  });
+
+  final int prescriptionCount;
+  final int scheduledPrescriptionCount;
+  final VoidCallback onAddPrescription;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Card(
+      color: colorScheme.secondaryContainer,
+      elevation: 0,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Medication cabinet',
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: colorScheme.onSecondaryContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Prescriptions',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          color: colorScheme.onSecondaryContainer,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: onAddPrescription,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add prescription'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Enter what is on your prescription label.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSecondaryContainer.withValues(alpha: 0.78),
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Dosey does not verify prescriptions or identify pills.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: colorScheme.onSecondaryContainer.withValues(alpha: 0.78),
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _PrescriptionHeroChip(
+                  icon: Icons.medication_outlined,
+                  label: '$prescriptionCount entered',
+                ),
+                _PrescriptionHeroChip(
+                  icon: Icons.event_available_outlined,
+                  label: '$scheduledPrescriptionCount scheduled',
+                ),
+                const _PrescriptionHeroChip(
+                  icon: Icons.route_outlined,
+                  label: 'Feeds schedule builder',
+                ),
+                const _PrescriptionHeroChip(
+                  icon: Icons.fact_check_outlined,
+                  label: 'Local label reference',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PrescriptionHeroChip extends StatelessWidget {
+  const _PrescriptionHeroChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withValues(alpha: 0.76),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: colorScheme.primary),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: colorScheme.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }

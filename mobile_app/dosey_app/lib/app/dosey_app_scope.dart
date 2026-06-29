@@ -5,6 +5,7 @@ import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/bluetooth/flutter_blue_plus_ble_gateway.dart';
+import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_plus_gateway.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
@@ -52,19 +53,31 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     _ownsDatabase = widget.database == null;
     final doseLog = DriftDoseLogRepository(_database);
     final localAuth = LocalAuthRepository(_database);
+    final settings = LocalAppSettingsRepository(
+      _database,
+      defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
+    );
     _dependencies = DoseyAppDependencies(
       database: _database,
-      settings: LocalAppSettingsRepository(
-        _database,
-        defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
-      ),
+      settings: settings,
       prescriptions: LocalPrescriptionRepository(_database),
       scheduleProfiles: LocalScheduleProfileRepository(_database),
       reminders: LocalReminderRepository(_database),
+      carouselSlots: LocalCarouselSlotRepository(_database),
       doseLog: doseLog,
       localAuth: localAuth,
       auth: AppAuthService(localAuth: localAuth),
-      controller: SimulatedControllerGateway(doseLog),
+      controller: SimulatedControllerGateway(
+        doseLog,
+        canHostRobot: () async {
+          final platform = currentAppDevicePlatform();
+          final storedRole = await settings.getDeviceRole();
+          final role = storedRole.isAllowedOn(platform)
+              ? storedRole
+              : AppDeviceRole.defaultFor(platform);
+          return role.canHostRobot;
+        },
+      ),
       ble: FlutterBluePlusBleGateway(),
       connectivity: ConnectivityPlusGateway(),
       reminderScheduler: FlutterLocalNotificationScheduler(),
@@ -98,6 +111,7 @@ class DoseyAppDependencies {
     required this.prescriptions,
     required this.scheduleProfiles,
     required this.reminders,
+    required this.carouselSlots,
     required this.doseLog,
     required this.localAuth,
     required this.auth,
@@ -113,6 +127,7 @@ class DoseyAppDependencies {
   final LocalPrescriptionRepository prescriptions;
   final LocalScheduleProfileRepository scheduleProfiles;
   final LocalReminderRepository reminders;
+  final LocalCarouselSlotRepository carouselSlots;
   final DriftDoseLogRepository doseLog;
   final LocalAuthRepository localAuth;
   final AuthService auth;

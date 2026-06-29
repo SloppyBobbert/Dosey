@@ -1,3 +1,5 @@
+import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -90,10 +92,23 @@ void main() {
         updatedAt: now,
       ),
     );
+    await LocalCarouselSlotRepository(database).assignSlot(
+      CarouselSlot(
+        id: 'slot-1',
+        slotNumber: 1,
+        prescriptionId: 'vitamin-d',
+        scheduleId: 'vitamin-d-morning',
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.loaded,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
 
     await prescriptions.deletePrescription('vitamin-d');
 
     expect(await reminders.watchSchedules().first, isEmpty);
+    expect(await database.select(database.carouselSlots).get(), isEmpty);
   });
 
   test('local prescription repository rejects blank names', () async {

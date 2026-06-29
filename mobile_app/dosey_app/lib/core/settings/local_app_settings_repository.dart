@@ -24,6 +24,17 @@ class LocalAppSettingsRepository {
     });
   }
 
+  Future<AppDeviceRole> getDeviceRole() async {
+    final query = _database.select(_database.appSettings)
+      ..where((setting) => setting.key.equals(_deviceRoleKey));
+    final setting = await query.getSingleOrNull();
+    if (setting == null) {
+      return defaultRole;
+    }
+
+    return AppDeviceRole.fromStorageValue(setting.value) ?? defaultRole;
+  }
+
   Future<void> setDeviceRole(AppDeviceRole role) {
     return _setValue(_deviceRoleKey, role.storageValue);
   }

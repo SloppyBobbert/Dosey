@@ -8,19 +8,21 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 
 | Item | Status |
 | --- | --- |
-| App shell | Today, Reminders, Controller, Log, Settings |
+| App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, Settings, plus profile menu and active section title |
 | Local storage | Drift/SQLite on the phone app only |
-| Reminders | Local add/edit/delete and enabled state |
+| Prescriptions and schedules | Local prescriptions, schedule profiles, schedule editing, and enabled state |
 | Auth | Google + Apple wrappers, no backend yet |
-| Controller | Simulator plus BLE foundation only; protocol incomplete |
+| Carousel and controller | Polished loading-bay and hardware-bench views, Daviky slot loading workflow, simulator, and BLE foundation only; real protocol incomplete |
 | Builds | Android debug APK and iOS no-codesign debug build run locally |
 
 ## Current app
 
-- Flutter/Dart app shell with Today, Reminders, Controller, Log, and Settings tabs.
-- Safety-first home/settings copy and safety acknowledgement storage.
-- Local Drift/SQLite database for app settings, reminder schedules, cached auth state, and dose logs.
-- Simple local reminder add/edit/delete controls with enabled/disabled state.
+- Flutter/Dart app shell with Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings tabs, plus a profile menu and active section title in the top app bar.
+- Safety-first home/settings copy, profile/account settings, profile menu shortcuts, and safety acknowledgement storage.
+- Polished dashboard cards for the core local workflow: medication cabinet, routine builder, Today next-dose timeline that skips locally completed, skipped, or missed doses, Carousel loading bay, Controller hardware bench, and local dose-history audit trail.
+- Local Drift/SQLite database for app settings, prescriptions, schedule profiles, reminder schedules, carousel slots, cached auth state, and dose logs.
+- Local prescription and schedule editing with schedule profiles, enabled/disabled state, and duplicate-time checks.
+- Daviky carousel loading workflow that assigns schedules to slots, marks slots loaded, shows loaded/ready counts, disables dispense buttons while the controller is offline, and logs dispense movement separately from taken confirmation.
 - Device roles: Android robot phone, Android personal phone, and iOS personal phone only.
 - `flutter_blue_plus` BLE foundation behind an app-owned interface; protocol still incomplete.
 - `connectivity_plus` behind an app-owned interface for advisory connectivity/Wi-Fi status only, not provisioning.
