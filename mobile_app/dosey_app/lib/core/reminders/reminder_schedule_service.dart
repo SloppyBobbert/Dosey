@@ -20,17 +20,36 @@ class ReminderScheduleService {
       return;
     }
     await scheduler.requestPermission();
-    await scheduler.scheduleDoseReminder(
-      doseId: schedule.id,
-      scheduledFor: _nextOccurrence(schedule),
-      label: schedule.label,
-      repeatsDaily: true,
-    );
+    await _scheduleNotification(schedule);
+  }
+
+  Future<void> syncScheduledNotifications() async {
+    final schedules = await repository.watchSchedules().first;
+    final enabledSchedules = schedules.where((schedule) => schedule.isEnabled);
+    if (enabledSchedules.isNotEmpty) {
+      await scheduler.requestPermission();
+    }
+    for (final schedule in schedules) {
+      if (schedule.isEnabled) {
+        await _scheduleNotification(schedule);
+      } else {
+        await scheduler.cancelDoseReminder(schedule.id);
+      }
+    }
   }
 
   Future<void> deleteSchedule(String id) async {
     await scheduler.cancelDoseReminder(id);
     await repository.deleteSchedule(id);
+  }
+
+  Future<void> _scheduleNotification(ReminderSchedule schedule) {
+    return scheduler.scheduleDoseReminder(
+      doseId: schedule.id,
+      scheduledFor: _nextOccurrence(schedule),
+      label: schedule.label,
+      repeatsDaily: true,
+    );
   }
 
   DateTime _nextOccurrence(ReminderSchedule schedule) {

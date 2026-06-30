@@ -126,6 +126,87 @@ void main() {
     expect(() => service.saveSchedule(schedule), throwsA(isA<StateError>()));
     expect(repository.savedSchedules, [schedule]);
   });
+
+  test(
+    'startup sync schedules enabled reminders and cancels disabled ones',
+    () async {
+      final repository = _FakeReminderRepository();
+      final scheduler = _FakeReminderScheduler();
+      final service = ReminderScheduleService(
+        repository: repository,
+        scheduler: scheduler,
+        now: () => DateTime(2026, 6, 29, 7, 15),
+      );
+      repository.savedSchedules.addAll([
+        _schedule(
+          id: 'morning-vitamin',
+          label: 'Vitamin D',
+          hour: 8,
+          minute: 30,
+          isEnabled: true,
+        ),
+        _schedule(
+          id: 'paused-dose',
+          label: 'Paused dose',
+          hour: 12,
+          minute: 0,
+          isEnabled: false,
+        ),
+        _schedule(
+          id: 'evening-dose',
+          label: 'Evening dose',
+          hour: 6,
+          minute: 45,
+          isEnabled: true,
+        ),
+      ]);
+
+      await service.syncScheduledNotifications();
+
+      expect(scheduler.permissionRequests, 1);
+      expect(scheduler.scheduledReminders, [
+        _ScheduledReminder(
+          doseId: 'morning-vitamin',
+          scheduledFor: DateTime(2026, 6, 29, 8, 30),
+          label: 'Vitamin D',
+          repeatsDaily: true,
+        ),
+        _ScheduledReminder(
+          doseId: 'evening-dose',
+          scheduledFor: DateTime(2026, 6, 30, 6, 45),
+          label: 'Evening dose',
+          repeatsDaily: true,
+        ),
+      ]);
+      expect(scheduler.cancelledDoseIds, ['paused-dose']);
+      expect(repository.operations, isEmpty);
+    },
+  );
+
+  test('startup sync skips permission when no reminders are enabled', () async {
+    final repository = _FakeReminderRepository();
+    final scheduler = _FakeReminderScheduler();
+    final service = ReminderScheduleService(
+      repository: repository,
+      scheduler: scheduler,
+      now: () => DateTime(2026, 6, 29, 7, 15),
+    );
+    repository.savedSchedules.add(
+      _schedule(
+        id: 'paused-dose',
+        label: 'Paused dose',
+        hour: 12,
+        minute: 0,
+        isEnabled: false,
+      ),
+    );
+
+    await service.syncScheduledNotifications();
+
+    expect(scheduler.permissionRequests, 0);
+    expect(scheduler.scheduledReminders, isEmpty);
+    expect(scheduler.cancelledDoseIds, ['paused-dose']);
+  });
 }
 
 ReminderSchedule _schedule({

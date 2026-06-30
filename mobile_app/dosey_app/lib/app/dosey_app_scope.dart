@@ -97,6 +97,15 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       reminderScheduler: reminderScheduler,
       permissions: PermissionHandlerGateway(),
     );
+    unawaited(_syncReminderNotifications());
+  }
+
+  Future<void> _syncReminderNotifications() async {
+    try {
+      await _dependencies.reminderSchedules.syncScheduledNotifications();
+    } on Object {
+      // Startup sync is best-effort; schedule edits still surface errors.
+    }
   }
 
   @override
