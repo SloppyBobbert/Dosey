@@ -12,6 +12,7 @@ import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
+import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
@@ -32,12 +33,14 @@ class DoseyAppScope extends StatefulWidget {
     this.database,
     this.reminderScheduler,
     this.permissionGateway,
+    this.notificationTapController,
   });
 
   final Widget child;
   final DoseyDatabase? database;
   final ReminderScheduler? reminderScheduler;
   final AppPermissionGateway? permissionGateway;
+  final ReminderNotificationTapController? notificationTapController;
 
   static DoseyAppDependencies of(BuildContext context) {
     final scope = context
@@ -53,6 +56,7 @@ class DoseyAppScope extends StatefulWidget {
 class _DoseyAppScopeState extends State<DoseyAppScope> {
   late final DoseyDatabase _database;
   late final bool _ownsDatabase;
+  late final bool _ownsNotificationTapController;
   late final DoseyAppDependencies _dependencies;
 
   @override
@@ -63,8 +67,14 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     final doseLog = DriftDoseLogRepository(_database);
     final localAuth = LocalAuthRepository(_database);
     final reminders = LocalReminderRepository(_database);
+    final notificationTaps =
+        widget.notificationTapController ?? ReminderNotificationTapController();
+    _ownsNotificationTapController = widget.notificationTapController == null;
     final reminderScheduler =
-        widget.reminderScheduler ?? FlutterLocalNotificationScheduler();
+        widget.reminderScheduler ??
+        FlutterLocalNotificationScheduler(
+          notificationTapHandler: notificationTaps.handleTap,
+        );
     final settings = LocalAppSettingsRepository(
       _database,
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
@@ -97,6 +107,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       ble: FlutterBluePlusBleGateway(),
       connectivity: ConnectivityPlusGateway(),
       reminderScheduler: reminderScheduler,
+      notificationTaps: notificationTaps,
       permissions: widget.permissionGateway ?? PermissionHandlerGateway(),
     );
     unawaited(_syncReminderNotifications());
@@ -116,6 +127,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     unawaited(_dependencies.ble.close());
     if (_ownsDatabase) {
       unawaited(_database.close());
+    }
+    if (_ownsNotificationTapController) {
+      _dependencies.notificationTaps.dispose();
     }
     super.dispose();
   }
@@ -145,6 +159,7 @@ class DoseyAppDependencies {
     required this.ble,
     required this.connectivity,
     required this.reminderScheduler,
+    required this.notificationTaps,
     required this.permissions,
   });
 
@@ -162,6 +177,7 @@ class DoseyAppDependencies {
   final BleGateway ble;
   final ConnectivityGateway connectivity;
   final ReminderScheduler reminderScheduler;
+  final ReminderNotificationTapController notificationTaps;
   final AppPermissionGateway permissions;
 }
 

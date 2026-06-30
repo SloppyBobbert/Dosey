@@ -5,6 +5,7 @@ import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
@@ -2347,6 +2348,39 @@ void main() {
     expect(permissions.requestedPermissions, [AppPermission.notifications]);
   });
 
+  testWidgets('notification tap opens Today without marking dose taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database);
+    final notificationTaps = ReminderNotificationTapController();
+    addTearDown(notificationTaps.dispose);
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, notificationTapController: notificationTaps),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      2,
+    );
+
+    notificationTaps.handleTap('vitamin-d:2026-06-30');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+      0,
+    );
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
+  });
+
   testWidgets('Schedule tab shows active routine summary for the timeline', (
     WidgetTester tester,
   ) async {
@@ -2870,11 +2904,13 @@ class DoseyApp extends StatelessWidget {
     this.database,
     this.permissionGateway,
     this.reminderScheduler,
+    this.notificationTapController,
   });
 
   final DoseyDatabase? database;
   final AppPermissionGateway? permissionGateway;
   final ReminderScheduler? reminderScheduler;
+  final ReminderNotificationTapController? notificationTapController;
 
   @override
   Widget build(BuildContext context) {
@@ -2882,6 +2918,7 @@ class DoseyApp extends StatelessWidget {
       database: database,
       reminderScheduler: reminderScheduler ?? const _NoopReminderScheduler(),
       permissionGateway: permissionGateway,
+      notificationTapController: notificationTapController,
     );
   }
 }

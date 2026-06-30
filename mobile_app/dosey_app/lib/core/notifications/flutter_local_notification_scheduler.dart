@@ -6,10 +6,13 @@ import 'package:timezone/data/latest.dart' as timezone_data;
 import 'package:timezone/timezone.dart';
 
 class FlutterLocalNotificationScheduler implements ReminderScheduler {
-  FlutterLocalNotificationScheduler({LocalNotificationsPlugin? plugin})
-    : _plugin = plugin ?? FlutterLocalNotificationsPluginAdapter();
+  FlutterLocalNotificationScheduler({
+    LocalNotificationsPlugin? plugin,
+    this.notificationTapHandler,
+  }) : _plugin = plugin ?? FlutterLocalNotificationsPluginAdapter();
 
   final LocalNotificationsPlugin _plugin;
+  final void Function(String doseId)? notificationTapHandler;
   bool _isInitialized = false;
   Future<void>? _initializing;
 
@@ -22,9 +25,12 @@ class FlutterLocalNotificationScheduler implements ReminderScheduler {
       await inFlight;
       return;
     }
-    _initializing = _plugin.initialize().then((_) {
-      _isInitialized = true;
-    });
+    _initializing = _plugin
+        .initialize(onNotificationTap: _handleNotificationTap)
+        .then((launchPayload) {
+          _isInitialized = true;
+          _handleNotificationTap(launchPayload);
+        });
     try {
       await _initializing;
     } finally {
@@ -74,6 +80,14 @@ class FlutterLocalNotificationScheduler implements ReminderScheduler {
       hash = ((hash * 31) + codeUnit) & 0x7fffffff;
     }
     return hash;
+  }
+
+  void _handleNotificationTap(String? payload) {
+    final doseId = payload?.trim();
+    if (doseId == null || doseId.isEmpty) {
+      return;
+    }
+    notificationTapHandler?.call(doseId);
   }
 }
 
@@ -130,7 +144,9 @@ class PluginScheduledNotification {
 enum PluginNotificationScheduleMode { inexactAllowWhileIdle }
 
 abstract interface class LocalNotificationsPlugin {
-  Future<void> initialize();
+  Future<String?> initialize({
+    void Function(String payload)? onNotificationTap,
+  });
 
   Future<void> requestPermission();
 
@@ -156,22 +172,35 @@ class FlutterLocalNotificationsPluginAdapter
   Future<void>? _initializing;
 
   @override
-  Future<void> initialize() async {
+  Future<String?> initialize({
+    void Function(String payload)? onNotificationTap,
+  }) async {
     if (_isInitialized) {
-      return;
+      return null;
     }
     final inFlight = _initializing;
     if (inFlight != null) {
       await inFlight;
-      return;
+      return null;
     }
     _initializing = () async {
       await _timezoneInitializer.ensureInitialized();
       await _plugin.initialize(
-        const InitializationSettings(
+        InitializationSettings(
           android: AndroidInitializationSettings('@mipmap/ic_launcher'),
-          iOS: DarwinInitializationSettings(),
+          iOS: DarwinInitializationSettings(
+            requestAlertPermission: false,
+            requestBadgePermission: false,
+            requestSoundPermission: false,
+          ),
         ),
+        onDidReceiveNotificationResponse: (response) {
+          final payload = response.payload?.trim();
+          if (payload == null || payload.isEmpty) {
+            return;
+          }
+          onNotificationTap?.call(payload);
+        },
       );
       _isInitialized = true;
     }();
@@ -180,6 +209,11 @@ class FlutterLocalNotificationsPluginAdapter
     } finally {
       _initializing = null;
     }
+    final launchDetails = await _plugin.getNotificationAppLaunchDetails();
+    if (launchDetails?.didNotificationLaunchApp ?? false) {
+      return launchDetails?.notificationResponse?.payload;
+    }
+    return null;
   }
 
   @override
