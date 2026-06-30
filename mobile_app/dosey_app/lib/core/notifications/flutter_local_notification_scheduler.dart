@@ -58,7 +58,7 @@ class FlutterLocalNotificationScheduler implements ReminderScheduler {
         id: _notificationIdForDose(doseId),
         channel: doseyReminderNotificationChannel,
         title: 'Dosey reminder',
-        body: 'Time for $label.',
+        body: 'Time for $label. Open Dosey to review and confirm.',
         scheduledFor: scheduledFor,
         payload: doseId,
         scheduleMode: PluginNotificationScheduleMode.inexactAllowWhileIdle,

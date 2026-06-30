@@ -48,7 +48,7 @@ void main() {
         id: 1843149358,
         channel: doseyReminderNotificationChannel,
         title: 'Dosey reminder',
-        body: 'Time for Morning vitamins.',
+        body: 'Time for Morning vitamins. Open Dosey to review and confirm.',
         scheduledFor: scheduledFor,
         payload: 'dose-42',
         scheduleMode: PluginNotificationScheduleMode.inexactAllowWhileIdle,
