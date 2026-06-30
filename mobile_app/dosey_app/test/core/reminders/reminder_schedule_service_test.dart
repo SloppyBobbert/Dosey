@@ -207,6 +207,29 @@ void main() {
     expect(scheduler.scheduledReminders, isEmpty);
     expect(scheduler.cancelledDoseIds, ['paused-dose']);
   });
+
+  test('test notification schedules a one-time reminder soon', () async {
+    final repository = _FakeReminderRepository();
+    final scheduler = _FakeReminderScheduler();
+    final service = ReminderScheduleService(
+      repository: repository,
+      scheduler: scheduler,
+      now: () => DateTime(2026, 6, 29, 7, 15),
+    );
+
+    await service.sendTestNotification();
+
+    expect(scheduler.permissionRequests, 1);
+    expect(scheduler.scheduledReminders, [
+      _ScheduledReminder(
+        doseId: 'dosey-test-reminder',
+        scheduledFor: DateTime(2026, 6, 29, 7, 15, 5),
+        label: 'Dosey test reminder',
+        repeatsDaily: false,
+      ),
+    ]);
+    expect(repository.operations, isEmpty);
+  });
 }
 
 ReminderSchedule _schedule({

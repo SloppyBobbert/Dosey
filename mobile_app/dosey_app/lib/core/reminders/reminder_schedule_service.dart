@@ -38,6 +38,16 @@ class ReminderScheduleService {
     }
   }
 
+  Future<void> sendTestNotification() async {
+    await scheduler.requestPermission();
+    await scheduler.scheduleDoseReminder(
+      doseId: 'dosey-test-reminder',
+      scheduledFor: _now().add(const Duration(seconds: 5)),
+      label: 'Dosey test reminder',
+      repeatsDaily: false,
+    );
+  }
+
   Future<void> deleteSchedule(String id) async {
     await scheduler.cancelDoseReminder(id);
     await repository.deleteSchedule(id);

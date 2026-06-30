@@ -349,6 +349,7 @@ class _ReminderNotificationCard extends StatefulWidget {
 class _ReminderNotificationCardState extends State<_ReminderNotificationCard> {
   AppPermissionState _status = AppPermissionState.unknown;
   bool _isChecking = true;
+  bool _isSendingTest = false;
 
   @override
   void didChangeDependencies() {
@@ -370,10 +371,23 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard> {
           'Dose reminders are scheduled locally on this phone. If notifications are blocked, Dosey can still show schedules in the app but system alerts may not appear.',
         ),
         const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: _isChecking ? null : _requestPermission,
-          icon: const Icon(Icons.notifications_none_outlined),
-          label: Text(_isChecking ? 'Checking...' : 'Check permissions'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _isChecking ? null : _requestPermission,
+              icon: const Icon(Icons.notifications_none_outlined),
+              label: Text(_isChecking ? 'Checking...' : 'Check permissions'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: _isSendingTest ? null : _sendTestNotification,
+              icon: const Icon(Icons.notification_add_outlined),
+              label: Text(
+                _isSendingTest ? 'Scheduling...' : 'Send test notification',
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -412,6 +426,24 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard> {
       setState(() => _isChecking = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Notification permission check failed: $error')),
+      );
+    }
+  }
+
+  Future<void> _sendTestNotification() async {
+    setState(() => _isSendingTest = true);
+    try {
+      await DoseyAppScope.of(context).reminderSchedules.sendTestNotification();
+      if (!mounted) return;
+      setState(() => _isSendingTest = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Test notification scheduled.')),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _isSendingTest = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Test notification failed: $error')),
       );
     }
   }

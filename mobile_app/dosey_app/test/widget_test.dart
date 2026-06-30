@@ -348,6 +348,33 @@ void main() {
     expect(permissions.requestedPermissions, [AppPermission.notifications]);
   });
 
+  testWidgets('settings can schedule a test reminder notification', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    final scheduler = _RecordingReminderScheduler();
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, reminderScheduler: scheduler),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Send test notification'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Test notification scheduled.'), findsOneWidget);
+    expect(scheduler.permissionRequests, 1);
+    expect(scheduler.scheduledReminders.single.doseId, 'dosey-test-reminder');
+    expect(scheduler.scheduledReminders.single.label, 'Dosey test reminder');
+    expect(scheduler.scheduledReminders.single.repeatsDaily, isFalse);
+  });
+
   testWidgets('profile menu shows local status and opens settings', (
     WidgetTester tester,
   ) async {
@@ -2773,16 +2800,22 @@ Future<void> _runAsyncCallback(VoidCallback callback) async {
 }
 
 class DoseyApp extends StatelessWidget {
-  const DoseyApp({super.key, this.database, this.permissionGateway});
+  const DoseyApp({
+    super.key,
+    this.database,
+    this.permissionGateway,
+    this.reminderScheduler,
+  });
 
   final DoseyDatabase? database;
   final AppPermissionGateway? permissionGateway;
+  final ReminderScheduler? reminderScheduler;
 
   @override
   Widget build(BuildContext context) {
     return app.DoseyApp(
       database: database,
-      reminderScheduler: const _NoopReminderScheduler(),
+      reminderScheduler: reminderScheduler ?? const _NoopReminderScheduler(),
       permissionGateway: permissionGateway,
     );
   }
@@ -2828,4 +2861,51 @@ class _NoopReminderScheduler implements ReminderScheduler {
 
   @override
   Future<void> cancelDoseReminder(String doseId) async {}
+}
+
+class _RecordingReminderScheduler implements ReminderScheduler {
+  int permissionRequests = 0;
+  final scheduledReminders = <_ScheduledReminder>[];
+  final cancelledDoseIds = <String>[];
+
+  @override
+  Future<void> requestPermission() async {
+    permissionRequests += 1;
+  }
+
+  @override
+  Future<void> scheduleDoseReminder({
+    required String doseId,
+    required DateTime scheduledFor,
+    required String label,
+    required bool repeatsDaily,
+  }) async {
+    scheduledReminders.add(
+      _ScheduledReminder(
+        doseId: doseId,
+        scheduledFor: scheduledFor,
+        label: label,
+        repeatsDaily: repeatsDaily,
+      ),
+    );
+  }
+
+  @override
+  Future<void> cancelDoseReminder(String doseId) async {
+    cancelledDoseIds.add(doseId);
+  }
+}
+
+class _ScheduledReminder {
+  const _ScheduledReminder({
+    required this.doseId,
+    required this.scheduledFor,
+    required this.label,
+    required this.repeatsDaily,
+  });
+
+  final String doseId;
+  final DateTime scheduledFor;
+  final String label;
+  final bool repeatsDaily;
 }
