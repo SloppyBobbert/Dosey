@@ -2,6 +2,7 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:flutter/material.dart';
@@ -59,7 +60,7 @@ class RemindersScreen extends StatelessWidget {
                           onAddSchedule: canAddSchedule
                               ? () => showScheduleSheet(
                                   context,
-                                  dependencies.reminders,
+                                  dependencies.reminderSchedules,
                                   prescriptions,
                                   profileId: activeProfile.id,
                                 )
@@ -80,7 +81,7 @@ class RemindersScreen extends StatelessWidget {
                               prescription:
                                   prescriptionsById[schedule.prescriptionId],
                               prescriptions: prescriptions,
-                              reminders: dependencies.reminders,
+                              reminderSchedules: dependencies.reminderSchedules,
                             )
                         else
                           const SizedBox.shrink(),
@@ -131,7 +132,7 @@ class RemindersScreen extends StatelessWidget {
 
   static Future<void> showScheduleSheet(
     BuildContext context,
-    ReminderRepository reminders,
+    ReminderScheduleService reminderSchedules,
     List<Prescription> prescriptions, {
     ReminderSchedule? schedule,
     String? initialPrescriptionId,
@@ -142,7 +143,7 @@ class RemindersScreen extends StatelessWidget {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _ScheduleSheet(
-        reminders: reminders,
+        reminderSchedules: reminderSchedules,
         prescriptions: prescriptions,
         schedule: schedule,
         initialPrescriptionId: initialPrescriptionId,
@@ -538,13 +539,13 @@ class _ScheduleTile extends StatelessWidget {
     required this.schedule,
     required this.prescription,
     required this.prescriptions,
-    required this.reminders,
+    required this.reminderSchedules,
   });
 
   final ReminderSchedule schedule;
   final Prescription? prescription;
   final List<Prescription> prescriptions;
-  final ReminderRepository reminders;
+  final ReminderScheduleService reminderSchedules;
 
   @override
   Widget build(BuildContext context) {
@@ -576,7 +577,7 @@ class _ScheduleTile extends StatelessWidget {
               tooltip: 'Edit schedule',
               onPressed: () => RemindersScreen.showScheduleSheet(
                 context,
-                reminders,
+                reminderSchedules,
                 prescriptions,
                 schedule: schedule,
               ),
@@ -595,7 +596,7 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _setEnabled(BuildContext context, bool value) async {
     try {
-      await reminders.upsertSchedule(
+      await reminderSchedules.saveSchedule(
         schedule.copyWith(isEnabled: value, updatedAt: DateTime.now().toUtc()),
       );
     } on Object catch (error) {
@@ -608,7 +609,7 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _delete(BuildContext context) async {
     try {
-      await reminders.deleteSchedule(schedule.id);
+      await reminderSchedules.deleteSchedule(schedule.id);
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
@@ -620,14 +621,14 @@ class _ScheduleTile extends StatelessWidget {
 
 class _ScheduleSheet extends StatefulWidget {
   const _ScheduleSheet({
-    required this.reminders,
+    required this.reminderSchedules,
     required this.prescriptions,
     required this.profileId,
     this.schedule,
     this.initialPrescriptionId,
   });
 
-  final ReminderRepository reminders;
+  final ReminderScheduleService reminderSchedules;
   final List<Prescription> prescriptions;
   final String profileId;
   final ReminderSchedule? schedule;
@@ -811,7 +812,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     );
 
     try {
-      await widget.reminders.upsertSchedule(schedule);
+      await widget.reminderSchedules.saveSchedule(schedule);
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {

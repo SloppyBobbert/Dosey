@@ -17,6 +17,7 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -25,10 +26,16 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter/widgets.dart';
 
 class DoseyAppScope extends StatefulWidget {
-  const DoseyAppScope({super.key, required this.child, this.database});
+  const DoseyAppScope({
+    super.key,
+    required this.child,
+    this.database,
+    this.reminderScheduler,
+  });
 
   final Widget child;
   final DoseyDatabase? database;
+  final ReminderScheduler? reminderScheduler;
 
   static DoseyAppDependencies of(BuildContext context) {
     final scope = context
@@ -53,6 +60,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     _ownsDatabase = widget.database == null;
     final doseLog = DriftDoseLogRepository(_database);
     final localAuth = LocalAuthRepository(_database);
+    final reminders = LocalReminderRepository(_database);
+    final reminderScheduler =
+        widget.reminderScheduler ?? FlutterLocalNotificationScheduler();
     final settings = LocalAppSettingsRepository(
       _database,
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
@@ -62,7 +72,11 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       settings: settings,
       prescriptions: LocalPrescriptionRepository(_database),
       scheduleProfiles: LocalScheduleProfileRepository(_database),
-      reminders: LocalReminderRepository(_database),
+      reminders: reminders,
+      reminderSchedules: ReminderScheduleService(
+        repository: reminders,
+        scheduler: reminderScheduler,
+      ),
       carouselSlots: LocalCarouselSlotRepository(_database),
       doseLog: doseLog,
       localAuth: localAuth,
@@ -80,7 +94,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       ),
       ble: FlutterBluePlusBleGateway(),
       connectivity: ConnectivityPlusGateway(),
-      reminderScheduler: FlutterLocalNotificationScheduler(),
+      reminderScheduler: reminderScheduler,
       permissions: PermissionHandlerGateway(),
     );
   }
@@ -111,6 +125,7 @@ class DoseyAppDependencies {
     required this.prescriptions,
     required this.scheduleProfiles,
     required this.reminders,
+    required this.reminderSchedules,
     required this.carouselSlots,
     required this.doseLog,
     required this.localAuth,
@@ -127,6 +142,7 @@ class DoseyAppDependencies {
   final LocalPrescriptionRepository prescriptions;
   final LocalScheduleProfileRepository scheduleProfiles;
   final LocalReminderRepository reminders;
+  final ReminderScheduleService reminderSchedules;
   final LocalCarouselSlotRepository carouselSlots;
   final DriftDoseLogRepository doseLog;
   final LocalAuthRepository localAuth;

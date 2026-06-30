@@ -43,6 +43,7 @@ class FlutterLocalNotificationScheduler implements ReminderScheduler {
     required String doseId,
     required DateTime scheduledFor,
     required String label,
+    required bool repeatsDaily,
   }) async {
     await _ensureInitialized();
     await _plugin.createChannel(doseyReminderNotificationChannel);
@@ -55,6 +56,7 @@ class FlutterLocalNotificationScheduler implements ReminderScheduler {
         scheduledFor: scheduledFor,
         payload: doseId,
         scheduleMode: PluginNotificationScheduleMode.inexactAllowWhileIdle,
+        repeatsDaily: repeatsDaily,
       ),
     );
   }
@@ -84,6 +86,7 @@ class PluginScheduledNotification {
     required this.scheduledFor,
     required this.payload,
     required this.scheduleMode,
+    required this.repeatsDaily,
   });
 
   final int id;
@@ -93,6 +96,7 @@ class PluginScheduledNotification {
   final DateTime scheduledFor;
   final String payload;
   final PluginNotificationScheduleMode scheduleMode;
+  final bool repeatsDaily;
 
   @override
   bool operator ==(Object other) {
@@ -104,7 +108,8 @@ class PluginScheduledNotification {
             other.body == body &&
             other.scheduledFor == scheduledFor &&
             other.payload == payload &&
-            other.scheduleMode == scheduleMode;
+            other.scheduleMode == scheduleMode &&
+            other.repeatsDaily == repeatsDaily;
   }
 
   @override
@@ -117,6 +122,7 @@ class PluginScheduledNotification {
       scheduledFor,
       payload,
       scheduleMode,
+      repeatsDaily,
     );
   }
 }
@@ -236,6 +242,9 @@ class FlutterLocalNotificationsPluginAdapter
         PluginNotificationScheduleMode.inexactAllowWhileIdle =>
           AndroidScheduleMode.inexactAllowWhileIdle,
       },
+      matchDateTimeComponents: notification.repeatsDaily
+          ? DateTimeComponents.time
+          : null,
     );
   }
 

@@ -1,12 +1,14 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
 import 'package:flutter/material.dart';
 
 class DoseyApp extends StatelessWidget {
-  const DoseyApp({super.key, this.database});
+  const DoseyApp({super.key, this.database, this.reminderScheduler});
 
   final DoseyDatabase? database;
+  final ReminderScheduler? reminderScheduler;
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +16,7 @@ class DoseyApp extends StatelessWidget {
 
     return DoseyAppScope(
       database: database,
+      reminderScheduler: reminderScheduler,
       child: MaterialApp(
         title: 'Dosey',
         debugShowCheckedModeBanner: false,

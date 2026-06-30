@@ -36,6 +36,7 @@ void main() {
       doseId: 'dose-42',
       scheduledFor: scheduledFor,
       label: 'Morning vitamins',
+      repeatsDaily: true,
     );
     await scheduler.cancelDoseReminder('dose-42');
 
@@ -51,6 +52,7 @@ void main() {
         scheduledFor: scheduledFor,
         payload: 'dose-42',
         scheduleMode: PluginNotificationScheduleMode.inexactAllowWhileIdle,
+        repeatsDaily: true,
       ),
     ]);
     expect(plugin.cancelledIds, [1843149358]);

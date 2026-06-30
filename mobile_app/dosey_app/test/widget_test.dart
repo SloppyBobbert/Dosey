@@ -1,10 +1,11 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
-import 'package:dosey_app/main.dart';
+import 'package:dosey_app/main.dart' as app;
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -2707,4 +2708,36 @@ Future<void> _runAsyncCallback(VoidCallback callback) async {
   if (result is Future<void>) {
     await result;
   }
+}
+
+class DoseyApp extends StatelessWidget {
+  const DoseyApp({super.key, this.database});
+
+  final DoseyDatabase? database;
+
+  @override
+  Widget build(BuildContext context) {
+    return app.DoseyApp(
+      database: database,
+      reminderScheduler: const _NoopReminderScheduler(),
+    );
+  }
+}
+
+class _NoopReminderScheduler implements ReminderScheduler {
+  const _NoopReminderScheduler();
+
+  @override
+  Future<void> requestPermission() async {}
+
+  @override
+  Future<void> scheduleDoseReminder({
+    required String doseId,
+    required DateTime scheduledFor,
+    required String label,
+    required bool repeatsDaily,
+  }) async {}
+
+  @override
+  Future<void> cancelDoseReminder(String doseId) async {}
 }
