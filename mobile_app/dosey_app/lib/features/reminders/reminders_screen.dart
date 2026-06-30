@@ -180,18 +180,22 @@ class _NotificationPermissionBannerState
 
   @override
   Widget build(BuildContext context) {
-    if (_status != AppPermissionState.denied) {
+    if (_isChecking) {
       return const SizedBox.shrink();
     }
 
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final details = _NotificationPermissionBannerDetails.forStatus(
+      _status,
+      colorScheme,
+    );
 
     return Padding(
       padding: const EdgeInsets.only(top: 12),
       child: Card(
         elevation: 0,
-        color: colorScheme.errorContainer.withValues(alpha: 0.5),
+        color: details.containerColor,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -200,16 +204,13 @@ class _NotificationPermissionBannerState
             children: [
               Row(
                 children: [
-                  Icon(
-                    Icons.notifications_off_outlined,
-                    color: colorScheme.onErrorContainer,
-                  ),
+                  Icon(details.icon, color: details.foregroundColor),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Notification alerts are blocked',
+                      details.title,
                       style: theme.textTheme.titleSmall?.copyWith(
-                        color: colorScheme.onErrorContainer,
+                        color: details.foregroundColor,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -218,20 +219,24 @@ class _NotificationPermissionBannerState
               ),
               const SizedBox(height: 8),
               Text(
-                'Schedules still save locally, but this phone may not show reminder alerts until notifications are allowed.',
+                details.body,
                 style: theme.textTheme.bodySmall?.copyWith(
-                  color: colorScheme.onErrorContainer,
+                  color: details.foregroundColor,
                   height: 1.35,
                 ),
               ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: _isChecking ? null : _requestPermission,
-                icon: const Icon(Icons.notifications_active_outlined),
-                label: Text(
-                  _isChecking ? 'Checking...' : 'Check notification permission',
+              if (details.showAction) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _isChecking ? null : _requestPermission,
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: Text(
+                    _isChecking
+                        ? 'Checking...'
+                        : 'Check notification permission',
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -267,6 +272,60 @@ class _NotificationPermissionBannerState
         SnackBar(content: Text('Notification permission check failed: $error')),
       );
     }
+  }
+}
+
+class _NotificationPermissionBannerDetails {
+  const _NotificationPermissionBannerDetails({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.containerColor,
+    required this.foregroundColor,
+    required this.showAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final Color containerColor;
+  final Color foregroundColor;
+  final bool showAction;
+
+  factory _NotificationPermissionBannerDetails.forStatus(
+    AppPermissionState status,
+    ColorScheme colorScheme,
+  ) {
+    return switch (status) {
+      AppPermissionState.granted => _NotificationPermissionBannerDetails(
+        icon: Icons.notifications_active_outlined,
+        title: 'Notification alerts look ready',
+        body: 'Dosey can show local reminder alerts on this phone.',
+        containerColor: colorScheme.primaryContainer.withValues(alpha: 0.42),
+        foregroundColor: colorScheme.onPrimaryContainer,
+        showAction: false,
+      ),
+      AppPermissionState.denied => _NotificationPermissionBannerDetails(
+        icon: Icons.notifications_off_outlined,
+        title: 'Notification alerts are blocked',
+        body:
+            'Schedules still save locally, but this phone may not show reminder alerts until notifications are allowed.',
+        containerColor: colorScheme.errorContainer.withValues(alpha: 0.5),
+        foregroundColor: colorScheme.onErrorContainer,
+        showAction: true,
+      ),
+      AppPermissionState.unknown => _NotificationPermissionBannerDetails(
+        icon: Icons.notifications_paused_outlined,
+        title: 'Notification alert status unknown',
+        body:
+            'Dosey cannot confirm system alert access yet. Check permission before relying on reminder notifications.',
+        containerColor: colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.7,
+        ),
+        foregroundColor: colorScheme.onSurfaceVariant,
+        showAction: true,
+      ),
+    };
   }
 }
 

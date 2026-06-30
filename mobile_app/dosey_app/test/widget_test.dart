@@ -2348,6 +2348,62 @@ void main() {
     expect(permissions.requestedPermissions, [AppPermission.notifications]);
   });
 
+  testWidgets('Schedule tab shows when notification alerts are allowed', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    final permissions = _FakePermissionGateway(
+      checkResponses: {AppPermission.notifications: AppPermissionState.granted},
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, permissionGateway: permissions),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notification alerts look ready'), findsOneWidget);
+    expect(
+      find.text('Dosey can show local reminder alerts on this phone.'),
+      findsOneWidget,
+    );
+    expect(find.text('Check notification permission'), findsNothing);
+  });
+
+  testWidgets('Schedule tab can refresh unknown notification status', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    final permissions = _FakePermissionGateway(
+      checkResponses: {AppPermission.notifications: AppPermissionState.unknown},
+      requestResponses: {
+        AppPermission.notifications: AppPermissionState.granted,
+      },
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, permissionGateway: permissions),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notification alert status unknown'), findsOneWidget);
+
+    await tester.tap(find.text('Check notification permission'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notification alerts look ready'), findsOneWidget);
+    expect(permissions.requestedPermissions, [AppPermission.notifications]);
+  });
+
   testWidgets('notification tap opens Today without marking dose taken', (
     WidgetTester tester,
   ) async {
