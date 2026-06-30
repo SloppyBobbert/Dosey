@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
@@ -66,6 +67,7 @@ class RemindersScreen extends StatelessWidget {
                                 )
                               : null,
                         ),
+                        const _NotificationPermissionBanner(),
                         const SizedBox(height: 16),
                         _ScheduleProfileSection(
                           profiles: profiles,
@@ -150,6 +152,121 @@ class RemindersScreen extends StatelessWidget {
         profileId: profileId,
       ),
     );
+  }
+}
+
+class _NotificationPermissionBanner extends StatefulWidget {
+  const _NotificationPermissionBanner();
+
+  @override
+  State<_NotificationPermissionBanner> createState() =>
+      _NotificationPermissionBannerState();
+}
+
+class _NotificationPermissionBannerState
+    extends State<_NotificationPermissionBanner> {
+  AppPermissionState _status = AppPermissionState.unknown;
+  bool _isChecking = true;
+  bool _hasCheckedPermission = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasCheckedPermission && TickerMode.valuesOf(context).enabled) {
+      _hasCheckedPermission = true;
+      _checkPermission();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_status != AppPermissionState.denied) {
+      return const SizedBox.shrink();
+    }
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Card(
+        elevation: 0,
+        color: colorScheme.errorContainer.withValues(alpha: 0.5),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.notifications_off_outlined,
+                    color: colorScheme.onErrorContainer,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Notification alerts are blocked',
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Schedules still save locally, but this phone may not show reminder alerts until notifications are allowed.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onErrorContainer,
+                  height: 1.35,
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _isChecking ? null : _requestPermission,
+                icon: const Icon(Icons.notifications_active_outlined),
+                label: Text(
+                  _isChecking ? 'Checking...' : 'Check notification permission',
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _checkPermission() async {
+    final permissions = DoseyAppScope.of(context).permissions;
+    final status = await permissions.check(AppPermission.notifications);
+    if (!mounted) return;
+    setState(() {
+      _status = status;
+      _isChecking = false;
+    });
+  }
+
+  Future<void> _requestPermission() async {
+    setState(() => _isChecking = true);
+    try {
+      final status = await DoseyAppScope.of(
+        context,
+      ).permissions.request(AppPermission.notifications);
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _isChecking = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _isChecking = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Notification permission check failed: $error')),
+      );
+    }
   }
 }
 

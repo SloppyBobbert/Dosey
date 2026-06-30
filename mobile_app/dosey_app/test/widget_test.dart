@@ -314,7 +314,10 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(permissions.checkedPermissions, [AppPermission.notifications]);
+    expect(
+      permissions.checkedPermissions,
+      contains(AppPermission.notifications),
+    );
   });
 
   testWidgets('settings can request reminder notification permission', (
@@ -2280,6 +2283,68 @@ void main() {
     expect(find.text('Vitamin D'), findsOneWidget);
     expect(find.text('08:30'), findsOneWidget);
     expect(find.text('Capsule'), findsOneWidget);
+  });
+
+  testWidgets('Schedule tab warns when notification alerts are blocked', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    final permissions = _FakePermissionGateway(
+      checkResponses: {AppPermission.notifications: AppPermissionState.denied},
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, permissionGateway: permissions),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notification alerts are blocked'), findsOneWidget);
+    expect(
+      find.text(
+        'Schedules still save locally, but this phone may not show reminder alerts until notifications are allowed.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Check notification permission'), findsOneWidget);
+    expect(
+      permissions.checkedPermissions,
+      contains(AppPermission.notifications),
+    );
+  });
+
+  testWidgets('Schedule tab can request blocked notification permission', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    final permissions = _FakePermissionGateway(
+      checkResponses: {AppPermission.notifications: AppPermissionState.denied},
+      requestResponses: {
+        AppPermission.notifications: AppPermissionState.granted,
+      },
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, permissionGateway: permissions),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notification alerts are blocked'), findsOneWidget);
+
+    await tester.tap(find.text('Check notification permission'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notification alerts are blocked'), findsNothing);
+    expect(permissions.requestedPermissions, [AppPermission.notifications]);
   });
 
   testWidgets('Schedule tab shows active routine summary for the timeline', (

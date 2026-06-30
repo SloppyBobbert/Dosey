@@ -349,12 +349,14 @@ class _ReminderNotificationCard extends StatefulWidget {
 class _ReminderNotificationCardState extends State<_ReminderNotificationCard> {
   AppPermissionState _status = AppPermissionState.unknown;
   bool _isChecking = true;
+  bool _hasCheckedPermission = false;
   bool _isSendingTest = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_isChecking) {
+    if (!_hasCheckedPermission && TickerMode.valuesOf(context).enabled) {
+      _hasCheckedPermission = true;
       _checkPermission();
     }
   }
