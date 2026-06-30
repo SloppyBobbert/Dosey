@@ -31,11 +31,13 @@ class DoseyAppScope extends StatefulWidget {
     required this.child,
     this.database,
     this.reminderScheduler,
+    this.permissionGateway,
   });
 
   final Widget child;
   final DoseyDatabase? database;
   final ReminderScheduler? reminderScheduler;
+  final AppPermissionGateway? permissionGateway;
 
   static DoseyAppDependencies of(BuildContext context) {
     final scope = context
@@ -95,7 +97,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       ble: FlutterBluePlusBleGateway(),
       connectivity: ConnectivityPlusGateway(),
       reminderScheduler: reminderScheduler,
-      permissions: PermissionHandlerGateway(),
+      permissions: widget.permissionGateway ?? PermissionHandlerGateway(),
     );
     unawaited(_syncReminderNotifications());
   }

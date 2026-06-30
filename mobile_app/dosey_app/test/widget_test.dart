@@ -6,6 +6,7 @@ import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -284,6 +285,67 @@ void main() {
     expect(find.text('Google account'), findsOneWidget);
     expect(find.text('Android personal phone'), findsOneWidget);
     expect(find.text('Sign out'), findsOneWidget);
+  });
+
+  testWidgets('settings shows reminder notification permission status', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    final permissions = _FakePermissionGateway(
+      checkResponses: {AppPermission.notifications: AppPermissionState.granted},
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, permissionGateway: permissions),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reminder notifications'), findsOneWidget);
+    expect(find.text('Notifications allowed'), findsOneWidget);
+    expect(
+      find.text(
+        'Dose reminders are scheduled locally on this phone. If notifications are blocked, Dosey can still show schedules in the app but system alerts may not appear.',
+      ),
+      findsOneWidget,
+    );
+    expect(permissions.checkedPermissions, [AppPermission.notifications]);
+  });
+
+  testWidgets('settings can request reminder notification permission', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    final permissions = _FakePermissionGateway(
+      checkResponses: {AppPermission.notifications: AppPermissionState.denied},
+      requestResponses: {
+        AppPermission.notifications: AppPermissionState.granted,
+      },
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, permissionGateway: permissions),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notifications blocked'), findsOneWidget);
+
+    await tester.tap(find.text('Check permissions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notifications allowed'), findsOneWidget);
+    expect(permissions.requestedPermissions, [AppPermission.notifications]);
   });
 
   testWidgets('profile menu shows local status and opens settings', (
@@ -2711,16 +2773,42 @@ Future<void> _runAsyncCallback(VoidCallback callback) async {
 }
 
 class DoseyApp extends StatelessWidget {
-  const DoseyApp({super.key, this.database});
+  const DoseyApp({super.key, this.database, this.permissionGateway});
 
   final DoseyDatabase? database;
+  final AppPermissionGateway? permissionGateway;
 
   @override
   Widget build(BuildContext context) {
     return app.DoseyApp(
       database: database,
       reminderScheduler: const _NoopReminderScheduler(),
+      permissionGateway: permissionGateway,
     );
+  }
+}
+
+class _FakePermissionGateway implements AppPermissionGateway {
+  _FakePermissionGateway({
+    this.checkResponses = const {},
+    this.requestResponses = const {},
+  });
+
+  final Map<AppPermission, AppPermissionState> checkResponses;
+  final Map<AppPermission, AppPermissionState> requestResponses;
+  final checkedPermissions = <AppPermission>[];
+  final requestedPermissions = <AppPermission>[];
+
+  @override
+  Future<AppPermissionState> check(AppPermission permission) async {
+    checkedPermissions.add(permission);
+    return checkResponses[permission] ?? AppPermissionState.unknown;
+  }
+
+  @override
+  Future<AppPermissionState> request(AppPermission permission) async {
+    requestedPermissions.add(permission);
+    return requestResponses[permission] ?? AppPermissionState.denied;
   }
 }
 
