@@ -404,13 +404,24 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard> {
   }
 
   Future<void> _checkPermission() async {
-    final permissions = DoseyAppScope.of(context).permissions;
-    final status = await permissions.check(AppPermission.notifications);
-    if (!mounted) return;
-    setState(() {
-      _status = status;
-      _isChecking = false;
-    });
+    try {
+      final permissions = DoseyAppScope.of(context).permissions;
+      final status = await permissions.check(AppPermission.notifications);
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _isChecking = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = AppPermissionState.unknown;
+        _isChecking = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Notification permission check failed: $error')),
+      );
+    }
   }
 
   Future<void> _requestPermission() async {
@@ -435,6 +446,22 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard> {
   Future<void> _sendTestNotification() async {
     setState(() => _isSendingTest = true);
     try {
+      final status = await DoseyAppScope.of(
+        context,
+      ).permissions.request(AppPermission.notifications);
+      if (!mounted) return;
+      setState(() => _status = status);
+      if (status != AppPermissionState.granted) {
+        setState(() => _isSendingTest = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Notifications are still blocked. Allow notifications before using the test alert.',
+            ),
+          ),
+        );
+        return;
+      }
       await DoseyAppScope.of(context).reminderSchedules.sendTestNotification();
       if (!mounted) return;
       setState(() => _isSendingTest = false);

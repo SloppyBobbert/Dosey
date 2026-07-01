@@ -245,13 +245,24 @@ class _NotificationPermissionBannerState
   }
 
   Future<void> _checkPermission() async {
-    final permissions = DoseyAppScope.of(context).permissions;
-    final status = await permissions.check(AppPermission.notifications);
-    if (!mounted) return;
-    setState(() {
-      _status = status;
-      _isChecking = false;
-    });
+    try {
+      final permissions = DoseyAppScope.of(context).permissions;
+      final status = await permissions.check(AppPermission.notifications);
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _isChecking = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = AppPermissionState.unknown;
+        _isChecking = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Notification permission check failed: $error')),
+      );
+    }
   }
 
   Future<void> _requestPermission() async {
@@ -772,9 +783,13 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _setEnabled(BuildContext context, bool value) async {
     try {
-      await reminderSchedules.saveSchedule(
+      final result = await reminderSchedules.saveSchedule(
         schedule.copyWith(isEnabled: value, updatedAt: DateTime.now().toUtc()),
       );
+      final notificationError = result.notificationError;
+      if (notificationError != null && context.mounted) {
+        _showScheduleNotificationWarning(context, notificationError);
+      }
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
@@ -988,7 +1003,14 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     );
 
     try {
-      await widget.reminderSchedules.saveSchedule(schedule);
+      final result = await widget.reminderSchedules.saveSchedule(schedule);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final notificationError = result.notificationError;
+      if (notificationError != null) {
+        _showScheduleNotificationWarning(context, notificationError);
+      }
+      return;
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -997,9 +1019,6 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
       });
       return;
     }
-
-    if (!mounted) return;
-    Navigator.of(context).pop();
   }
 
   String? _initialPrescriptionId(ReminderSchedule? schedule) {
@@ -1039,4 +1058,12 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     }
     return 'Schedule save failed: $error';
   }
+}
+
+void _showScheduleNotificationWarning(BuildContext context, Object error) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('Schedule saved, but notification setup failed: $error'),
+    ),
+  );
 }

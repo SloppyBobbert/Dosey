@@ -13,28 +13,30 @@ class ReminderScheduleService {
   final ReminderScheduler scheduler;
   final DateTime Function() _now;
 
-  Future<void> saveSchedule(ReminderSchedule schedule) async {
+  Future<ReminderScheduleSaveResult> saveSchedule(
+    ReminderSchedule schedule,
+  ) async {
     await repository.upsertSchedule(schedule);
-    if (!schedule.isEnabled) {
-      await scheduler.cancelDoseReminder(schedule.id);
-      return;
+    try {
+      if (!schedule.isEnabled) {
+        await scheduler.cancelDoseReminder(schedule.id);
+        return const ReminderScheduleSaveResult.saved();
+      }
+      await scheduler.requestPermission();
+      await _scheduleNotification(schedule);
+      return const ReminderScheduleSaveResult.saved();
+    } on Object catch (error) {
+      return ReminderScheduleSaveResult.saved(notificationError: error);
     }
-    await scheduler.requestPermission();
-    await _scheduleNotification(schedule);
   }
 
   Future<void> syncScheduledNotifications() async {
     final schedules = await repository.watchSchedules().first;
-    final enabledSchedules = schedules.where((schedule) => schedule.isEnabled);
-    if (enabledSchedules.isNotEmpty) {
-      await scheduler.requestPermission();
+    for (final schedule in schedules.where((schedule) => !schedule.isEnabled)) {
+      await scheduler.cancelDoseReminder(schedule.id);
     }
-    for (final schedule in schedules) {
-      if (schedule.isEnabled) {
-        await _scheduleNotification(schedule);
-      } else {
-        await scheduler.cancelDoseReminder(schedule.id);
-      }
+    for (final schedule in schedules.where((schedule) => schedule.isEnabled)) {
+      await _scheduleNotification(schedule);
     }
   }
 
@@ -71,9 +73,17 @@ class ReminderScheduleService {
       schedule.hour,
       schedule.minute,
     );
-    if (today.isAfter(current)) {
+    if (!today.isBefore(current)) {
       return today;
     }
     return today.add(const Duration(days: 1));
   }
+}
+
+class ReminderScheduleSaveResult {
+  const ReminderScheduleSaveResult.saved({this.notificationError});
+
+  final Object? notificationError;
+
+  bool get hasNotificationWarning => notificationError != null;
 }

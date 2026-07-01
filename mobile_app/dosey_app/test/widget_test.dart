@@ -352,6 +352,32 @@ void main() {
     expect(permissions.requestedPermissions, [AppPermission.notifications]);
   });
 
+  testWidgets('settings handles notification permission check failure', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    final permissions = _FakePermissionGateway(
+      checkError: StateError('permission bridge unavailable'),
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, permissionGateway: permissions),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notification status unknown'), findsOneWidget);
+    expect(
+      find.textContaining('Notification permission check failed'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('settings can schedule a test reminder notification', (
     WidgetTester tester,
   ) async {
@@ -359,9 +385,18 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
     final scheduler = _RecordingReminderScheduler();
+    final permissions = _FakePermissionGateway(
+      requestResponses: {
+        AppPermission.notifications: AppPermissionState.granted,
+      },
+    );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, reminderScheduler: scheduler),
+      DoseyApp(
+        database: database,
+        permissionGateway: permissions,
+        reminderScheduler: scheduler,
+      ),
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('Settings'));
@@ -373,10 +408,50 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Test notification scheduled.'), findsOneWidget);
+    expect(permissions.requestedPermissions, [AppPermission.notifications]);
     expect(scheduler.permissionRequests, 1);
     expect(scheduler.scheduledReminders.single.doseId, 'dosey-test-reminder');
     expect(scheduler.scheduledReminders.single.label, 'Dosey test reminder');
     expect(scheduler.scheduledReminders.single.repeatsDaily, isFalse);
+  });
+
+  testWidgets('settings does not report test notification success when blocked', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    final scheduler = _RecordingReminderScheduler();
+    final permissions = _FakePermissionGateway(
+      requestResponses: {
+        AppPermission.notifications: AppPermissionState.denied,
+      },
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(
+        database: database,
+        permissionGateway: permissions,
+        reminderScheduler: scheduler,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Send test notification'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Notifications are still blocked. Allow notifications before using the test alert.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Test notification scheduled.'), findsNothing);
+    expect(scheduler.scheduledReminders, isEmpty);
   });
 
   testWidgets('profile menu shows local status and opens settings', (
@@ -2054,7 +2129,7 @@ void main() {
     await tester.tap(find.text('Save prescription'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('Vitamin D'), findsWidgets);
     expect(find.text('Capsule'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Edit prescription'));
@@ -2286,6 +2361,38 @@ void main() {
     expect(find.text('Capsule'), findsOneWidget);
   });
 
+  testWidgets('Schedule tab saves when notification scheduling fails', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    final scheduler = _RecordingReminderScheduler()
+      ..scheduleError = StateError('notifications unavailable');
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, reminderScheduler: scheduler),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add schedule'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
+    await tester.tap(find.text('Save schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('08:30'), findsOneWidget);
+    expect(
+      find.textContaining('Schedule saved, but notification'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Schedule tab warns when notification alerts are blocked', (
     WidgetTester tester,
   ) async {
@@ -2315,6 +2422,31 @@ void main() {
     expect(
       permissions.checkedPermissions,
       contains(AppPermission.notifications),
+    );
+  });
+
+  testWidgets('Schedule tab handles notification permission check failure', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    final permissions = _FakePermissionGateway(
+      checkError: StateError('permission bridge unavailable'),
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(database: database, permissionGateway: permissions),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Schedule'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Notification alert status unknown'), findsOneWidget);
+    expect(
+      find.textContaining('Notification permission check failed'),
+      findsOneWidget,
     );
   });
 
@@ -2983,16 +3115,20 @@ class _FakePermissionGateway implements AppPermissionGateway {
   _FakePermissionGateway({
     this.checkResponses = const {},
     this.requestResponses = const {},
+    this.checkError,
   });
 
   final Map<AppPermission, AppPermissionState> checkResponses;
   final Map<AppPermission, AppPermissionState> requestResponses;
+  final Object? checkError;
   final checkedPermissions = <AppPermission>[];
   final requestedPermissions = <AppPermission>[];
 
   @override
   Future<AppPermissionState> check(AppPermission permission) async {
     checkedPermissions.add(permission);
+    final error = checkError;
+    if (error != null) throw error;
     return checkResponses[permission] ?? AppPermissionState.unknown;
   }
 
@@ -3025,6 +3161,8 @@ class _RecordingReminderScheduler implements ReminderScheduler {
   int permissionRequests = 0;
   final scheduledReminders = <_ScheduledReminder>[];
   final cancelledDoseIds = <String>[];
+  Object? scheduleError;
+  Object? cancelError;
 
   @override
   Future<void> requestPermission() async {
@@ -3038,6 +3176,8 @@ class _RecordingReminderScheduler implements ReminderScheduler {
     required String label,
     required bool repeatsDaily,
   }) async {
+    final error = scheduleError;
+    if (error != null) throw error;
     scheduledReminders.add(
       _ScheduledReminder(
         doseId: doseId,
@@ -3050,6 +3190,8 @@ class _RecordingReminderScheduler implements ReminderScheduler {
 
   @override
   Future<void> cancelDoseReminder(String doseId) async {
+    final error = cancelError;
+    if (error != null) throw error;
     cancelledDoseIds.add(doseId);
   }
 }

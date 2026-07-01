@@ -63,6 +63,31 @@ void main() {
     );
   });
 
+  test('enabled save schedules today when scheduled minute is exact', () async {
+    final repository = _FakeReminderRepository();
+    final scheduler = _FakeReminderScheduler();
+    final service = ReminderScheduleService(
+      repository: repository,
+      scheduler: scheduler,
+      now: () => DateTime(2026, 6, 29, 8, 30),
+    );
+
+    await service.saveSchedule(
+      _schedule(
+        id: 'morning-dose',
+        label: 'Morning dose',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+      ),
+    );
+
+    expect(
+      scheduler.scheduledReminders.single.scheduledFor,
+      DateTime(2026, 6, 29, 8, 30),
+    );
+  });
+
   test('disabled save persists and cancels the notification', () async {
     final repository = _FakeReminderRepository();
     final scheduler = _FakeReminderScheduler();
@@ -106,7 +131,7 @@ void main() {
     expect(operations, ['cancel:morning-vitamin', 'delete:morning-vitamin']);
   });
 
-  test('scheduling failure surfaces after saving schedule', () async {
+  test('scheduling failure is returned after saving schedule', () async {
     final repository = _FakeReminderRepository();
     final scheduler = _FakeReminderScheduler()
       ..scheduleError = StateError('notifications unavailable');
@@ -123,8 +148,10 @@ void main() {
       isEnabled: true,
     );
 
-    expect(() => service.saveSchedule(schedule), throwsA(isA<StateError>()));
+    final result = await service.saveSchedule(schedule);
+
     expect(repository.savedSchedules, [schedule]);
+    expect(result.notificationError, isA<StateError>());
   });
 
   test(
@@ -163,7 +190,7 @@ void main() {
 
       await service.syncScheduledNotifications();
 
-      expect(scheduler.permissionRequests, 1);
+      expect(scheduler.permissionRequests, 0);
       expect(scheduler.scheduledReminders, [
         _ScheduledReminder(
           doseId: 'morning-vitamin',
