@@ -48,14 +48,19 @@ class ReminderScheduleService {
     }
   }
 
-  Future<void> sendTestNotification() async {
-    await scheduler.requestPermission();
-    await scheduler.scheduleDoseReminder(
-      doseId: 'dosey-test-reminder',
-      scheduledFor: _now().add(const Duration(seconds: 5)),
-      label: 'Dosey test reminder',
-      repeatsDaily: false,
-    );
+  Future<ReminderScheduleSaveResult> sendTestNotification() async {
+    try {
+      await scheduler.requestPermission();
+      await scheduler.scheduleDoseReminder(
+        doseId: 'dosey-test-reminder',
+        scheduledFor: _now().add(const Duration(seconds: 5)),
+        label: 'Dosey test reminder',
+        repeatsDaily: false,
+      );
+      return const ReminderScheduleSaveResult.persisted();
+    } on Exception catch (error) {
+      return ReminderScheduleSaveResult.persisted(notificationError: error);
+    }
   }
 
   Future<ReminderScheduleDeleteResult> deleteSchedule(String id) async {

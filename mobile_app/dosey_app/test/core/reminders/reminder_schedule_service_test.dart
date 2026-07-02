@@ -347,7 +347,7 @@ void main() {
       now: () => DateTime(2026, 6, 29, 7, 15),
     );
 
-    await service.sendTestNotification();
+    final result = await service.sendTestNotification();
 
     expect(scheduler.permissionRequests, 1);
     expect(scheduler.scheduledReminders, [
@@ -358,6 +358,44 @@ void main() {
         repeatsDaily: false,
       ),
     ]);
+    expect(repository.operations, isEmpty);
+    expect(result.hasNotificationWarning, isFalse);
+  });
+
+  test('test notification returns scheduler exceptions as warnings', () async {
+    final repository = _FakeReminderRepository();
+    final scheduler = _FakeReminderScheduler()
+      ..scheduleError = Exception('notifications unavailable');
+    final service = ReminderScheduleService(
+      repository: repository,
+      scheduler: scheduler,
+      now: () => DateTime(2026, 6, 29, 7, 15),
+    );
+
+    final result = await service.sendTestNotification();
+
+    expect(scheduler.permissionRequests, 1);
+    expect(scheduler.scheduledReminders, isEmpty);
+    expect(repository.operations, isEmpty);
+    expect(result.notificationError, isA<Exception>());
+  });
+
+  test('unexpected test notification errors still surface', () async {
+    final repository = _FakeReminderRepository();
+    final scheduler = _FakeReminderScheduler()
+      ..scheduleError = StateError('programming bug');
+    final service = ReminderScheduleService(
+      repository: repository,
+      scheduler: scheduler,
+      now: () => DateTime(2026, 6, 29, 7, 15),
+    );
+
+    await expectLater(
+      service.sendTestNotification(),
+      throwsA(isA<StateError>()),
+    );
+
+    expect(scheduler.permissionRequests, 1);
     expect(repository.operations, isEmpty);
   });
 }

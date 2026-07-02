@@ -462,9 +462,21 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard> {
         );
         return;
       }
-      await DoseyAppScope.of(context).reminderSchedules.sendTestNotification();
+      final result = await DoseyAppScope.of(
+        context,
+      ).reminderSchedules.sendTestNotification();
       if (!mounted) return;
       setState(() => _isSendingTest = false);
+      if (result.hasNotificationWarning) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Test notification failed: ${result.notificationError}',
+            ),
+          ),
+        );
+        return;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Test notification scheduled.')),
       );

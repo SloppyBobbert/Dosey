@@ -454,6 +454,41 @@ void main() {
     expect(scheduler.scheduledReminders, isEmpty);
   });
 
+  testWidgets('settings reports test notification scheduler failures', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    final scheduler = _RecordingReminderScheduler()
+      ..scheduleError = Exception('notifications unavailable');
+    final permissions = _FakePermissionGateway(
+      requestResponses: {
+        AppPermission.notifications: AppPermissionState.granted,
+      },
+    );
+
+    await tester.pumpWidget(
+      DoseyApp(
+        database: database,
+        permissionGateway: permissions,
+        reminderScheduler: scheduler,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Send test notification'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Test notification failed:'), findsOneWidget);
+    expect(find.text('Test notification scheduled.'), findsNothing);
+    expect(scheduler.scheduledReminders, isEmpty);
+  });
+
   testWidgets('profile menu shows local status and opens settings', (
     WidgetTester tester,
   ) async {
