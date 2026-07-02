@@ -5,6 +5,7 @@ abstract interface class ReminderScheduler {
     required String doseId,
     required DateTime scheduledFor,
     required String label,
+    required bool repeatsDaily,
   });
 
   Future<void> cancelDoseReminder(String doseId);

@@ -1,7 +1,9 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:flutter/material.dart';
@@ -59,12 +61,13 @@ class RemindersScreen extends StatelessWidget {
                           onAddSchedule: canAddSchedule
                               ? () => showScheduleSheet(
                                   context,
-                                  dependencies.reminders,
+                                  dependencies.reminderSchedules,
                                   prescriptions,
                                   profileId: activeProfile.id,
                                 )
                               : null,
                         ),
+                        const _NotificationPermissionBanner(),
                         const SizedBox(height: 16),
                         _ScheduleProfileSection(
                           profiles: profiles,
@@ -80,7 +83,7 @@ class RemindersScreen extends StatelessWidget {
                               prescription:
                                   prescriptionsById[schedule.prescriptionId],
                               prescriptions: prescriptions,
-                              reminders: dependencies.reminders,
+                              reminderSchedules: dependencies.reminderSchedules,
                             )
                         else
                           const SizedBox.shrink(),
@@ -131,7 +134,7 @@ class RemindersScreen extends StatelessWidget {
 
   static Future<void> showScheduleSheet(
     BuildContext context,
-    ReminderRepository reminders,
+    ReminderScheduleService reminderSchedules,
     List<Prescription> prescriptions, {
     ReminderSchedule? schedule,
     String? initialPrescriptionId,
@@ -142,13 +145,222 @@ class RemindersScreen extends StatelessWidget {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (context) => _ScheduleSheet(
-        reminders: reminders,
+        reminderSchedules: reminderSchedules,
         prescriptions: prescriptions,
         schedule: schedule,
         initialPrescriptionId: initialPrescriptionId,
         profileId: profileId,
       ),
     );
+  }
+}
+
+class _NotificationPermissionBanner extends StatefulWidget {
+  const _NotificationPermissionBanner();
+
+  @override
+  State<_NotificationPermissionBanner> createState() =>
+      _NotificationPermissionBannerState();
+}
+
+class _NotificationPermissionBannerState
+    extends State<_NotificationPermissionBanner>
+    with WidgetsBindingObserver {
+  AppPermissionState _status = AppPermissionState.unknown;
+  bool _isChecking = true;
+  bool _hasCheckedPermission = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasCheckedPermission && TickerMode.valuesOf(context).enabled) {
+      _hasCheckedPermission = true;
+      _checkPermission();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (TickerMode.valuesOf(context).enabled) {
+      _hasCheckedPermission = true;
+      _checkPermission();
+      return;
+    }
+    _hasCheckedPermission = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isChecking) {
+      return const SizedBox.shrink();
+    }
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final details = _NotificationPermissionBannerDetails.forStatus(
+      _status,
+      colorScheme,
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Card(
+        elevation: 0,
+        color: details.containerColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(details.icon, color: details.foregroundColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      details.title,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: details.foregroundColor,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                details.body,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: details.foregroundColor,
+                  height: 1.35,
+                ),
+              ),
+              if (details.showAction) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _isChecking ? null : _requestPermission,
+                  icon: const Icon(Icons.notifications_active_outlined),
+                  label: Text(
+                    _isChecking
+                        ? 'Checking...'
+                        : 'Check notification permission',
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _checkPermission() async {
+    try {
+      final permissions = DoseyAppScope.of(context).permissions;
+      final status = await permissions.check(AppPermission.notifications);
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _isChecking = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = AppPermissionState.unknown;
+        _isChecking = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Notification permission check failed: $error')),
+      );
+    }
+  }
+
+  Future<void> _requestPermission() async {
+    setState(() => _isChecking = true);
+    try {
+      final status = await DoseyAppScope.of(
+        context,
+      ).permissions.request(AppPermission.notifications);
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _isChecking = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _isChecking = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Notification permission check failed: $error')),
+      );
+    }
+  }
+}
+
+class _NotificationPermissionBannerDetails {
+  const _NotificationPermissionBannerDetails({
+    required this.icon,
+    required this.title,
+    required this.body,
+    required this.containerColor,
+    required this.foregroundColor,
+    required this.showAction,
+  });
+
+  final IconData icon;
+  final String title;
+  final String body;
+  final Color containerColor;
+  final Color foregroundColor;
+  final bool showAction;
+
+  factory _NotificationPermissionBannerDetails.forStatus(
+    AppPermissionState status,
+    ColorScheme colorScheme,
+  ) {
+    return switch (status) {
+      AppPermissionState.granted => _NotificationPermissionBannerDetails(
+        icon: Icons.notifications_active_outlined,
+        title: 'Notification alerts look ready',
+        body: 'Dosey can show local reminder alerts on this phone.',
+        containerColor: colorScheme.primaryContainer.withValues(alpha: 0.42),
+        foregroundColor: colorScheme.onPrimaryContainer,
+        showAction: false,
+      ),
+      AppPermissionState.denied => _NotificationPermissionBannerDetails(
+        icon: Icons.notifications_off_outlined,
+        title: 'Notification alerts are blocked',
+        body:
+            'Schedules still save locally, but this phone may not show reminder alerts until notifications are allowed.',
+        containerColor: colorScheme.errorContainer.withValues(alpha: 0.5),
+        foregroundColor: colorScheme.onErrorContainer,
+        showAction: true,
+      ),
+      AppPermissionState.unknown => _NotificationPermissionBannerDetails(
+        icon: Icons.notifications_paused_outlined,
+        title: 'Notification alert status unknown',
+        body:
+            'Dosey cannot confirm system alert access yet. Check permission before relying on reminder notifications.',
+        containerColor: colorScheme.surfaceContainerHighest.withValues(
+          alpha: 0.7,
+        ),
+        foregroundColor: colorScheme.onSurfaceVariant,
+        showAction: true,
+      ),
+    };
   }
 }
 
@@ -538,13 +750,13 @@ class _ScheduleTile extends StatelessWidget {
     required this.schedule,
     required this.prescription,
     required this.prescriptions,
-    required this.reminders,
+    required this.reminderSchedules,
   });
 
   final ReminderSchedule schedule;
   final Prescription? prescription;
   final List<Prescription> prescriptions;
-  final ReminderRepository reminders;
+  final ReminderScheduleService reminderSchedules;
 
   @override
   Widget build(BuildContext context) {
@@ -576,7 +788,7 @@ class _ScheduleTile extends StatelessWidget {
               tooltip: 'Edit schedule',
               onPressed: () => RemindersScreen.showScheduleSheet(
                 context,
-                reminders,
+                reminderSchedules,
                 prescriptions,
                 schedule: schedule,
               ),
@@ -595,9 +807,13 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _setEnabled(BuildContext context, bool value) async {
     try {
-      await reminders.upsertSchedule(
+      final result = await reminderSchedules.saveSchedule(
         schedule.copyWith(isEnabled: value, updatedAt: DateTime.now().toUtc()),
       );
+      final notificationError = result.notificationError;
+      if (notificationError != null && context.mounted) {
+        _showScheduleNotificationWarning(context, notificationError);
+      }
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
@@ -608,7 +824,11 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _delete(BuildContext context) async {
     try {
-      await reminders.deleteSchedule(schedule.id);
+      final result = await reminderSchedules.deleteSchedule(schedule.id);
+      final notificationError = result.notificationError;
+      if (notificationError != null && context.mounted) {
+        _showScheduleDeleteNotificationWarning(context, notificationError);
+      }
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(
@@ -620,14 +840,14 @@ class _ScheduleTile extends StatelessWidget {
 
 class _ScheduleSheet extends StatefulWidget {
   const _ScheduleSheet({
-    required this.reminders,
+    required this.reminderSchedules,
     required this.prescriptions,
     required this.profileId,
     this.schedule,
     this.initialPrescriptionId,
   });
 
-  final ReminderRepository reminders;
+  final ReminderScheduleService reminderSchedules;
   final List<Prescription> prescriptions;
   final String profileId;
   final ReminderSchedule? schedule;
@@ -811,7 +1031,14 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     );
 
     try {
-      await widget.reminders.upsertSchedule(schedule);
+      final result = await widget.reminderSchedules.saveSchedule(schedule);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      final notificationError = result.notificationError;
+      if (notificationError != null) {
+        _showScheduleNotificationWarning(context, notificationError);
+      }
+      return;
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -820,9 +1047,6 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
       });
       return;
     }
-
-    if (!mounted) return;
-    Navigator.of(context).pop();
   }
 
   String? _initialPrescriptionId(ReminderSchedule? schedule) {
@@ -862,4 +1086,25 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     }
     return 'Schedule save failed: $error';
   }
+}
+
+void _showScheduleNotificationWarning(BuildContext context, Object error) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('Schedule saved, but notification setup failed: $error'),
+    ),
+  );
+}
+
+void _showScheduleDeleteNotificationWarning(
+  BuildContext context,
+  Object error,
+) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        'Schedule was not deleted because Dosey could not cancel its notification: $error',
+      ),
+    ),
+  );
 }

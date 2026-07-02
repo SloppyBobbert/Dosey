@@ -1,12 +1,24 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
+import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
 import 'package:flutter/material.dart';
 
 class DoseyApp extends StatelessWidget {
-  const DoseyApp({super.key, this.database});
+  const DoseyApp({
+    super.key,
+    this.database,
+    this.reminderScheduler,
+    this.permissionGateway,
+    this.notificationTapController,
+  });
 
   final DoseyDatabase? database;
+  final ReminderScheduler? reminderScheduler;
+  final AppPermissionGateway? permissionGateway;
+  final ReminderNotificationTapController? notificationTapController;
 
   @override
   Widget build(BuildContext context) {
@@ -14,6 +26,9 @@ class DoseyApp extends StatelessWidget {
 
     return DoseyAppScope(
       database: database,
+      reminderScheduler: reminderScheduler,
+      permissionGateway: permissionGateway,
+      notificationTapController: notificationTapController,
       child: MaterialApp(
         title: 'Dosey',
         debugShowCheckedModeBanner: false,

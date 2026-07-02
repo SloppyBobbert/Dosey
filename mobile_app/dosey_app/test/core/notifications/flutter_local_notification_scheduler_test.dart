@@ -36,6 +36,7 @@ void main() {
       doseId: 'dose-42',
       scheduledFor: scheduledFor,
       label: 'Morning vitamins',
+      repeatsDaily: true,
     );
     await scheduler.cancelDoseReminder('dose-42');
 
@@ -47,10 +48,11 @@ void main() {
         id: 1843149358,
         channel: doseyReminderNotificationChannel,
         title: 'Dosey reminder',
-        body: 'Time for Morning vitamins.',
+        body: 'Time for Morning vitamins. Open Dosey to review and confirm.',
         scheduledFor: scheduledFor,
         payload: 'dose-42',
         scheduleMode: PluginNotificationScheduleMode.inexactAllowWhileIdle,
+        repeatsDaily: true,
       ),
     ]);
     expect(plugin.cancelledIds, [1843149358]);
@@ -62,6 +64,36 @@ void main() {
       'cancel',
     ]);
   });
+
+  test('scheduler forwards tapped reminder payloads', () async {
+    final plugin = _FakeLocalNotificationsPlugin();
+    final tappedDoseIds = <String>[];
+    final scheduler = FlutterLocalNotificationScheduler(
+      plugin: plugin,
+      notificationTapHandler: tappedDoseIds.add,
+    );
+
+    await scheduler.requestPermission();
+    plugin.tapNotification('dose-42');
+
+    expect(tappedDoseIds, ['dose-42']);
+  });
+
+  test(
+    'scheduler forwards launch reminder payloads after initialization',
+    () async {
+      final plugin = _FakeLocalNotificationsPlugin(launchPayload: 'dose-42');
+      final tappedDoseIds = <String>[];
+      final scheduler = FlutterLocalNotificationScheduler(
+        plugin: plugin,
+        notificationTapHandler: tappedDoseIds.add,
+      );
+
+      await scheduler.requestPermission();
+
+      expect(tappedDoseIds, ['dose-42']);
+    },
+  );
 
   test('scheduler only initializes once during concurrent first use', () async {
     final plugin = _BlockingFakeLocalNotificationsPlugin();
@@ -158,17 +190,29 @@ void main() {
 }
 
 class _FakeLocalNotificationsPlugin implements LocalNotificationsPlugin {
+  _FakeLocalNotificationsPlugin({this.launchPayload});
+
+  final String? launchPayload;
   int initializedCount = 0;
   int permissionRequests = 0;
   final List<LocalNotificationChannel> createdChannels = [];
   final List<PluginScheduledNotification> scheduledNotifications = [];
   final List<int> cancelledIds = [];
   final List<String> operations = [];
+  void Function(String payload)? onNotificationTap;
 
   @override
-  Future<void> initialize() async {
+  Future<String?> initialize({
+    void Function(String payload)? onNotificationTap,
+  }) async {
     initializedCount += 1;
     operations.add('initialize');
+    this.onNotificationTap = onNotificationTap;
+    return launchPayload;
+  }
+
+  void tapNotification(String payload) {
+    onNotificationTap?.call(payload);
   }
 
   @override
@@ -202,10 +246,12 @@ class _BlockingFakeLocalNotificationsPlugin
   int initializeCalls = 0;
 
   @override
-  Future<void> initialize() async {
+  Future<String?> initialize({
+    void Function(String payload)? onNotificationTap,
+  }) async {
     initializeCalls += 1;
     await _initializeCompleter.future;
-    return super.initialize();
+    return super.initialize(onNotificationTap: onNotificationTap);
   }
 
   void completeInitialize() {
@@ -270,6 +316,7 @@ class _BlockingFakeNotificationTimezoneInitializer
 class _FakeFlutterLocalNotificationsPlatformPlugin
     implements FlutterLocalNotificationsPlugin {
   int initializeCalls = 0;
+  DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse;
 
   @override
   Future<bool?> initialize(
@@ -279,7 +326,14 @@ class _FakeFlutterLocalNotificationsPlatformPlugin
     onDidReceiveBackgroundNotificationResponse,
   }) async {
     initializeCalls += 1;
+    this.onDidReceiveNotificationResponse = onDidReceiveNotificationResponse;
     return true;
+  }
+
+  @override
+  Future<NotificationAppLaunchDetails?>
+  getNotificationAppLaunchDetails() async {
+    return const NotificationAppLaunchDetails(false);
   }
 
   @override

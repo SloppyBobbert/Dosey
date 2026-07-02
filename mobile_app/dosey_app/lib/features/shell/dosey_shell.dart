@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/carousel/carousel_screen.dart';
@@ -20,6 +23,8 @@ class DoseyShell extends StatefulWidget {
 
 class _DoseyShellState extends State<DoseyShell> {
   int _selectedIndex = 0;
+  ReminderNotificationTapController? _notificationTaps;
+  StreamSubscription<ReminderNotificationTap>? _notificationTapSubscription;
 
   static const _screens = [
     TodayScreen(),
@@ -40,6 +45,26 @@ class _DoseyShellState extends State<DoseyShell> {
     'Log',
     'Settings',
   ];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final notificationTaps = DoseyAppScope.of(context).notificationTaps;
+    if (identical(notificationTaps, _notificationTaps)) {
+      return;
+    }
+    _notificationTapSubscription?.cancel();
+    _notificationTaps = notificationTaps;
+    _notificationTapSubscription = notificationTaps.taps.listen(
+      _handleNotificationTap,
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_notificationTapSubscription?.cancel());
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -222,9 +247,19 @@ class _DoseyShellState extends State<DoseyShell> {
   }
 
   void _selectTab(int index) {
+    if (_selectedIndex == index) {
+      return;
+    }
     setState(() {
       _selectedIndex = index;
     });
+  }
+
+  void _handleNotificationTap(ReminderNotificationTap tap) {
+    if (!mounted) {
+      return;
+    }
+    _selectTab(_todayTabIndex);
   }
 
   static String _avatarLabel(AuthUser? user) {
@@ -238,6 +273,7 @@ class _DoseyShellState extends State<DoseyShell> {
 }
 
 const _settingsTabIndex = 6;
+const _todayTabIndex = 0;
 
 class _ProfileMenuSheet extends StatelessWidget {
   const _ProfileMenuSheet({

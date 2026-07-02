@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:flutter/material.dart';
@@ -70,6 +71,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 12),
             _DeviceModeCard(platform: platform),
+            const SizedBox(height: 12),
+            const _ReminderNotificationCard(),
             const SizedBox(height: 12),
             const _SafetyCard(),
             const SizedBox(height: 12),
@@ -332,6 +335,182 @@ class _DeviceModeDropdownState extends State<_DeviceModeDropdown> {
         }
       },
     );
+  }
+}
+
+class _ReminderNotificationCard extends StatefulWidget {
+  const _ReminderNotificationCard();
+
+  @override
+  State<_ReminderNotificationCard> createState() =>
+      _ReminderNotificationCardState();
+}
+
+class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
+    with WidgetsBindingObserver {
+  AppPermissionState _status = AppPermissionState.unknown;
+  bool _isChecking = true;
+  bool _hasCheckedPermission = false;
+  bool _isSendingTest = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_hasCheckedPermission && TickerMode.valuesOf(context).enabled) {
+      _hasCheckedPermission = true;
+      _checkPermission();
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (TickerMode.valuesOf(context).enabled) {
+      _hasCheckedPermission = true;
+      _checkPermission();
+      return;
+    }
+    _hasCheckedPermission = false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsSectionCard(
+      icon: Icons.notifications_active_outlined,
+      title: 'Reminder notifications',
+      children: [
+        Text(_statusLabel),
+        const SizedBox(height: 8),
+        const Text(
+          'Dose reminders are scheduled locally on this phone. If notifications are blocked, Dosey can still show schedules in the app but system alerts may not appear.',
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            OutlinedButton.icon(
+              onPressed: _isChecking ? null : _requestPermission,
+              icon: const Icon(Icons.notifications_none_outlined),
+              label: Text(_isChecking ? 'Checking...' : 'Check permissions'),
+            ),
+            FilledButton.tonalIcon(
+              onPressed: _isSendingTest ? null : _sendTestNotification,
+              icon: const Icon(Icons.notification_add_outlined),
+              label: Text(
+                _isSendingTest ? 'Scheduling...' : 'Send test notification',
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  String get _statusLabel {
+    return switch (_status) {
+      AppPermissionState.granted => 'Notifications allowed',
+      AppPermissionState.denied => 'Notifications blocked',
+      AppPermissionState.unknown => 'Notification status unknown',
+    };
+  }
+
+  Future<void> _checkPermission() async {
+    try {
+      final permissions = DoseyAppScope.of(context).permissions;
+      final status = await permissions.check(AppPermission.notifications);
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _isChecking = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _status = AppPermissionState.unknown;
+        _isChecking = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Notification permission check failed: $error')),
+      );
+    }
+  }
+
+  Future<void> _requestPermission() async {
+    setState(() => _isChecking = true);
+    final permissions = DoseyAppScope.of(context).permissions;
+    try {
+      final status = await permissions.request(AppPermission.notifications);
+      if (!mounted) return;
+      setState(() {
+        _status = status;
+        _isChecking = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _isChecking = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Notification permission check failed: $error')),
+      );
+    }
+  }
+
+  Future<void> _sendTestNotification() async {
+    setState(() => _isSendingTest = true);
+    try {
+      final status = await DoseyAppScope.of(
+        context,
+      ).permissions.request(AppPermission.notifications);
+      if (!mounted) return;
+      setState(() => _status = status);
+      if (status != AppPermissionState.granted) {
+        setState(() => _isSendingTest = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Notifications are still blocked. Allow notifications before using the test alert.',
+            ),
+          ),
+        );
+        return;
+      }
+      final result = await DoseyAppScope.of(
+        context,
+      ).reminderSchedules.sendTestNotification();
+      if (!mounted) return;
+      setState(() => _isSendingTest = false);
+      if (result.hasNotificationWarning) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Test notification failed: ${result.notificationError}',
+            ),
+          ),
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Test notification scheduled.')),
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() => _isSendingTest = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Test notification failed: $error')),
+      );
+    }
   }
 }
 

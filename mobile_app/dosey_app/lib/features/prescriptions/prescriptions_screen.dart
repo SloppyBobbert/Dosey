@@ -1,8 +1,8 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
-import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:flutter/material.dart';
@@ -69,7 +69,7 @@ class PrescriptionsScreen extends StatelessWidget {
                             activeProfileId,
                           ),
                           prescriptions: prescriptions,
-                          reminders: dependencies.reminders,
+                          reminderSchedules: dependencies.reminderSchedules,
                         ),
                   ],
                 );
@@ -378,7 +378,7 @@ class _PrescriptionTile extends StatelessWidget {
     required this.activeProfileId,
     required this.scheduleSummary,
     required this.prescriptions,
-    required this.reminders,
+    required this.reminderSchedules,
   });
 
   final Prescription prescription;
@@ -386,7 +386,7 @@ class _PrescriptionTile extends StatelessWidget {
   final String activeProfileId;
   final _PrescriptionScheduleSummary scheduleSummary;
   final PrescriptionRepository prescriptions;
-  final ReminderRepository reminders;
+  final ReminderScheduleService reminderSchedules;
 
   @override
   Widget build(BuildContext context) {
@@ -457,7 +457,7 @@ class _PrescriptionTile extends StatelessWidget {
   Future<void> _schedule(BuildContext context) {
     return RemindersScreen.showScheduleSheet(
       context,
-      reminders,
+      reminderSchedules,
       allPrescriptions,
       initialPrescriptionId: prescription.id,
       profileId: activeProfileId,
