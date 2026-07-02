@@ -36,6 +36,8 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
             id: prescription.id,
             name: prescription.name.trim(),
             pillType: prescription.pillType.storageValue,
+            remainingDoses: Value(prescription.remainingDoses),
+            refillThreshold: Value(prescription.refillThreshold),
             createdAt: prescription.createdAt.toUtc(),
             updatedAt: prescription.updatedAt.toUtc(),
           ),
@@ -62,6 +64,8 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
       id: row.id,
       name: row.name,
       pillType: PillType.fromStorageValue(row.pillType),
+      remainingDoses: row.remainingDoses,
+      refillThreshold: row.refillThreshold,
       createdAt: row.createdAt.toUtc(),
       updatedAt: row.updatedAt.toUtc(),
     );
@@ -73,6 +77,20 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
         prescription.name,
         'name',
         'Enter the medication name from the prescription label.',
+      );
+    }
+    if (prescription.remainingDoses < 0) {
+      throw ArgumentError.value(
+        prescription.remainingDoses,
+        'remainingDoses',
+        'Enter zero or more remaining doses.',
+      );
+    }
+    if (prescription.refillThreshold < 0) {
+      throw ArgumentError.value(
+        prescription.refillThreshold,
+        'refillThreshold',
+        'Enter zero or more doses for the refill warning.',
       );
     }
   }

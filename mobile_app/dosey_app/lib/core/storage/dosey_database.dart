@@ -53,8 +53,35 @@ class Prescriptions extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get pillType => text()();
+  IntColumn get remainingDoses => integer().withDefault(const Constant(0))();
+  IntColumn get refillThreshold => integer().withDefault(const Constant(3))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (remaining_doses >= 0)',
+    'CHECK (refill_threshold >= 0)',
+  ];
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('PrescriptionRefillRow')
+class PrescriptionRefills extends Table {
+  TextColumn get id => text()();
+  TextColumn get prescriptionId => text()();
+  IntColumn get doseDelta => integer()();
+  IntColumn get remainingAfter => integer()();
+  DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get note => text().nullable()();
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (dose_delta > 0)',
+    'CHECK (remaining_after >= 0)',
+  ];
 
   @override
   Set<Column> get primaryKey => {id};
@@ -114,6 +141,7 @@ class DoseLogEvents extends Table {
     AppSettings,
     ReminderSchedules,
     Prescriptions,
+    PrescriptionRefills,
     ScheduleProfiles,
     CarouselSlots,
     AuthSessions,
@@ -134,7 +162,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -184,6 +212,16 @@ class DoseyDatabase extends _$DoseyDatabase {
       if (from >= 8 && from < 9) {
         await _normalizeLegacyCarouselSlotStatuses();
         await migrator.alterTable(TableMigration(carouselSlots));
+      }
+      if (from < 10) {
+        if (from >= 6) {
+          await migrator.addColumn(prescriptions, prescriptions.remainingDoses);
+          await migrator.addColumn(
+            prescriptions,
+            prescriptions.refillThreshold,
+          );
+        }
+        await migrator.createTable(prescriptionRefills);
       }
     },
   );

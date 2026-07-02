@@ -44,6 +44,30 @@ void main() {
     },
   );
 
+  test('local prescription repository persists refill dose settings', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalPrescriptionRepository(database);
+    final createdAt = DateTime.utc(2026, 6, 9, 8);
+
+    await repository.upsertPrescription(
+      Prescription(
+        id: 'vitamin-d',
+        name: 'Vitamin D',
+        pillType: PillType.capsule,
+        remainingDoses: 14,
+        refillThreshold: 5,
+        createdAt: createdAt,
+        updatedAt: createdAt,
+      ),
+    );
+
+    final prescriptions = await repository.watchPrescriptions().first;
+    expect(prescriptions.single.remainingDoses, 14);
+    expect(prescriptions.single.refillThreshold, 5);
+    expect(prescriptions.single.needsRefill, isFalse);
+  });
+
   test('local prescription repository deletes prescriptions', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
