@@ -2196,7 +2196,7 @@ void main() {
     await tester.tap(find.text('Save prescription'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Vitamin D'), findsWidgets);
+    expect(find.text('Vitamin D'), findsOneWidget);
     expect(find.text('Capsule'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Edit prescription'));
