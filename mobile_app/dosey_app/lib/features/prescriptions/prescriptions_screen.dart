@@ -6,6 +6,7 @@ import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 class PrescriptionsScreen extends StatelessWidget {
   const PrescriptionsScreen({super.key});
@@ -399,6 +400,8 @@ class _PrescriptionTile extends StatelessWidget {
           children: [
             Text(prescription.pillType.label),
             const SizedBox(height: 4),
+            _InventorySummary(prescription: prescription),
+            const SizedBox(height: 4),
             if (scheduleSummary.hasSchedules)
               Text(scheduleSummary.activeTimesLabel),
             Text(scheduleSummary.coverageLabel),
@@ -407,6 +410,11 @@ class _PrescriptionTile extends StatelessWidget {
         trailing: Wrap(
           spacing: 4,
           children: [
+            IconButton(
+              tooltip: 'Add refill doses',
+              onPressed: () => _showRefillSheet(context),
+              icon: const Icon(Icons.add_box_outlined),
+            ),
             IconButton(
               tooltip: 'View schedule details',
               onPressed: scheduleSummary.hasSchedules
@@ -474,6 +482,101 @@ class _PrescriptionTile extends StatelessWidget {
       );
     }
   }
+
+  Future<void> _showRefillSheet(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _RefillSheet(
+        prescriptions: prescriptions,
+        prescription: prescription,
+      ),
+    );
+  }
+}
+
+class _InventorySummary extends StatelessWidget {
+  const _InventorySummary({required this.prescription});
+
+  final Prescription prescription;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final warningColor = prescription.needsRefill
+        ? colorScheme.error
+        : colorScheme.primary;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _InventoryChip(
+          icon: Icons.inventory_2_outlined,
+          label: '${prescription.remainingDoses} doses left',
+          color: warningColor,
+        ),
+        _InventoryChip(
+          icon: prescription.needsRefill
+              ? Icons.warning_amber_outlined
+              : Icons.notifications_active_outlined,
+          label: prescription.needsRefill
+              ? 'Refill soon'
+              : 'Warn at ${prescription.refillThreshold}',
+          color: warningColor,
+        ),
+        Text(
+          'Count changes only after manual taken confirmation.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _InventoryChip extends StatelessWidget {
+  const _InventoryChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.11),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _PrescriptionScheduleDetailsSheet extends StatelessWidget {
@@ -533,6 +636,8 @@ class _PrescriptionSheet extends StatefulWidget {
 
 class _PrescriptionSheetState extends State<_PrescriptionSheet> {
   late final TextEditingController _nameController;
+  late final TextEditingController _remainingDosesController;
+  late final TextEditingController _refillThresholdController;
   late PillType _pillType;
   var _isSaving = false;
   String? _errorText;
@@ -542,12 +647,20 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
     super.initState();
     final prescription = widget.prescription;
     _nameController = TextEditingController(text: prescription?.name ?? '');
+    _remainingDosesController = TextEditingController(
+      text: (prescription?.remainingDoses ?? 0).toString(),
+    );
+    _refillThresholdController = TextEditingController(
+      text: (prescription?.refillThreshold ?? 3).toString(),
+    );
     _pillType = prescription?.pillType ?? PillType.pill;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _remainingDosesController.dispose();
+    _refillThresholdController.dispose();
     super.dispose();
   }
 
@@ -598,6 +711,44 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
                   ),
               ],
             ),
+            const SizedBox(height: 16),
+            Text(
+              'Refill tracking',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _remainingDosesController,
+                    decoration: const InputDecoration(
+                      labelText: 'Remaining doses',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextFormField(
+                    controller: _refillThresholdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Low warning at',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Dosey subtracts only after you confirm a dose was taken.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             if (_errorText != null) ...[
               const SizedBox(height: 8),
               Text(
@@ -625,13 +776,25 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
     );
   }
 
-  /// Validates the label copy, then persists the local prescription entry.
+  // save local med label and counts
   Future<void> _save() async {
     if (_isSaving) return;
 
     final name = _nameController.text.trim();
     if (name.isEmpty) {
       setState(() => _errorText = 'Enter a medication name.');
+      return;
+    }
+    final remainingDoses = _parseDoseField(
+      _remainingDosesController.text,
+      fallback: 0,
+    );
+    final refillThreshold = _parseDoseField(
+      _refillThresholdController.text,
+      fallback: 3,
+    );
+    if (remainingDoses == null || refillThreshold == null) {
+      setState(() => _errorText = 'Enter zero or more doses.');
       return;
     }
 
@@ -646,6 +809,8 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
       id: existing?.id ?? 'prescription-${now.microsecondsSinceEpoch}',
       name: name,
       pillType: _pillType,
+      remainingDoses: remainingDoses,
+      refillThreshold: refillThreshold,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     );
@@ -656,6 +821,133 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
       if (!mounted) return;
       setState(() {
         _errorText = 'Prescription save failed: $error';
+        _isSaving = false;
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  static int? _parseDoseField(String value, {required int fallback}) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return fallback;
+    final parsed = int.tryParse(trimmed);
+    if (parsed == null || parsed < 0) return null;
+    return parsed;
+  }
+}
+
+class _RefillSheet extends StatefulWidget {
+  const _RefillSheet({required this.prescriptions, required this.prescription});
+
+  final PrescriptionRepository prescriptions;
+  final Prescription prescription;
+
+  @override
+  State<_RefillSheet> createState() => _RefillSheetState();
+}
+
+class _RefillSheetState extends State<_RefillSheet> {
+  final _doseCountController = TextEditingController();
+  final _noteController = TextEditingController();
+  var _isSaving = false;
+  String? _errorText;
+
+  @override
+  void dispose() {
+    _doseCountController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(16, 0, 16, bottomInset + 16),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Add refill doses',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 8),
+            Text('${widget.prescription.remainingDoses} doses left now'),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _doseCountController,
+              decoration: const InputDecoration(
+                labelText: 'Doses added',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _noteController,
+              decoration: const InputDecoration(
+                labelText: 'Note',
+                border: OutlineInputBorder(),
+              ),
+              textInputAction: TextInputAction.done,
+            ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _errorText!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ],
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                const Spacer(),
+                FilledButton(
+                  onPressed: _isSaving ? null : _save,
+                  child: const Text('Save refill'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    if (_isSaving) return;
+    final doseCount = int.tryParse(_doseCountController.text.trim());
+    if (doseCount == null || doseCount <= 0) {
+      setState(() => _errorText = 'Enter one or more doses.');
+      return;
+    }
+
+    setState(() {
+      _errorText = null;
+      _isSaving = true;
+    });
+
+    try {
+      await widget.prescriptions.addRefill(
+        prescriptionId: widget.prescription.id,
+        doseCount: doseCount,
+        occurredAt: DateTime.now().toUtc(),
+        note: _noteController.text,
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorText = 'Refill save failed: $error';
         _isSaving = false;
       });
       return;

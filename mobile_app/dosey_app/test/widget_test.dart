@@ -1927,6 +1927,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Confirm taken'));
     await tester.tap(find.text('Confirm taken'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Log'));
@@ -1934,6 +1935,27 @@ void main() {
 
     expect(find.text('Dose taken confirmed'), findsOneWidget);
     expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
+  });
+
+  testWidgets('Today confirm taken decrements linked prescription inventory', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database, remainingDoses: 2);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Confirm taken'));
+    await tester.tap(find.text('Confirm taken'));
+    await tester.pumpAndSettle();
+
+    final prescription = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    expect(prescription.remainingDoses, 1);
   });
 
   testWidgets('Today already taken logs manual taken without dispensing', (
@@ -2218,6 +2240,61 @@ void main() {
 
     expect(find.text('Vitamin D3'), findsNothing);
     expect(find.text('No prescriptions yet.'), findsOneWidget);
+  });
+
+  testWidgets('prescriptions tab saves and refills dose counts', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Prescriptions'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add prescription'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Medication name'),
+      'Vitamin D',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Remaining doses'),
+      '2',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Low warning at'),
+      '5',
+    );
+    await tester.tap(find.text('Save prescription'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 doses left'), findsOneWidget);
+    expect(find.text('Refill soon'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Add refill doses'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Doses added'),
+      '30',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'Note'),
+      'new bottle',
+    );
+    await tester.tap(find.text('Save refill'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('32 doses left'), findsOneWidget);
+    expect(find.text('Warn at 5'), findsOneWidget);
+    final refillEvents = await database
+        .select(database.prescriptionRefills)
+        .get();
+    expect(refillEvents.single.doseDelta, 30);
+    expect(refillEvents.single.remainingAfter, 32);
+    expect(refillEvents.single.note, 'new bottle');
   });
 
   testWidgets('prescriptions tab shows medication cabinet summary', (
@@ -3148,12 +3225,18 @@ Future<void> _addTravelProfile(
   }
 }
 
-Future<void> _addVitaminPrescription(DoseyDatabase database) {
+Future<void> _addVitaminPrescription(
+  DoseyDatabase database, {
+  int remainingDoses = 0,
+  int refillThreshold = 3,
+}) {
   return LocalPrescriptionRepository(database).upsertPrescription(
     Prescription(
       id: 'vitamin-d',
       name: 'Vitamin D',
       pillType: PillType.capsule,
+      remainingDoses: remainingDoses,
+      refillThreshold: refillThreshold,
       createdAt: DateTime.utc(2026),
       updatedAt: DateTime.utc(2026),
     ),

@@ -164,14 +164,28 @@ class TodayScreen extends StatelessWidget {
     DoseLogEvent event,
     String successMessage, {
     CarouselSlot? retireLoadedSlot,
+    String? inventoryPrescriptionId,
   }) async {
     try {
       final dependencies = DoseyAppScope.of(context);
       final retiresLoadedSlot =
           retireLoadedSlot != null && _isTerminalDoseEvent(event);
-      if (retiresLoadedSlot) {
+      final recordsInventory =
+          event.marksDoseTaken && inventoryPrescriptionId != null;
+      if (retiresLoadedSlot || recordsInventory) {
         await dependencies.database.transaction(() async {
-          await dependencies.carouselSlots.markNeedsReview(retireLoadedSlot.id);
+          if (retiresLoadedSlot) {
+            await dependencies.carouselSlots.markNeedsReview(
+              retireLoadedSlot.id,
+            );
+          }
+          // only real taken states spend inventory
+          if (recordsInventory) {
+            await dependencies.prescriptions.recordTakenDose(
+              inventoryPrescriptionId,
+              occurredAt: event.occurredAt,
+            );
+          }
           await dependencies.doseLog.addEvent(event);
         });
       } else {
@@ -232,6 +246,13 @@ class _TodayDoseContent extends StatelessWidget {
             final latestEvent = currentDoseId == null
                 ? null
                 : TodayScreen._latestEventForDose(events, currentDoseId);
+            final inventoryPrescriptionId =
+                currentSchedule == null ||
+                    !prescriptionsById.containsKey(
+                      currentSchedule.prescriptionId,
+                    )
+                ? null
+                : currentSchedule.prescriptionId;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -256,6 +277,7 @@ class _TodayDoseContent extends StatelessWidget {
                           ),
                           'Dose confirmation logged.',
                           retireLoadedSlot: loadedSlot,
+                          inventoryPrescriptionId: inventoryPrescriptionId,
                         ),
                 ),
                 const SizedBox(height: 12),
@@ -342,6 +364,10 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
       DoseLogEventKind.doseVisibleConfirmed,
     );
     final loadedSlot = widget.loadedSlot;
+    final inventoryPrescriptionId =
+        widget.prescriptionsById.containsKey(currentSchedule.prescriptionId)
+        ? currentSchedule.prescriptionId
+        : null;
     final dispenseKey = loadedSlot == null
         ? null
         : '${loadedSlot.id}:$currentDoseId';
@@ -405,6 +431,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   ),
                   'Dose marked taken.',
                   retireLoadedSlot: loadedSlot,
+                  inventoryPrescriptionId: inventoryPrescriptionId,
                 ),
               ),
               onAlreadyTaken: doseAction(
@@ -416,6 +443,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   ),
                   'Already-taken dose logged.',
                   retireLoadedSlot: loadedSlot,
+                  inventoryPrescriptionId: inventoryPrescriptionId,
                 ),
               ),
               onTakenEarly: doseAction(
@@ -427,6 +455,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   ),
                   'Early dose logged.',
                   retireLoadedSlot: loadedSlot,
+                  inventoryPrescriptionId: inventoryPrescriptionId,
                 ),
               ),
               onTakenLate: doseAction(
@@ -438,6 +467,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   ),
                   'Late dose logged.',
                   retireLoadedSlot: loadedSlot,
+                  inventoryPrescriptionId: inventoryPrescriptionId,
                 ),
               ),
               onConfirmVisible: hasDispenseSucceeded && !hasVisibleConfirmed
