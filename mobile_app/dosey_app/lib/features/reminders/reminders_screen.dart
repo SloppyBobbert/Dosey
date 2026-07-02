@@ -800,7 +800,11 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _delete(BuildContext context) async {
     try {
-      await reminderSchedules.deleteSchedule(schedule.id);
+      final result = await reminderSchedules.deleteSchedule(schedule.id);
+      final notificationError = result.notificationError;
+      if (notificationError != null && context.mounted) {
+        _showScheduleNotificationWarning(context, notificationError);
+      }
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(

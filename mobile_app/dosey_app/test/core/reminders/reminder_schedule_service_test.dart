@@ -134,7 +134,7 @@ void main() {
   test('scheduling failure is returned after saving schedule', () async {
     final repository = _FakeReminderRepository();
     final scheduler = _FakeReminderScheduler()
-      ..scheduleError = StateError('notifications unavailable');
+      ..scheduleError = Exception('notifications unavailable');
     final service = ReminderScheduleService(
       repository: repository,
       scheduler: scheduler,
@@ -151,8 +151,36 @@ void main() {
     final result = await service.saveSchedule(schedule);
 
     expect(repository.savedSchedules, [schedule]);
-    expect(result.notificationError, isA<StateError>());
+    expect(result.notificationError, isA<Exception>());
   });
+
+  test(
+    'unexpected scheduler errors still surface after saving schedule',
+    () async {
+      final repository = _FakeReminderRepository();
+      final scheduler = _FakeReminderScheduler()
+        ..scheduleError = StateError('programming bug');
+      final service = ReminderScheduleService(
+        repository: repository,
+        scheduler: scheduler,
+        now: () => DateTime(2026, 6, 29, 7, 15),
+      );
+      final schedule = _schedule(
+        id: 'morning-vitamin',
+        label: 'Vitamin D',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+      );
+
+      await expectLater(
+        service.saveSchedule(schedule),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(repository.savedSchedules, [schedule]);
+    },
+  );
 
   test(
     'startup sync schedules enabled reminders and cancels disabled ones',
@@ -210,7 +238,7 @@ void main() {
     },
   );
 
-  test('startup sync skips permission when no reminders are enabled', () async {
+  test('startup sync never requests notification permission', () async {
     final repository = _FakeReminderRepository();
     final scheduler = _FakeReminderScheduler();
     final service = ReminderScheduleService(
@@ -234,6 +262,81 @@ void main() {
     expect(scheduler.scheduledReminders, isEmpty);
     expect(scheduler.cancelledDoseIds, ['paused-dose']);
   });
+
+  test('startup sync continues after individual scheduler failures', () async {
+    final repository = _FakeReminderRepository();
+    final scheduler = _FakeReminderScheduler()
+      ..cancelErrorsByDoseId['paused-dose'] = Exception('cancel failed')
+      ..scheduleErrorsByDoseId['morning-vitamin'] = Exception(
+        'schedule failed',
+      );
+    final service = ReminderScheduleService(
+      repository: repository,
+      scheduler: scheduler,
+      now: () => DateTime(2026, 6, 29, 7, 15),
+    );
+    repository.savedSchedules.addAll([
+      _schedule(
+        id: 'paused-dose',
+        label: 'Paused dose',
+        hour: 12,
+        minute: 0,
+        isEnabled: false,
+      ),
+      _schedule(
+        id: 'disabled-dose',
+        label: 'Disabled dose',
+        hour: 13,
+        minute: 0,
+        isEnabled: false,
+      ),
+      _schedule(
+        id: 'morning-vitamin',
+        label: 'Vitamin D',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+      ),
+      _schedule(
+        id: 'evening-dose',
+        label: 'Evening dose',
+        hour: 20,
+        minute: 0,
+        isEnabled: true,
+      ),
+    ]);
+
+    await service.syncScheduledNotifications();
+
+    expect(scheduler.cancelledDoseIds, ['disabled-dose']);
+    expect(scheduler.scheduledReminders, [
+      _ScheduledReminder(
+        doseId: 'evening-dose',
+        scheduledFor: DateTime(2026, 6, 29, 20),
+        label: 'Evening dose',
+        repeatsDaily: true,
+      ),
+    ]);
+  });
+
+  test(
+    'delete still removes schedule when notification cancel fails',
+    () async {
+      final repository = _FakeReminderRepository();
+      final scheduler = _FakeReminderScheduler()
+        ..cancelError = Exception('cancel failed');
+      final service = ReminderScheduleService(
+        repository: repository,
+        scheduler: scheduler,
+        now: () => DateTime(2026, 6, 29, 7, 15),
+      );
+
+      final result = await service.deleteSchedule('morning-vitamin');
+
+      expect(repository.deletedScheduleIds, ['morning-vitamin']);
+      expect(result.notificationError, isA<Exception>());
+    },
+  );
 
   test('test notification schedules a one-time reminder soon', () async {
     final repository = _FakeReminderRepository();
@@ -311,6 +414,9 @@ class _FakeReminderScheduler implements ReminderScheduler {
   final operations = <String>[];
   List<String>? sharedOperations;
   Object? scheduleError;
+  Object? cancelError;
+  final scheduleErrorsByDoseId = <String, Object>{};
+  final cancelErrorsByDoseId = <String, Object>{};
 
   @override
   Future<void> requestPermission() async {
@@ -326,7 +432,7 @@ class _FakeReminderScheduler implements ReminderScheduler {
     required String label,
     required bool repeatsDaily,
   }) async {
-    final error = scheduleError;
+    final error = scheduleErrorsByDoseId[doseId] ?? scheduleError;
     if (error != null) throw error;
     scheduledReminders.add(
       _ScheduledReminder(
@@ -342,6 +448,8 @@ class _FakeReminderScheduler implements ReminderScheduler {
 
   @override
   Future<void> cancelDoseReminder(String doseId) async {
+    final error = cancelErrorsByDoseId[doseId] ?? cancelError;
+    if (error != null) throw error;
     cancelledDoseIds.add(doseId);
     operations.add('cancel:$doseId');
     sharedOperations?.add('cancel:$doseId');

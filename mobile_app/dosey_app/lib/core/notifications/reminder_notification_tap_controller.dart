@@ -1,5 +1,11 @@
 import 'dart:async';
 
+/// Broadcasts reminder notification taps to the shell.
+///
+/// If a cold-start tap arrives before the shell subscribes, the controller keeps
+/// the latest pending tap and emits it to the first listener. Later pre-listener
+/// taps replace earlier ones because every reminder tap routes to the same Today
+/// destination.
 class ReminderNotificationTapController {
   late final _controller = StreamController<ReminderNotificationTap>.broadcast(
     onListen: _emitPendingTap,

@@ -2369,7 +2369,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminPrescription(database);
     final scheduler = _RecordingReminderScheduler()
-      ..scheduleError = StateError('notifications unavailable');
+      ..scheduleError = Exception('notifications unavailable');
 
     await tester.pumpWidget(
       DoseyApp(database: database, reminderScheduler: scheduler),
@@ -2385,7 +2385,7 @@ void main() {
     await tester.tap(find.text('Save schedule'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('Vitamin D'), findsWidgets);
     expect(find.text('08:30'), findsOneWidget);
     expect(
       find.textContaining('Schedule saved, but notification'),

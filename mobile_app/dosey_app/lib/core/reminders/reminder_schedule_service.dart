@@ -20,23 +20,31 @@ class ReminderScheduleService {
     try {
       if (!schedule.isEnabled) {
         await scheduler.cancelDoseReminder(schedule.id);
-        return const ReminderScheduleSaveResult.saved();
+        return const ReminderScheduleSaveResult.persisted();
       }
       await scheduler.requestPermission();
       await _scheduleNotification(schedule);
-      return const ReminderScheduleSaveResult.saved();
-    } on Object catch (error) {
-      return ReminderScheduleSaveResult.saved(notificationError: error);
+      return const ReminderScheduleSaveResult.persisted();
+    } on Exception catch (error) {
+      return ReminderScheduleSaveResult.persisted(notificationError: error);
     }
   }
 
   Future<void> syncScheduledNotifications() async {
     final schedules = await repository.watchSchedules().first;
     for (final schedule in schedules.where((schedule) => !schedule.isEnabled)) {
-      await scheduler.cancelDoseReminder(schedule.id);
+      try {
+        await scheduler.cancelDoseReminder(schedule.id);
+      } on Exception {
+        // Startup reconciliation is best-effort; keep processing other schedules.
+      }
     }
     for (final schedule in schedules.where((schedule) => schedule.isEnabled)) {
-      await _scheduleNotification(schedule);
+      try {
+        await _scheduleNotification(schedule);
+      } on Exception {
+        // Startup reconciliation is best-effort; keep processing other schedules.
+      }
     }
   }
 
@@ -50,9 +58,17 @@ class ReminderScheduleService {
     );
   }
 
-  Future<void> deleteSchedule(String id) async {
-    await scheduler.cancelDoseReminder(id);
+  Future<ReminderScheduleDeleteResult> deleteSchedule(String id) async {
+    Object? notificationError;
+    try {
+      await scheduler.cancelDoseReminder(id);
+    } on Exception catch (error) {
+      notificationError = error;
+    }
     await repository.deleteSchedule(id);
+    return ReminderScheduleDeleteResult.deleted(
+      notificationError: notificationError,
+    );
   }
 
   Future<void> _scheduleNotification(ReminderSchedule schedule) {
@@ -81,7 +97,15 @@ class ReminderScheduleService {
 }
 
 class ReminderScheduleSaveResult {
-  const ReminderScheduleSaveResult.saved({this.notificationError});
+  const ReminderScheduleSaveResult.persisted({this.notificationError});
+
+  final Object? notificationError;
+
+  bool get hasNotificationWarning => notificationError != null;
+}
+
+class ReminderScheduleDeleteResult {
+  const ReminderScheduleDeleteResult.deleted({this.notificationError});
 
   final Object? notificationError;
 
