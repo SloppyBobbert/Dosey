@@ -55,3 +55,21 @@ class Prescription {
     );
   }
 }
+
+class PrescriptionRefill {
+  const PrescriptionRefill({
+    required this.id,
+    required this.prescriptionId,
+    required this.doseDelta,
+    required this.remainingAfter,
+    required this.occurredAt,
+    required this.note,
+  });
+
+  final String id;
+  final String prescriptionId;
+  final int doseDelta;
+  final int remainingAfter;
+  final DateTime occurredAt;
+  final String? note;
+}

@@ -68,6 +68,77 @@ void main() {
     expect(prescriptions.single.needsRefill, isFalse);
   });
 
+  test('adding a refill increases remaining doses and saves history', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalPrescriptionRepository(database);
+    final createdAt = DateTime.utc(2026, 6, 9, 8);
+    final refilledAt = DateTime.utc(2026, 6, 10, 9);
+
+    await repository.upsertPrescription(
+      Prescription(
+        id: 'vitamin-d',
+        name: 'Vitamin D',
+        pillType: PillType.capsule,
+        remainingDoses: 2,
+        refillThreshold: 5,
+        createdAt: createdAt,
+        updatedAt: createdAt,
+      ),
+    );
+
+    await repository.addRefill(
+      prescriptionId: 'vitamin-d',
+      doseCount: 30,
+      occurredAt: refilledAt,
+      note: 'new bottle',
+    );
+
+    final prescriptions = await repository.watchPrescriptions().first;
+    final refillHistory = await repository
+        .watchRefillHistory('vitamin-d')
+        .first;
+    expect(prescriptions.single.remainingDoses, 32);
+    expect(prescriptions.single.needsRefill, isFalse);
+    expect(refillHistory.single.prescriptionId, 'vitamin-d');
+    expect(refillHistory.single.doseDelta, 30);
+    expect(refillHistory.single.remainingAfter, 32);
+    expect(refillHistory.single.occurredAt, refilledAt);
+    expect(refillHistory.single.note, 'new bottle');
+  });
+
+  test(
+    'recording a taken dose decrements remaining doses only to zero',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalPrescriptionRepository(database);
+      final now = DateTime.utc(2026, 6, 9, 8);
+
+      await repository.upsertPrescription(
+        Prescription(
+          id: 'vitamin-d',
+          name: 'Vitamin D',
+          pillType: PillType.capsule,
+          remainingDoses: 1,
+          refillThreshold: 3,
+          createdAt: now,
+          updatedAt: now,
+        ),
+      );
+
+      await repository.recordTakenDose('vitamin-d', occurredAt: now);
+      await repository.recordTakenDose(
+        'vitamin-d',
+        occurredAt: now.add(const Duration(minutes: 1)),
+      );
+
+      final prescriptions = await repository.watchPrescriptions().first;
+      expect(prescriptions.single.remainingDoses, 0);
+      expect(prescriptions.single.needsRefill, isTrue);
+    },
+  );
+
   test('local prescription repository deletes prescriptions', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
@@ -133,6 +204,7 @@ void main() {
 
     expect(await reminders.watchSchedules().first, isEmpty);
     expect(await database.select(database.carouselSlots).get(), isEmpty);
+    expect(await prescriptions.watchRefillHistory('vitamin-d').first, isEmpty);
   });
 
   test('local prescription repository rejects blank names', () async {
