@@ -346,11 +346,24 @@ class _ReminderNotificationCard extends StatefulWidget {
       _ReminderNotificationCardState();
 }
 
-class _ReminderNotificationCardState extends State<_ReminderNotificationCard> {
+class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
+    with WidgetsBindingObserver {
   AppPermissionState _status = AppPermissionState.unknown;
   bool _isChecking = true;
   bool _hasCheckedPermission = false;
   bool _isSendingTest = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -359,6 +372,17 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard> {
       _hasCheckedPermission = true;
       _checkPermission();
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (TickerMode.valuesOf(context).enabled) {
+      _hasCheckedPermission = true;
+      _checkPermission();
+      return;
+    }
+    _hasCheckedPermission = false;
   }
 
   @override

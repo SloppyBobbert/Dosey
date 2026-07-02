@@ -64,16 +64,13 @@ class ReminderScheduleService {
   }
 
   Future<ReminderScheduleDeleteResult> deleteSchedule(String id) async {
-    Object? notificationError;
     try {
       await scheduler.cancelDoseReminder(id);
     } on Exception catch (error) {
-      notificationError = error;
+      return ReminderScheduleDeleteResult.retained(notificationError: error);
     }
     await repository.deleteSchedule(id);
-    return ReminderScheduleDeleteResult.deleted(
-      notificationError: notificationError,
-    );
+    return const ReminderScheduleDeleteResult.deleted();
   }
 
   Future<void> _scheduleNotification(ReminderSchedule schedule) {
@@ -110,8 +107,18 @@ class ReminderScheduleSaveResult {
 }
 
 class ReminderScheduleDeleteResult {
-  const ReminderScheduleDeleteResult.deleted({this.notificationError});
+  const ReminderScheduleDeleteResult._({
+    required this.deleted,
+    this.notificationError,
+  });
 
+  const ReminderScheduleDeleteResult.deleted() : this._(deleted: true);
+
+  const ReminderScheduleDeleteResult.retained({
+    required Object notificationError,
+  }) : this._(deleted: false, notificationError: notificationError);
+
+  final bool deleted;
   final Object? notificationError;
 
   bool get hasNotificationWarning => notificationError != null;

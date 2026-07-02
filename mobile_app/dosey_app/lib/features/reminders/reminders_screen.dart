@@ -164,10 +164,23 @@ class _NotificationPermissionBanner extends StatefulWidget {
 }
 
 class _NotificationPermissionBannerState
-    extends State<_NotificationPermissionBanner> {
+    extends State<_NotificationPermissionBanner>
+    with WidgetsBindingObserver {
   AppPermissionState _status = AppPermissionState.unknown;
   bool _isChecking = true;
   bool _hasCheckedPermission = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -176,6 +189,17 @@ class _NotificationPermissionBannerState
       _hasCheckedPermission = true;
       _checkPermission();
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    if (TickerMode.valuesOf(context).enabled) {
+      _hasCheckedPermission = true;
+      _checkPermission();
+      return;
+    }
+    _hasCheckedPermission = false;
   }
 
   @override
@@ -803,7 +827,7 @@ class _ScheduleTile extends StatelessWidget {
       final result = await reminderSchedules.deleteSchedule(schedule.id);
       final notificationError = result.notificationError;
       if (notificationError != null && context.mounted) {
-        _showScheduleNotificationWarning(context, notificationError);
+        _showScheduleDeleteNotificationWarning(context, notificationError);
       }
     } on Object catch (error) {
       if (!context.mounted) return;
@@ -1068,6 +1092,19 @@ void _showScheduleNotificationWarning(BuildContext context, Object error) {
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text('Schedule saved, but notification setup failed: $error'),
+    ),
+  );
+}
+
+void _showScheduleDeleteNotificationWarning(
+  BuildContext context,
+  Object error,
+) {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(
+        'Schedule was not deleted because Dosey could not cancel its notification: $error',
+      ),
     ),
   );
 }

@@ -319,24 +319,22 @@ void main() {
     ]);
   });
 
-  test(
-    'delete still removes schedule when notification cancel fails',
-    () async {
-      final repository = _FakeReminderRepository();
-      final scheduler = _FakeReminderScheduler()
-        ..cancelError = Exception('cancel failed');
-      final service = ReminderScheduleService(
-        repository: repository,
-        scheduler: scheduler,
-        now: () => DateTime(2026, 6, 29, 7, 15),
-      );
+  test('delete keeps schedule when notification cancel fails', () async {
+    final repository = _FakeReminderRepository();
+    final scheduler = _FakeReminderScheduler()
+      ..cancelError = Exception('cancel failed');
+    final service = ReminderScheduleService(
+      repository: repository,
+      scheduler: scheduler,
+      now: () => DateTime(2026, 6, 29, 7, 15),
+    );
 
-      final result = await service.deleteSchedule('morning-vitamin');
+    final result = await service.deleteSchedule('morning-vitamin');
 
-      expect(repository.deletedScheduleIds, ['morning-vitamin']);
-      expect(result.notificationError, isA<Exception>());
-    },
-  );
+    expect(repository.deletedScheduleIds, isEmpty);
+    expect(result.deleted, isFalse);
+    expect(result.notificationError, isA<Exception>());
+  });
 
   test('test notification schedules a one-time reminder soon', () async {
     final repository = _FakeReminderRepository();
