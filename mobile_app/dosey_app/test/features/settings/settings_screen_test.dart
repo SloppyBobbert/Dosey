@@ -4,6 +4,7 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:flutter/foundation.dart';
@@ -139,6 +140,29 @@ void main() {
     );
     expect(switches.first.value, isTrue);
     expect(switches.last.value, isFalse);
+    expect(find.text('15 minutes'), findsOneWidget);
+    expect(find.text('30 minutes'), findsOneWidget);
+  });
+
+  testWidgets('saved robot face timing values render on load', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await RobotFaceSettingsRepository(database).saveSettings(
+      const RobotFaceSettings(
+        wakeBeforeDoseMinutes: 15,
+        stayAwakeAfterDoseMinutes: 30,
+      ),
+    );
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    await _scrollToRobotFace(tester);
+
     expect(find.text('15 minutes'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
   });

@@ -387,6 +387,10 @@ class _RobotFaceSettingsSection extends StatelessWidget {
 
 class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
   static const List<int> _timingOptions = [0, 5, 10, 15, 30, 60];
+  static const int _defaultWakeBeforeDoseMinutes =
+      RobotFaceSettings.defaultWakeBeforeDoseMinutes;
+  static const int _defaultStayAwakeAfterDoseMinutes =
+      RobotFaceSettings.defaultStayAwakeAfterDoseMinutes;
 
   bool _isSaving = false;
 
@@ -445,6 +449,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                       child: _RobotFaceTimingDropdown(
                         label: 'Wake before dose',
                         value: settings.wakeBeforeDoseMinutes,
+                        fallbackValue: _defaultWakeBeforeDoseMinutes,
                         enabled: !_isSaving,
                         options: _timingOptions,
                         onChanged: (value) => _saveSettings(
@@ -457,6 +462,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                       child: _RobotFaceTimingDropdown(
                         label: 'Stay awake after dose',
                         value: settings.stayAwakeAfterDoseMinutes,
+                        fallbackValue: _defaultStayAwakeAfterDoseMinutes,
                         enabled: !_isSaving,
                         options: _timingOptions,
                         onChanged: (value) => _saveSettings(
@@ -495,6 +501,7 @@ class _RobotFaceTimingDropdown extends StatelessWidget {
   const _RobotFaceTimingDropdown({
     required this.label,
     required this.value,
+    required this.fallbackValue,
     required this.enabled,
     required this.options,
     required this.onChanged,
@@ -502,17 +509,17 @@ class _RobotFaceTimingDropdown extends StatelessWidget {
 
   final String label;
   final int value;
+  final int fallbackValue;
   final bool enabled;
   final List<int> options;
   final ValueChanged<int> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final selectedValue = options.contains(value)
-        ? value
-        : RobotFaceSettings.defaultWakeBeforeDoseMinutes;
+    final selectedValue = options.contains(value) ? value : fallbackValue;
 
     return DropdownButtonFormField<int>(
+      key: ValueKey('$label:$selectedValue'),
       initialValue: selectedValue,
       decoration: InputDecoration(
         labelText: label,
