@@ -11,13 +11,16 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 
 ## Current scope
 
-- Android and iOS app shell with Today, Reminders, Controller, Log, and Settings tabs.
-- Safety-first home/settings copy and safety acknowledgement storage.
-- Local reminder schedule storage with simple add/edit/delete controls and enabled/disabled state.
+- Android and iOS app shell with Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings tabs, plus a profile menu.
+- Safety-first copy and local safety acknowledgement storage.
+- Local prescription storage with remaining-dose counts, refill thresholds, refill-add history, and medication-type display.
+- Local reminder schedule storage with add/edit/delete controls, enabled/disabled state, duplicate-time checks, and schedule profiles.
+- Carousel loading workflow with Daviky slot assignment, loaded/dispensed/review states, and controller-gated dispense actions.
+- Today dose-state logging that keeps dispense, visible, taken, skipped, missed, and caregiver/help actions separate.
 - Controller simulator plus BLE foundation for app flow work; controller protocol is still incomplete.
 - Google and Apple sign-in through app-owned auth interfaces; no Firebase/Supabase backend yet.
 - App-owned interfaces for controller/BLE, connectivity, auth, reminders, permissions, notifications, and dose logging.
-- Drift/SQLite local database for device role settings, reminders, cached auth state, and dose log events.
+- Drift/SQLite local database for device role settings, prescriptions, reminders, schedule profiles, carousel slots, cached auth state, refill records, and dose log events.
 
 Selected background packages:
 
@@ -48,18 +51,21 @@ Device role rules:
 
 ## What works locally
 
-- Create, edit, disable, and delete local reminders.
-- Store device role, safety acknowledgement, cached auth state, and dose log events locally.
-- Exercise controller flows with a simulator before BLE exists.
+- Create, edit, and delete local prescriptions and reminders.
+- Track remaining doses, refill thresholds, refill warnings, and refill-add history locally.
+- Assign reminders to Daviky carousel slots and exercise controller flows with a simulator before BLE exists.
+- Log Today actions separately for dispense success, dose visible, taken confirmations, already taken, early/late taken, snooze, skip, missed, and caregiver help.
+- Prevent duplicate terminal Today actions from double-logging the same dose or spending inventory twice.
+- Store device role, safety acknowledgement, cached auth state, refill data, carousel state, and dose log events locally.
 - Run Android debug APK and iOS no-codesign debug builds on this machine.
 
-The app must not mark a dose taken because the servo moved. Dispense logging requires a controller success event, and later versions should separately track dose visible and dose taken confirmation.
+The app must not mark a dose taken because the servo moved. Dispense logging requires a controller success event, and the app separately tracks dose visible and dose taken confirmation.
 
 ## Near-term app work
 
 - Draft the Bluetooth command/status/heartbeat protocol before adding a BLE package.
-- Implement Robot Mode flows for guided Daviky carousel loading, dispense confirmation, refill countdown, and hardware tests.
-- Include dose actions for take now, take early, take late, snooze, skip, mark already taken, ask caregiver, and mark missed.
+- Keep expanding Robot Mode flows around guided Daviky carousel loading, dispense confirmation, refill countdown, and hardware tests.
+- Keep Today dose actions and refill inventory behavior aligned with local-first safety rules.
 - Add heartbeat/offline detection for XIAO power loss, crash, disconnect, or missed responses.
 - Keep caregiver alerts, Piper voices, voice commands, cloud sync, facial recognition, and local AI as later features.
 

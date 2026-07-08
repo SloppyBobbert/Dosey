@@ -5,7 +5,21 @@ import 'package:drift/drift.dart';
 abstract interface class PrescriptionRepository {
   Stream<List<Prescription>> watchPrescriptions();
 
+  Stream<List<PrescriptionRefill>> watchRefillHistory(String prescriptionId);
+
   Future<void> upsertPrescription(Prescription prescription);
+
+  Future<void> addRefill({
+    required String prescriptionId,
+    required int doseCount,
+    required DateTime occurredAt,
+    String? note,
+  });
+
+  Future<void> recordTakenDose(
+    String prescriptionId, {
+    required DateTime occurredAt,
+  });
 
   Future<void> deletePrescription(String id);
 }
@@ -24,6 +38,15 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
     return query.watch().map((rows) => rows.map(_fromRow).toList());
   }
 
+  @override
+  Stream<List<PrescriptionRefill>> watchRefillHistory(String prescriptionId) {
+    final query = _database.select(_database.prescriptionRefills)
+      ..where((refill) => refill.prescriptionId.equals(prescriptionId))
+      ..orderBy([(refill) => OrderingTerm.desc(refill.occurredAt)]);
+
+    return query.watch().map((rows) => rows.map(_refillFromRow).toList());
+  }
+
   /// Saves the user-entered medication name and selected pill graphic type.
   @override
   Future<void> upsertPrescription(Prescription prescription) {
@@ -36,10 +59,84 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
             id: prescription.id,
             name: prescription.name.trim(),
             pillType: prescription.pillType.storageValue,
+            remainingDoses: Value(prescription.remainingDoses),
+            refillThreshold: Value(prescription.refillThreshold),
             createdAt: prescription.createdAt.toUtc(),
             updatedAt: prescription.updatedAt.toUtc(),
           ),
         );
+  }
+
+  @override
+  Future<void> addRefill({
+    required String prescriptionId,
+    required int doseCount,
+    required DateTime occurredAt,
+    String? note,
+  }) async {
+    if (doseCount <= 0) {
+      throw ArgumentError.value(
+        doseCount,
+        'doseCount',
+        'Enter one or more doses to add.',
+      );
+    }
+
+    return _database.transaction(() async {
+      final row = await _prescriptionById(prescriptionId);
+      final occurredAtUtc = occurredAt.toUtc();
+      final remainingAfter = row.remainingDoses + doseCount;
+      final trimmedNote = note?.trim();
+
+      await (_database.update(
+        _database.prescriptions,
+      )..where((prescription) => prescription.id.equals(prescriptionId))).write(
+        PrescriptionsCompanion(
+          remainingDoses: Value(remainingAfter),
+          updatedAt: Value(occurredAtUtc),
+        ),
+      );
+      await _database
+          .into(_database.prescriptionRefills)
+          .insert(
+            PrescriptionRefillsCompanion.insert(
+              id: _refillIdFor(
+                prescriptionId: prescriptionId,
+                doseCount: doseCount,
+                occurredAt: occurredAtUtc,
+              ),
+              prescriptionId: prescriptionId,
+              doseDelta: doseCount,
+              remainingAfter: remainingAfter,
+              occurredAt: occurredAtUtc,
+              note: trimmedNote == null || trimmedNote.isEmpty
+                  ? const Value.absent()
+                  : Value(trimmedNote),
+            ),
+          );
+    });
+  }
+
+  @override
+  Future<void> recordTakenDose(
+    String prescriptionId, {
+    required DateTime occurredAt,
+  }) async {
+    return _database.transaction(() async {
+      final row = await _prescriptionById(prescriptionId);
+      if (row.remainingDoses == 0) {
+        return;
+      }
+
+      await (_database.update(
+        _database.prescriptions,
+      )..where((prescription) => prescription.id.equals(prescriptionId))).write(
+        PrescriptionsCompanion(
+          remainingDoses: Value(row.remainingDoses - 1),
+          updatedAt: Value(occurredAt.toUtc()),
+        ),
+      );
+    });
   }
 
   @override
@@ -52,6 +149,9 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
         _database.reminderSchedules,
       )..where((schedule) => schedule.prescriptionId.equals(id))).go();
       await (_database.delete(
+        _database.prescriptionRefills,
+      )..where((refill) => refill.prescriptionId.equals(id))).go();
+      await (_database.delete(
         _database.prescriptions,
       )..where((prescription) => prescription.id.equals(id))).go();
     });
@@ -62,9 +162,41 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
       id: row.id,
       name: row.name,
       pillType: PillType.fromStorageValue(row.pillType),
+      remainingDoses: row.remainingDoses,
+      refillThreshold: row.refillThreshold,
       createdAt: row.createdAt.toUtc(),
       updatedAt: row.updatedAt.toUtc(),
     );
+  }
+
+  static PrescriptionRefill _refillFromRow(PrescriptionRefillRow row) {
+    return PrescriptionRefill(
+      id: row.id,
+      prescriptionId: row.prescriptionId,
+      doseDelta: row.doseDelta,
+      remainingAfter: row.remainingAfter,
+      occurredAt: row.occurredAt.toUtc(),
+      note: row.note,
+    );
+  }
+
+  Future<PrescriptionRow> _prescriptionById(String prescriptionId) async {
+    final row =
+        await (_database.select(_database.prescriptions)
+              ..where((prescription) => prescription.id.equals(prescriptionId)))
+            .getSingleOrNull();
+    if (row == null) {
+      throw StateError('Prescription not found: $prescriptionId');
+    }
+    return row;
+  }
+
+  static String _refillIdFor({
+    required String prescriptionId,
+    required int doseCount,
+    required DateTime occurredAt,
+  }) {
+    return 'refill:$prescriptionId:${occurredAt.toUtc().microsecondsSinceEpoch}:$doseCount';
   }
 
   static void _validatePrescription(Prescription prescription) {
@@ -73,6 +205,20 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
         prescription.name,
         'name',
         'Enter the medication name from the prescription label.',
+      );
+    }
+    if (prescription.remainingDoses < 0) {
+      throw ArgumentError.value(
+        prescription.remainingDoses,
+        'remainingDoses',
+        'Enter zero or more remaining doses.',
+      );
+    }
+    if (prescription.refillThreshold < 0) {
+      throw ArgumentError.value(
+        prescription.refillThreshold,
+        'refillThreshold',
+        'Enter zero or more doses for the refill warning.',
       );
     }
   }

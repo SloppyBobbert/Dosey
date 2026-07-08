@@ -864,6 +864,30 @@ class $PrescriptionsTable extends Prescriptions
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _remainingDosesMeta = const VerificationMeta(
+    'remainingDoses',
+  );
+  @override
+  late final GeneratedColumn<int> remainingDoses = GeneratedColumn<int>(
+    'remaining_doses',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _refillThresholdMeta = const VerificationMeta(
+    'refillThreshold',
+  );
+  @override
+  late final GeneratedColumn<int> refillThreshold = GeneratedColumn<int>(
+    'refill_threshold',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(3),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -891,6 +915,8 @@ class $PrescriptionsTable extends Prescriptions
     id,
     name,
     pillType,
+    remainingDoses,
+    refillThreshold,
     createdAt,
     updatedAt,
   ];
@@ -926,6 +952,24 @@ class $PrescriptionsTable extends Prescriptions
       );
     } else if (isInserting) {
       context.missing(_pillTypeMeta);
+    }
+    if (data.containsKey('remaining_doses')) {
+      context.handle(
+        _remainingDosesMeta,
+        remainingDoses.isAcceptableOrUnknown(
+          data['remaining_doses']!,
+          _remainingDosesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('refill_threshold')) {
+      context.handle(
+        _refillThresholdMeta,
+        refillThreshold.isAcceptableOrUnknown(
+          data['refill_threshold']!,
+          _refillThresholdMeta,
+        ),
+      );
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -964,6 +1008,14 @@ class $PrescriptionsTable extends Prescriptions
         DriftSqlType.string,
         data['${effectivePrefix}pill_type'],
       )!,
+      remainingDoses: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}remaining_doses'],
+      )!,
+      refillThreshold: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}refill_threshold'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -985,12 +1037,16 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
   final String id;
   final String name;
   final String pillType;
+  final int remainingDoses;
+  final int refillThreshold;
   final DateTime createdAt;
   final DateTime updatedAt;
   const PrescriptionRow({
     required this.id,
     required this.name,
     required this.pillType,
+    required this.remainingDoses,
+    required this.refillThreshold,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -1000,6 +1056,8 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['pill_type'] = Variable<String>(pillType);
+    map['remaining_doses'] = Variable<int>(remainingDoses);
+    map['refill_threshold'] = Variable<int>(refillThreshold);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -1010,6 +1068,8 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
       id: Value(id),
       name: Value(name),
       pillType: Value(pillType),
+      remainingDoses: Value(remainingDoses),
+      refillThreshold: Value(refillThreshold),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -1024,6 +1084,8 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       pillType: serializer.fromJson<String>(json['pillType']),
+      remainingDoses: serializer.fromJson<int>(json['remainingDoses']),
+      refillThreshold: serializer.fromJson<int>(json['refillThreshold']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -1035,6 +1097,8 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'pillType': serializer.toJson<String>(pillType),
+      'remainingDoses': serializer.toJson<int>(remainingDoses),
+      'refillThreshold': serializer.toJson<int>(refillThreshold),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -1044,12 +1108,16 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
     String? id,
     String? name,
     String? pillType,
+    int? remainingDoses,
+    int? refillThreshold,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => PrescriptionRow(
     id: id ?? this.id,
     name: name ?? this.name,
     pillType: pillType ?? this.pillType,
+    remainingDoses: remainingDoses ?? this.remainingDoses,
+    refillThreshold: refillThreshold ?? this.refillThreshold,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -1058,6 +1126,12 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       pillType: data.pillType.present ? data.pillType.value : this.pillType,
+      remainingDoses: data.remainingDoses.present
+          ? data.remainingDoses.value
+          : this.remainingDoses,
+      refillThreshold: data.refillThreshold.present
+          ? data.refillThreshold.value
+          : this.refillThreshold,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -1069,6 +1143,8 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('pillType: $pillType, ')
+          ..write('remainingDoses: $remainingDoses, ')
+          ..write('refillThreshold: $refillThreshold, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -1076,7 +1152,15 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, pillType, createdAt, updatedAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    pillType,
+    remainingDoses,
+    refillThreshold,
+    createdAt,
+    updatedAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1084,6 +1168,8 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
           other.id == this.id &&
           other.name == this.name &&
           other.pillType == this.pillType &&
+          other.remainingDoses == this.remainingDoses &&
+          other.refillThreshold == this.refillThreshold &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -1092,6 +1178,8 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
   final Value<String> id;
   final Value<String> name;
   final Value<String> pillType;
+  final Value<int> remainingDoses;
+  final Value<int> refillThreshold;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -1099,6 +1187,8 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.pillType = const Value.absent(),
+    this.remainingDoses = const Value.absent(),
+    this.refillThreshold = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1107,6 +1197,8 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     required String id,
     required String name,
     required String pillType,
+    this.remainingDoses = const Value.absent(),
+    this.refillThreshold = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
@@ -1119,6 +1211,8 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? pillType,
+    Expression<int>? remainingDoses,
+    Expression<int>? refillThreshold,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1127,6 +1221,8 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (pillType != null) 'pill_type': pillType,
+      if (remainingDoses != null) 'remaining_doses': remainingDoses,
+      if (refillThreshold != null) 'refill_threshold': refillThreshold,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1137,6 +1233,8 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     Value<String>? id,
     Value<String>? name,
     Value<String>? pillType,
+    Value<int>? remainingDoses,
+    Value<int>? refillThreshold,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -1145,6 +1243,8 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
       id: id ?? this.id,
       name: name ?? this.name,
       pillType: pillType ?? this.pillType,
+      remainingDoses: remainingDoses ?? this.remainingDoses,
+      refillThreshold: refillThreshold ?? this.refillThreshold,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1162,6 +1262,12 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     }
     if (pillType.present) {
       map['pill_type'] = Variable<String>(pillType.value);
+    }
+    if (remainingDoses.present) {
+      map['remaining_doses'] = Variable<int>(remainingDoses.value);
+    }
+    if (refillThreshold.present) {
+      map['refill_threshold'] = Variable<int>(refillThreshold.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -1181,8 +1287,437 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('pillType: $pillType, ')
+          ..write('remainingDoses: $remainingDoses, ')
+          ..write('refillThreshold: $refillThreshold, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PrescriptionRefillsTable extends PrescriptionRefills
+    with TableInfo<$PrescriptionRefillsTable, PrescriptionRefillRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PrescriptionRefillsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _prescriptionIdMeta = const VerificationMeta(
+    'prescriptionId',
+  );
+  @override
+  late final GeneratedColumn<String> prescriptionId = GeneratedColumn<String>(
+    'prescription_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _doseDeltaMeta = const VerificationMeta(
+    'doseDelta',
+  );
+  @override
+  late final GeneratedColumn<int> doseDelta = GeneratedColumn<int>(
+    'dose_delta',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _remainingAfterMeta = const VerificationMeta(
+    'remainingAfter',
+  );
+  @override
+  late final GeneratedColumn<int> remainingAfter = GeneratedColumn<int>(
+    'remaining_after',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _occurredAtMeta = const VerificationMeta(
+    'occurredAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> occurredAt = GeneratedColumn<DateTime>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    prescriptionId,
+    doseDelta,
+    remainingAfter,
+    occurredAt,
+    note,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'prescription_refills';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PrescriptionRefillRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('prescription_id')) {
+      context.handle(
+        _prescriptionIdMeta,
+        prescriptionId.isAcceptableOrUnknown(
+          data['prescription_id']!,
+          _prescriptionIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_prescriptionIdMeta);
+    }
+    if (data.containsKey('dose_delta')) {
+      context.handle(
+        _doseDeltaMeta,
+        doseDelta.isAcceptableOrUnknown(data['dose_delta']!, _doseDeltaMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_doseDeltaMeta);
+    }
+    if (data.containsKey('remaining_after')) {
+      context.handle(
+        _remainingAfterMeta,
+        remainingAfter.isAcceptableOrUnknown(
+          data['remaining_after']!,
+          _remainingAfterMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_remainingAfterMeta);
+    }
+    if (data.containsKey('occurred_at')) {
+      context.handle(
+        _occurredAtMeta,
+        occurredAt.isAcceptableOrUnknown(data['occurred_at']!, _occurredAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_occurredAtMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PrescriptionRefillRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PrescriptionRefillRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      prescriptionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prescription_id'],
+      )!,
+      doseDelta: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}dose_delta'],
+      )!,
+      remainingAfter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}remaining_after'],
+      )!,
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+    );
+  }
+
+  @override
+  $PrescriptionRefillsTable createAlias(String alias) {
+    return $PrescriptionRefillsTable(attachedDatabase, alias);
+  }
+}
+
+class PrescriptionRefillRow extends DataClass
+    implements Insertable<PrescriptionRefillRow> {
+  final String id;
+  final String prescriptionId;
+  final int doseDelta;
+  final int remainingAfter;
+  final DateTime occurredAt;
+  final String? note;
+  const PrescriptionRefillRow({
+    required this.id,
+    required this.prescriptionId,
+    required this.doseDelta,
+    required this.remainingAfter,
+    required this.occurredAt,
+    this.note,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['prescription_id'] = Variable<String>(prescriptionId);
+    map['dose_delta'] = Variable<int>(doseDelta);
+    map['remaining_after'] = Variable<int>(remainingAfter);
+    map['occurred_at'] = Variable<DateTime>(occurredAt);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    return map;
+  }
+
+  PrescriptionRefillsCompanion toCompanion(bool nullToAbsent) {
+    return PrescriptionRefillsCompanion(
+      id: Value(id),
+      prescriptionId: Value(prescriptionId),
+      doseDelta: Value(doseDelta),
+      remainingAfter: Value(remainingAfter),
+      occurredAt: Value(occurredAt),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+    );
+  }
+
+  factory PrescriptionRefillRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PrescriptionRefillRow(
+      id: serializer.fromJson<String>(json['id']),
+      prescriptionId: serializer.fromJson<String>(json['prescriptionId']),
+      doseDelta: serializer.fromJson<int>(json['doseDelta']),
+      remainingAfter: serializer.fromJson<int>(json['remainingAfter']),
+      occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+      note: serializer.fromJson<String?>(json['note']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'prescriptionId': serializer.toJson<String>(prescriptionId),
+      'doseDelta': serializer.toJson<int>(doseDelta),
+      'remainingAfter': serializer.toJson<int>(remainingAfter),
+      'occurredAt': serializer.toJson<DateTime>(occurredAt),
+      'note': serializer.toJson<String?>(note),
+    };
+  }
+
+  PrescriptionRefillRow copyWith({
+    String? id,
+    String? prescriptionId,
+    int? doseDelta,
+    int? remainingAfter,
+    DateTime? occurredAt,
+    Value<String?> note = const Value.absent(),
+  }) => PrescriptionRefillRow(
+    id: id ?? this.id,
+    prescriptionId: prescriptionId ?? this.prescriptionId,
+    doseDelta: doseDelta ?? this.doseDelta,
+    remainingAfter: remainingAfter ?? this.remainingAfter,
+    occurredAt: occurredAt ?? this.occurredAt,
+    note: note.present ? note.value : this.note,
+  );
+  PrescriptionRefillRow copyWithCompanion(PrescriptionRefillsCompanion data) {
+    return PrescriptionRefillRow(
+      id: data.id.present ? data.id.value : this.id,
+      prescriptionId: data.prescriptionId.present
+          ? data.prescriptionId.value
+          : this.prescriptionId,
+      doseDelta: data.doseDelta.present ? data.doseDelta.value : this.doseDelta,
+      remainingAfter: data.remainingAfter.present
+          ? data.remainingAfter.value
+          : this.remainingAfter,
+      occurredAt: data.occurredAt.present
+          ? data.occurredAt.value
+          : this.occurredAt,
+      note: data.note.present ? data.note.value : this.note,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PrescriptionRefillRow(')
+          ..write('id: $id, ')
+          ..write('prescriptionId: $prescriptionId, ')
+          ..write('doseDelta: $doseDelta, ')
+          ..write('remainingAfter: $remainingAfter, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('note: $note')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    prescriptionId,
+    doseDelta,
+    remainingAfter,
+    occurredAt,
+    note,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PrescriptionRefillRow &&
+          other.id == this.id &&
+          other.prescriptionId == this.prescriptionId &&
+          other.doseDelta == this.doseDelta &&
+          other.remainingAfter == this.remainingAfter &&
+          other.occurredAt == this.occurredAt &&
+          other.note == this.note);
+}
+
+class PrescriptionRefillsCompanion
+    extends UpdateCompanion<PrescriptionRefillRow> {
+  final Value<String> id;
+  final Value<String> prescriptionId;
+  final Value<int> doseDelta;
+  final Value<int> remainingAfter;
+  final Value<DateTime> occurredAt;
+  final Value<String?> note;
+  final Value<int> rowid;
+  const PrescriptionRefillsCompanion({
+    this.id = const Value.absent(),
+    this.prescriptionId = const Value.absent(),
+    this.doseDelta = const Value.absent(),
+    this.remainingAfter = const Value.absent(),
+    this.occurredAt = const Value.absent(),
+    this.note = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PrescriptionRefillsCompanion.insert({
+    required String id,
+    required String prescriptionId,
+    required int doseDelta,
+    required int remainingAfter,
+    required DateTime occurredAt,
+    this.note = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       prescriptionId = Value(prescriptionId),
+       doseDelta = Value(doseDelta),
+       remainingAfter = Value(remainingAfter),
+       occurredAt = Value(occurredAt);
+  static Insertable<PrescriptionRefillRow> custom({
+    Expression<String>? id,
+    Expression<String>? prescriptionId,
+    Expression<int>? doseDelta,
+    Expression<int>? remainingAfter,
+    Expression<DateTime>? occurredAt,
+    Expression<String>? note,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (prescriptionId != null) 'prescription_id': prescriptionId,
+      if (doseDelta != null) 'dose_delta': doseDelta,
+      if (remainingAfter != null) 'remaining_after': remainingAfter,
+      if (occurredAt != null) 'occurred_at': occurredAt,
+      if (note != null) 'note': note,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PrescriptionRefillsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? prescriptionId,
+    Value<int>? doseDelta,
+    Value<int>? remainingAfter,
+    Value<DateTime>? occurredAt,
+    Value<String?>? note,
+    Value<int>? rowid,
+  }) {
+    return PrescriptionRefillsCompanion(
+      id: id ?? this.id,
+      prescriptionId: prescriptionId ?? this.prescriptionId,
+      doseDelta: doseDelta ?? this.doseDelta,
+      remainingAfter: remainingAfter ?? this.remainingAfter,
+      occurredAt: occurredAt ?? this.occurredAt,
+      note: note ?? this.note,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (prescriptionId.present) {
+      map['prescription_id'] = Variable<String>(prescriptionId.value);
+    }
+    if (doseDelta.present) {
+      map['dose_delta'] = Variable<int>(doseDelta.value);
+    }
+    if (remainingAfter.present) {
+      map['remaining_after'] = Variable<int>(remainingAfter.value);
+    }
+    if (occurredAt.present) {
+      map['occurred_at'] = Variable<DateTime>(occurredAt.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PrescriptionRefillsCompanion(')
+          ..write('id: $id, ')
+          ..write('prescriptionId: $prescriptionId, ')
+          ..write('doseDelta: $doseDelta, ')
+          ..write('remainingAfter: $remainingAfter, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('note: $note, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2914,6 +3449,8 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
   late final $ReminderSchedulesTable reminderSchedules =
       $ReminderSchedulesTable(this);
   late final $PrescriptionsTable prescriptions = $PrescriptionsTable(this);
+  late final $PrescriptionRefillsTable prescriptionRefills =
+      $PrescriptionRefillsTable(this);
   late final $ScheduleProfilesTable scheduleProfiles = $ScheduleProfilesTable(
     this,
   );
@@ -2928,6 +3465,7 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     appSettings,
     reminderSchedules,
     prescriptions,
+    prescriptionRefills,
     scheduleProfiles,
     carouselSlots,
     authSessions,
@@ -3393,6 +3931,8 @@ typedef $$PrescriptionsTableCreateCompanionBuilder =
       required String id,
       required String name,
       required String pillType,
+      Value<int> remainingDoses,
+      Value<int> refillThreshold,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> rowid,
@@ -3402,6 +3942,8 @@ typedef $$PrescriptionsTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String> pillType,
+      Value<int> remainingDoses,
+      Value<int> refillThreshold,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -3428,6 +3970,16 @@ class $$PrescriptionsTableFilterComposer
 
   ColumnFilters<String> get pillType => $composableBuilder(
     column: $table.pillType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get remainingDoses => $composableBuilder(
+    column: $table.remainingDoses,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get refillThreshold => $composableBuilder(
+    column: $table.refillThreshold,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3466,6 +4018,16 @@ class $$PrescriptionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get remainingDoses => $composableBuilder(
+    column: $table.remainingDoses,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get refillThreshold => $composableBuilder(
+    column: $table.refillThreshold,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -3494,6 +4056,16 @@ class $$PrescriptionsTableAnnotationComposer
 
   GeneratedColumn<String> get pillType =>
       $composableBuilder(column: $table.pillType, builder: (column) => column);
+
+  GeneratedColumn<int> get remainingDoses => $composableBuilder(
+    column: $table.remainingDoses,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get refillThreshold => $composableBuilder(
+    column: $table.refillThreshold,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -3542,6 +4114,8 @@ class $$PrescriptionsTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> pillType = const Value.absent(),
+                Value<int> remainingDoses = const Value.absent(),
+                Value<int> refillThreshold = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -3549,6 +4123,8 @@ class $$PrescriptionsTableTableManager
                 id: id,
                 name: name,
                 pillType: pillType,
+                remainingDoses: remainingDoses,
+                refillThreshold: refillThreshold,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -3558,6 +4134,8 @@ class $$PrescriptionsTableTableManager
                 required String id,
                 required String name,
                 required String pillType,
+                Value<int> remainingDoses = const Value.absent(),
+                Value<int> refillThreshold = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
@@ -3565,6 +4143,8 @@ class $$PrescriptionsTableTableManager
                 id: id,
                 name: name,
                 pillType: pillType,
+                remainingDoses: remainingDoses,
+                refillThreshold: refillThreshold,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -3592,6 +4172,247 @@ typedef $$PrescriptionsTableProcessedTableManager =
         BaseReferences<_$DoseyDatabase, $PrescriptionsTable, PrescriptionRow>,
       ),
       PrescriptionRow,
+      PrefetchHooks Function()
+    >;
+typedef $$PrescriptionRefillsTableCreateCompanionBuilder =
+    PrescriptionRefillsCompanion Function({
+      required String id,
+      required String prescriptionId,
+      required int doseDelta,
+      required int remainingAfter,
+      required DateTime occurredAt,
+      Value<String?> note,
+      Value<int> rowid,
+    });
+typedef $$PrescriptionRefillsTableUpdateCompanionBuilder =
+    PrescriptionRefillsCompanion Function({
+      Value<String> id,
+      Value<String> prescriptionId,
+      Value<int> doseDelta,
+      Value<int> remainingAfter,
+      Value<DateTime> occurredAt,
+      Value<String?> note,
+      Value<int> rowid,
+    });
+
+class $$PrescriptionRefillsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $PrescriptionRefillsTable> {
+  $$PrescriptionRefillsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prescriptionId => $composableBuilder(
+    column: $table.prescriptionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get doseDelta => $composableBuilder(
+    column: $table.doseDelta,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get remainingAfter => $composableBuilder(
+    column: $table.remainingAfter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PrescriptionRefillsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $PrescriptionRefillsTable> {
+  $$PrescriptionRefillsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get prescriptionId => $composableBuilder(
+    column: $table.prescriptionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get doseDelta => $composableBuilder(
+    column: $table.doseDelta,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get remainingAfter => $composableBuilder(
+    column: $table.remainingAfter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PrescriptionRefillsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $PrescriptionRefillsTable> {
+  $$PrescriptionRefillsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get prescriptionId => $composableBuilder(
+    column: $table.prescriptionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get doseDelta =>
+      $composableBuilder(column: $table.doseDelta, builder: (column) => column);
+
+  GeneratedColumn<int> get remainingAfter => $composableBuilder(
+    column: $table.remainingAfter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+}
+
+class $$PrescriptionRefillsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $PrescriptionRefillsTable,
+          PrescriptionRefillRow,
+          $$PrescriptionRefillsTableFilterComposer,
+          $$PrescriptionRefillsTableOrderingComposer,
+          $$PrescriptionRefillsTableAnnotationComposer,
+          $$PrescriptionRefillsTableCreateCompanionBuilder,
+          $$PrescriptionRefillsTableUpdateCompanionBuilder,
+          (
+            PrescriptionRefillRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $PrescriptionRefillsTable,
+              PrescriptionRefillRow
+            >,
+          ),
+          PrescriptionRefillRow,
+          PrefetchHooks Function()
+        > {
+  $$PrescriptionRefillsTableTableManager(
+    _$DoseyDatabase db,
+    $PrescriptionRefillsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PrescriptionRefillsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PrescriptionRefillsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$PrescriptionRefillsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> prescriptionId = const Value.absent(),
+                Value<int> doseDelta = const Value.absent(),
+                Value<int> remainingAfter = const Value.absent(),
+                Value<DateTime> occurredAt = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PrescriptionRefillsCompanion(
+                id: id,
+                prescriptionId: prescriptionId,
+                doseDelta: doseDelta,
+                remainingAfter: remainingAfter,
+                occurredAt: occurredAt,
+                note: note,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String prescriptionId,
+                required int doseDelta,
+                required int remainingAfter,
+                required DateTime occurredAt,
+                Value<String?> note = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PrescriptionRefillsCompanion.insert(
+                id: id,
+                prescriptionId: prescriptionId,
+                doseDelta: doseDelta,
+                remainingAfter: remainingAfter,
+                occurredAt: occurredAt,
+                note: note,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PrescriptionRefillsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $PrescriptionRefillsTable,
+      PrescriptionRefillRow,
+      $$PrescriptionRefillsTableFilterComposer,
+      $$PrescriptionRefillsTableOrderingComposer,
+      $$PrescriptionRefillsTableAnnotationComposer,
+      $$PrescriptionRefillsTableCreateCompanionBuilder,
+      $$PrescriptionRefillsTableUpdateCompanionBuilder,
+      (
+        PrescriptionRefillRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $PrescriptionRefillsTable,
+          PrescriptionRefillRow
+        >,
+      ),
+      PrescriptionRefillRow,
       PrefetchHooks Function()
     >;
 typedef $$ScheduleProfilesTableCreateCompanionBuilder =
@@ -4533,6 +5354,8 @@ class $DoseyDatabaseManager {
       $$ReminderSchedulesTableTableManager(_db, _db.reminderSchedules);
   $$PrescriptionsTableTableManager get prescriptions =>
       $$PrescriptionsTableTableManager(_db, _db.prescriptions);
+  $$PrescriptionRefillsTableTableManager get prescriptionRefills =>
+      $$PrescriptionRefillsTableTableManager(_db, _db.prescriptionRefills);
   $$ScheduleProfilesTableTableManager get scheduleProfiles =>
       $$ScheduleProfilesTableTableManager(_db, _db.scheduleProfiles);
   $$CarouselSlotsTableTableManager get carouselSlots =>

@@ -53,8 +53,35 @@ class Prescriptions extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   TextColumn get pillType => text()();
+  IntColumn get remainingDoses => integer().withDefault(const Constant(0))();
+  IntColumn get refillThreshold => integer().withDefault(const Constant(3))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (remaining_doses >= 0)',
+    'CHECK (refill_threshold >= 0)',
+  ];
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('PrescriptionRefillRow')
+class PrescriptionRefills extends Table {
+  TextColumn get id => text()();
+  TextColumn get prescriptionId => text()();
+  IntColumn get doseDelta => integer()();
+  IntColumn get remainingAfter => integer()();
+  DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get note => text().nullable()();
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (dose_delta > 0)',
+    'CHECK (remaining_after >= 0)',
+  ];
 
   @override
   Set<Column> get primaryKey => {id};
@@ -114,6 +141,7 @@ class DoseLogEvents extends Table {
     AppSettings,
     ReminderSchedules,
     Prescriptions,
+    PrescriptionRefills,
     ScheduleProfiles,
     CarouselSlots,
     AuthSessions,
@@ -134,7 +162,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -185,6 +213,12 @@ class DoseyDatabase extends _$DoseyDatabase {
         await _normalizeLegacyCarouselSlotStatuses();
         await migrator.alterTable(TableMigration(carouselSlots));
       }
+      if (from < 10) {
+        if (from >= 6) {
+          await _rebuildLegacyPrescriptionsTableWithInventoryTracking();
+        }
+        await migrator.createTable(prescriptionRefills);
+      }
     },
   );
 
@@ -206,6 +240,46 @@ class DoseyDatabase extends _$DoseyDatabase {
       SET status = 'needs_review'
       WHERE status NOT IN ('assigned', 'loaded', 'dispensed', 'needs_review');
     ''');
+  }
+
+  Future<void> _rebuildLegacyPrescriptionsTableWithInventoryTracking() async {
+    await transaction(() async {
+      await customStatement(
+        'ALTER TABLE prescriptions RENAME TO prescriptions_old;',
+      );
+      await customStatement('''
+        CREATE TABLE prescriptions (
+          id TEXT NOT NULL PRIMARY KEY,
+          name TEXT NOT NULL,
+          pill_type TEXT NOT NULL,
+          remaining_doses INTEGER NOT NULL DEFAULT 0 CHECK (remaining_doses >= 0),
+          refill_threshold INTEGER NOT NULL DEFAULT 3 CHECK (refill_threshold >= 0),
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      ''');
+      await customStatement('''
+        INSERT INTO prescriptions (
+          id,
+          name,
+          pill_type,
+          remaining_doses,
+          refill_threshold,
+          created_at,
+          updated_at
+        )
+        SELECT
+          id,
+          name,
+          pill_type,
+          0,
+          3,
+          created_at,
+          updated_at
+        FROM prescriptions_old;
+      ''');
+      await customStatement('DROP TABLE prescriptions_old;');
+    });
   }
 
   Future<void> _seedOnboardingCompleted({required bool completed}) async {

@@ -21,6 +21,8 @@ class Prescription {
     required this.id,
     required this.name,
     required this.pillType,
+    this.remainingDoses = 0,
+    this.refillThreshold = 3,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -28,20 +30,46 @@ class Prescription {
   final String id;
   final String name;
   final PillType pillType;
+  final int remainingDoses;
+  final int refillThreshold;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  bool get needsRefill => remainingDoses <= refillThreshold;
 
   Prescription copyWith({
     String? name,
     PillType? pillType,
+    int? remainingDoses,
+    int? refillThreshold,
     DateTime? updatedAt,
   }) {
     return Prescription(
       id: id,
       name: name ?? this.name,
       pillType: pillType ?? this.pillType,
+      remainingDoses: remainingDoses ?? this.remainingDoses,
+      refillThreshold: refillThreshold ?? this.refillThreshold,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
+}
+
+class PrescriptionRefill {
+  const PrescriptionRefill({
+    required this.id,
+    required this.prescriptionId,
+    required this.doseDelta,
+    required this.remainingAfter,
+    required this.occurredAt,
+    required this.note,
+  });
+
+  final String id;
+  final String prescriptionId;
+  final int doseDelta;
+  final int remainingAfter;
+  final DateTime occurredAt;
+  final String? note;
 }
