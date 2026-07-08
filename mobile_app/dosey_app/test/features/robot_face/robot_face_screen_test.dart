@@ -21,6 +21,8 @@ void main() {
           nextEventLabel: '8:00 PM · Evening meds',
           isFlipped: false,
           isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
           statusLabel: 'Controller connected',
         ),
       ),
@@ -43,11 +45,14 @@ void main() {
   ) async {
     await tester.pumpWidget(
       const _RobotFaceTestApp(
+        key: ValueKey<String>('soon-state'),
         initialState: RobotFaceState(
           mode: RobotFaceMode.idle,
           nextEventLabel: 'No reminders scheduled',
           isFlipped: true,
           isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
         ),
       ),
     );
@@ -66,11 +71,14 @@ void main() {
   ) async {
     await tester.pumpWidget(
       const _RobotFaceTestApp(
+        key: ValueKey<String>('ready-state'),
         initialState: RobotFaceState(
           mode: RobotFaceMode.doseReady,
           nextEventLabel: 'Now · Morning meds',
           isFlipped: false,
           isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
           statusLabel: 'Ready to dispense',
         ),
       ),
@@ -101,6 +109,8 @@ void main() {
           nextEventLabel: '8:00 PM · Evening meds',
           isFlipped: false,
           isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
           statusLabel: 'Controller connected',
         ),
       ),
@@ -112,6 +122,8 @@ void main() {
         nextEventLabel: 'No reminders scheduled',
         isFlipped: false,
         isLandscapeOnly: true,
+        rampProgress: 0,
+        isInAwakeWindow: false,
         statusLabel: 'Robot Face unavailable',
       ),
     );
@@ -133,6 +145,8 @@ void main() {
           nextEventLabel: '8:00 PM · Evening meds',
           isFlipped: false,
           isLandscapeOnly: true,
+          rampProgress: 0.55,
+          isInAwakeWindow: true,
           statusLabel: 'Dispense soon',
         ),
       ),
@@ -162,6 +176,8 @@ void main() {
           nextEventLabel: 'No reminders scheduled',
           isFlipped: false,
           isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
         ),
       ),
     );
@@ -181,6 +197,8 @@ void main() {
           nextEventLabel: 'No reminders scheduled',
           isFlipped: false,
           isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
         ),
       ),
     );
@@ -197,6 +215,94 @@ void main() {
 
     final loopedPhase = state.debugPhase as double;
     expect(loopedPhase, closeTo(0.04, 0.03));
+  });
+
+  testWidgets('ramps compact urgency between soon and ready states', (
+    WidgetTester tester,
+  ) async {
+    final states = StreamController<RobotFaceState>.broadcast();
+    addTearDown(states.close);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        stateStream: states.stream,
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.doseApproaching,
+          nextEventLabel: '8:00 PM · Evening meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0.2,
+          isInAwakeWindow: true,
+          statusLabel: 'Dispense soon',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final soonScale = tester.widget<AnimatedScale>(
+      find.byKey(RobotFaceScreen.urgentPromptScaleKey),
+    );
+    final soonBadge = tester.widget<DecoratedBox>(
+      find.byKey(RobotFaceScreen.statusBadgeKey),
+    );
+    final soonBorder =
+        (soonBadge.decoration as BoxDecoration).border! as Border;
+
+    states.add(
+      const RobotFaceState(
+        mode: RobotFaceMode.doseReady,
+        nextEventLabel: 'Now · Morning meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+        statusLabel: 'Ready to dispense',
+      ),
+    );
+
+    await tester.pump();
+
+    final readyScale = tester.widget<AnimatedScale>(
+      find.byKey(RobotFaceScreen.urgentPromptScaleKey),
+    );
+    final readyBadge = tester.widget<DecoratedBox>(
+      find.byKey(RobotFaceScreen.statusBadgeKey),
+    );
+    final readyBorder =
+        (readyBadge.decoration as BoxDecoration).border! as Border;
+
+    expect(soonScale.scale, greaterThan(1));
+    expect(readyScale.scale, greaterThan(soonScale.scale));
+    expect(readyBorder.top.color.a, greaterThan(soonBorder.top.color.a));
+  });
+
+  testWidgets('shows alert support badge in awake idle window', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: '8:00 PM · Evening meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+          statusLabel: 'Controller connected',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final badge = tester.widget<DecoratedBox>(
+      find.byKey(RobotFaceScreen.statusBadgeKey),
+    );
+    final border = (badge.decoration as BoxDecoration).border! as Border;
+
+    expect(find.text('Controller connected'), findsOneWidget);
+    expect(border.top.color.a, greaterThan(0.08));
   });
 }
 

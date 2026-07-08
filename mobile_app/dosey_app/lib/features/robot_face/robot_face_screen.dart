@@ -19,6 +19,10 @@ class RobotFaceScreen extends StatefulWidget {
   static const bottomCardKey = ValueKey<String>('robot-face-bottom-card');
   static const flipTransformKey = ValueKey<String>('robot-face-flip-transform');
   static const urgentPromptKey = ValueKey<String>('robot-face-urgent-prompt');
+  static const urgentPromptScaleKey = ValueKey<String>(
+    'robot-face-urgent-prompt-scale',
+  );
+  static const statusBadgeKey = ValueKey<String>('robot-face-status-badge');
 
   final RobotFaceController? controller;
   final Stream<RobotFaceState>? stateStream;
@@ -35,6 +39,8 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
     nextEventLabel: 'No reminders scheduled',
     isFlipped: false,
     isLandscapeOnly: true,
+    rampProgress: 0,
+    isInAwakeWindow: false,
     statusLabel: 'Robot Face unavailable',
   );
 
@@ -109,6 +115,7 @@ class _UrgentPromptOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final prompt = _promptFor(state);
+    final promptScale = _promptScaleFor(state);
     if (prompt == null) {
       return const SizedBox.shrink();
     }
@@ -119,7 +126,8 @@ class _UrgentPromptOverlay extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.only(top: 18),
           child: AnimatedScale(
-            scale: state.mode == RobotFaceMode.doseReady ? 1.08 : 1,
+            key: RobotFaceScreen.urgentPromptScaleKey,
+            scale: promptScale,
             duration: const Duration(milliseconds: 280),
             child: DecoratedBox(
               decoration: BoxDecoration(
@@ -206,6 +214,16 @@ class _UrgentPromptOverlay extends StatelessWidget {
       _ => Colors.white,
     };
   }
+
+  double _promptScaleFor(RobotFaceState state) {
+    final ramp = state.rampProgress.clamp(0.0, 1.0);
+
+    return switch (state.mode) {
+      RobotFaceMode.doseApproaching => 1 + (ramp * 0.06),
+      RobotFaceMode.doseReady => 1.1,
+      _ => 1,
+    };
+  }
 }
 
 class _RobotFaceFrame extends StatelessWidget {
@@ -280,6 +298,8 @@ class _RobotFaceStatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final badgeEmphasis = _badgeEmphasisFor(state);
+
     return DecoratedBox(
       decoration: BoxDecoration(
         color: const Color(0xC20B111B),
@@ -345,28 +365,48 @@ class _RobotFaceStatusCard extends StatelessWidget {
                 case final statusLabel?) ...<Widget>[
               const SizedBox(width: 12),
               Flexible(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
+                child: AnimatedScale(
+                  duration: const Duration(milliseconds: 280),
+                  scale: 1 + (badgeEmphasis * 0.05),
+                  child: DecoratedBox(
+                    key: RobotFaceScreen.statusBadgeKey,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(
+                        alpha: 0.06 + (badgeEmphasis * 0.05),
+                      ),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: _accentFor(
+                          state.mode,
+                        ).withValues(alpha: 0.08 + (badgeEmphasis * 0.14)),
+                      ),
+                      boxShadow: badgeEmphasis == 0
+                          ? null
+                          : <BoxShadow>[
+                              BoxShadow(
+                                color: _accentFor(state.mode).withValues(
+                                  alpha: 0.12 + (badgeEmphasis * 0.1),
+                                ),
+                                blurRadius: 16,
+                                spreadRadius: 0.5,
+                              ),
+                            ],
                     ),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    child: Text(
-                      statusLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFD3DAE7),
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12 + (badgeEmphasis * 2),
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        statusLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFD3DAE7),
+                        ),
                       ),
                     ),
                   ),
@@ -420,6 +460,17 @@ class _RobotFaceStatusCard extends StatelessWidget {
       RobotFaceMode.error => 'Check robot',
       RobotFaceMode.offline => 'Reconnect needed',
       _ => statusLabel,
+    };
+  }
+
+  double _badgeEmphasisFor(RobotFaceState state) {
+    final ramp = state.rampProgress.clamp(0.0, 1.0);
+
+    return switch (state.mode) {
+      RobotFaceMode.doseApproaching => 0.28 + (ramp * 0.52),
+      RobotFaceMode.doseReady => 1,
+      RobotFaceMode.idle when state.isInAwakeWindow => 0.24,
+      _ => 0,
     };
   }
 }

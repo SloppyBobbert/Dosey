@@ -120,14 +120,16 @@ class _RobotFacePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
-    final breathing = 1 + math.sin(phase * math.pi * 2) * 0.018;
+    final motion = _motionProfileFor(state, size);
+    final breathing =
+        1 + math.sin(phase * math.pi * 2) * motion.breathingAmplitude;
     final pulse = _pulseValue();
     final blink = _blinkValue();
 
     final palette = _paletteFor(state.mode);
     final concernTilt = _concernTiltFor(state.mode);
-    final eyelidOpen = _eyelidOpenFor(state.mode, blink);
-    final pupilOffset = _pupilOffsetFor(state.mode, size, phase);
+    final eyelidOpen = _eyelidOpenFor(state, blink, phase);
+    final pupilOffset = _pupilOffsetFor(state, size, phase);
     final bounceOffset = _bounceOffsetFor(state.mode);
 
     final backgroundPaint = Paint()
@@ -142,21 +144,28 @@ class _RobotFacePainter extends CustomPainter {
       canvas,
       center: Offset(size.width * 0.22, size.height * 0.18),
       radius: size.shortestSide * 0.38,
-      color: palette.glow.withValues(alpha: 0.22),
+      color: palette.glow.withValues(alpha: 0.18 + motion.glowBoost),
     );
     _paintGlowOrb(
       canvas,
       center: Offset(size.width * 0.82, size.height * 0.24),
       radius: size.shortestSide * 0.26,
-      color: palette.accent.withValues(alpha: 0.12),
+      color: palette.accent.withValues(alpha: 0.08 + (motion.glowBoost * 0.75)),
     );
+
+    if (motion.wakeAura > 0) {
+      _paintWakeAura(canvas, size, palette, motion.wakeAura, pulse);
+    }
 
     if (state.mode == RobotFaceMode.sleepy) {
       _paintSleepVeil(canvas, size, phase);
     }
 
     final eyeArea = Rect.fromCenter(
-      center: Offset(size.width * 0.5, size.height * 0.48 + bounceOffset),
+      center: Offset(
+        size.width * 0.5,
+        size.height * (0.48 - motion.eyeLift) + bounceOffset + motion.idleDrift,
+      ),
       width: size.width * 0.8,
       height: size.height * 0.48,
     );
@@ -182,14 +191,39 @@ class _RobotFacePainter extends CustomPainter {
       eyeRadius,
     );
 
-    if (state.mode == RobotFaceMode.doseReady ||
-        state.mode == RobotFaceMode.doseApproaching) {
-      _paintAttentionRing(canvas, leftEye.outerRect, palette, pulse);
-      _paintAttentionRing(canvas, rightEye.outerRect, palette, pulse);
+    if (motion.attentionRingStrength > 0) {
+      _paintAttentionRing(
+        canvas,
+        leftEye.outerRect,
+        palette,
+        pulse,
+        motion.attentionRingStrength,
+      );
+      _paintAttentionRing(
+        canvas,
+        rightEye.outerRect,
+        palette,
+        pulse,
+        motion.attentionRingStrength,
+      );
     }
 
-    _paintEye(canvas, leftEye, palette, pupilOffset, concernTilt * -1);
-    _paintEye(canvas, rightEye, palette, pupilOffset, concernTilt);
+    _paintEye(
+      canvas,
+      leftEye,
+      palette,
+      pupilOffset,
+      concernTilt * -1,
+      motion.glowBoost,
+    );
+    _paintEye(
+      canvas,
+      rightEye,
+      palette,
+      pupilOffset,
+      concernTilt,
+      motion.glowBoost,
+    );
   }
 
   void _paintEye(
@@ -198,6 +232,7 @@ class _RobotFacePainter extends CustomPainter {
     _FacePalette palette,
     Offset pupilOffset,
     double tilt,
+    double glowBoost,
   ) {
     canvas.save();
     canvas.translate(eye.center.dx, eye.center.dy);
@@ -205,8 +240,8 @@ class _RobotFacePainter extends CustomPainter {
     canvas.translate(-eye.center.dx, -eye.center.dy);
 
     final outerGlow = Paint()
-      ..color = palette.glow.withValues(alpha: 0.28)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 42);
+      ..color = palette.glow.withValues(alpha: 0.24 + glowBoost)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 42 + (glowBoost * 24));
     canvas.drawRRect(eye.inflate(14), outerGlow);
 
     final shellPaint = Paint()
@@ -272,17 +307,48 @@ class _RobotFacePainter extends CustomPainter {
     Rect eyeRect,
     _FacePalette palette,
     double pulse,
+    double strength,
   ) {
     final ringPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4 + pulse * 3
-      ..color = palette.accent.withValues(alpha: 0.18 + pulse * 0.2);
+      ..strokeWidth = 1.5 + (strength * 2.5) + (pulse * strength * 2.5)
+      ..color = palette.accent.withValues(
+        alpha: 0.08 + (strength * 0.12) + (pulse * strength * 0.16),
+      );
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        eyeRect.inflate(18 + pulse * 10),
+        eyeRect.inflate(10 + (strength * 12) + (pulse * strength * 10)),
         Radius.circular(eyeRect.height),
       ),
       ringPaint,
+    );
+  }
+
+  void _paintWakeAura(
+    Canvas canvas,
+    Size size,
+    _FacePalette palette,
+    double intensity,
+    double pulse,
+  ) {
+    final auraRect = Rect.fromCenter(
+      center: Offset(size.width * 0.5, size.height * 0.3),
+      width: size.width * 0.72,
+      height: size.height * 0.2,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(auraRect, Radius.circular(auraRect.height)),
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: <Color>[
+            palette.accent.withValues(alpha: 0),
+            palette.accent.withValues(alpha: 0.04 + (intensity * 0.08)),
+            palette.accent.withValues(alpha: 0),
+          ],
+          stops: <double>[0, 0.5 + (pulse * 0.05), 1],
+        ).createShader(auraRect),
     );
   }
 
@@ -338,12 +404,20 @@ class _RobotFacePainter extends CustomPainter {
     return Curves.easeOut.transform(pulse);
   }
 
-  double _eyelidOpenFor(RobotFaceMode mode, double blink) {
-    final base = switch (mode) {
+  double _eyelidOpenFor(RobotFaceState state, double blink, double phase) {
+    final ramp = state.rampProgress.clamp(0.0, 1.0);
+    final awakeLift = state.isInAwakeWindow ? 0.04 : 0.0;
+    final liveLift = state.mode == RobotFaceMode.idle
+        ? ((math.sin(phase * math.pi * 2) + 1) / 2) * 0.03
+        : 0.0;
+    final base = switch (state.mode) {
       RobotFaceMode.sleepy => 0.28,
       RobotFaceMode.offline => 0.54,
       RobotFaceMode.error || RobotFaceMode.missed => 0.46,
       RobotFaceMode.happyConfirmed => 1.08,
+      RobotFaceMode.doseApproaching => 1.0 + awakeLift + (ramp * 0.06),
+      RobotFaceMode.doseReady => 1.06,
+      RobotFaceMode.idle => 0.98 + awakeLift + liveLift,
       _ => 1.0,
     };
     return (base - blink * 0.94).clamp(0.12, 1.08);
@@ -358,19 +432,29 @@ class _RobotFacePainter extends CustomPainter {
     };
   }
 
-  Offset _pupilOffsetFor(RobotFaceMode mode, Size size, double phase) {
+  Offset _pupilOffsetFor(RobotFaceState state, Size size, double phase) {
+    final ramp = state.rampProgress.clamp(0.0, 1.0);
     final horizontal = math.sin(phase * math.pi * 2) * size.width * 0.012;
-    return switch (mode) {
+    final idleVertical = math.sin(phase * math.pi * 4) * size.height * 0.003;
+
+    return switch (state.mode) {
       RobotFaceMode.sleepy => Offset(-size.width * 0.012, size.height * 0.012),
-      RobotFaceMode.doseReady ||
-      RobotFaceMode.doseApproaching => Offset(0, -size.height * 0.018),
+      RobotFaceMode.doseApproaching => Offset(
+        horizontal * (0.35 - (ramp * 0.2)),
+        -size.height * (0.01 + (ramp * 0.012)),
+      ),
+      RobotFaceMode.doseReady => Offset(0, -size.height * 0.024),
       RobotFaceMode.happyConfirmed => Offset(
         horizontal * 0.3,
         -size.height * 0.022,
       ),
       RobotFaceMode.error => Offset(size.width * 0.008, size.height * 0.006),
       RobotFaceMode.offline => Offset(-size.width * 0.006, size.height * 0.01),
-      _ => Offset(horizontal, 0),
+      RobotFaceMode.idle when state.isInAwakeWindow => Offset(
+        horizontal * 0.5,
+        -size.height * 0.008 + idleVertical,
+      ),
+      _ => Offset(horizontal, idleVertical),
     };
   }
 
@@ -379,6 +463,53 @@ class _RobotFacePainter extends CustomPainter {
       return 0;
     }
     return math.sin(phase * math.pi * 2) * 8;
+  }
+
+  _FaceMotionProfile _motionProfileFor(RobotFaceState state, Size size) {
+    final ramp = state.rampProgress.clamp(0.0, 1.0);
+
+    return switch (state.mode) {
+      RobotFaceMode.doseApproaching => _FaceMotionProfile(
+        breathingAmplitude: 0.02 - (ramp * 0.004),
+        glowBoost: 0.08 + (ramp * 0.12),
+        eyeLift: 0.008 + (ramp * 0.018),
+        attentionRingStrength: 0.25 + (ramp * 0.45),
+        wakeAura: state.isInAwakeWindow ? 0.5 + (ramp * 0.35) : ramp * 0.35,
+        idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.004,
+      ),
+      RobotFaceMode.doseReady => _FaceMotionProfile(
+        breathingAmplitude: 0.014,
+        glowBoost: 0.26,
+        eyeLift: 0.03,
+        attentionRingStrength: 1,
+        wakeAura: 1,
+        idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.003,
+      ),
+      RobotFaceMode.idle when state.isInAwakeWindow => _FaceMotionProfile(
+        breathingAmplitude: 0.022,
+        glowBoost: 0.07,
+        eyeLift: 0.01,
+        attentionRingStrength: 0.16,
+        wakeAura: 0.38,
+        idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.006,
+      ),
+      RobotFaceMode.idle => _FaceMotionProfile(
+        breathingAmplitude: 0.022,
+        glowBoost: 0.03,
+        eyeLift: 0,
+        attentionRingStrength: 0,
+        wakeAura: 0,
+        idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.005,
+      ),
+      _ => _FaceMotionProfile(
+        breathingAmplitude: 0.018,
+        glowBoost: 0.04,
+        eyeLift: 0,
+        attentionRingStrength: 0,
+        wakeAura: 0,
+        idleDrift: 0,
+      ),
+    };
   }
 
   _FacePalette _paletteFor(RobotFaceMode mode) {
@@ -465,4 +596,22 @@ class _FacePalette {
   final Color pupil;
   final Color glow;
   final Color accent;
+}
+
+class _FaceMotionProfile {
+  const _FaceMotionProfile({
+    required this.breathingAmplitude,
+    required this.glowBoost,
+    required this.eyeLift,
+    required this.attentionRingStrength,
+    required this.wakeAura,
+    required this.idleDrift,
+  });
+
+  final double breathingAmplitude;
+  final double glowBoost;
+  final double eyeLift;
+  final double attentionRingStrength;
+  final double wakeAura;
+  final double idleDrift;
 }
