@@ -10,20 +10,12 @@ import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/features/today/today_next_dose_helper.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 
 class TodayScreen extends StatelessWidget {
   const TodayScreen({super.key});
-
-  static final Set<String> _terminalDoseEventKinds = <String>{
-    DoseLogEventKind.doseTakenConfirmed.name,
-    DoseLogEventKind.doseAlreadyTaken.name,
-    DoseLogEventKind.doseTakenEarly.name,
-    DoseLogEventKind.doseTakenLate.name,
-    DoseLogEventKind.doseSkipped.name,
-    DoseLogEventKind.doseMissed.name,
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -103,39 +95,21 @@ class TodayScreen extends StatelessWidget {
     List<ReminderSchedule> schedules,
     List<DoseLogEvent> events,
   ) {
-    for (final schedule in schedules) {
-      final doseId = _doseIdForToday(schedule.id);
-      if (schedule.isEnabled && !_hasTerminalEventForDose(events, doseId)) {
-        return schedule;
-      }
-    }
-    return null;
+    return TodayNextDoseHelper.currentSchedule(schedules, events);
   }
 
   static DoseLogEvent? _latestEventForDose(
     List<DoseLogEvent> events,
     String doseId,
   ) {
-    DoseLogEvent? latest;
-    for (final event in events) {
-      if (event.doseId == doseId &&
-          (latest == null || event.occurredAt.isAfter(latest.occurredAt))) {
-        latest = event;
-      }
-    }
-    return latest;
+    return TodayNextDoseHelper.latestEventForDose(events, doseId);
   }
 
   static bool _hasTerminalEventForDose(
     List<DoseLogEvent> events,
     String doseId,
   ) {
-    for (final event in events) {
-      if (event.doseId == doseId && _isTerminalDoseEventKind(event.kind)) {
-        return true;
-      }
-    }
-    return false;
+    return TodayNextDoseHelper.hasTerminalEventForDose(events, doseId);
   }
 
   static bool _hasEventKindForDose(
@@ -156,7 +130,7 @@ class TodayScreen extends StatelessWidget {
   }
 
   static bool _isTerminalDoseEventKind(DoseLogEventKind kind) {
-    return _terminalDoseEventKinds.contains(kind.name);
+    return TodayNextDoseHelper.isTerminalDoseEventKind(kind);
   }
 
   static String? _inventoryPrescriptionIdFor(
@@ -171,10 +145,7 @@ class TodayScreen extends StatelessWidget {
   }
 
   static String _doseIdForToday(String scheduleId) {
-    final now = DateTime.now();
-    final month = now.month.toString().padLeft(2, '0');
-    final day = now.day.toString().padLeft(2, '0');
-    return '$scheduleId:${now.year}-$month-$day';
+    return TodayNextDoseHelper.doseIdForDate(scheduleId, DateTime.now());
   }
 
   static Future<void> _logDoseAction(
@@ -242,7 +213,9 @@ class TodayScreen extends StatelessWidget {
               ..where(
                 (row) =>
                     row.doseId.equals(doseId) &
-                    row.kind.isIn(_terminalDoseEventKinds),
+                    row.kind.isIn(
+                      TodayNextDoseHelper.terminalDoseEventKindNames,
+                    ),
               )
               ..limit(1))
             .getSingleOrNull();
