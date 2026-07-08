@@ -6,12 +6,23 @@ class RobotFaceSettingsRepository {
 
   static const _isFlippedKey = 'robot_face_is_flipped';
   static const _dimAfterInactivityKey = 'robot_face_dim_after_inactivity';
+  static const _wakeBeforeDoseMinutesKey =
+      'robot_face_wake_before_dose_minutes';
+  static const _stayAwakeAfterDoseMinutesKey =
+      'robot_face_stay_awake_after_dose_minutes';
+  static const _defaultWakeBeforeDoseMinutes = 10;
+  static const _defaultStayAwakeAfterDoseMinutes = 10;
 
   final DoseyDatabase _database;
 
   Stream<RobotFaceSettings> watchSettings() {
     return _database
-        .watchAppSettings({_isFlippedKey, _dimAfterInactivityKey})
+        .watchAppSettings({
+          _isFlippedKey,
+          _dimAfterInactivityKey,
+          _wakeBeforeDoseMinutesKey,
+          _stayAwakeAfterDoseMinutesKey,
+        })
         .map(_mapSettings);
   }
 
@@ -19,6 +30,8 @@ class RobotFaceSettingsRepository {
     final settings = await _database.getAppSettings({
       _isFlippedKey,
       _dimAfterInactivityKey,
+      _wakeBeforeDoseMinutesKey,
+      _stayAwakeAfterDoseMinutesKey,
     });
 
     return _mapSettings(settings);
@@ -34,6 +47,14 @@ class RobotFaceSettingsRepository {
         _dimAfterInactivityKey,
         settings.dimAfterInactivity.toString(),
       );
+      await _database.setAppSetting(
+        _wakeBeforeDoseMinutesKey,
+        settings.wakeBeforeDoseMinutes.toString(),
+      );
+      await _database.setAppSetting(
+        _stayAwakeAfterDoseMinutesKey,
+        settings.stayAwakeAfterDoseMinutes.toString(),
+      );
     });
   }
 
@@ -43,6 +64,12 @@ class RobotFaceSettingsRepository {
     return RobotFaceSettings(
       isFlipped: values[_isFlippedKey] == 'true',
       dimAfterInactivity: values[_dimAfterInactivityKey] != 'false',
+      wakeBeforeDoseMinutes:
+          int.tryParse(values[_wakeBeforeDoseMinutesKey] ?? '') ??
+          _defaultWakeBeforeDoseMinutes,
+      stayAwakeAfterDoseMinutes:
+          int.tryParse(values[_stayAwakeAfterDoseMinutesKey] ?? '') ??
+          _defaultStayAwakeAfterDoseMinutes,
     );
   }
 }

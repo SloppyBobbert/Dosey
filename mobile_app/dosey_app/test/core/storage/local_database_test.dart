@@ -34,7 +34,13 @@ void main() {
       addTearDown(database.close);
       final repository = RobotFaceSettingsRepository(database);
 
-      expect(await repository.getSettings(), const RobotFaceSettings());
+      expect(
+        await repository.getSettings(),
+        const RobotFaceSettings(
+          wakeBeforeDoseMinutes: 10,
+          stayAwakeAfterDoseMinutes: 10,
+        ),
+      );
     },
   );
 
@@ -48,13 +54,26 @@ void main() {
 
     await Future<void>.delayed(Duration.zero);
     await repository.saveSettings(
-      const RobotFaceSettings(isFlipped: true, dimAfterInactivity: false),
+      const RobotFaceSettings(
+        isFlipped: true,
+        dimAfterInactivity: false,
+        wakeBeforeDoseMinutes: 15,
+        stayAwakeAfterDoseMinutes: 20,
+      ),
     );
     await Future<void>.delayed(Duration.zero);
 
     expect(states, [
-      const RobotFaceSettings(),
-      const RobotFaceSettings(isFlipped: true, dimAfterInactivity: false),
+      const RobotFaceSettings(
+        wakeBeforeDoseMinutes: 10,
+        stayAwakeAfterDoseMinutes: 10,
+      ),
+      const RobotFaceSettings(
+        isFlipped: true,
+        dimAfterInactivity: false,
+        wakeBeforeDoseMinutes: 15,
+        stayAwakeAfterDoseMinutes: 20,
+      ),
     ]);
   });
 
