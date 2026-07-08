@@ -24,6 +24,8 @@ import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:flutter/widgets.dart';
 
 class DoseyAppScope extends StatefulWidget {
@@ -57,6 +59,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
   late final DoseyDatabase _database;
   late final bool _ownsDatabase;
   late final bool _ownsNotificationTapController;
+  late final StreamController<DateTime> _robotFaceClockController;
+  late final Timer _robotFaceClockTimer;
   late final DoseyAppDependencies _dependencies;
 
   @override
@@ -64,6 +68,12 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     super.initState();
     _database = widget.database ?? DoseyDatabase();
     _ownsDatabase = widget.database == null;
+    _robotFaceClockController = StreamController<DateTime>.broadcast();
+    _robotFaceClockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!_robotFaceClockController.isClosed) {
+        _robotFaceClockController.add(DateTime.now());
+      }
+    });
     final doseLog = DriftDoseLogRepository(_database);
     final localAuth = LocalAuthRepository(_database);
     final reminders = LocalReminderRepository(_database);
@@ -79,11 +89,24 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       _database,
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
     );
+    final robotFaceSettings = RobotFaceSettingsRepository(_database);
+    final scheduleProfiles = LocalScheduleProfileRepository(_database);
+    final controller = SimulatedControllerGateway(
+      doseLog,
+      canHostRobot: () async {
+        final platform = currentAppDevicePlatform();
+        final storedRole = await settings.getDeviceRole();
+        final role = storedRole.isAllowedOn(platform)
+            ? storedRole
+            : AppDeviceRole.defaultFor(platform);
+        return role.canHostRobot;
+      },
+    );
     _dependencies = DoseyAppDependencies(
       database: _database,
       settings: settings,
       prescriptions: LocalPrescriptionRepository(_database),
-      scheduleProfiles: LocalScheduleProfileRepository(_database),
+      scheduleProfiles: scheduleProfiles,
       reminders: reminders,
       reminderSchedules: ReminderScheduleService(
         repository: reminders,
@@ -93,16 +116,16 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       doseLog: doseLog,
       localAuth: localAuth,
       auth: AppAuthService(localAuth: localAuth),
-      controller: SimulatedControllerGateway(
-        doseLog,
-        canHostRobot: () async {
-          final platform = currentAppDevicePlatform();
-          final storedRole = await settings.getDeviceRole();
-          final role = storedRole.isAllowedOn(platform)
-              ? storedRole
-              : AppDeviceRole.defaultFor(platform);
-          return role.canHostRobot;
-        },
+      controller: controller,
+      robotFaceSettings: robotFaceSettings,
+      robotFaceController: RobotFaceController(
+        settings: settings,
+        robotFaceSettings: robotFaceSettings,
+        controller: controller,
+        scheduleProfiles: scheduleProfiles,
+        reminders: reminders,
+        doseLog: doseLog,
+        clock: _robotFaceClockController.stream,
       ),
       ble: FlutterBluePlusBleGateway(),
       connectivity: ConnectivityPlusGateway(),
@@ -123,7 +146,10 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
 
   @override
   void dispose() {
+    _robotFaceClockTimer.cancel();
+    unawaited(_robotFaceClockController.close());
     unawaited(_dependencies.controller.close());
+    unawaited(_dependencies.robotFaceController.close());
     unawaited(_dependencies.ble.close());
     if (_ownsDatabase) {
       unawaited(_database.close());
@@ -156,6 +182,8 @@ class DoseyAppDependencies {
     required this.localAuth,
     required this.auth,
     required this.controller,
+    required this.robotFaceSettings,
+    required this.robotFaceController,
     required this.ble,
     required this.connectivity,
     required this.reminderScheduler,
@@ -174,6 +202,8 @@ class DoseyAppDependencies {
   final LocalAuthRepository localAuth;
   final AuthService auth;
   final ControllerGateway controller;
+  final RobotFaceSettingsRepository robotFaceSettings;
+  final RobotFaceController robotFaceController;
   final BleGateway ble;
   final ConnectivityGateway connectivity;
   final ReminderScheduler reminderScheduler;

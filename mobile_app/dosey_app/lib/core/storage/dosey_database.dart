@@ -306,6 +306,28 @@ class DoseyDatabase extends _$DoseyDatabase {
       mode: InsertMode.insertOrIgnore,
     );
   }
+
+  Stream<List<AppSetting>> watchAppSettings(Set<String> keys) {
+    final query = select(appSettings)
+      ..where((setting) => setting.key.isIn(keys));
+    return query.watch();
+  }
+
+  Future<List<AppSetting>> getAppSettings(Set<String> keys) {
+    final query = select(appSettings)
+      ..where((setting) => setting.key.isIn(keys));
+    return query.get();
+  }
+
+  Future<void> setAppSetting(String key, String value) {
+    return into(appSettings).insertOnConflictUpdate(
+      AppSettingsCompanion.insert(
+        key: key,
+        value: value,
+        updatedAt: DateTime.now().toUtc(),
+      ),
+    );
+  }
 }
 
 QueryExecutor _openConnection() {

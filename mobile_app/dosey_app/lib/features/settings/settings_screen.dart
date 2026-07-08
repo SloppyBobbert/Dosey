@@ -3,6 +3,7 @@ import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:flutter/material.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -71,6 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 12),
             _DeviceModeCard(platform: platform),
+            const _RobotFaceSettingsSection(),
             const SizedBox(height: 12),
             const _ReminderNotificationCard(),
             const SizedBox(height: 12),
@@ -346,6 +348,224 @@ class _ReminderNotificationCard extends StatefulWidget {
       _ReminderNotificationCardState();
 }
 
+class _RobotFaceSettingsCard extends StatefulWidget {
+  const _RobotFaceSettingsCard();
+
+  @override
+  State<_RobotFaceSettingsCard> createState() => _RobotFaceSettingsCardState();
+}
+
+class _RobotFaceSettingsSection extends StatelessWidget {
+  const _RobotFaceSettingsSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<AppDeviceRole>(
+      stream: DoseyAppScope.of(context).settings.watchDeviceRole(),
+      builder: (context, roleSnapshot) {
+        final platform = currentAppDevicePlatform();
+        final fallbackRole = AppDeviceRole.defaultFor(platform);
+        final storedRole = roleSnapshot.data;
+        final role = storedRole != null && storedRole.isAllowedOn(platform)
+            ? storedRole
+            : fallbackRole;
+
+        if (!role.canHostRobot) {
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          children: [
+            const SizedBox(height: 12),
+            const _RobotFaceSettingsCard(),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
+  static const List<int> _timingOptions = [0, 5, 10, 15, 30, 60];
+  static const int _defaultWakeBeforeDoseMinutes =
+      RobotFaceSettings.defaultWakeBeforeDoseMinutes;
+  static const int _defaultStayAwakeAfterDoseMinutes =
+      RobotFaceSettings.defaultStayAwakeAfterDoseMinutes;
+
+  bool _isSaving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final dependencies = DoseyAppScope.of(context);
+
+    return StreamBuilder<AppDeviceRole>(
+      stream: dependencies.settings.watchDeviceRole(),
+      builder: (context, roleSnapshot) {
+        final platform = currentAppDevicePlatform();
+        final fallbackRole = AppDeviceRole.defaultFor(platform);
+        final storedRole = roleSnapshot.data;
+        final role = storedRole != null && storedRole.isAllowedOn(platform)
+            ? storedRole
+            : fallbackRole;
+        if (!role.canHostRobot) {
+          return const SizedBox.shrink();
+        }
+
+        return StreamBuilder<RobotFaceSettings>(
+          stream: dependencies.robotFaceSettings.watchSettings(),
+          builder: (context, settingsSnapshot) {
+            final settings = settingsSnapshot.data ?? const RobotFaceSettings();
+
+            return _SettingsSectionCard(
+              icon: Icons.face_retouching_natural_outlined,
+              title: 'Robot Face',
+              children: [
+                const Text(
+                  'Keep the face horizontal and match your phone mount.',
+                ),
+                const SizedBox(height: 12),
+                _SettingsSwitchTile(
+                  value: settings.isFlipped,
+                  enabled: !_isSaving,
+                  title: 'Flip face 180°',
+                  subtitle: 'Use this if the phone is mounted upside down.',
+                  onChanged: (value) =>
+                      _saveSettings(settings.copyWith(isFlipped: value)),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.dimAfterInactivity,
+                  enabled: !_isSaving,
+                  title: 'Dim after inactivity',
+                  subtitle: 'Lets the screen dim or sleep when idle.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(dimAfterInactivity: value),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _RobotFaceTimingDropdown(
+                        label: 'Wake before dose',
+                        value: settings.wakeBeforeDoseMinutes,
+                        fallbackValue: _defaultWakeBeforeDoseMinutes,
+                        enabled: !_isSaving,
+                        options: _timingOptions,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(wakeBeforeDoseMinutes: value),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _RobotFaceTimingDropdown(
+                        label: 'Stay awake after dose',
+                        value: settings.stayAwakeAfterDoseMinutes,
+                        fallbackValue: _defaultStayAwakeAfterDoseMinutes,
+                        enabled: !_isSaving,
+                        options: _timingOptions,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(stayAwakeAfterDoseMinutes: value),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _saveSettings(RobotFaceSettings settings) async {
+    setState(() => _isSaving = true);
+    try {
+      await DoseyAppScope.of(context).robotFaceSettings.saveSettings(settings);
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Robot Face settings failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+}
+
+class _RobotFaceTimingDropdown extends StatelessWidget {
+  const _RobotFaceTimingDropdown({
+    required this.label,
+    required this.value,
+    required this.fallbackValue,
+    required this.enabled,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final int value;
+  final int fallbackValue;
+  final bool enabled;
+  final List<int> options;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedValue = options.contains(value) ? value : fallbackValue;
+    final theme = Theme.of(context);
+    final decoration = InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: theme.colorScheme.surfaceContainerHighest,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    );
+
+    return InputDecorator(
+      key: ValueKey('$label:$selectedValue'),
+      decoration: decoration,
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: selectedValue,
+          isExpanded: true,
+          items: options
+              .map(
+                (minutes) => DropdownMenuItem<int>(
+                  value: minutes,
+                  child: Text(_robotFaceTimingLabel(minutes)),
+                ),
+              )
+              .toList(),
+          onChanged: enabled
+              ? (newValue) {
+                  if (newValue != null) {
+                    onChanged(newValue);
+                  }
+                }
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+String _robotFaceTimingLabel(int minutes) {
+  if (minutes == 0) {
+    return 'Off';
+  }
+
+  if (minutes == 1) {
+    return '1 minute';
+  }
+
+  return '$minutes minutes';
+}
+
 class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
     with WidgetsBindingObserver {
   AppPermissionState _status = AppPermissionState.unknown;
@@ -609,6 +829,37 @@ class _SettingsSectionCard extends StatelessWidget {
             ...children,
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _SettingsSwitchTile extends StatelessWidget {
+  const _SettingsSwitchTile({
+    required this.value,
+    required this.enabled,
+    required this.title,
+    required this.subtitle,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final bool enabled;
+  final String title;
+  final String subtitle;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(18),
+      child: SwitchListTile(
+        value: value,
+        onChanged: enabled ? onChanged : null,
+        title: Text(title),
+        subtitle: Text(subtitle),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
     );
   }

@@ -10,6 +10,7 @@ import 'package:dosey_app/features/controller/controller_screen.dart';
 import 'package:dosey_app/features/log/dose_log_screen.dart';
 import 'package:dosey_app/features/prescriptions/prescriptions_screen.dart';
 import 'package:dosey_app/features/reminders/reminders_screen.dart';
+import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/today/today_screen.dart';
 import 'package:flutter/material.dart';
@@ -25,26 +26,6 @@ class _DoseyShellState extends State<DoseyShell> {
   int _selectedIndex = 0;
   ReminderNotificationTapController? _notificationTaps;
   StreamSubscription<ReminderNotificationTap>? _notificationTapSubscription;
-
-  static const _screens = [
-    TodayScreen(),
-    PrescriptionsScreen(),
-    RemindersScreen(),
-    CarouselScreen(),
-    ControllerScreen(),
-    DoseLogScreen(),
-    SettingsScreen(),
-  ];
-
-  static const _sectionTitles = [
-    'Today',
-    'Prescriptions',
-    'Schedule',
-    'Carousel',
-    'Controller',
-    'Log',
-    'Settings',
-  ];
 
   @override
   void didChangeDependencies() {
@@ -70,40 +51,60 @@ class _DoseyShellState extends State<DoseyShell> {
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.of(context);
     final platform = currentAppDevicePlatform();
+    final roleStream = dependencies.settings.watchDeviceRole();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Dosey',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w800,
-              ),
+    return StreamBuilder<AppDeviceRole>(
+      stream: roleStream,
+      builder: (context, roleSnapshot) {
+        final role = _resolvedRole(roleSnapshot.data, platform);
+        final tabs = _buildTabs(role);
+        final selectedIndex = _selectedIndex.clamp(0, tabs.length - 1);
+        if (selectedIndex != _selectedIndex) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            setState(() {
+              _selectedIndex = selectedIndex;
+            });
+          });
+        }
+
+        final activeTab = tabs[selectedIndex];
+        final settingsTabIndex = tabs.indexWhere(
+          (tab) => tab.id == _ShellTabId.settings,
+        );
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Dosey',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                Text(activeTab.title),
+              ],
             ),
-            Text(_sectionTitles[_selectedIndex]),
-          ],
-        ),
-        actions: [
-          StreamBuilder<AuthSession>(
-            stream: dependencies.auth.watchSession(),
-            builder: (context, authSnapshot) {
-              final session =
-                  authSnapshot.data ?? const AuthSession.signedOut();
-
-              return StreamBuilder<AppDeviceRole>(
-                stream: dependencies.settings.watchDeviceRole(),
-                builder: (context, roleSnapshot) {
-                  final role = _resolvedRole(roleSnapshot.data, platform);
+            actions: [
+              StreamBuilder<AuthSession>(
+                stream: dependencies.auth.watchSession(),
+                builder: (context, authSnapshot) {
+                  final session =
+                      authSnapshot.data ?? const AuthSession.signedOut();
 
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
                     child: IconButton(
                       tooltip: 'Open profile menu',
                       onPressed: () {
-                        _showProfileMenu(session: session, role: role);
+                        _showProfileMenu(
+                          session: session,
+                          role: role,
+                          settingsTabIndex: settingsTabIndex,
+                        );
                       },
                       icon: CircleAvatar(
                         radius: 16,
@@ -112,58 +113,114 @@ class _DoseyShellState extends State<DoseyShell> {
                     ),
                   );
                 },
-              );
+              ),
+            ],
+          ),
+          body: IndexedStack(
+            index: selectedIndex,
+            children: [
+              for (var index = 0; index < tabs.length; index += 1)
+                tabs[index].buildScreen(selectedIndex, index),
+            ],
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: selectedIndex,
+            onDestinationSelected: (index) {
+              setState(() {
+                _selectedIndex = index;
+              });
             },
+            destinations: tabs.map((tab) => tab.destination).toList(),
           ),
-        ],
-      ),
-      body: IndexedStack(index: _selectedIndex, children: _screens),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.today_outlined),
-            selectedIcon: Icon(Icons.today),
-            label: 'Today',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.medication_outlined),
-            selectedIcon: Icon(Icons.medication),
-            label: 'Prescriptions',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.alarm_outlined),
-            selectedIcon: Icon(Icons.alarm),
-            label: 'Schedule',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.view_carousel_outlined),
-            selectedIcon: Icon(Icons.view_carousel),
-            label: 'Carousel',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.memory_outlined),
-            selectedIcon: Icon(Icons.memory),
-            label: 'Controller',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.receipt_long_outlined),
-            selectedIcon: Icon(Icons.receipt_long),
-            label: 'Log',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-      ),
+        );
+      },
     );
+  }
+
+  List<_ShellTab> _buildTabs(AppDeviceRole role) {
+    return [
+      const _ShellTab(
+        id: _ShellTabId.today,
+        title: 'Today',
+        destination: NavigationDestination(
+          icon: Icon(Icons.today_outlined),
+          selectedIcon: Icon(Icons.today),
+          label: 'Today',
+        ),
+        screenBuilder: _buildTodayScreen,
+      ),
+      const _ShellTab(
+        id: _ShellTabId.prescriptions,
+        title: 'Prescriptions',
+        destination: NavigationDestination(
+          icon: Icon(Icons.medication_outlined),
+          selectedIcon: Icon(Icons.medication),
+          label: 'Prescriptions',
+        ),
+        screenBuilder: _buildPrescriptionsScreen,
+      ),
+      const _ShellTab(
+        id: _ShellTabId.schedule,
+        title: 'Schedule',
+        destination: NavigationDestination(
+          icon: Icon(Icons.alarm_outlined),
+          selectedIcon: Icon(Icons.alarm),
+          label: 'Schedule',
+        ),
+        screenBuilder: _buildRemindersScreen,
+      ),
+      if (role.canHostRobot)
+        const _ShellTab(
+          id: _ShellTabId.robotFace,
+          title: 'Robot Face',
+          destination: NavigationDestination(
+            icon: Icon(Icons.smart_toy_outlined),
+            selectedIcon: Icon(Icons.smart_toy),
+            label: 'Robot Face',
+          ),
+          screenBuilder: _buildRobotFaceScreen,
+        ),
+      const _ShellTab(
+        id: _ShellTabId.carousel,
+        title: 'Carousel',
+        destination: NavigationDestination(
+          icon: Icon(Icons.view_carousel_outlined),
+          selectedIcon: Icon(Icons.view_carousel),
+          label: 'Carousel',
+        ),
+        screenBuilder: _buildCarouselScreen,
+      ),
+      const _ShellTab(
+        id: _ShellTabId.controller,
+        title: 'Controller',
+        destination: NavigationDestination(
+          icon: Icon(Icons.memory_outlined),
+          selectedIcon: Icon(Icons.memory),
+          label: 'Controller',
+        ),
+        screenBuilder: _buildControllerScreen,
+      ),
+      const _ShellTab(
+        id: _ShellTabId.log,
+        title: 'Log',
+        destination: NavigationDestination(
+          icon: Icon(Icons.receipt_long_outlined),
+          selectedIcon: Icon(Icons.receipt_long),
+          label: 'Log',
+        ),
+        screenBuilder: _buildDoseLogScreen,
+      ),
+      const _ShellTab(
+        id: _ShellTabId.settings,
+        title: 'Settings',
+        destination: NavigationDestination(
+          icon: Icon(Icons.settings_outlined),
+          selectedIcon: Icon(Icons.settings),
+          label: 'Settings',
+        ),
+        screenBuilder: _buildSettingsScreen,
+      ),
+    ];
   }
 
   static AppDeviceRole _resolvedRole(
@@ -180,6 +237,7 @@ class _DoseyShellState extends State<DoseyShell> {
   Future<void> _showProfileMenu({
     required AuthSession session,
     required AppDeviceRole role,
+    required int settingsTabIndex,
   }) {
     final dependencies = DoseyAppScope.of(context);
     final platform = currentAppDevicePlatform();
@@ -195,7 +253,7 @@ class _DoseyShellState extends State<DoseyShell> {
           role: role,
           onOpenSettings: () {
             Navigator.of(sheetContext).pop();
-            _selectTab(_settingsTabIndex);
+            _selectTab(settingsTabIndex);
           },
           onResetSetup: () async {
             Navigator.of(sheetContext).pop();
@@ -272,8 +330,55 @@ class _DoseyShellState extends State<DoseyShell> {
   }
 }
 
-const _settingsTabIndex = 6;
 const _todayTabIndex = 0;
+
+enum _ShellTabId {
+  today,
+  prescriptions,
+  schedule,
+  robotFace,
+  carousel,
+  controller,
+  log,
+  settings,
+}
+
+typedef _ShellScreenBuilder = Widget Function(int selectedIndex, int tabIndex);
+
+class _ShellTab {
+  const _ShellTab({
+    required this.id,
+    required this.title,
+    required this.destination,
+    required this.screenBuilder,
+  });
+
+  final _ShellTabId id;
+  final String title;
+  final NavigationDestination destination;
+  final _ShellScreenBuilder screenBuilder;
+
+  Widget buildScreen(int selectedIndex, int tabIndex) {
+    return screenBuilder(selectedIndex, tabIndex);
+  }
+}
+
+Widget _buildTodayScreen(int selectedIndex, int tabIndex) =>
+    const TodayScreen();
+Widget _buildPrescriptionsScreen(int selectedIndex, int tabIndex) =>
+    const PrescriptionsScreen();
+Widget _buildRemindersScreen(int selectedIndex, int tabIndex) =>
+    const RemindersScreen();
+Widget _buildRobotFaceScreen(int selectedIndex, int tabIndex) =>
+    RobotFaceScreen(isActive: selectedIndex == tabIndex);
+Widget _buildCarouselScreen(int selectedIndex, int tabIndex) =>
+    const CarouselScreen();
+Widget _buildControllerScreen(int selectedIndex, int tabIndex) =>
+    const ControllerScreen();
+Widget _buildDoseLogScreen(int selectedIndex, int tabIndex) =>
+    const DoseLogScreen();
+Widget _buildSettingsScreen(int selectedIndex, int tabIndex) =>
+    const SettingsScreen();
 
 class _ProfileMenuSheet extends StatelessWidget {
   const _ProfileMenuSheet({

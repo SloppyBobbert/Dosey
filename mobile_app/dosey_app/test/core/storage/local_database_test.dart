@@ -3,6 +3,8 @@ import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -23,6 +25,82 @@ void main() {
     await settings.setDeviceRole(AppDeviceRole.androidRobot);
 
     expect(await settings.watchDeviceRole().first, AppDeviceRole.androidRobot);
+  });
+
+  test(
+    'robot face settings default to not flipped and dim after inactivity',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = RobotFaceSettingsRepository(database);
+
+      expect(
+        await repository.getSettings(),
+        const RobotFaceSettings(
+          wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
+          stayAwakeAfterDoseMinutes:
+              RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
+        ),
+      );
+    },
+  );
+
+  test(
+    'robot face settings fall back to defaults for malformed values',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = RobotFaceSettingsRepository(database);
+
+      await database.setAppSetting('robot_face_wake_before_dose_minutes', '-5');
+      await database.setAppSetting(
+        'robot_face_stay_awake_after_dose_minutes',
+        'not-a-number',
+      );
+
+      expect(
+        await repository.getSettings(),
+        const RobotFaceSettings(
+          wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
+          stayAwakeAfterDoseMinutes:
+              RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
+        ),
+      );
+    },
+  );
+
+  test('robot face settings stream updates after save', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = RobotFaceSettingsRepository(database);
+    final states = <RobotFaceSettings>[];
+    final subscription = repository.watchSettings().listen(states.add);
+    addTearDown(subscription.cancel);
+
+    await Future<void>.delayed(Duration.zero);
+    await repository.saveSettings(
+      const RobotFaceSettings(
+        isFlipped: true,
+        dimAfterInactivity: false,
+        wakeBeforeDoseMinutes: 15,
+        stayAwakeAfterDoseMinutes: 20,
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(states, [
+      const RobotFaceSettings(
+        wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
+        stayAwakeAfterDoseMinutes:
+            RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
+      ),
+      const RobotFaceSettings(
+        isFlipped: true,
+        dimAfterInactivity: false,
+        wakeBeforeDoseMinutes: 15,
+        stayAwakeAfterDoseMinutes: 20,
+      ),
+    ]);
   });
 
   test(

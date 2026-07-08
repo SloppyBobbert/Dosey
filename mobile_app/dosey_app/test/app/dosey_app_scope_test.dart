@@ -41,5 +41,7 @@ void main() {
       isA<FlutterLocalNotificationScheduler>(),
     );
     expect(dependencies.permissions, isA<PermissionHandlerGateway>());
+    expect(dependencies.robotFaceSettings, isNotNull);
+    expect(dependencies.robotFaceController, isNotNull);
   });
 }
