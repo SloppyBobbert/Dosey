@@ -10,7 +10,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 | --- | --- |
 | App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, Settings, plus profile menu and active section title |
 | Local storage | Drift/SQLite on the phone app only |
-| Prescriptions and schedules | Local prescriptions, schedule profiles, schedule editing, and enabled state |
+| Prescriptions and schedules | Local prescriptions, refill inventory tracking, schedule profiles, schedule editing, and enabled state |
 | Auth | Google + Apple wrappers, no backend yet |
 | Carousel and controller | Polished loading-bay and hardware-bench views, Daviky slot loading workflow, simulator, and BLE foundation only; real protocol incomplete |
 | Builds | Android debug APK and iOS no-codesign debug build run locally |
@@ -21,7 +21,8 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 - Safety-first home/settings copy, profile/account settings, profile menu shortcuts, and safety acknowledgement storage.
 - Polished dashboard cards for the core local workflow: medication cabinet, routine builder, Today next-dose timeline that skips locally completed, skipped, or missed doses, Carousel loading bay, Controller hardware bench, and local dose-history audit trail.
 - Local Drift/SQLite database for app settings, prescriptions, schedule profiles, reminder schedules, carousel slots, cached auth state, and dose logs.
-- Local prescription and schedule editing with schedule profiles, enabled/disabled state, and duplicate-time checks.
+- Local prescription and schedule editing with remaining-dose counts, refill thresholds, refill-add history, schedule profiles, enabled/disabled state, and duplicate-time checks.
+- Today dose actions only spend inventory for taken-style confirmations, while duplicate terminal actions for the same dose are ignored.
 - Daviky carousel loading workflow that assigns schedules to slots, marks slots loaded, shows loaded/ready counts, disables dispense buttons while the controller is offline, and logs dispense movement separately from taken confirmation.
 - Device roles: Android robot phone, Android personal phone, and iOS personal phone only.
 - `flutter_blue_plus` BLE foundation behind an app-owned interface; protocol still incomplete.

@@ -215,11 +215,7 @@ class DoseyDatabase extends _$DoseyDatabase {
       }
       if (from < 10) {
         if (from >= 6) {
-          await migrator.addColumn(prescriptions, prescriptions.remainingDoses);
-          await migrator.addColumn(
-            prescriptions,
-            prescriptions.refillThreshold,
-          );
+          await _rebuildLegacyPrescriptionsTableWithInventoryTracking();
         }
         await migrator.createTable(prescriptionRefills);
       }
@@ -244,6 +240,46 @@ class DoseyDatabase extends _$DoseyDatabase {
       SET status = 'needs_review'
       WHERE status NOT IN ('assigned', 'loaded', 'dispensed', 'needs_review');
     ''');
+  }
+
+  Future<void> _rebuildLegacyPrescriptionsTableWithInventoryTracking() async {
+    await transaction(() async {
+      await customStatement(
+        'ALTER TABLE prescriptions RENAME TO prescriptions_old;',
+      );
+      await customStatement('''
+        CREATE TABLE prescriptions (
+          id TEXT NOT NULL PRIMARY KEY,
+          name TEXT NOT NULL,
+          pill_type TEXT NOT NULL,
+          remaining_doses INTEGER NOT NULL DEFAULT 0 CHECK (remaining_doses >= 0),
+          refill_threshold INTEGER NOT NULL DEFAULT 3 CHECK (refill_threshold >= 0),
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      ''');
+      await customStatement('''
+        INSERT INTO prescriptions (
+          id,
+          name,
+          pill_type,
+          remaining_doses,
+          refill_threshold,
+          created_at,
+          updated_at
+        )
+        SELECT
+          id,
+          name,
+          pill_type,
+          0,
+          3,
+          created_at,
+          updated_at
+        FROM prescriptions_old;
+      ''');
+      await customStatement('DROP TABLE prescriptions_old;');
+    });
   }
 
   Future<void> _seedOnboardingCompleted({required bool completed}) async {

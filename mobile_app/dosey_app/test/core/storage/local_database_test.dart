@@ -297,6 +297,43 @@ void main() {
       expect(refillEvents, isEmpty);
     },
   );
+
+  test(
+    'migration from schema nine preserves non-negative prescription constraints',
+    () async {
+      final database = DoseyDatabase(_schemaNineExecutor());
+      addTearDown(database.close);
+
+      expect(
+        () => database.customStatement('''
+          INSERT INTO prescriptions (
+            id,
+            name,
+            pill_type,
+            remaining_doses,
+            refill_threshold,
+            created_at,
+            updated_at
+          ) VALUES (
+            'negative-test',
+            'Negative test',
+            'capsule',
+            -1,
+            -2,
+            0,
+            0
+          );
+        '''),
+        throwsA(
+          isA<Exception>().having(
+            (error) => error.toString(),
+            'message',
+            contains('CHECK constraint failed'),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 NativeDatabase _schemaEightExecutor({required String status}) {

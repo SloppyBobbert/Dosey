@@ -1193,6 +1193,115 @@ void main() {
     );
   });
 
+  testWidgets(
+    'Today ignores duplicate rapid confirm taken callbacks and spends inventory once',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database, remainingDoses: 2);
+      await _addVitaminReminder(database, id: 'vitamin-d-morning');
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpAndSettle();
+
+      final confirmButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Confirm taken'),
+      );
+      expect(confirmButton.onPressed, isNotNull);
+
+      await _runAsyncCallback(confirmButton.onPressed!);
+      await _runAsyncCallback(confirmButton.onPressed!);
+      await tester.pumpAndSettle();
+
+      final events = await database.select(database.doseLogEvents).get();
+      expect(
+        events.where(
+          (event) => event.kind == DoseLogEventKind.doseTakenConfirmed.name,
+        ),
+        hasLength(1),
+      );
+
+      final prescription = await (database.select(
+        database.prescriptions,
+      )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+      expect(prescription.remainingDoses, 1);
+    },
+  );
+
+  testWidgets('Today ignores a second terminal action after confirm taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database, remainingDoses: 2);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    final confirmButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Confirm taken'),
+    );
+    final alreadyTakenButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Already taken'),
+    );
+    expect(confirmButton.onPressed, isNotNull);
+    expect(alreadyTakenButton.onPressed, isNotNull);
+
+    await _runAsyncCallback(confirmButton.onPressed!);
+    await _runAsyncCallback(alreadyTakenButton.onPressed!);
+    await tester.pumpAndSettle();
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(
+      events.where(
+        (event) =>
+            event.doseId == _todayDoseId('vitamin-d-morning') &&
+            (event.kind == DoseLogEventKind.doseTakenConfirmed.name ||
+                event.kind == DoseLogEventKind.doseAlreadyTaken.name),
+      ),
+      hasLength(1),
+    );
+    expect(events.single.kind, DoseLogEventKind.doseTakenConfirmed.name);
+  });
+
+  testWidgets('Today ignores a stale non-terminal action after confirm taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database, remainingDoses: 2);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    final confirmButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Confirm taken'),
+    );
+    final snoozeButton = tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Log snooze'),
+    );
+    expect(confirmButton.onPressed, isNotNull);
+    expect(snoozeButton.onPressed, isNotNull);
+
+    await _runAsyncCallback(confirmButton.onPressed!);
+    await _runAsyncCallback(snoozeButton.onPressed!);
+    await tester.pumpAndSettle();
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(
+      events.where(
+        (event) => event.doseId == _todayDoseId('vitamin-d-morning'),
+      ),
+      hasLength(1),
+    );
+    expect(events.single.kind, DoseLogEventKind.doseTakenConfirmed.name);
+  });
+
   testWidgets('Today keeps Dose visible after later non-terminal notes', (
     WidgetTester tester,
   ) async {
@@ -1230,6 +1339,45 @@ void main() {
 
     expect(find.widgetWithText(FilledButton, 'Dose visible'), findsOneWidget);
   });
+
+  testWidgets(
+    'Today dose visible does not decrement linked prescription inventory',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database, remainingDoses: 2);
+      await _addVitaminReminder(database, id: 'vitamin-d-morning');
+      await _addLoadedVitaminSlot(database);
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Controller'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Connect simulator'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Today'));
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(find.text('Dispense from slot 1'));
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Dispense from slot 1'),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.pump(const Duration(seconds: 4));
+
+      await tester.ensureVisible(find.text('Dose visible'));
+      await tester.tap(find.text('Dose visible'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      final prescription = await (database.select(
+        database.prescriptions,
+      )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+      expect(prescription.remainingDoses, 2);
+    },
+  );
 
   testWidgets('Today confirm taken retires loaded carousel slot', (
     WidgetTester tester,
@@ -1980,6 +2128,27 @@ void main() {
     expect(events.single.marksDoseTaken, isTrue);
   });
 
+  testWidgets('Today already taken decrements linked prescription inventory', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database, remainingDoses: 2);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Already taken'));
+    await tester.tap(find.text('Already taken'));
+    await tester.pumpAndSettle();
+
+    final prescription = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    expect(prescription.remainingDoses, 1);
+  });
+
   testWidgets('Today taken early logs manual early dose as taken', (
     WidgetTester tester,
   ) async {
@@ -2002,6 +2171,27 @@ void main() {
     expect(events.single.marksDoseTaken, isTrue);
   });
 
+  testWidgets('Today taken early decrements linked prescription inventory', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database, remainingDoses: 2);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Taken early'));
+    await tester.tap(find.text('Taken early'));
+    await tester.pumpAndSettle();
+
+    final prescription = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    expect(prescription.remainingDoses, 1);
+  });
+
   testWidgets('Today taken late logs manual late dose as taken', (
     WidgetTester tester,
   ) async {
@@ -2022,6 +2212,27 @@ void main() {
     final events = await database.select(database.doseLogEvents).get();
     expect(events.single.kind, DoseLogEventKind.doseTakenLate.name);
     expect(events.single.marksDoseTaken, isTrue);
+  });
+
+  testWidgets('Today taken late decrements linked prescription inventory', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database, remainingDoses: 2);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Taken late'));
+    await tester.tap(find.text('Taken late'));
+    await tester.pumpAndSettle();
+
+    final prescription = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    expect(prescription.remainingDoses, 1);
   });
 
   testWidgets('Today ask caregiver logs non-terminal help request', (
@@ -2072,6 +2283,30 @@ void main() {
     expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
   });
 
+  testWidgets(
+    'Today skip dose does not decrement linked prescription inventory',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database, remainingDoses: 2);
+      await _addVitaminReminder(database);
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Skip dose'));
+      await tester.tap(find.text('Skip dose'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Log'));
+      await tester.pumpAndSettle();
+
+      final prescription = await (database.select(
+        database.prescriptions,
+      )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+      expect(prescription.remainingDoses, 2);
+    },
+  );
+
   testWidgets('Today mark missed logs missed dose with safe guidance', (
     WidgetTester tester,
   ) async {
@@ -2098,6 +2333,29 @@ void main() {
 
     expect(find.text('Dose missed'), findsOneWidget);
     expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
+  });
+
+  testWidgets('Today missed does not decrement linked prescription inventory', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database, remainingDoses: 2);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Mark missed'));
+    await tester.tap(find.text('Mark missed'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Log'));
+    await tester.pumpAndSettle();
+
+    final prescription = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    expect(prescription.remainingDoses, 2);
   });
 
   testWidgets('signed-out Personal Mode returns to account gate', (
@@ -2150,6 +2408,41 @@ void main() {
     expect(find.text('Dose taken confirmed'), findsOneWidget);
     expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
     expect(find.text('manual-confirmation'), findsNothing);
+  });
+
+  testWidgets('Today hero ignores duplicate rapid manual confirm callbacks', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database, remainingDoses: 2);
+    await _addVitaminReminder(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    final heroButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Confirm dose taken manually'),
+    );
+    expect(heroButton.onPressed, isNotNull);
+
+    await _runAsyncCallback(heroButton.onPressed!);
+    await _runAsyncCallback(heroButton.onPressed!);
+    await tester.pumpAndSettle();
+
+    final events = await database.select(database.doseLogEvents).get();
+    expect(
+      events.where(
+        (event) => event.kind == DoseLogEventKind.doseTakenConfirmed.name,
+      ),
+      hasLength(1),
+    );
+
+    final prescription = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    expect(prescription.remainingDoses, 1);
   });
 
   testWidgets('Log tab shows local audit summary', (WidgetTester tester) async {
@@ -2296,6 +2589,50 @@ void main() {
     expect(refillEvents.single.remainingAfter, 32);
     expect(refillEvents.single.note, 'new bottle');
   });
+
+  testWidgets(
+    'prescription edit does not silently save cleared inventory fields',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(
+        database,
+        remainingDoses: 7,
+        refillThreshold: 4,
+      );
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Prescriptions'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Edit prescription'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Remaining doses'),
+        '',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Low warning at'),
+        '',
+      );
+      await tester.tap(find.text('Save prescription'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Enter zero or more doses for both refill tracking fields.'),
+        findsOneWidget,
+      );
+      expect(find.text('Edit prescription'), findsOneWidget);
+
+      final prescription = await (database.select(
+        database.prescriptions,
+      )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+      expect(prescription.remainingDoses, 7);
+      expect(prescription.refillThreshold, 4);
+    },
+  );
 
   testWidgets('prescriptions tab shows medication cabinet summary', (
     WidgetTester tester,

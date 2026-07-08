@@ -785,16 +785,13 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
       setState(() => _errorText = 'Enter a medication name.');
       return;
     }
-    final remainingDoses = _parseDoseField(
-      _remainingDosesController.text,
-      fallback: 0,
-    );
-    final refillThreshold = _parseDoseField(
-      _refillThresholdController.text,
-      fallback: 3,
-    );
+    final remainingDoses = _parseDoseField(_remainingDosesController.text);
+    final refillThreshold = _parseDoseField(_refillThresholdController.text);
     if (remainingDoses == null || refillThreshold == null) {
-      setState(() => _errorText = 'Enter zero or more doses.');
+      setState(
+        () => _errorText =
+            'Enter zero or more doses for both refill tracking fields.',
+      );
       return;
     }
 
@@ -830,9 +827,9 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
     Navigator.of(context).pop();
   }
 
-  static int? _parseDoseField(String value, {required int fallback}) {
+  static int? _parseDoseField(String value) {
     final trimmed = value.trim();
-    if (trimmed.isEmpty) return fallback;
+    if (trimmed.isEmpty) return null;
     final parsed = int.tryParse(trimmed);
     if (parsed == null || parsed < 0) return null;
     return parsed;
