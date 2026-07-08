@@ -31,6 +31,9 @@ void main() {
     expect(find.text('Robot Face'), findsOneWidget);
     expect(find.text('Flip face 180°'), findsOneWidget);
     expect(find.text('Dim after inactivity'), findsOneWidget);
+    expect(find.text('Wake before dose'), findsOneWidget);
+    expect(find.text('Stay awake after dose'), findsOneWidget);
+    expect(find.text('10 minutes'), findsNWidgets(2));
   });
 
   testWidgets('personal role does not show robot face settings controls', (
@@ -76,7 +79,7 @@ void main() {
     );
   });
 
-  testWidgets('toggling robot face controls persists and updates state', (
+  testWidgets('robot face controls persist and update state', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -111,11 +114,33 @@ void main() {
       const RobotFaceSettings(isFlipped: true, dimAfterInactivity: false),
     );
 
+    await tester.tap(find.text('10 minutes').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('15 minutes').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('10 minutes').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('30 minutes').last);
+    await tester.pumpAndSettle();
+
+    expect(
+      await repository.getSettings(),
+      const RobotFaceSettings(
+        isFlipped: true,
+        dimAfterInactivity: false,
+        wakeBeforeDoseMinutes: 15,
+        stayAwakeAfterDoseMinutes: 30,
+      ),
+    );
+
     final switches = tester.widgetList<SwitchListTile>(
       find.byType(SwitchListTile),
     );
     expect(switches.first.value, isTrue);
     expect(switches.last.value, isFalse);
+    expect(find.text('15 minutes'), findsOneWidget);
+    expect(find.text('30 minutes'), findsOneWidget);
   });
 
   testWidgets('stale robot role stays hidden on iOS personal mode', (
@@ -143,6 +168,8 @@ void main() {
       expect(find.text('Robot Face'), findsNothing);
       expect(find.text('Flip face 180°'), findsNothing);
       expect(find.text('Dim after inactivity'), findsNothing);
+      expect(find.text('Wake before dose'), findsNothing);
+      expect(find.text('Stay awake after dose'), findsNothing);
       expect(find.text('iOS can only be a personal phone.'), findsOneWidget);
       expect(find.text('iOS personal phone'), findsOneWidget);
     } finally {

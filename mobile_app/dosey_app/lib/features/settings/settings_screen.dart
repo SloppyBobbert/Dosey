@@ -386,6 +386,8 @@ class _RobotFaceSettingsSection extends StatelessWidget {
 }
 
 class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
+  static const List<int> _timingOptions = [0, 5, 10, 15, 30, 60];
+
   bool _isSaving = false;
 
   @override
@@ -436,6 +438,34 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                     settings.copyWith(dimAfterInactivity: value),
                   ),
                 ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _RobotFaceTimingDropdown(
+                        label: 'Wake before dose',
+                        value: settings.wakeBeforeDoseMinutes,
+                        enabled: !_isSaving,
+                        options: _timingOptions,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(wakeBeforeDoseMinutes: value),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _RobotFaceTimingDropdown(
+                        label: 'Stay awake after dose',
+                        value: settings.stayAwakeAfterDoseMinutes,
+                        enabled: !_isSaving,
+                        options: _timingOptions,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(stayAwakeAfterDoseMinutes: value),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             );
           },
@@ -459,6 +489,66 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
       }
     }
   }
+}
+
+class _RobotFaceTimingDropdown extends StatelessWidget {
+  const _RobotFaceTimingDropdown({
+    required this.label,
+    required this.value,
+    required this.enabled,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final int value;
+  final bool enabled;
+  final List<int> options;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedValue = options.contains(value)
+        ? value
+        : RobotFaceSettings.defaultWakeBeforeDoseMinutes;
+
+    return DropdownButtonFormField<int>(
+      initialValue: selectedValue,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      items: options
+          .map(
+            (minutes) => DropdownMenuItem<int>(
+              value: minutes,
+              child: Text(_robotFaceTimingLabel(minutes)),
+            ),
+          )
+          .toList(),
+      onChanged: enabled
+          ? (newValue) {
+              if (newValue != null) {
+                onChanged(newValue);
+              }
+            }
+          : null,
+    );
+  }
+}
+
+String _robotFaceTimingLabel(int minutes) {
+  if (minutes == 0) {
+    return 'Off';
+  }
+
+  if (minutes == 1) {
+    return '1 minute';
+  }
+
+  return '$minutes minutes';
 }
 
 class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
