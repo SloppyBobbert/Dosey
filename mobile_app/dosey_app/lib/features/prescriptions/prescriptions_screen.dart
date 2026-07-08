@@ -516,7 +516,7 @@ class _InventorySummary extends StatelessWidget {
       children: [
         _InventoryChip(
           icon: Icons.inventory_2_outlined,
-          label: '${prescription.remainingDoses} doses left',
+          label: _doseCountLabel(prescription.remainingDoses, suffix: 'left'),
           color: warningColor,
         ),
         _InventoryChip(
@@ -577,6 +577,11 @@ class _InventoryChip extends StatelessWidget {
       ),
     );
   }
+}
+
+String _doseCountLabel(int count, {String? suffix}) {
+  final unit = count == 1 ? 'dose' : 'doses';
+  return suffix == null ? '$count $unit' : '$count $unit $suffix';
 }
 
 class _PrescriptionScheduleDetailsSheet extends StatelessWidget {
@@ -874,7 +879,12 @@ class _RefillSheetState extends State<_RefillSheet> {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 8),
-            Text('${widget.prescription.remainingDoses} doses left now'),
+            Text(
+              _doseCountLabel(
+                widget.prescription.remainingDoses,
+                suffix: 'left now',
+              ),
+            ),
             const SizedBox(height: 16),
             TextFormField(
               controller: _doseCountController,

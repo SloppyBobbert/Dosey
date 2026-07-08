@@ -16,14 +16,14 @@ import 'package:flutter/material.dart';
 class TodayScreen extends StatelessWidget {
   const TodayScreen({super.key});
 
-  static final List<String> _terminalDoseEventKinds = <String>[
+  static final Set<String> _terminalDoseEventKinds = <String>{
     DoseLogEventKind.doseTakenConfirmed.name,
     DoseLogEventKind.doseAlreadyTaken.name,
     DoseLogEventKind.doseTakenEarly.name,
     DoseLogEventKind.doseTakenLate.name,
     DoseLogEventKind.doseSkipped.name,
     DoseLogEventKind.doseMissed.name,
-  ];
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -159,6 +159,17 @@ class TodayScreen extends StatelessWidget {
     return _terminalDoseEventKinds.contains(kind.name);
   }
 
+  static String? _inventoryPrescriptionIdFor(
+    ReminderSchedule? schedule,
+    Map<String, Prescription> prescriptionsById,
+  ) {
+    if (schedule == null ||
+        !prescriptionsById.containsKey(schedule.prescriptionId)) {
+      return null;
+    }
+    return schedule.prescriptionId;
+  }
+
   static String _doseIdForToday(String scheduleId) {
     final now = DateTime.now();
     final month = now.month.toString().padLeft(2, '0');
@@ -278,12 +289,10 @@ class _TodayDoseContent extends StatelessWidget {
                 ? null
                 : TodayScreen._latestEventForDose(events, currentDoseId);
             final inventoryPrescriptionId =
-                currentSchedule == null ||
-                    !prescriptionsById.containsKey(
-                      currentSchedule.prescriptionId,
-                    )
-                ? null
-                : currentSchedule.prescriptionId;
+                TodayScreen._inventoryPrescriptionIdFor(
+                  currentSchedule,
+                  prescriptionsById,
+                );
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -395,10 +404,10 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
       DoseLogEventKind.doseVisibleConfirmed,
     );
     final loadedSlot = widget.loadedSlot;
-    final inventoryPrescriptionId =
-        widget.prescriptionsById.containsKey(currentSchedule.prescriptionId)
-        ? currentSchedule.prescriptionId
-        : null;
+    final inventoryPrescriptionId = TodayScreen._inventoryPrescriptionIdFor(
+      currentSchedule,
+      widget.prescriptionsById,
+    );
     final dispenseKey = loadedSlot == null
         ? null
         : '${loadedSlot.id}:$currentDoseId';
