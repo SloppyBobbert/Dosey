@@ -2,9 +2,17 @@ class RobotFaceSettings {
   const RobotFaceSettings({
     this.isFlipped = false,
     this.dimAfterInactivity = true,
-    this.wakeBeforeDoseMinutes = 10,
-    this.stayAwakeAfterDoseMinutes = 10,
-  });
+    int wakeBeforeDoseMinutes = defaultWakeBeforeDoseMinutes,
+    int stayAwakeAfterDoseMinutes = defaultStayAwakeAfterDoseMinutes,
+  }) : wakeBeforeDoseMinutes = wakeBeforeDoseMinutes < 0
+           ? defaultWakeBeforeDoseMinutes
+           : wakeBeforeDoseMinutes,
+       stayAwakeAfterDoseMinutes = stayAwakeAfterDoseMinutes < 0
+           ? defaultStayAwakeAfterDoseMinutes
+           : stayAwakeAfterDoseMinutes;
+
+  static const int defaultWakeBeforeDoseMinutes = 10;
+  static const int defaultStayAwakeAfterDoseMinutes = 10;
 
   final bool isFlipped;
   final bool dimAfterInactivity;

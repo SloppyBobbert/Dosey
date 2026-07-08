@@ -10,8 +10,6 @@ class RobotFaceSettingsRepository {
       'robot_face_wake_before_dose_minutes';
   static const _stayAwakeAfterDoseMinutesKey =
       'robot_face_stay_awake_after_dose_minutes';
-  static const _defaultWakeBeforeDoseMinutes = 10;
-  static const _defaultStayAwakeAfterDoseMinutes = 10;
 
   final DoseyDatabase _database;
 
@@ -66,10 +64,10 @@ class RobotFaceSettingsRepository {
       dimAfterInactivity: values[_dimAfterInactivityKey] != 'false',
       wakeBeforeDoseMinutes:
           int.tryParse(values[_wakeBeforeDoseMinutesKey] ?? '') ??
-          _defaultWakeBeforeDoseMinutes,
+          RobotFaceSettings.defaultWakeBeforeDoseMinutes,
       stayAwakeAfterDoseMinutes:
           int.tryParse(values[_stayAwakeAfterDoseMinutesKey] ?? '') ??
-          _defaultStayAwakeAfterDoseMinutes,
+          RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
     );
   }
 }

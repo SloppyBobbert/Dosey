@@ -37,8 +37,33 @@ void main() {
       expect(
         await repository.getSettings(),
         const RobotFaceSettings(
-          wakeBeforeDoseMinutes: 10,
-          stayAwakeAfterDoseMinutes: 10,
+          wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
+          stayAwakeAfterDoseMinutes:
+              RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
+        ),
+      );
+    },
+  );
+
+  test(
+    'robot face settings fall back to defaults for malformed values',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = RobotFaceSettingsRepository(database);
+
+      await database.setAppSetting('robot_face_wake_before_dose_minutes', '-5');
+      await database.setAppSetting(
+        'robot_face_stay_awake_after_dose_minutes',
+        'not-a-number',
+      );
+
+      expect(
+        await repository.getSettings(),
+        const RobotFaceSettings(
+          wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
+          stayAwakeAfterDoseMinutes:
+              RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
         ),
       );
     },
@@ -65,8 +90,9 @@ void main() {
 
     expect(states, [
       const RobotFaceSettings(
-        wakeBeforeDoseMinutes: 10,
-        stayAwakeAfterDoseMinutes: 10,
+        wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
+        stayAwakeAfterDoseMinutes:
+            RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
       ),
       const RobotFaceSettings(
         isFlipped: true,
