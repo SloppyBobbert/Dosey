@@ -312,9 +312,7 @@ class RobotFaceController {
       schedule.hour,
       schedule.minute,
     );
-    final wakeBeforeWindow = Duration(
-      minutes: _robotSettings.wakeBeforeDoseMinutes,
-    );
+    final wakeBeforeWindow = _wakeBeforeWindow;
     final stayAwakeWindow = Duration(
       minutes: _robotSettings.stayAwakeAfterDoseMinutes,
     );

@@ -59,6 +59,27 @@ void main() {
   );
 
   test(
+    'wake-before fallback stays consistent when wake before minutes is zero',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 45),
+        scheduleHour: 10,
+        scheduleMinute: 0,
+        robotFaceSettings: const RobotFaceSettings(wakeBeforeDoseMinutes: 0),
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final state = await fixture.controller.watchState().first;
+
+      expect(state.mode, RobotFaceMode.doseApproaching);
+      expect(state.rampProgress, closeTo(0.5, 0.001));
+      expect(state.isInAwakeWindow, isTrue);
+    },
+  );
+
+  test(
     'transitions to sleepy after the inactivity timeout when dimming is enabled',
     () async {
       final clock = StreamController<DateTime>.broadcast();
