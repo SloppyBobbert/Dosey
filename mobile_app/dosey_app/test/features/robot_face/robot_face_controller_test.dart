@@ -406,6 +406,62 @@ void main() {
     },
   );
 
+  test(
+    'dispense request rejects a completed current due dose when the next dose is still in the future',
+    () async {
+      final now = DateTime(2026, 7, 8, 9, 5);
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: now,
+        schedules: <ReminderSchedule>[
+          _schedule(
+            id: 'schedule-1',
+            profileId: 'profile-1',
+            hour: 9,
+            minute: 0,
+            now: now,
+            label: 'Current meds',
+          ),
+          _schedule(
+            id: 'schedule-2',
+            profileId: 'profile-1',
+            hour: 13,
+            minute: 0,
+            now: now,
+            label: 'Later meds',
+          ),
+        ],
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseTakenConfirmed(
+          doseId: 'schedule-1:2026-07-08',
+          occurredAt: now.toUtc(),
+        ),
+      );
+
+      final confirmedState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.happyConfirmed,
+      );
+
+      expect(confirmedState.nextEventLabel, '09:00 · Current meds');
+
+      expect(
+        fixture.controller.requestDispenseForCurrentDose(),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'message',
+            'No active dose is ready to dispense.',
+          ),
+        ),
+      );
+      expect(fixture.controllerGateway.requestedDoseIds, isEmpty);
+    },
+  );
+
   test('shows missed state for a terminal missed dose event', () async {
     final fixture = await _RobotFaceControllerFixture.create(
       now: DateTime(2026, 7, 8, 9, 5),

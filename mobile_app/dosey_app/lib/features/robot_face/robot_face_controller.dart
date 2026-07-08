@@ -278,20 +278,30 @@ class RobotFaceController {
   }
 
   ReminderSchedule? _dueSchedule(DateTime now) {
-    final schedule = _displaySchedule(now);
-    if (schedule == null) {
-      return null;
+    for (final schedule in _activeSchedules) {
+      if (!schedule.isEnabled) {
+        continue;
+      }
+
+      final scheduledTime = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        schedule.hour,
+        schedule.minute,
+      );
+
+      if (scheduledTime.isAfter(now)) {
+        continue;
+      }
+
+      final doseId = TodayNextDoseHelper.doseIdForDate(schedule.id, now);
+      if (!TodayNextDoseHelper.hasTerminalEventForDose(_events, doseId)) {
+        return schedule;
+      }
     }
 
-    final scheduledTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      schedule.hour,
-      schedule.minute,
-    );
-
-    return scheduledTime.isAfter(now) ? null : schedule;
+    return null;
   }
 
   _RobotFaceChoreography _choreographyFor(
