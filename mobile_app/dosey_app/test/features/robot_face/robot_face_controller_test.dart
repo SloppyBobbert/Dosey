@@ -32,6 +32,29 @@ void main() {
 
       expect(state.mode, RobotFaceMode.idle);
       expect(state.nextEventLabel, '10:00 · Morning meds');
+      expect(state.rampProgress, 0);
+      expect(state.isInAwakeWindow, isFalse);
+    },
+  );
+
+  test(
+    'ramp progress rises inside the configured wake-before window',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 55),
+        scheduleHour: 10,
+        scheduleMinute: 0,
+        robotFaceSettings: const RobotFaceSettings(wakeBeforeDoseMinutes: 10),
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final state = await fixture.controller.watchState().first;
+
+      expect(state.mode, RobotFaceMode.doseApproaching);
+      expect(state.rampProgress, closeTo(0.5, 0.001));
+      expect(state.isInAwakeWindow, isTrue);
     },
   );
 
@@ -84,6 +107,8 @@ void main() {
 
       final readyState = await fixture.controller.watchState().first;
       expect(readyState.mode, RobotFaceMode.doseReady);
+      expect(readyState.rampProgress, 1);
+      expect(readyState.isInAwakeWindow, isTrue);
 
       await fixture.doseLog.addEvent(
         DoseLogEvent.controllerDispenseSucceeded(
@@ -141,6 +166,53 @@ void main() {
 
       expect(confirmedState.nextEventLabel, '09:00 · Morning meds');
       expect(confirmedState.statusLabel, 'Dose confirmed taken');
+      expect(confirmedState.rampProgress, 1);
+      expect(confirmedState.isInAwakeWindow, isTrue);
+    },
+  );
+
+  test(
+    'awake window keeps the face awake after a dose for the configured time',
+    () async {
+      final clock = StreamController<DateTime>.broadcast();
+      var now = DateTime(2026, 7, 8, 9, 5);
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: now,
+        scheduleHour: 9,
+        scheduleMinute: 0,
+        clock: clock.stream,
+        robotFaceSettings: const RobotFaceSettings(
+          stayAwakeAfterDoseMinutes: 10,
+        ),
+      );
+      addTearDown(() async {
+        await clock.close();
+        await fixture.close();
+      });
+
+      await fixture.settle();
+
+      now = DateTime(2026, 7, 8, 9, 9);
+      fixture.now = now;
+      clock.add(now);
+
+      final awakeState = await fixture.controller.watchState().firstWhere(
+        (state) => state.isInAwakeWindow,
+      );
+
+      expect(awakeState.mode, RobotFaceMode.doseReady);
+      expect(awakeState.rampProgress, 1);
+
+      now = DateTime(2026, 7, 8, 9, 11);
+      fixture.now = now;
+      clock.add(now);
+
+      final noLongerAwakeState = await fixture.controller
+          .watchState()
+          .firstWhere((state) => !state.isInAwakeWindow);
+
+      expect(noLongerAwakeState.mode, RobotFaceMode.doseReady);
+      expect(noLongerAwakeState.rampProgress, 1);
     },
   );
 
@@ -328,6 +400,7 @@ class _RobotFaceControllerFixture {
     int scheduleHour = 10,
     int scheduleMinute = 0,
     List<ReminderSchedule>? schedules,
+    RobotFaceSettings robotFaceSettings = const RobotFaceSettings(),
     ScheduleProfile? activeProfile,
     bool emitDefaultActiveProfile = true,
     Stream<DateTime>? clock,
@@ -337,7 +410,7 @@ class _RobotFaceControllerFixture {
       database,
       defaultRole: AppDeviceRole.androidRobot,
     );
-    final robotFaceSettings = RobotFaceSettingsRepository(database);
+    final robotFaceSettingsRepository = RobotFaceSettingsRepository(database);
     final profiles = _FakeScheduleProfileRepository();
     final reminders = _FakeReminderRepository();
     final doseLog = _FakeDoseLogRepository();
@@ -347,7 +420,7 @@ class _RobotFaceControllerFixture {
     var currentNow = now;
 
     await settings.setDeviceRole(AppDeviceRole.androidRobot);
-    await robotFaceSettings.saveSettings(const RobotFaceSettings());
+    await robotFaceSettingsRepository.saveSettings(robotFaceSettings);
     if (activeProfile != null || emitDefaultActiveProfile) {
       profiles.emit(
         activeProfile ??
@@ -375,7 +448,7 @@ class _RobotFaceControllerFixture {
 
     final robotFaceController = RobotFaceController(
       settings: settings,
-      robotFaceSettings: robotFaceSettings,
+      robotFaceSettings: robotFaceSettingsRepository,
       controller: controllerGateway,
       scheduleProfiles: profiles,
       reminders: reminders,

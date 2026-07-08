@@ -17,6 +17,8 @@ class RobotFaceState {
     required this.nextEventLabel,
     required this.isFlipped,
     required this.isLandscapeOnly,
+    required this.rampProgress,
+    required this.isInAwakeWindow,
     this.statusLabel,
   });
 
@@ -24,6 +26,8 @@ class RobotFaceState {
   final String nextEventLabel;
   final bool isFlipped;
   final bool isLandscapeOnly;
+  final double rampProgress;
+  final bool isInAwakeWindow;
   final String? statusLabel;
 
   @override
@@ -37,6 +41,8 @@ class RobotFaceState {
         other.nextEventLabel == nextEventLabel &&
         other.isFlipped == isFlipped &&
         other.isLandscapeOnly == isLandscapeOnly &&
+        other.rampProgress == rampProgress &&
+        other.isInAwakeWindow == isInAwakeWindow &&
         other.statusLabel == statusLabel;
   }
 
@@ -46,6 +52,8 @@ class RobotFaceState {
     nextEventLabel,
     isFlipped,
     isLandscapeOnly,
+    rampProgress,
+    isInAwakeWindow,
     statusLabel,
   );
 }

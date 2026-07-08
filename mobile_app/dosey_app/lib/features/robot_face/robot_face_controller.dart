@@ -138,6 +138,7 @@ class RobotFaceController {
     final role = _role;
     final now = _current();
     final nextSchedule = _displaySchedule(now);
+    final choreography = _choreographyFor(nextSchedule, now);
     final nextEventLabel = nextSchedule == null
         ? 'No reminders scheduled'
         : '${nextSchedule.timeLabel} · ${nextSchedule.label}';
@@ -146,9 +147,12 @@ class RobotFaceController {
       nextEventLabel: nextEventLabel,
       isFlipped: _robotSettings.isFlipped,
       isLandscapeOnly: role?.canHostRobot ?? false,
+      rampProgress: choreography.rampProgress,
+      isInAwakeWindow: choreography.isInAwakeWindow,
       statusLabel: _statusFor(role, nextSchedule, now),
     );
     if (baseState.mode == RobotFaceMode.idle &&
+        !baseState.isInAwakeWindow &&
         _robotSettings.dimAfterInactivity &&
         now.difference(_lastInteractionAt) >= sleepyAfter) {
       return RobotFaceState(
@@ -156,6 +160,8 @@ class RobotFaceController {
         nextEventLabel: baseState.nextEventLabel,
         isFlipped: baseState.isFlipped,
         isLandscapeOnly: baseState.isLandscapeOnly,
+        rampProgress: baseState.rampProgress,
+        isInAwakeWindow: baseState.isInAwakeWindow,
         statusLabel: baseState.statusLabel,
       );
     }
@@ -215,7 +221,7 @@ class RobotFaceController {
     if (!scheduledTime.isAfter(now)) {
       return RobotFaceMode.doseReady;
     }
-    if (scheduledTime.difference(now) <= doseApproachingWindow) {
+    if (scheduledTime.difference(now) <= _wakeBeforeWindow) {
       return RobotFaceMode.doseApproaching;
     }
     return RobotFaceMode.idle;
@@ -288,6 +294,52 @@ class RobotFaceController {
     return scheduledTime.isAfter(now) ? null : schedule;
   }
 
+  _RobotFaceChoreography _choreographyFor(
+    ReminderSchedule? schedule,
+    DateTime now,
+  ) {
+    if (schedule == null) {
+      return const _RobotFaceChoreography(
+        rampProgress: 0,
+        isInAwakeWindow: false,
+      );
+    }
+
+    final scheduledTime = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      schedule.hour,
+      schedule.minute,
+    );
+    final wakeBeforeWindow = Duration(
+      minutes: _robotSettings.wakeBeforeDoseMinutes,
+    );
+    final stayAwakeWindow = Duration(
+      minutes: _robotSettings.stayAwakeAfterDoseMinutes,
+    );
+    final wakeWindowStart = scheduledTime.subtract(wakeBeforeWindow);
+    final wakeWindowEnd = scheduledTime.add(stayAwakeWindow);
+
+    final rampProgress = switch (now.compareTo(scheduledTime)) {
+      >= 0 => 1.0,
+      _ when wakeBeforeWindow == Duration.zero => 0.0,
+      _ when now.isBefore(wakeWindowStart) => 0.0,
+      _ =>
+        now
+                .difference(wakeWindowStart)
+                .inMilliseconds
+                .clamp(0, wakeBeforeWindow.inMilliseconds) /
+            wakeBeforeWindow.inMilliseconds,
+    };
+
+    return _RobotFaceChoreography(
+      rampProgress: rampProgress.clamp(0.0, 1.0),
+      isInAwakeWindow:
+          !now.isBefore(wakeWindowStart) && !now.isAfter(wakeWindowEnd),
+    );
+  }
+
   List<ReminderSchedule> get _activeSchedules {
     final activeProfile = _activeProfile;
     if (activeProfile == null) {
@@ -297,4 +349,23 @@ class RobotFaceController {
         .where((schedule) => schedule.profileId == activeProfile.id)
         .toList(growable: false);
   }
+
+  Duration get _wakeBeforeWindow {
+    final settingsWindow = Duration(
+      minutes: _robotSettings.wakeBeforeDoseMinutes,
+    );
+    return settingsWindow > Duration.zero
+        ? settingsWindow
+        : doseApproachingWindow;
+  }
+}
+
+class _RobotFaceChoreography {
+  const _RobotFaceChoreography({
+    required this.rampProgress,
+    required this.isInAwakeWindow,
+  });
+
+  final double rampProgress;
+  final bool isInAwakeWindow;
 }
