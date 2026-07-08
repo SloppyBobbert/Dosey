@@ -55,6 +55,11 @@ class TodayNextDoseHelper {
         latestDueTime = scheduledTime;
         latestDueSchedule = schedule;
       }
+
+      final doseId = doseIdForDate(schedule.id, referenceTime);
+      if (!hasTerminalEventForDose(events, doseId)) {
+        return schedule;
+      }
     }
 
     return latestDueSchedule ??

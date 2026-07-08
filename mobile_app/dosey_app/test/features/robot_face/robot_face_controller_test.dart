@@ -59,7 +59,7 @@ void main() {
   );
 
   test(
-    'wake-before fallback stays consistent when wake before minutes is zero',
+    'wake before off keeps the face idle until the scheduled time',
     () async {
       final fixture = await _RobotFaceControllerFixture.create(
         now: DateTime(2026, 7, 8, 9, 45),
@@ -73,9 +73,9 @@ void main() {
 
       final state = await fixture.controller.watchState().first;
 
-      expect(state.mode, RobotFaceMode.doseApproaching);
-      expect(state.rampProgress, closeTo(0.5, 0.001));
-      expect(state.isInAwakeWindow, isTrue);
+      expect(state.mode, RobotFaceMode.idle);
+      expect(state.rampProgress, 0);
+      expect(state.isInAwakeWindow, isFalse);
     },
   );
 
@@ -275,7 +275,7 @@ void main() {
   );
 
   test(
-    'dispense request uses the same latest due schedule shown on the face',
+    'dispense request uses the first unresolved due schedule shown on the face',
     () async {
       final now = DateTime(2026, 7, 8, 9, 5);
       final fixture = await _RobotFaceControllerFixture.create(
@@ -304,7 +304,7 @@ void main() {
       await fixture.settle();
 
       final initialState = await fixture.controller.watchState().first;
-      expect(initialState.nextEventLabel, '09:00 · Current meds');
+      expect(initialState.nextEventLabel, '08:00 · Early meds');
 
       final dispenseFuture = fixture.controller.requestDispenseForCurrentDose();
 
@@ -312,9 +312,9 @@ void main() {
         (state) => state.mode == RobotFaceMode.dispensing,
       );
 
-      expect(dispensingState.nextEventLabel, '09:00 · Current meds');
+      expect(dispensingState.nextEventLabel, '08:00 · Early meds');
       expect(fixture.controllerGateway.requestedDoseIds, <String>[
-        'schedule-2:2026-07-08',
+        'schedule-1:2026-07-08',
       ]);
 
       fixture.controllerGateway.completeDispense();
@@ -346,6 +346,63 @@ void main() {
         ),
       );
       expect(fixture.controllerGateway.requestedDoseIds, isEmpty);
+    },
+  );
+
+  test(
+    'resolved earlier due dose advances display and dispense to the next due dose',
+    () async {
+      final now = DateTime(2026, 7, 8, 9, 5);
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: now,
+        schedules: <ReminderSchedule>[
+          _schedule(
+            id: 'schedule-1',
+            profileId: 'profile-1',
+            hour: 8,
+            minute: 0,
+            now: now,
+            label: 'Early meds',
+          ),
+          _schedule(
+            id: 'schedule-2',
+            profileId: 'profile-1',
+            hour: 9,
+            minute: 0,
+            now: now,
+            label: 'Current meds',
+          ),
+        ],
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseTakenConfirmed(
+          doseId: 'schedule-1:2026-07-08',
+          occurredAt: now.toUtc(),
+        ),
+      );
+
+      final readyState = await fixture.controller.watchState().firstWhere(
+        (state) => state.nextEventLabel == '09:00 · Current meds',
+      );
+
+      expect(readyState.mode, RobotFaceMode.doseReady);
+
+      final dispenseFuture = fixture.controller.requestDispenseForCurrentDose();
+      final dispensingState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.dispensing,
+      );
+
+      expect(dispensingState.nextEventLabel, '09:00 · Current meds');
+      expect(fixture.controllerGateway.requestedDoseIds, <String>[
+        'schedule-2:2026-07-08',
+      ]);
+
+      fixture.controllerGateway.completeDispense();
+      await dispenseFuture;
     },
   );
 

@@ -349,12 +349,7 @@ class RobotFaceController {
   }
 
   Duration get _wakeBeforeWindow {
-    final settingsWindow = Duration(
-      minutes: _robotSettings.wakeBeforeDoseMinutes,
-    );
-    return settingsWindow > Duration.zero
-        ? settingsWindow
-        : doseApproachingWindow;
+    return Duration(minutes: _robotSettings.wakeBeforeDoseMinutes);
   }
 }
 
