@@ -167,6 +167,36 @@ void main() {
     expect(find.text('30 minutes'), findsOneWidget);
   });
 
+  testWidgets('robot face timing dropdowns resync after repository update', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    final scope = tester.element(find.byType(MaterialApp));
+    final repository = DoseyAppScope.of(scope).robotFaceSettings;
+
+    await _scrollToRobotFace(tester);
+
+    expect(find.text('10 minutes'), findsNWidgets(2));
+
+    await repository.saveSettings(
+      const RobotFaceSettings(
+        wakeBeforeDoseMinutes: 15,
+        stayAwakeAfterDoseMinutes: 30,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('10 minutes'), findsNothing);
+    expect(find.text('15 minutes'), findsOneWidget);
+    expect(find.text('30 minutes'), findsOneWidget);
+  });
+
   testWidgets('stale robot role stays hidden on iOS personal mode', (
     WidgetTester tester,
   ) async {
