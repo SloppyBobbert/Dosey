@@ -58,10 +58,13 @@ class RobotFaceSettingsRepository {
 
   RobotFaceSettings _mapSettings(List<AppSetting> settings) {
     final values = {for (final setting in settings) setting.key: setting.value};
+    const defaultSettings = RobotFaceSettings();
 
     return RobotFaceSettings(
       isFlipped: values[_isFlippedKey] == 'true',
-      dimAfterInactivity: values[_dimAfterInactivityKey] != 'false',
+      dimAfterInactivity: values.containsKey(_dimAfterInactivityKey)
+          ? values[_dimAfterInactivityKey] == 'true'
+          : defaultSettings.dimAfterInactivity,
       wakeBeforeDoseMinutes:
           int.tryParse(values[_wakeBeforeDoseMinutesKey] ?? '') ??
           RobotFaceSettings.defaultWakeBeforeDoseMinutes,

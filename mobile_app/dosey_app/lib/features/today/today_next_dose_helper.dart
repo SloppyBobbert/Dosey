@@ -13,6 +13,9 @@ class TodayNextDoseHelper {
     DoseLogEventKind.doseMissed.name,
   };
 
+  static final List<String> _terminalDoseEventKindNames =
+      List<String>.unmodifiable(_terminalDoseEventKinds);
+
   static ReminderSchedule? currentSchedule(
     List<ReminderSchedule> schedules,
     List<DoseLogEvent> events, {
@@ -97,7 +100,7 @@ class TodayNextDoseHelper {
   }
 
   static List<String> get terminalDoseEventKindNames =>
-      List<String>.unmodifiable(_terminalDoseEventKinds);
+      _terminalDoseEventKindNames;
 
   static String doseIdForDate(String scheduleId, DateTime now) {
     final month = now.month.toString().padLeft(2, '0');

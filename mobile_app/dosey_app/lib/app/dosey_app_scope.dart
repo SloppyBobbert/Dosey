@@ -59,6 +59,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
   late final DoseyDatabase _database;
   late final bool _ownsDatabase;
   late final bool _ownsNotificationTapController;
+  late final StreamController<DateTime> _robotFaceClockController;
+  late final Timer _robotFaceClockTimer;
   late final DoseyAppDependencies _dependencies;
 
   @override
@@ -66,6 +68,12 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     super.initState();
     _database = widget.database ?? DoseyDatabase();
     _ownsDatabase = widget.database == null;
+    _robotFaceClockController = StreamController<DateTime>.broadcast();
+    _robotFaceClockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!_robotFaceClockController.isClosed) {
+        _robotFaceClockController.add(DateTime.now());
+      }
+    });
     final doseLog = DriftDoseLogRepository(_database);
     final localAuth = LocalAuthRepository(_database);
     final reminders = LocalReminderRepository(_database);
@@ -117,6 +125,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         scheduleProfiles: scheduleProfiles,
         reminders: reminders,
         doseLog: doseLog,
+        clock: _robotFaceClockController.stream,
       ),
       ble: FlutterBluePlusBleGateway(),
       connectivity: ConnectivityPlusGateway(),
@@ -137,6 +146,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
 
   @override
   void dispose() {
+    _robotFaceClockTimer.cancel();
+    unawaited(_robotFaceClockController.close());
     unawaited(_dependencies.controller.close());
     unawaited(_dependencies.robotFaceController.close());
     unawaited(_dependencies.ble.close());

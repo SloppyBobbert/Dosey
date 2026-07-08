@@ -517,31 +517,39 @@ class _RobotFaceTimingDropdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final selectedValue = options.contains(value) ? value : fallbackValue;
+    final theme = Theme.of(context);
+    final decoration = InputDecoration(
+      labelText: label,
+      filled: true,
+      fillColor: theme.colorScheme.surfaceContainerHighest,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    );
 
-    return DropdownButtonFormField<int>(
+    return InputDecorator(
       key: ValueKey('$label:$selectedValue'),
-      initialValue: selectedValue,
-      decoration: InputDecoration(
-        labelText: label,
-        filled: true,
-        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+      decoration: decoration,
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: selectedValue,
+          isExpanded: true,
+          items: options
+              .map(
+                (minutes) => DropdownMenuItem<int>(
+                  value: minutes,
+                  child: Text(_robotFaceTimingLabel(minutes)),
+                ),
+              )
+              .toList(),
+          onChanged: enabled
+              ? (newValue) {
+                  if (newValue != null) {
+                    onChanged(newValue);
+                  }
+                }
+              : null,
+        ),
       ),
-      items: options
-          .map(
-            (minutes) => DropdownMenuItem<int>(
-              value: minutes,
-              child: Text(_robotFaceTimingLabel(minutes)),
-            ),
-          )
-          .toList(),
-      onChanged: enabled
-          ? (newValue) {
-              if (newValue != null) {
-                onChanged(newValue);
-              }
-            }
-          : null,
     );
   }
 }

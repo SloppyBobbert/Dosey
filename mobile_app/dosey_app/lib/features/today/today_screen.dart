@@ -91,27 +91,6 @@ class TodayScreen extends StatelessWidget {
     };
   }
 
-  static ReminderSchedule? _currentSchedule(
-    List<ReminderSchedule> schedules,
-    List<DoseLogEvent> events,
-  ) {
-    return TodayNextDoseHelper.currentSchedule(schedules, events);
-  }
-
-  static DoseLogEvent? _latestEventForDose(
-    List<DoseLogEvent> events,
-    String doseId,
-  ) {
-    return TodayNextDoseHelper.latestEventForDose(events, doseId);
-  }
-
-  static bool _hasTerminalEventForDose(
-    List<DoseLogEvent> events,
-    String doseId,
-  ) {
-    return TodayNextDoseHelper.hasTerminalEventForDose(events, doseId);
-  }
-
   static bool _hasEventKindForDose(
     List<DoseLogEvent> events,
     String doseId,
@@ -126,11 +105,7 @@ class TodayScreen extends StatelessWidget {
   }
 
   static bool _isTerminalDoseEvent(DoseLogEvent event) {
-    return _isTerminalDoseEventKind(event.kind);
-  }
-
-  static bool _isTerminalDoseEventKind(DoseLogEventKind kind) {
-    return TodayNextDoseHelper.isTerminalDoseEventKind(kind);
+    return TodayNextDoseHelper.isTerminalDoseEventKind(event.kind);
   }
 
   static String? _inventoryPrescriptionIdFor(
@@ -142,10 +117,6 @@ class TodayScreen extends StatelessWidget {
       return null;
     }
     return schedule.prescriptionId;
-  }
-
-  static String _doseIdForToday(String scheduleId) {
-    return TodayNextDoseHelper.doseIdForDate(scheduleId, DateTime.now());
   }
 
   static Future<void> _logDoseAction(
@@ -238,10 +209,16 @@ class _TodayDoseContent extends StatelessWidget {
       stream: DoseyAppScope.of(context).doseLog.watchEvents(),
       builder: (context, logSnapshot) {
         final events = logSnapshot.data ?? const <DoseLogEvent>[];
-        final currentSchedule = TodayScreen._currentSchedule(schedules, events);
+        final currentSchedule = TodayNextDoseHelper.currentSchedule(
+          schedules,
+          events,
+        );
         final currentDoseId = currentSchedule == null
             ? null
-            : TodayScreen._doseIdForToday(currentSchedule.id);
+            : TodayNextDoseHelper.doseIdForDate(
+                currentSchedule.id,
+                DateTime.now(),
+              );
 
         final dependencies = DoseyAppScope.of(context);
 
@@ -260,7 +237,7 @@ class _TodayDoseContent extends StatelessWidget {
                   );
             final latestEvent = currentDoseId == null
                 ? null
-                : TodayScreen._latestEventForDose(events, currentDoseId);
+                : TodayNextDoseHelper.latestEventForDose(events, currentDoseId);
             final inventoryPrescriptionId =
                 TodayScreen._inventoryPrescriptionIdFor(
                   currentSchedule,
@@ -362,7 +339,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     if (currentSchedule == null || currentDoseId == null) {
       return const SizedBox.shrink();
     }
-    final latestEvent = TodayScreen._latestEventForDose(
+    final latestEvent = TodayNextDoseHelper.latestEventForDose(
       widget.events,
       currentDoseId,
     );
@@ -1146,8 +1123,11 @@ class _ScheduleTimelineCard extends StatelessWidget {
   ) sync* {
     var foundFirstEnabled = false;
     for (final schedule in schedules) {
-      final doseId = TodayScreen._doseIdForToday(schedule.id);
-      if (TodayScreen._hasTerminalEventForDose(events, doseId)) {
+      final doseId = TodayNextDoseHelper.doseIdForDate(
+        schedule.id,
+        DateTime.now(),
+      );
+      if (TodayNextDoseHelper.hasTerminalEventForDose(events, doseId)) {
         continue;
       }
       if (!schedule.isEnabled) {

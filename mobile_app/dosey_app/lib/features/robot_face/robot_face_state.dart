@@ -30,6 +30,26 @@ class RobotFaceState {
   final bool isInAwakeWindow;
   final String? statusLabel;
 
+  RobotFaceState copyWith({
+    RobotFaceMode? mode,
+    String? nextEventLabel,
+    bool? isFlipped,
+    bool? isLandscapeOnly,
+    double? rampProgress,
+    bool? isInAwakeWindow,
+    String? statusLabel,
+  }) {
+    return RobotFaceState(
+      mode: mode ?? this.mode,
+      nextEventLabel: nextEventLabel ?? this.nextEventLabel,
+      isFlipped: isFlipped ?? this.isFlipped,
+      isLandscapeOnly: isLandscapeOnly ?? this.isLandscapeOnly,
+      rampProgress: rampProgress ?? this.rampProgress,
+      isInAwakeWindow: isInAwakeWindow ?? this.isInAwakeWindow,
+      statusLabel: statusLabel ?? this.statusLabel,
+    );
+  }
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) {

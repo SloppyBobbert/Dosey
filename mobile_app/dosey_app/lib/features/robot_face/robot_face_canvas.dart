@@ -417,8 +417,9 @@ class _RobotFacePainter extends CustomPainter {
       RobotFaceMode.happyConfirmed => 1.08,
       RobotFaceMode.doseApproaching => 1.0 + awakeLift + (ramp * 0.06),
       RobotFaceMode.doseReady => 1.06,
+      RobotFaceMode.dispensing => 0.92,
+      RobotFaceMode.waitingForConfirmation => 0.9 + awakeLift,
       RobotFaceMode.idle => 0.98 + awakeLift + liveLift,
-      _ => 1.0,
     };
     return (base - blink * 0.94).clamp(0.12, 1.08);
   }
@@ -444,6 +445,15 @@ class _RobotFacePainter extends CustomPainter {
         -size.height * (0.01 + (ramp * 0.012)),
       ),
       RobotFaceMode.doseReady => Offset(0, -size.height * 0.024),
+      RobotFaceMode.dispensing => Offset(
+        horizontal * 0.2,
+        -size.height * 0.016 +
+            math.sin(phase * math.pi * 4) * size.height * 0.008,
+      ),
+      RobotFaceMode.waitingForConfirmation => Offset(
+        horizontal * 0.18,
+        -size.height * 0.014,
+      ),
       RobotFaceMode.happyConfirmed => Offset(
         horizontal * 0.3,
         -size.height * 0.022,
@@ -484,6 +494,22 @@ class _RobotFacePainter extends CustomPainter {
         attentionRingStrength: 1,
         wakeAura: 1,
         idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.003,
+      ),
+      RobotFaceMode.dispensing => _FaceMotionProfile(
+        breathingAmplitude: 0.01,
+        glowBoost: 0.3,
+        eyeLift: 0.024,
+        attentionRingStrength: 0.82,
+        wakeAura: 0.92,
+        idleDrift: math.sin(phase * math.pi * 4) * size.height * 0.008,
+      ),
+      RobotFaceMode.waitingForConfirmation => _FaceMotionProfile(
+        breathingAmplitude: 0.016,
+        glowBoost: 0.14,
+        eyeLift: 0.016,
+        attentionRingStrength: 0.46,
+        wakeAura: 0.5,
+        idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.002,
       ),
       RobotFaceMode.idle when state.isInAwakeWindow => _FaceMotionProfile(
         breathingAmplitude: 0.022,
@@ -532,6 +558,24 @@ class _RobotFacePainter extends CustomPainter {
         pupil: Color(0xFF04283A),
         glow: Color(0xFF2AE7FF),
         accent: Color(0xFFFFB84F),
+      ),
+      RobotFaceMode.dispensing => const _FacePalette(
+        backgroundTop: Color(0xFF08131E),
+        backgroundBottom: Color(0xFF03070B),
+        eyeTop: Color(0xFF67F0FF),
+        eyeBottom: Color(0xFF0FA3D1),
+        pupil: Color(0xFF04283A),
+        glow: Color(0xFF34EDFF),
+        accent: Color(0xFFFF9A3C),
+      ),
+      RobotFaceMode.waitingForConfirmation => const _FacePalette(
+        backgroundTop: Color(0xFF0A1621),
+        backgroundBottom: Color(0xFF04080D),
+        eyeTop: Color(0xFFBFF8FF),
+        eyeBottom: Color(0xFF56CAE3),
+        pupil: Color(0xFF073041),
+        glow: Color(0xFF62E8FF),
+        accent: Color(0xFFFFD17B),
       ),
       RobotFaceMode.happyConfirmed => const _FacePalette(
         backgroundTop: Color(0xFF091A16),

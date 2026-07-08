@@ -24,7 +24,6 @@ class RobotFaceController {
     Stream<DateTime>? clock,
     DateTime Function()? now,
     this.sleepyAfter = const Duration(minutes: 30),
-    this.doseApproachingWindow = const Duration(minutes: 30),
   }) : _now = now ?? DateTime.now {
     _lastInteractionAt = _now();
     _subscriptions = <StreamSubscription<Object?>>[
@@ -72,7 +71,6 @@ class RobotFaceController {
   final DoseLogRepository _doseLog;
   final DateTime Function() _now;
   final Duration sleepyAfter;
-  final Duration doseApproachingWindow;
 
   final _stateController = StreamController<RobotFaceState>.broadcast();
   late final List<StreamSubscription<Object?>> _subscriptions;
@@ -90,7 +88,7 @@ class RobotFaceController {
   RobotFaceState? _latestState;
 
   Stream<RobotFaceState> watchState() async* {
-    final state = _latestState ?? _computeState();
+    final state = _latestState ??= _computeState();
     yield state;
     yield* _stateController.stream;
   }
@@ -155,15 +153,7 @@ class RobotFaceController {
         !baseState.isInAwakeWindow &&
         _robotSettings.dimAfterInactivity &&
         now.difference(_lastInteractionAt) >= sleepyAfter) {
-      return RobotFaceState(
-        mode: RobotFaceMode.sleepy,
-        nextEventLabel: baseState.nextEventLabel,
-        isFlipped: baseState.isFlipped,
-        isLandscapeOnly: baseState.isLandscapeOnly,
-        rampProgress: baseState.rampProgress,
-        isInAwakeWindow: baseState.isInAwakeWindow,
-        statusLabel: baseState.statusLabel,
-      );
+      return baseState.copyWith(mode: RobotFaceMode.sleepy);
     }
     return baseState;
   }
