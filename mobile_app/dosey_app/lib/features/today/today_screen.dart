@@ -9,9 +9,8 @@ import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
-import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/features/doses/dose_action_logger.dart';
 import 'package:dosey_app/features/today/today_next_dose_helper.dart';
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 
 class TodayScreen extends StatelessWidget {
@@ -103,95 +102,6 @@ class TodayScreen extends StatelessWidget {
     }
     return false;
   }
-
-  static bool _isTerminalDoseEvent(DoseLogEvent event) {
-    return TodayNextDoseHelper.isTerminalDoseEventKind(event.kind);
-  }
-
-  static String? _inventoryPrescriptionIdFor(
-    ReminderSchedule? schedule,
-    Map<String, Prescription> prescriptionsById,
-  ) {
-    if (schedule == null ||
-        !prescriptionsById.containsKey(schedule.prescriptionId)) {
-      return null;
-    }
-    return schedule.prescriptionId;
-  }
-
-  static Future<void> _logDoseAction(
-    BuildContext context,
-    DoseLogEvent event,
-    String successMessage, {
-    CarouselSlot? retireLoadedSlot,
-    String? inventoryPrescriptionId,
-  }) async {
-    try {
-      final dependencies = DoseyAppScope.of(context);
-      final retiresLoadedSlot =
-          retireLoadedSlot != null && _isTerminalDoseEvent(event);
-      final recordsInventory =
-          event.marksDoseTaken && inventoryPrescriptionId != null;
-      var ignoredDoseAction = false;
-      await dependencies.database.transaction(() async {
-        if (await _hasPersistedTerminalEventForDose(
-          dependencies.database,
-          event.doseId,
-        )) {
-          ignoredDoseAction = true;
-          return;
-        }
-        if (retiresLoadedSlot) {
-          await dependencies.carouselSlots.markNeedsReview(retireLoadedSlot.id);
-        }
-        // only real taken states spend inventory
-        if (recordsInventory) {
-          await dependencies.prescriptions.recordTakenDose(
-            inventoryPrescriptionId,
-            occurredAt: event.occurredAt,
-          );
-        }
-        await dependencies.doseLog.addEvent(event);
-      });
-      if (!context.mounted) {
-        return;
-      }
-      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
-      if (ignoredDoseAction) {
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Dose already logged for today.')),
-        );
-        return;
-      }
-      messenger.showSnackBar(SnackBar(content: Text(successMessage)));
-    } on Object catch (error) {
-      if (!context.mounted) {
-        return;
-      }
-      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
-      messenger.showSnackBar(
-        SnackBar(content: Text('Dose action failed: $error')),
-      );
-    }
-  }
-
-  static Future<bool> _hasPersistedTerminalEventForDose(
-    DoseyDatabase database,
-    String doseId,
-  ) async {
-    final existingEvent =
-        await (database.select(database.doseLogEvents)
-              ..where(
-                (row) =>
-                    row.doseId.equals(doseId) &
-                    row.kind.isIn(
-                      TodayNextDoseHelper.terminalDoseEventKindNames,
-                    ),
-              )
-              ..limit(1))
-            .getSingleOrNull();
-    return existingEvent != null;
-  }
 }
 
 class _TodayDoseContent extends StatelessWidget {
@@ -239,9 +149,9 @@ class _TodayDoseContent extends StatelessWidget {
                 ? null
                 : TodayNextDoseHelper.latestEventForDose(events, currentDoseId);
             final inventoryPrescriptionId =
-                TodayScreen._inventoryPrescriptionIdFor(
+                DoseActionLogger.inventoryPrescriptionIdFor(
                   currentSchedule,
-                  prescriptionsById,
+                  prescriptionsById.keys.toSet(),
                 );
 
             return Column(
@@ -259,7 +169,7 @@ class _TodayDoseContent extends StatelessWidget {
                       .length,
                   onConfirmDoseTaken: currentDoseId == null
                       ? null
-                      : () => TodayScreen._logDoseAction(
+                      : () => DoseActionLogger.logDoseAction(
                           context,
                           DoseLogEvent.doseTakenConfirmed(
                             doseId: currentDoseId,
@@ -354,9 +264,9 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
       DoseLogEventKind.doseVisibleConfirmed,
     );
     final loadedSlot = widget.loadedSlot;
-    final inventoryPrescriptionId = TodayScreen._inventoryPrescriptionIdFor(
+    final inventoryPrescriptionId = DoseActionLogger.inventoryPrescriptionIdFor(
       currentSchedule,
-      widget.prescriptionsById,
+      widget.prescriptionsById.keys.toSet(),
     );
     final dispenseKey = loadedSlot == null
         ? null
@@ -403,7 +313,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   : () =>
                         _dispenseLoadedSlot(context, loadedSlot, currentDoseId),
               onSnoozeDose: doseAction(
-                () => TodayScreen._logDoseAction(
+                () => DoseActionLogger.logDoseAction(
                   context,
                   DoseLogEvent.doseSnoozed(
                     doseId: currentDoseId,
@@ -413,7 +323,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                 ),
               ),
               onConfirmTaken: doseAction(
-                () => TodayScreen._logDoseAction(
+                () => DoseActionLogger.logDoseAction(
                   context,
                   DoseLogEvent.doseTakenConfirmed(
                     doseId: currentDoseId,
@@ -425,7 +335,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                 ),
               ),
               onAlreadyTaken: doseAction(
-                () => TodayScreen._logDoseAction(
+                () => DoseActionLogger.logDoseAction(
                   context,
                   DoseLogEvent.doseAlreadyTaken(
                     doseId: currentDoseId,
@@ -437,7 +347,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                 ),
               ),
               onTakenEarly: doseAction(
-                () => TodayScreen._logDoseAction(
+                () => DoseActionLogger.logDoseAction(
                   context,
                   DoseLogEvent.doseTakenEarly(
                     doseId: currentDoseId,
@@ -449,7 +359,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                 ),
               ),
               onTakenLate: doseAction(
-                () => TodayScreen._logDoseAction(
+                () => DoseActionLogger.logDoseAction(
                   context,
                   DoseLogEvent.doseTakenLate(
                     doseId: currentDoseId,
@@ -462,7 +372,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
               ),
               onConfirmVisible: hasDispenseSucceeded && !hasVisibleConfirmed
                   ? doseAction(
-                      () => TodayScreen._logDoseAction(
+                      () => DoseActionLogger.logDoseAction(
                         context,
                         DoseLogEvent.doseVisibleConfirmed(
                           doseId: currentDoseId,
@@ -473,7 +383,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                     )
                   : null,
               onAskCaregiver: doseAction(
-                () => TodayScreen._logDoseAction(
+                () => DoseActionLogger.logDoseAction(
                   context,
                   DoseLogEvent.caregiverHelpRequested(
                     doseId: currentDoseId,
@@ -483,7 +393,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                 ),
               ),
               onSkipDose: doseAction(
-                () => TodayScreen._logDoseAction(
+                () => DoseActionLogger.logDoseAction(
                   context,
                   DoseLogEvent.doseSkipped(
                     doseId: currentDoseId,
@@ -494,7 +404,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                 ),
               ),
               onMarkMissed: doseAction(
-                () => TodayScreen._logDoseAction(
+                () => DoseActionLogger.logDoseAction(
                   context,
                   DoseLogEvent.doseMissed(
                     doseId: currentDoseId,

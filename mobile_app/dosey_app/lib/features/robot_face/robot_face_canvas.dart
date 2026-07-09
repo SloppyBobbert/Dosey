@@ -469,10 +469,7 @@ class _RobotFacePainter extends CustomPainter {
   }
 
   double _bounceOffsetFor(RobotFaceMode mode) {
-    if (mode != RobotFaceMode.happyConfirmed) {
-      return 0;
-    }
-    return math.sin(phase * math.pi * 2) * 8;
+    return 0;
   }
 
   _FaceMotionProfile _motionProfileFor(RobotFaceState state, Size size) {
@@ -549,7 +546,24 @@ class _RobotFacePainter extends CustomPainter {
         glow: Color(0xFF5877A8),
         accent: Color(0xFF7E90D9),
       ),
-      RobotFaceMode.doseReady ||
+      RobotFaceMode.doseReady => const _FacePalette(
+        backgroundTop: Color(0xFF08161A),
+        backgroundBottom: Color(0xFF03080A),
+        eyeTop: Color(0xFFA4FFE8),
+        eyeBottom: Color(0xFF38CDAA),
+        pupil: Color(0xFF052C24),
+        glow: Color(0xFF4BF3C8),
+        accent: Color(0xFF6EEFD8),
+      ),
+      RobotFaceMode.waitingForConfirmation => const _FacePalette(
+        backgroundTop: Color(0xFF09171A),
+        backgroundBottom: Color(0xFF04090B),
+        eyeTop: Color(0xFFD0FFF3),
+        eyeBottom: Color(0xFF5ED8BA),
+        pupil: Color(0xFF073229),
+        glow: Color(0xFF68F3D2),
+        accent: Color(0xFF8AF5E0),
+      ),
       RobotFaceMode.doseApproaching => const _FacePalette(
         backgroundTop: Color(0xFF08141F),
         backgroundBottom: Color(0xFF03070B),
@@ -557,7 +571,7 @@ class _RobotFacePainter extends CustomPainter {
         eyeBottom: Color(0xFF1797BE),
         pupil: Color(0xFF04283A),
         glow: Color(0xFF2AE7FF),
-        accent: Color(0xFFFFB84F),
+        accent: Color(0xFF7EEDFF),
       ),
       RobotFaceMode.dispensing => const _FacePalette(
         backgroundTop: Color(0xFF08131E),
@@ -566,16 +580,7 @@ class _RobotFacePainter extends CustomPainter {
         eyeBottom: Color(0xFF0FA3D1),
         pupil: Color(0xFF04283A),
         glow: Color(0xFF34EDFF),
-        accent: Color(0xFFFF9A3C),
-      ),
-      RobotFaceMode.waitingForConfirmation => const _FacePalette(
-        backgroundTop: Color(0xFF0A1621),
-        backgroundBottom: Color(0xFF04080D),
-        eyeTop: Color(0xFFBFF8FF),
-        eyeBottom: Color(0xFF56CAE3),
-        pupil: Color(0xFF073041),
-        glow: Color(0xFF62E8FF),
-        accent: Color(0xFFFFD17B),
+        accent: Color(0xFF8BEFFF),
       ),
       RobotFaceMode.happyConfirmed => const _FacePalette(
         backgroundTop: Color(0xFF091A16),
@@ -584,7 +589,7 @@ class _RobotFacePainter extends CustomPainter {
         eyeBottom: Color(0xFF38C4A2),
         pupil: Color(0xFF06372C),
         glow: Color(0xFF56F0C7),
-        accent: Color(0xFFFFF2A6),
+        accent: Color(0xFF83EFD4),
       ),
       RobotFaceMode.error || RobotFaceMode.missed => const _FacePalette(
         backgroundTop: Color(0xFF1D1013),

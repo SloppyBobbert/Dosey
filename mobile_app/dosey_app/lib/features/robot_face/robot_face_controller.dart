@@ -137,17 +137,21 @@ class RobotFaceController {
     final now = _current();
     final nextSchedule = _displaySchedule(now);
     final choreography = _choreographyFor(nextSchedule, now);
+    final mode = _modeFor(role, nextSchedule, now);
     final nextEventLabel = nextSchedule == null
         ? 'No reminders scheduled'
         : '${nextSchedule.timeLabel} · ${nextSchedule.label}';
+    final actionDoseId = _actionDoseIdFor(mode, nextSchedule, now);
     final baseState = RobotFaceState(
-      mode: _modeFor(role, nextSchedule, now),
+      mode: mode,
       nextEventLabel: nextEventLabel,
       isFlipped: _robotSettings.isFlipped,
       isLandscapeOnly: role?.canHostRobot ?? false,
       rampProgress: choreography.rampProgress,
       isInAwakeWindow: choreography.isInAwakeWindow,
       statusLabel: _statusFor(role, nextSchedule, now),
+      actionDoseId: actionDoseId,
+      availableActions: _availableActionsFor(actionDoseId),
     );
     if (baseState.mode == RobotFaceMode.idle &&
         !baseState.isInAwakeWindow &&
@@ -156,6 +160,71 @@ class RobotFaceController {
       return baseState.copyWith(mode: RobotFaceMode.sleepy);
     }
     return baseState;
+  }
+
+  String? _actionDoseIdFor(
+    RobotFaceMode mode,
+    ReminderSchedule? nextSchedule,
+    DateTime now,
+  ) {
+    if (nextSchedule == null) {
+      return null;
+    }
+
+    final dueSchedule = _dueSchedule(now);
+    if (dueSchedule == null || dueSchedule.id != nextSchedule.id) {
+      return null;
+    }
+
+    final doseId = TodayNextDoseHelper.doseIdForDate(dueSchedule.id, now);
+    if (mode.needsContextualAction) {
+      return doseId;
+    }
+
+    if (mode == RobotFaceMode.offline || mode == RobotFaceMode.error) {
+      final latestEvent = TodayNextDoseHelper.latestEventForDose(
+        _events,
+        doseId,
+      );
+      if (latestEvent != null && _keepsDoseActionable(latestEvent.kind)) {
+        return doseId;
+      }
+    }
+
+    return null;
+  }
+
+  bool _keepsDoseActionable(DoseLogEventKind kind) {
+    return switch (kind) {
+      DoseLogEventKind.controllerDispenseSucceeded ||
+      DoseLogEventKind.doseVisibleConfirmed ||
+      DoseLogEventKind.doseSnoozed ||
+      DoseLogEventKind.caregiverHelpRequested => true,
+      _ => false,
+    };
+  }
+
+  Set<RobotFaceActionKind> _availableActionsFor(String? actionDoseId) {
+    if (actionDoseId == null) {
+      return const <RobotFaceActionKind>{};
+    }
+
+    final actions = <RobotFaceActionKind>{
+      RobotFaceActionKind.confirmTaken,
+      RobotFaceActionKind.skipDose,
+      RobotFaceActionKind.askForHelp,
+    };
+
+    final hasHelpRequest = _events.any(
+      (event) =>
+          event.doseId == actionDoseId &&
+          event.kind == DoseLogEventKind.caregiverHelpRequested,
+    );
+    if (hasHelpRequest) {
+      actions.remove(RobotFaceActionKind.askForHelp);
+    }
+
+    return actions;
   }
 
   RobotFaceMode _modeFor(

@@ -1,8 +1,18 @@
 import 'dart:async';
 
+import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
+import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
+import 'package:dosey_app/core/prescriptions/prescription.dart';
+import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
+import 'package:dosey_app/features/today/today_next_dose_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -277,6 +287,97 @@ void main() {
     expect(readyBorder.top.color.a, greaterThan(soonBorder.top.color.a));
   });
 
+  testWidgets('uses green ready-tone badge accents for ready path states', (
+    WidgetTester tester,
+  ) async {
+    final states = StreamController<RobotFaceState>.broadcast();
+    addTearDown(states.close);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        stateStream: states.stream,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.doseReady,
+          nextEventLabel: 'Now · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Ready to dispense',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    BoxDecoration readyDecoration() =>
+        tester
+                .widget<DecoratedBox>(
+                  find.byKey(RobotFaceScreen.statusBadgeKey),
+                )
+                .decoration
+            as BoxDecoration;
+
+    final readyBorder = readyDecoration().border! as Border;
+    expect(readyBorder.top.color.g, greaterThan(readyBorder.top.color.r));
+    expect(readyBorder.top.color.b, greaterThan(readyBorder.top.color.r));
+
+    states.add(
+      const RobotFaceState(
+        mode: RobotFaceMode.waitingForConfirmation,
+        nextEventLabel: 'Taken? · Morning meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+        statusLabel: 'Waiting for confirmation',
+      ),
+    );
+
+    await tester.pump();
+
+    final waitingBorder = readyDecoration().border! as Border;
+    expect(waitingBorder.top.color.g, greaterThan(waitingBorder.top.color.r));
+    expect(waitingBorder.top.color.b, greaterThan(waitingBorder.top.color.r));
+    expect(waitingBorder.top.color.a, lessThan(readyBorder.top.color.a));
+  });
+
+  testWidgets('uses ready-tone urgent prompt accents for dose ready state', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.doseReady,
+          nextEventLabel: 'Now · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Ready to dispense',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final promptDecoration =
+        tester
+                .widgetList<DecoratedBox>(
+                  find.ancestor(
+                    of: find.byKey(RobotFaceScreen.urgentPromptKey),
+                    matching: find.byType(DecoratedBox),
+                  ),
+                )
+                .first
+                .decoration
+            as BoxDecoration;
+    final promptBorder = promptDecoration.border! as Border;
+
+    expect(promptBorder.top.color.g, greaterThan(promptBorder.top.color.r));
+    expect(promptBorder.top.color.b, greaterThan(promptBorder.top.color.r));
+  });
+
   testWidgets('shows alert support badge in awake idle window', (
     WidgetTester tester,
   ) async {
@@ -304,6 +405,502 @@ void main() {
     expect(find.text('Controller connected'), findsOneWidget);
     expect(border.top.color.a, greaterThan(0.08));
   });
+
+  testWidgets('hides action panel for idle state without actionable dose', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: '8:00 PM · Evening meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+          statusLabel: 'Controller connected',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.byKey(RobotFaceScreen.actionPanelKey), findsNothing);
+  });
+
+  testWidgets('shows contextual actions only for actionable dose states', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.doseReady,
+          nextEventLabel: 'Now · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Ready to dispense',
+          actionDoseId: 'dose-123',
+          availableActions: {
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+            RobotFaceActionKind.askForHelp,
+          },
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.byKey(RobotFaceScreen.actionPanelKey), findsOneWidget);
+    expect(find.byKey(RobotFaceScreen.confirmTakenButtonKey), findsOneWidget);
+    expect(find.byKey(RobotFaceScreen.skipDoseButtonKey), findsOneWidget);
+    expect(find.byKey(RobotFaceScreen.needHelpButtonKey), findsOneWidget);
+  });
+
+  testWidgets(
+    'keeps contextual actions visible for actionable offline follow-up states',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const _RobotFaceTestApp(
+          initialState: RobotFaceState(
+            mode: RobotFaceMode.offline,
+            nextEventLabel: 'Taken? · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            statusLabel: 'Controller disconnected',
+            actionDoseId: 'dose-123',
+            availableActions: {
+              RobotFaceActionKind.confirmTaken,
+              RobotFaceActionKind.skipDose,
+              RobotFaceActionKind.askForHelp,
+            },
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.byKey(RobotFaceScreen.actionPanelKey), findsOneWidget);
+      expect(find.byKey(RobotFaceScreen.confirmTakenButtonKey), findsOneWidget);
+      expect(find.byKey(RobotFaceScreen.skipDoseButtonKey), findsOneWidget);
+      expect(find.byKey(RobotFaceScreen.needHelpButtonKey), findsOneWidget);
+    },
+  );
+
+  testWidgets('logs confirm taken action and prevents repeat confirm', (
+    WidgetTester tester,
+  ) async {
+    final doseLog = _FakeDoseLogRepository(delayCompletion: true);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        doseLog: doseLog,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.doseReady,
+          nextEventLabel: 'Now · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Ready to dispense',
+          actionDoseId: 'dose-123',
+          availableActions: {
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+            RobotFaceActionKind.askForHelp,
+          },
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final buttonFinder = find.byKey(RobotFaceScreen.confirmTakenButtonKey);
+    expect(tester.widget<FilledButton>(buttonFinder).onPressed, isNotNull);
+
+    await tester.tap(buttonFinder);
+    await tester.pump();
+
+    expect(tester.widget<FilledButton>(buttonFinder).onPressed, isNull);
+
+    doseLog.completePendingAdd();
+    await tester.pump();
+
+    expect(doseLog.events, hasLength(1));
+    expect(doseLog.events.single.kind, DoseLogEventKind.doseTakenConfirmed);
+    expect(doseLog.events.single.doseId, 'dose-123');
+    expect(doseLog.events.single.marksDoseTaken, isTrue);
+
+    expect(tester.widget<FilledButton>(buttonFinder).onPressed, isNull);
+    expect(find.text('Taken logged.'), findsOneWidget);
+  });
+
+  testWidgets(
+    'Robot Face confirm taken reuses Today terminal dose side effects',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      const scheduleId = 'vitamin-d-morning';
+      final doseId = TodayNextDoseHelper.doseIdForDate(
+        scheduleId,
+        DateTime.now(),
+      );
+      await LocalPrescriptionRepository(database).upsertPrescription(
+        Prescription(
+          id: 'vitamin-d',
+          name: 'Vitamin D',
+          pillType: PillType.capsule,
+          remainingDoses: 2,
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+        ),
+      );
+      await LocalReminderRepository(database).upsertSchedule(
+        ReminderSchedule(
+          id: scheduleId,
+          label: 'Vitamin D',
+          prescriptionId: 'vitamin-d',
+          hour: 8,
+          minute: 30,
+          isEnabled: true,
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+        ),
+      );
+      await LocalCarouselSlotRepository(database).assignSlot(
+        CarouselSlot(
+          id: 'schedule-1-$scheduleId',
+          slotNumber: 1,
+          prescriptionId: 'vitamin-d',
+          scheduleId: scheduleId,
+          profileId: ReminderSchedule.defaultProfileId,
+          status: CarouselSlotStatus.loaded,
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+        ),
+      );
+
+      await tester.pumpWidget(
+        DoseyAppScope(
+          database: database,
+          child: MaterialApp(
+            home: RobotFaceScreen(
+              initialState: RobotFaceState(
+                mode: RobotFaceMode.waitingForConfirmation,
+                nextEventLabel: 'Taken? · Morning meds',
+                isFlipped: false,
+                isLandscapeOnly: true,
+                rampProgress: 1,
+                isInAwakeWindow: true,
+                statusLabel: 'Waiting for confirmation',
+                actionDoseId: doseId,
+                availableActions: const {
+                  RobotFaceActionKind.confirmTaken,
+                  RobotFaceActionKind.skipDose,
+                  RobotFaceActionKind.askForHelp,
+                },
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+      await tester.tap(find.byKey(RobotFaceScreen.confirmTakenButtonKey));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      final slot = await (database.select(
+        database.carouselSlots,
+      )..where((row) => row.id.equals('schedule-1-$scheduleId'))).getSingle();
+      final prescription = await (database.select(
+        database.prescriptions,
+      )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+
+      expect(slot.status, CarouselSlotStatus.needsReview.storageValue);
+      expect(prescription.remainingDoses, 1);
+    },
+  );
+
+  testWidgets('Robot Face confirm taken retires an already dispensed slot', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    const scheduleId = 'vitamin-d-morning';
+    final doseId = TodayNextDoseHelper.doseIdForDate(
+      scheduleId,
+      DateTime.now(),
+    );
+    await LocalPrescriptionRepository(database).upsertPrescription(
+      Prescription(
+        id: 'vitamin-d',
+        name: 'Vitamin D',
+        pillType: PillType.capsule,
+        remainingDoses: 2,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: scheduleId,
+        label: 'Vitamin D',
+        prescriptionId: 'vitamin-d',
+        hour: 8,
+        minute: 30,
+        isEnabled: true,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+    await LocalCarouselSlotRepository(database).assignSlot(
+      CarouselSlot(
+        id: 'schedule-1-$scheduleId',
+        slotNumber: 1,
+        prescriptionId: 'vitamin-d',
+        scheduleId: scheduleId,
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.dispensed,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(
+      DoseyAppScope(
+        database: database,
+        child: MaterialApp(
+          home: RobotFaceScreen(
+            initialState: RobotFaceState(
+              mode: RobotFaceMode.waitingForConfirmation,
+              nextEventLabel: 'Taken? · Morning meds',
+              isFlipped: false,
+              isLandscapeOnly: true,
+              rampProgress: 1,
+              isInAwakeWindow: true,
+              statusLabel: 'Waiting for confirmation',
+              actionDoseId: doseId,
+              availableActions: const {
+                RobotFaceActionKind.confirmTaken,
+                RobotFaceActionKind.skipDose,
+                RobotFaceActionKind.askForHelp,
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.confirmTakenButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final slot = await (database.select(
+      database.carouselSlots,
+    )..where((row) => row.id.equals('schedule-1-$scheduleId'))).getSingle();
+
+    expect(slot.status, CarouselSlotStatus.needsReview.storageValue);
+  });
+
+  testWidgets(
+    'keeps actions available when shared dose logging reports failure',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RobotFaceScreen(
+            doseActionLogger: (_, _, _) async => false,
+            initialState: const RobotFaceState(
+              mode: RobotFaceMode.waitingForConfirmation,
+              nextEventLabel: 'Taken? · Morning meds',
+              isFlipped: false,
+              isLandscapeOnly: true,
+              rampProgress: 1,
+              isInAwakeWindow: true,
+              statusLabel: 'Waiting for confirmation',
+              actionDoseId: 'vitamin-d-morning:2026-07-08',
+              availableActions: {
+                RobotFaceActionKind.confirmTaken,
+                RobotFaceActionKind.skipDose,
+                RobotFaceActionKind.askForHelp,
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      final confirmButton = find.byKey(RobotFaceScreen.confirmTakenButtonKey);
+      await tester.tap(confirmButton);
+      await tester.pump();
+
+      expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+    },
+  );
+
+  testWidgets('ignores duplicate rapid confirm taps before rebuild', (
+    WidgetTester tester,
+  ) async {
+    final doseLog = _FakeDoseLogRepository(delayCompletion: true);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        doseLog: doseLog,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.doseReady,
+          nextEventLabel: 'Now · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Ready to dispense',
+          actionDoseId: 'dose-123',
+          availableActions: {
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+            RobotFaceActionKind.askForHelp,
+          },
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final buttonFinder = find.byKey(RobotFaceScreen.confirmTakenButtonKey);
+
+    await tester.tap(buttonFinder, warnIfMissed: false);
+    await tester.tap(buttonFinder, warnIfMissed: false);
+    await tester.pump();
+
+    expect(doseLog.events, hasLength(1));
+    expect(doseLog.events.single.kind, DoseLogEventKind.doseTakenConfirmed);
+
+    doseLog.completePendingAdd();
+    await tester.pump();
+  });
+
+  testWidgets('logs skip action without marking the dose taken', (
+    WidgetTester tester,
+  ) async {
+    final doseLog = _FakeDoseLogRepository();
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        doseLog: doseLog,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.doseReady,
+          nextEventLabel: 'Now · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Ready to dispense',
+          actionDoseId: 'dose-123',
+          availableActions: {
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+            RobotFaceActionKind.askForHelp,
+          },
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.skipDoseButtonKey));
+    await tester.pump();
+
+    expect(doseLog.events, hasLength(1));
+    expect(doseLog.events.single.kind, DoseLogEventKind.doseSkipped);
+    expect(doseLog.events.single.doseId, 'dose-123');
+    expect(doseLog.events.single.marksDoseTaken, isFalse);
+    expect(find.text('Skip logged.'), findsOneWidget);
+  });
+
+  testWidgets('logs help action without marking the dose taken', (
+    WidgetTester tester,
+  ) async {
+    final doseLog = _FakeDoseLogRepository();
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        doseLog: doseLog,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.doseReady,
+          nextEventLabel: 'Now · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Ready to dispense',
+          actionDoseId: 'dose-123',
+          availableActions: {
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+            RobotFaceActionKind.askForHelp,
+          },
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.needHelpButtonKey));
+    await tester.pump();
+
+    expect(doseLog.events, hasLength(1));
+    expect(doseLog.events.single.kind, DoseLogEventKind.caregiverHelpRequested);
+    expect(doseLog.events.single.doseId, 'dose-123');
+    expect(doseLog.events.single.marksDoseTaken, isFalse);
+    expect(find.text('Help request logged.'), findsOneWidget);
+  });
+
+  testWidgets('disables help after the first help request for the same dose', (
+    WidgetTester tester,
+  ) async {
+    final doseLog = _FakeDoseLogRepository();
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        doseLog: doseLog,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.waitingForConfirmation,
+          nextEventLabel: 'Taken? · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Waiting for confirmation',
+          actionDoseId: 'dose-123',
+          availableActions: {
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+            RobotFaceActionKind.askForHelp,
+          },
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    final helpButtonFinder = find.byKey(RobotFaceScreen.needHelpButtonKey);
+
+    await tester.tap(helpButtonFinder);
+    await tester.pump();
+
+    expect(doseLog.events, hasLength(1));
+    expect(doseLog.events.single.kind, DoseLogEventKind.caregiverHelpRequested);
+    expect(tester.widget<FilledButton>(helpButtonFinder).onPressed, isNull);
+
+    await tester.tap(helpButtonFinder, warnIfMissed: false);
+    await tester.pump();
+
+    expect(doseLog.events, hasLength(1));
+  });
 }
 
 class _RobotFaceTestApp extends StatelessWidget {
@@ -312,11 +909,13 @@ class _RobotFaceTestApp extends StatelessWidget {
     this.stateStream,
     required this.initialState,
     this.isActive = true,
+    this.doseLog,
   });
 
   final Stream<RobotFaceState>? stateStream;
   final RobotFaceState initialState;
   final bool isActive;
+  final DoseLogRepository? doseLog;
 
   @override
   Widget build(BuildContext context) {
@@ -325,7 +924,35 @@ class _RobotFaceTestApp extends StatelessWidget {
         stateStream: stateStream,
         initialState: initialState,
         isActive: isActive,
+        doseLog: doseLog,
       ),
     );
+  }
+}
+
+class _FakeDoseLogRepository implements DoseLogRepository {
+  _FakeDoseLogRepository({this.delayCompletion = false});
+
+  final List<DoseLogEvent> events = <DoseLogEvent>[];
+  final bool delayCompletion;
+  Completer<void>? _pendingAddCompleter;
+
+  @override
+  Future<void> addEvent(DoseLogEvent event) async {
+    events.add(event);
+    if (delayCompletion) {
+      _pendingAddCompleter = Completer<void>();
+      await _pendingAddCompleter!.future;
+      _pendingAddCompleter = null;
+    }
+  }
+
+  @override
+  Stream<List<DoseLogEvent>> watchEvents() {
+    return Stream<List<DoseLogEvent>>.value(events);
+  }
+
+  void completePendingAdd() {
+    _pendingAddCompleter?.complete();
   }
 }
