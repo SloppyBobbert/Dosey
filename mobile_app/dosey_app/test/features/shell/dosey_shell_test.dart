@@ -129,6 +129,7 @@ void main() {
     expect(find.text('Robot Face'), findsWidgets);
     expect(find.text('Reminder notifications'), findsWidgets);
     expect(find.text('Prototype safety'), findsWidgets);
+    expect(find.text('Help & About'), findsWidgets);
     expect(find.text('Start over setup'), findsWidgets);
     expect(find.text('All settings'), findsOneWidget);
 
@@ -139,11 +140,50 @@ void main() {
       find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
       findsOneWidget,
     );
-    await tester.scrollUntilVisible(find.text('Prototype safety'), 200);
+    expect(find.text('Prototype safety').hitTestable(), findsOneWidget);
+    expect(
+      find.text('I understand prototype safety rules').hitTestable(),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('settings gear menu opens Help and About', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(_TestShellApp(database: database));
     await tester.pumpAndSettle();
 
-    expect(find.text('Prototype safety'), findsOneWidget);
-    expect(find.text('I understand prototype safety rules'), findsOneWidget);
+    await tester.tap(find.byTooltip('Open settings menu'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Help & About'), findsOneWidget);
+
+    await tester.tap(find.text('Help & About').hitTestable());
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
+      findsOneWidget,
+    );
+    expect(find.text('Help & About').hitTestable(), findsOneWidget);
+    expect(find.text('Dosey 1.0.0+1').hitTestable(), findsOneWidget);
+    expect(
+      find.widgetWithText(
+        SelectableText,
+        'https://github.com/SloppyBobbert/Dosey',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'This prototype is not a medical-grade device. Test only with fake pills, candy, beads, dry beans, or vitamins.',
+      ),
+      findsOneWidget,
+    );
   });
 }
 

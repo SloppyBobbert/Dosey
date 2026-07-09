@@ -536,6 +536,7 @@ void main() {
     expect(find.text('Account'), findsWidgets);
     expect(find.text('Device mode'), findsWidgets);
     expect(find.text('Reminder notifications'), findsWidgets);
+    expect(find.text('Help & About'), findsOneWidget);
     expect(find.text('Start over setup'), findsOneWidget);
 
     await tester.tap(find.text('All settings'));

@@ -12,6 +12,7 @@ enum SettingsSection {
   robotFace,
   notifications,
   safety,
+  helpAbout,
   setup,
 }
 
@@ -84,7 +85,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection.robotFace => 500,
       SettingsSection.notifications => 760,
       SettingsSection.safety => 940,
-      SettingsSection.setup => 1120,
+      SettingsSection.helpAbout => 1120,
+      SettingsSection.setup => 1320,
     };
   }
 
@@ -157,6 +159,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 12),
             _SafetyCard(key: _sectionKeys[SettingsSection.safety]),
+            const SizedBox(height: 12),
+            _HelpAboutCard(key: _sectionKeys[SettingsSection.helpAbout]),
             const SizedBox(height: 12),
             _SettingsSectionCard(
               key: _sectionKeys[SettingsSection.setup],
@@ -865,6 +869,37 @@ class _SafetyCard extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _HelpAboutCard extends StatelessWidget {
+  const _HelpAboutCard({super.key});
+
+  static const _githubUrl = 'https://github.com/SloppyBobbert/Dosey';
+
+  @override
+  Widget build(BuildContext context) {
+    return const _SettingsSectionCard(
+      icon: Icons.help_outline,
+      title: 'Help & About',
+      children: [
+        Text('Dosey 1.0.0+1'),
+        SizedBox(height: 8),
+        Text(
+          'This prototype is not a medical-grade device. Test only with fake pills, candy, beads, dry beans, or vitamins.',
+        ),
+        SizedBox(height: 8),
+        Text(
+          'If a dose was missed, follow your prescription instructions or ask your caregiver, pharmacist, or doctor. Do not double dose unless your prescription instructions say to.',
+        ),
+        SizedBox(height: 8),
+        Text('Caregiver sharing and cloud sync are not active yet.'),
+        SizedBox(height: 8),
+        Text('GitHub: $_githubUrl'),
+        SizedBox(height: 4),
+        SelectableText(_githubUrl),
+      ],
     );
   }
 }

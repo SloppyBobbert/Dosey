@@ -273,6 +273,14 @@ class _DoseyShellState extends State<DoseyShell> {
         ),
       ),
       const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(SettingsSection.helpAbout),
+        child: ListTile(
+          leading: Icon(Icons.help_outline),
+          title: Text('Help & About'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuItem(
         value: _SettingsMenuAction.openSection(SettingsSection.setup),
         child: ListTile(
           leading: Icon(Icons.restart_alt),
