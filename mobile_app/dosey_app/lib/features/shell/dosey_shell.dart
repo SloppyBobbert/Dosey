@@ -25,6 +25,7 @@ class DoseyShell extends StatefulWidget {
 class _DoseyShellState extends State<DoseyShell> {
   int _selectedIndex = 0;
   SettingsSection? _settingsSectionTarget;
+  int _settingsNavigationRequest = 0;
   ReminderNotificationTapController? _notificationTaps;
   StreamSubscription<ReminderNotificationTap>? _notificationTapSubscription;
 
@@ -216,7 +217,9 @@ class _DoseyShellState extends State<DoseyShell> {
           label: 'Settings',
         ),
         screenBuilder: (selectedIndex, tabIndex) => SettingsScreen(
-          key: ValueKey(_settingsSectionTarget),
+          key: ValueKey(
+            'settings-$_settingsNavigationRequest-$_settingsSectionTarget',
+          ),
           sectionTarget: _settingsSectionTarget,
         ),
       ),
@@ -322,6 +325,7 @@ class _DoseyShellState extends State<DoseyShell> {
     if (settingsTabIndex < 0) return;
     setState(() {
       _settingsSectionTarget = section;
+      _settingsNavigationRequest += 1;
       _selectedIndex = settingsTabIndex;
     });
   }

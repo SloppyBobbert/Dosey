@@ -67,8 +67,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           duration: Duration.zero,
           alignment: 0.08,
         );
-      }
-      if (_scrollController.hasClients) {
+      } else if (_scrollController.hasClients) {
         final position = _scrollController.position;
         final offset = _estimatedSectionOffset(
           target,
@@ -876,6 +875,10 @@ class _SafetyCard extends StatelessWidget {
 class _HelpAboutCard extends StatelessWidget {
   const _HelpAboutCard({super.key});
 
+  static const _appVersion = String.fromEnvironment(
+    'DOSEY_APP_VERSION',
+    defaultValue: '1.0.0+1',
+  );
   static const _githubUrl = 'https://github.com/SloppyBobbert/Dosey';
 
   @override
@@ -884,7 +887,7 @@ class _HelpAboutCard extends StatelessWidget {
       icon: Icons.help_outline,
       title: 'Help & About',
       children: [
-        Text('Dosey 1.0.0+1'),
+        Text('Dosey $_appVersion'),
         SizedBox(height: 8),
         Text(
           'This prototype is not a medical-grade device. Test only with fake pills, candy, beads, dry beans, or vitamins.',

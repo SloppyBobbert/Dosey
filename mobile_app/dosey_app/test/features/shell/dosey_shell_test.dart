@@ -121,8 +121,7 @@ void main() {
     await tester.pumpWidget(_TestShellApp(database: database));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Open settings menu'));
-    await tester.pumpAndSettle();
+    await _openSettingsMenu(tester);
 
     expect(find.text('Account'), findsWidgets);
     expect(find.text('Device mode'), findsWidgets);
@@ -145,6 +144,19 @@ void main() {
       find.text('I understand prototype safety rules').hitTestable(),
       findsOneWidget,
     );
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 700));
+    await tester.pumpAndSettle();
+    expect(find.text('Account').hitTestable(), findsWidgets);
+
+    await _openSettingsMenu(tester);
+    await tester.tap(find.text('Prototype safety').hitTestable());
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('I understand prototype safety rules').hitTestable(),
+      findsOneWidget,
+    );
   });
 
   testWidgets('settings gear menu opens Help and About', (
@@ -157,8 +169,7 @@ void main() {
     await tester.pumpWidget(_TestShellApp(database: database));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Open settings menu'));
-    await tester.pumpAndSettle();
+    await _openSettingsMenu(tester);
 
     expect(find.text('Help & About'), findsOneWidget);
 
@@ -193,6 +204,11 @@ Future<void> _setDeviceRole(DoseyDatabase database, AppDeviceRole role) async {
     defaultRole: AppDeviceRole.androidPersonal,
   );
   await settings.setDeviceRole(role);
+}
+
+Future<void> _openSettingsMenu(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Open settings menu'));
+  await tester.pumpAndSettle();
 }
 
 class _TestShellApp extends StatelessWidget {

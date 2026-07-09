@@ -534,8 +534,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open settings menu'));
-    await tester.pumpAndSettle();
+    await _openSettingsMenu(tester);
 
     expect(find.text('Account'), findsWidgets);
     expect(find.text('Device mode'), findsWidgets);
@@ -563,8 +562,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open settings menu'));
-    await tester.pumpAndSettle();
+    await _openSettingsMenu(tester);
 
     expect(find.text('Account'), findsWidgets);
     expect(find.text('Sign out'), findsOneWidget);
@@ -572,9 +570,8 @@ void main() {
     await tester.tap(find.text('Account').hitTestable());
     await tester.pumpAndSettle();
 
-    expect(find.text('Dosey Tester'), findsOneWidget);
-    expect(find.text('google@example.com'), findsOneWidget);
-    expect(find.text('Google account'), findsOneWidget);
+    expect(find.text('Signed in as google@example.com'), findsOneWidget);
+    expect(find.text('Cloud sync is not active yet.'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(OutlinedButton, 'Sign out'));
     await tester.pumpAndSettle();
@@ -3484,6 +3481,11 @@ Future<void> _acceptMedicalNotice(WidgetTester tester) async {
   await tester.tap(find.byType(Checkbox));
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openSettingsMenu(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Open settings menu'));
   await tester.pumpAndSettle();
 }
 
