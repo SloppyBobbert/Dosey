@@ -24,6 +24,8 @@ class DoseyShell extends StatefulWidget {
 
 class _DoseyShellState extends State<DoseyShell> {
   int _selectedIndex = 0;
+  SettingsSection? _settingsSectionTarget;
+  int _settingsNavigationRequest = 0;
   ReminderNotificationTapController? _notificationTaps;
   StreamSubscription<ReminderNotificationTap>? _notificationTapSubscription;
 
@@ -97,19 +99,15 @@ class _DoseyShellState extends State<DoseyShell> {
 
                   return Padding(
                     padding: const EdgeInsets.only(right: 8),
-                    child: IconButton(
-                      tooltip: 'Open profile menu',
-                      onPressed: () {
-                        _showProfileMenu(
-                          session: session,
-                          role: role,
-                          settingsTabIndex: settingsTabIndex,
-                        );
-                      },
-                      icon: CircleAvatar(
-                        radius: 16,
-                        child: Text(_avatarLabel(session.user)),
+                    child: PopupMenuButton<_SettingsMenuAction>(
+                      tooltip: 'Open settings menu',
+                      icon: const Icon(Icons.settings_outlined),
+                      onSelected: (action) => _handleSettingsMenuAction(
+                        action,
+                        settingsTabIndex: settingsTabIndex,
                       ),
+                      itemBuilder: (context) =>
+                          _settingsMenuItems(session: session, role: role),
                     ),
                   );
                 },
@@ -210,15 +208,97 @@ class _DoseyShellState extends State<DoseyShell> {
         ),
         screenBuilder: _buildDoseLogScreen,
       ),
-      const _ShellTab(
+      _ShellTab(
         id: _ShellTabId.settings,
         title: 'Settings',
-        destination: NavigationDestination(
+        destination: const NavigationDestination(
           icon: Icon(Icons.settings_outlined),
           selectedIcon: Icon(Icons.settings),
           label: 'Settings',
         ),
-        screenBuilder: _buildSettingsScreen,
+        screenBuilder: (selectedIndex, tabIndex) => SettingsScreen(
+          key: ValueKey(
+            'settings-$_settingsNavigationRequest-$_settingsSectionTarget',
+          ),
+          sectionTarget: _settingsSectionTarget,
+        ),
+      ),
+    ];
+  }
+
+  List<PopupMenuEntry<_SettingsMenuAction>> _settingsMenuItems({
+    required AuthSession session,
+    required AppDeviceRole role,
+  }) {
+    return [
+      PopupMenuItem(
+        value: const _SettingsMenuAction.openSection(SettingsSection.account),
+        child: ListTile(
+          leading: Icon(
+            session.isSignedIn ? Icons.account_circle : Icons.login,
+          ),
+          title: const Text('Account'),
+          subtitle: Text(session.isSignedIn ? 'Sign out' : 'Sign in'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(SettingsSection.deviceMode),
+        child: ListTile(
+          leading: Icon(Icons.phone_android_outlined),
+          title: Text('Device mode'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      if (role.canHostRobot)
+        const PopupMenuItem(
+          value: _SettingsMenuAction.openSection(SettingsSection.robotFace),
+          child: ListTile(
+            leading: Icon(Icons.face_retouching_natural_outlined),
+            title: Text('Robot Face'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+      const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(SettingsSection.notifications),
+        child: ListTile(
+          leading: Icon(Icons.notifications_active_outlined),
+          title: Text('Reminder notifications'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(SettingsSection.safety),
+        child: ListTile(
+          leading: Icon(Icons.health_and_safety_outlined),
+          title: Text('Prototype safety'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(SettingsSection.helpAbout),
+        child: ListTile(
+          leading: Icon(Icons.help_outline),
+          title: Text('Help & About'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(SettingsSection.setup),
+        child: ListTile(
+          leading: Icon(Icons.restart_alt),
+          title: Text('Start over setup'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuDivider(),
+      const PopupMenuItem(
+        value: _SettingsMenuAction.openSettingsHome(),
+        child: ListTile(
+          leading: Icon(Icons.settings_outlined),
+          title: Text('All settings'),
+          contentPadding: EdgeInsets.zero,
+        ),
       ),
     ];
   }
@@ -234,74 +314,20 @@ class _DoseyShellState extends State<DoseyShell> {
     return AppDeviceRole.defaultFor(platform);
   }
 
-  Future<void> _showProfileMenu({
-    required AuthSession session,
-    required AppDeviceRole role,
+  void _handleSettingsMenuAction(
+    _SettingsMenuAction action, {
     required int settingsTabIndex,
   }) {
-    final dependencies = DoseyAppScope.of(context);
-    final platform = currentAppDevicePlatform();
+    _openSettings(settingsTabIndex, section: action.section);
+  }
 
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (sheetContext) {
-        return _ProfileMenuSheet(
-          session: session,
-          role: role,
-          onOpenSettings: () {
-            Navigator.of(sheetContext).pop();
-            _selectTab(settingsTabIndex);
-          },
-          onResetSetup: () async {
-            Navigator.of(sheetContext).pop();
-            try {
-              await dependencies.settings.resetSetupState();
-            } on Object catch (error) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Setup reset failed: $error')),
-              );
-            }
-          },
-          onSignIn: () async {
-            Navigator.of(sheetContext).pop();
-            final providerName = platform == AppDevicePlatform.ios
-                ? 'Apple'
-                : 'Google';
-            try {
-              if (platform == AppDevicePlatform.ios) {
-                await dependencies.auth.signInWithApple();
-              } else {
-                await dependencies.auth.signInWithGoogle();
-              }
-            } on Object catch (error) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    '$providerName sign-in is not configured yet: $error',
-                  ),
-                ),
-              );
-            }
-          },
-          onSignOut: () async {
-            Navigator.of(sheetContext).pop();
-            try {
-              await dependencies.auth.signOut();
-            } on Object catch (error) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Sign out failed: $error')),
-              );
-            }
-          },
-        );
-      },
-    );
+  void _openSettings(int settingsTabIndex, {SettingsSection? section}) {
+    if (settingsTabIndex < 0) return;
+    setState(() {
+      _settingsSectionTarget = section;
+      _settingsNavigationRequest += 1;
+      _selectedIndex = settingsTabIndex;
+    });
   }
 
   void _selectTab(int index) {
@@ -319,15 +345,13 @@ class _DoseyShellState extends State<DoseyShell> {
     }
     _selectTab(_todayTabIndex);
   }
+}
 
-  static String _avatarLabel(AuthUser? user) {
-    if (user == null) return 'D';
-    final name = user.displayName?.trim();
-    if (name != null && name.isNotEmpty) {
-      return name.characters.first.toUpperCase();
-    }
-    return user.email.characters.first.toUpperCase();
-  }
+class _SettingsMenuAction {
+  const _SettingsMenuAction.openSection(this.section);
+  const _SettingsMenuAction.openSettingsHome() : section = null;
+
+  final SettingsSection? section;
 }
 
 const _todayTabIndex = 0;
@@ -377,154 +401,3 @@ Widget _buildControllerScreen(int selectedIndex, int tabIndex) =>
     const ControllerScreen();
 Widget _buildDoseLogScreen(int selectedIndex, int tabIndex) =>
     const DoseLogScreen();
-Widget _buildSettingsScreen(int selectedIndex, int tabIndex) =>
-    const SettingsScreen();
-
-class _ProfileMenuSheet extends StatelessWidget {
-  const _ProfileMenuSheet({
-    required this.session,
-    required this.role,
-    required this.onOpenSettings,
-    required this.onResetSetup,
-    required this.onSignIn,
-    required this.onSignOut,
-  });
-
-  final AuthSession session;
-  final AppDeviceRole role;
-  final VoidCallback onOpenSettings;
-  final Future<void> Function() onResetSetup;
-  final Future<void> Function() onSignIn;
-  final Future<void> Function() onSignOut;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final user = session.user;
-    final displayName = user?.displayName?.trim();
-    final title = user == null
-        ? 'Not signed in'
-        : displayName != null && displayName.isNotEmpty
-        ? displayName
-        : user.email;
-    final subtitle = user == null ? 'Local prototype mode' : user.email;
-
-    return ListView(
-      shrinkWrap: true,
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-      children: [
-        Text(
-          'Profile menu',
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 12),
-        DecoratedBox(
-          decoration: BoxDecoration(
-            color: colorScheme.primaryContainer.withValues(alpha: 0.36),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  child: Text(_DoseyShellState._avatarLabel(user)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(subtitle),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          _MenuChip(label: _providerLabel(user)),
-                          _MenuChip(label: role.label),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        ListTile(
-          leading: const Icon(Icons.settings_outlined),
-          title: const Text('Settings'),
-          subtitle: const Text('Account, device mode, and setup'),
-          onTap: onOpenSettings,
-        ),
-        ListTile(
-          leading: const Icon(Icons.restart_alt),
-          title: const Text('Start over setup'),
-          subtitle: const Text('Show first-run setup again'),
-          onTap: onResetSetup,
-        ),
-        const Divider(),
-        ListTile(
-          leading: Icon(session.isSignedIn ? Icons.logout : Icons.login),
-          title: Text(session.isSignedIn ? 'Sign out' : 'Sign in'),
-          subtitle: Text(
-            session.isSignedIn
-                ? 'Return this phone to local signed-out mode'
-                : 'Use the configured local prototype provider',
-          ),
-          onTap: session.isSignedIn ? onSignOut : onSignIn,
-        ),
-      ],
-    );
-  }
-
-  static String _providerLabel(AuthUser? user) {
-    return switch (user?.provider) {
-      AuthProvider.google => 'Google account',
-      AuthProvider.apple => 'Apple account',
-      null => 'Local prototype',
-    };
-  }
-}
-
-class _MenuChip extends StatelessWidget {
-  const _MenuChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surface,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: colorScheme.primary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-      ),
-    );
-  }
-}

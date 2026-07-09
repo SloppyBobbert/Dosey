@@ -222,9 +222,13 @@ void main() {
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Start over setup'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Start over setup'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start over setup'));
+    await tester.tap(find.text('Start over setup').hitTestable());
     await tester.pumpAndSettle();
 
     expect(find.text('Dosey is not a medical device'), findsOneWidget);
@@ -521,7 +525,7 @@ void main() {
     expect(scheduler.scheduledReminders, isEmpty);
   });
 
-  testWidgets('profile menu shows local status and opens settings', (
+  testWidgets('settings menu opens the full settings screen', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -530,23 +534,22 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open profile menu'));
-    await tester.pumpAndSettle();
+    await _openSettingsMenu(tester);
 
-    expect(find.text('Profile menu'), findsOneWidget);
-    expect(find.text('Not signed in'), findsOneWidget);
-    expect(find.text('Local prototype'), findsOneWidget);
-    expect(find.text('Android robot phone'), findsOneWidget);
+    expect(find.text('Account'), findsWidgets);
+    expect(find.text('Device mode'), findsWidgets);
+    expect(find.text('Reminder notifications'), findsWidgets);
+    expect(find.text('Help & About'), findsOneWidget);
     expect(find.text('Start over setup'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ListTile, 'Settings'));
+    await tester.tap(find.text('All settings'));
     await tester.pumpAndSettle();
 
     expect(find.text('Account'), findsOneWidget);
     expect(find.text('Cloud sync is not active yet.'), findsOneWidget);
   });
 
-  testWidgets('profile menu shows signed-in identity and signs out', (
+  testWidgets('settings menu opens account section and signs out', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -559,15 +562,18 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Open profile menu'));
+    await _openSettingsMenu(tester);
+
+    expect(find.text('Account'), findsWidgets);
+    expect(find.text('Sign out'), findsOneWidget);
+
+    await tester.tap(find.text('Account').hitTestable());
     await tester.pumpAndSettle();
 
-    expect(find.text('Dosey Tester'), findsOneWidget);
-    expect(find.text('google@example.com'), findsOneWidget);
-    expect(find.text('Google account'), findsOneWidget);
-    expect(find.text('Android personal phone'), findsOneWidget);
+    expect(find.text('Signed in as google@example.com'), findsOneWidget);
+    expect(find.text('Cloud sync is not active yet.'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ListTile, 'Sign out'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Sign out'));
     await tester.pumpAndSettle();
 
     expect(find.text('Sign in to continue'), findsOneWidget);
@@ -3475,6 +3481,11 @@ Future<void> _acceptMedicalNotice(WidgetTester tester) async {
   await tester.tap(find.byType(Checkbox));
   await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+  await tester.pumpAndSettle();
+}
+
+Future<void> _openSettingsMenu(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Open settings menu'));
   await tester.pumpAndSettle();
 }
 
