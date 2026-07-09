@@ -20,6 +20,8 @@ The first mechanism to build is a servo pusher:
 
 The servo has already tested strong enough for the current mechanism. The next mechanical problem is reliable mounting, alignment, one-slot indexing, rollback prevention, and repeated movement.
 
+Use fake pills, candy, beads, dry beans, or vitamins only during these tests. Do not use real prescription medication in the prototype rig.
+
 ## LEGO shell goals
 
 - Cute boxy robot body with friendly proportions.
@@ -40,6 +42,8 @@ The LEGO shell must not block the carousel, cup, phone charging cable, controlle
 - Carousel does not roll backward.
 - Slot aligns with the chute and cup.
 - Movement works repeatedly over at least 10 cycles.
-- Failures and fixes are logged in `docs/build_log.md`.
+- Failures and fixes are logged in `../docs/build_log.md`.
+
+Record measurements, test photos, and repeatability notes before enclosing the rig in the LEGO shell.
 
 Do not hide the mechanism inside a polished shell until the repeatable one-slot movement test passes.

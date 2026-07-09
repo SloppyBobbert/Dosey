@@ -24,7 +24,7 @@ This is a prototype and research build. It is not a medical-grade device.
 | Mechanism | Grove servo pusher with a ratchet or physical stop; basic servo movement is confirmed |
 | Shell | Fully LEGO body around the carousel, phone, electronics, cup opening, and service panels |
 | App data | Drift/SQLite on the phone only; no backend or cloud sync yet |
-| App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, Settings, profile menu, and polished section headers |
+| App shell | Today, Prescriptions, Schedule, Robot Face on Android Robot Mode, Carousel, Controller, Log, Settings, profile menu, and polished section headers |
 | Safety status | Fake-pill testing only; not for real medication |
 
 ## Safety
@@ -91,8 +91,8 @@ The project should now focus on the servo/carousel rig while app MVP work contin
 
 1. **Hardware confirmed** — ESP32-C6, Grove Base for XIAO, and basic servo movement are confirmed. Continue one-module checks for PIR, buttons, LEDs, buzzer/vibration, and sensors.
 2. **Servo and carousel rig** — Next major build. Advance the Daviky carousel one slot repeatably, prevent rollback, and align the slot with the chute/cup.
-3. **Bluetooth control** — Make the phone command the XIAO wirelessly with acknowledgements and status events.
-4. **Basic app MVP** — Build Robot Mode with schedule, loading guide, dispense, refill, history, hardware test, and local safety flows.
+3. **Bluetooth control** — Finish the phone-to-XIAO command/status protocol with acknowledgements, heartbeat, and status events.
+4. **Basic app MVP** — Continue Robot Mode with the face screen, schedule, loading guide, dispense, refill, history, hardware test, and local safety flows.
 5. **LEGO body integration** — Turn the working rig into a cute, stable, serviceable LEGO robot body.
 6. **Reliability features** — Add heartbeat/offline warnings, refill warnings, missed-dose logic, PIN, error recovery, and index correction.
 7. **Advanced interaction** — Future Piper voices, voice commands, local command recognition, AI experiments, caregiver summaries, video shortcut, and face recognition.
@@ -134,7 +134,7 @@ No firmware build command exists yet.
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the practical platform for Robot Mode because the phone lives inside Dosey; iOS remains supported for Personal Mode.
 
-The current app has a seven-section shell: Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, with a top-right profile menu and active app-bar section titles. Its main surfaces now have clearer dashboard cards: a Today next-dose/timeline view that advances past locally completed, skipped, or missed doses; a Prescriptions medication-cabinet summary with local refill countdowns; a Schedule routine-builder summary; a Carousel loading-bay summary; a Controller hardware-bench summary; a Log dose-history summary; and a Settings profile/account hub. It includes safety acknowledgement storage, local prescription and schedule profile management, refill inventory tracking with refill thresholds and refill-add history, Daviky carousel loading assignments with offline dispense controls disabled until the controller is connected, local Drift/SQLite storage, a controller simulator, Google and Apple sign-in plumbing, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
+The current app shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices. Android Robot Mode also shows Robot Face. The shell has a top-right profile menu and active app-bar section titles. Its main surfaces now have clearer dashboard cards: a Today next-dose/timeline view that advances past locally completed, skipped, or missed doses; a Prescriptions medication-cabinet summary with local refill countdowns; a Schedule routine-builder summary; a Robot Face screen with local face-state timing settings; a Carousel loading-bay summary; a Controller hardware-bench summary; a Log dose-history summary; and a Settings profile/account hub. It includes safety acknowledgement storage, local prescription and schedule profile management, refill inventory tracking with refill thresholds and refill-add history, Daviky carousel loading assignments with offline dispense controls disabled until the controller is connected, local Drift/SQLite storage, a controller simulator, Google and Apple sign-in plumbing, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
 
 BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
 
@@ -187,15 +187,15 @@ The servo has already been tested as strong enough for the current mechanism, so
 
 ## Project status
 
-Early prototype. The repo has a safety-first Flutter app shell, polished setup/status surfaces, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps dispense separate from taken confirmation, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
+Early prototype. The repo has a safety-first Flutter app shell, polished setup/status surfaces, Android Robot Face scaffolding, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps dispense separate from taken confirmation, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no production firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
 
 Near-term work:
 
 - Record the ESP32-C6 and Grove Base wiring, power paths, and servo power behavior.
 - Build the Stage 2 servo/carousel rig and run repeated one-slot tests.
-- Draft and test the Bluetooth command/status/heartbeat protocol.
-- Round out the next app PR with any remaining polish, screenshots or manual QA notes, and README updates.
-- Expand Robot Mode around loading, dispense confirmation, refill tracking, and hardware tests.
+- Draft and test the Bluetooth command/status/heartbeat protocol against the simulator before hardware integration.
+- Add screenshots or manual QA notes for the current app surfaces before a broader app polish PR.
+- Expand Robot Mode around Robot Face wake/sleep behavior, loading, dispense confirmation, refill tracking, and hardware tests.
 - Integrate the working rig into a fully LEGO shell only after movement is repeatable.
 
 ## License
