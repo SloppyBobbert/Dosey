@@ -222,9 +222,13 @@ void main() {
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Start over setup'), 200);
+    await tester.scrollUntilVisible(
+      find.text('Start over setup'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start over setup'));
+    await tester.tap(find.text('Start over setup').hitTestable());
     await tester.pumpAndSettle();
 
     expect(find.text('Dosey is not a medical device'), findsOneWidget);
