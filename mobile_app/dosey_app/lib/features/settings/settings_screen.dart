@@ -6,16 +6,87 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:flutter/material.dart';
 
+enum SettingsSection {
+  account,
+  deviceMode,
+  robotFace,
+  notifications,
+  safety,
+  setup,
+}
+
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key});
+  const SettingsScreen({super.key, this.sectionTarget});
+
+  final SettingsSection? sectionTarget;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  final Map<SettingsSection, GlobalKey> _sectionKeys = {
+    for (final section in SettingsSection.values) section: GlobalKey(),
+  };
+
+  late final ScrollController _scrollController;
   bool _isSigningIn = false;
   String? _authMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController = ScrollController();
+    _scrollToTargetAfterBuild();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(SettingsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sectionTarget != widget.sectionTarget) {
+      _scrollToTargetAfterBuild();
+    }
+  }
+
+  void _scrollToTargetAfterBuild() {
+    final target = widget.sectionTarget;
+    if (target == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final targetContext = _sectionKeys[target]?.currentContext;
+      if (targetContext != null) {
+        Scrollable.ensureVisible(
+          targetContext,
+          duration: Duration.zero,
+          alignment: 0.08,
+        );
+      }
+      if (_scrollController.hasClients) {
+        final position = _scrollController.position;
+        final offset = _estimatedSectionOffset(
+          target,
+        ).clamp(position.minScrollExtent, position.maxScrollExtent);
+        _scrollController.jumpTo(offset);
+      }
+    });
+  }
+
+  double _estimatedSectionOffset(SettingsSection section) {
+    return switch (section) {
+      SettingsSection.account => 120,
+      SettingsSection.deviceMode => 320,
+      SettingsSection.robotFace => 500,
+      SettingsSection.notifications => 760,
+      SettingsSection.safety => 940,
+      SettingsSection.setup => 1120,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -30,6 +101,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final session = authSnapshot.data ?? const AuthSession.signedOut();
 
         return ListView(
+          controller: _scrollController,
           padding: const EdgeInsets.all(16),
           children: [
             Text('Settings', style: Theme.of(context).textTheme.titleLarge),
@@ -37,6 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _ProfileSummaryCard(session: session, platform: platform),
             const SizedBox(height: 12),
             _SettingsSectionCard(
+              key: _sectionKeys[SettingsSection.account],
               icon: Icons.account_circle_outlined,
               title: 'Account',
               children: [
@@ -71,14 +144,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            _DeviceModeCard(platform: platform),
-            const _RobotFaceSettingsSection(),
+            _DeviceModeCard(
+              key: _sectionKeys[SettingsSection.deviceMode],
+              platform: platform,
+            ),
+            _RobotFaceSettingsSection(
+              sectionKey: _sectionKeys[SettingsSection.robotFace],
+            ),
             const SizedBox(height: 12),
-            const _ReminderNotificationCard(),
+            _ReminderNotificationCard(
+              key: _sectionKeys[SettingsSection.notifications],
+            ),
             const SizedBox(height: 12),
-            const _SafetyCard(),
+            _SafetyCard(key: _sectionKeys[SettingsSection.safety]),
             const SizedBox(height: 12),
             _SettingsSectionCard(
+              key: _sectionKeys[SettingsSection.setup],
               icon: Icons.restart_alt,
               title: 'Setup',
               children: [
@@ -243,7 +324,7 @@ class _ProfileSummaryCard extends StatelessWidget {
 }
 
 class _DeviceModeCard extends StatelessWidget {
-  const _DeviceModeCard({required this.platform});
+  const _DeviceModeCard({super.key, required this.platform});
 
   final AppDevicePlatform platform;
 
@@ -341,7 +422,7 @@ class _DeviceModeDropdownState extends State<_DeviceModeDropdown> {
 }
 
 class _ReminderNotificationCard extends StatefulWidget {
-  const _ReminderNotificationCard();
+  const _ReminderNotificationCard({super.key});
 
   @override
   State<_ReminderNotificationCard> createState() =>
@@ -349,14 +430,16 @@ class _ReminderNotificationCard extends StatefulWidget {
 }
 
 class _RobotFaceSettingsCard extends StatefulWidget {
-  const _RobotFaceSettingsCard();
+  const _RobotFaceSettingsCard({super.key});
 
   @override
   State<_RobotFaceSettingsCard> createState() => _RobotFaceSettingsCardState();
 }
 
 class _RobotFaceSettingsSection extends StatelessWidget {
-  const _RobotFaceSettingsSection();
+  const _RobotFaceSettingsSection({required this.sectionKey});
+
+  final Key? sectionKey;
 
   @override
   Widget build(BuildContext context) {
@@ -377,7 +460,7 @@ class _RobotFaceSettingsSection extends StatelessWidget {
         return Column(
           children: [
             const SizedBox(height: 12),
-            const _RobotFaceSettingsCard(),
+            _RobotFaceSettingsCard(key: sectionKey),
           ],
         );
       },
@@ -735,7 +818,7 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
 }
 
 class _SafetyCard extends StatelessWidget {
-  const _SafetyCard();
+  const _SafetyCard({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -788,6 +871,7 @@ class _SafetyCard extends StatelessWidget {
 
 class _SettingsSectionCard extends StatelessWidget {
   const _SettingsSectionCard({
+    super.key,
     required this.icon,
     required this.title,
     required this.children,

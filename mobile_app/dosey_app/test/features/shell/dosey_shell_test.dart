@@ -110,6 +110,41 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('settings gear menu lists settings sections and opens safety', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(_TestShellApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Open settings menu'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Account'), findsWidgets);
+    expect(find.text('Device mode'), findsWidgets);
+    expect(find.text('Robot Face'), findsWidgets);
+    expect(find.text('Reminder notifications'), findsWidgets);
+    expect(find.text('Prototype safety'), findsWidgets);
+    expect(find.text('Start over setup'), findsWidgets);
+    expect(find.text('All settings'), findsOneWidget);
+
+    await tester.tap(find.text('Prototype safety').hitTestable());
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
+      findsOneWidget,
+    );
+    await tester.scrollUntilVisible(find.text('Prototype safety'), 200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Prototype safety'), findsOneWidget);
+    expect(find.text('I understand prototype safety rules'), findsOneWidget);
+  });
 }
 
 Future<void> _setDeviceRole(DoseyDatabase database, AppDeviceRole role) async {
