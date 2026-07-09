@@ -11,12 +11,13 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 
 ## Current scope
 
-- Android and iOS app shell with Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings tabs, plus a profile menu.
+- Android and iOS app shell with Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings tabs, plus a profile menu. Android Robot Mode also shows Robot Face.
 - Safety-first copy and local safety acknowledgement storage.
 - Local prescription storage with remaining-dose counts, refill thresholds, refill-add history, and medication-type display.
 - Local reminder schedule storage with add/edit/delete controls, enabled/disabled state, duplicate-time checks, and schedule profiles.
 - Carousel loading workflow with Daviky slot assignment, loaded/dispensed/review states, and controller-gated dispense actions.
 - Today dose-state logging that keeps dispense, visible, taken, skipped, missed, and caregiver/help actions separate.
+- Robot Face scaffolding with local face-state timing settings for wake-before-dose and stay-awake-after-dose behavior.
 - Controller simulator plus BLE foundation for app flow work; controller protocol is still incomplete.
 - Google and Apple sign-in through app-owned auth interfaces; no Firebase/Supabase backend yet.
 - App-owned interfaces for controller/BLE, connectivity, auth, reminders, permissions, notifications, and dose logging.
@@ -63,7 +64,7 @@ The app must not mark a dose taken because the servo moved. Dispense logging req
 
 ## Near-term app work
 
-- Draft the Bluetooth command/status/heartbeat protocol before adding a BLE package.
+- Draft and test the Bluetooth command/status/heartbeat protocol against the simulator before hardware integration.
 - Keep expanding Robot Mode flows around guided Daviky carousel loading, dispense confirmation, refill countdown, and hardware tests.
 - Keep Today dose actions and refill inventory behavior aligned with local-first safety rules.
 - Add heartbeat/offline detection for XIAO power loss, crash, disconnect, or missed responses.

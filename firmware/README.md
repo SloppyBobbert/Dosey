@@ -1,6 +1,6 @@
 # Firmware
 
-Arduino/PlatformIO C++ firmware for the Seeed Studio XIAO controller and Grove modules.
+Planned Arduino/PlatformIO C++ firmware for the Seeed Studio XIAO controller and Grove modules.
 
 The confirmed controller is the Seeed Studio XIAO ESP32-C6. The confirmed Grove base is the Seeed Studio Grove Base for XIAO. Older ESP32S3 and XIAO Expansion Board references are historical notes.
 
@@ -40,7 +40,7 @@ Start with small Grove bring-up examples before combining modules into shared fi
 
 ## Early protocol commands
 
-Use `docs/protocol.md` as the source of truth. Early test commands include:
+Use `../docs/protocol.md` as the source of truth. Early test commands include:
 
 - `STATUS`
 - `HEARTBEAT`
@@ -52,3 +52,7 @@ Use `docs/protocol.md` as the source of truth. Early test commands include:
 - `PIR_STATUS`
 
 Report movement completion separately from dose visibility and dose taken confirmation.
+
+## Current status
+
+No production firmware build is committed yet. Keep early work as small bring-up sketches or examples until the servo/carousel rig can advance one Daviky slot repeatably. Record wiring and protocol decisions in `../docs/wiring.md` and `../docs/protocol.md` as they become real.
