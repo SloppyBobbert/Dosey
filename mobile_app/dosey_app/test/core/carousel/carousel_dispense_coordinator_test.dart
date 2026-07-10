@@ -11,10 +11,18 @@ void main() {
         controllerLifecycle: lifecycle,
       );
 
-      await coordinator.dispenseLoadedSlot(slotId: 'slot-1', doseId: 'dose-1');
+      await coordinator.dispenseLoadedSlot(
+        slotId: 'slot-1',
+        doseId: 'dose-1',
+        scheduleId: 'schedule-1',
+      );
 
       expect(lifecycle.requests, [
-        const _DoseDispenseRequest(doseId: 'dose-1', slotId: 'slot-1'),
+        const _DoseDispenseRequest(
+          doseId: 'dose-1',
+          slotId: 'slot-1',
+          scheduleId: 'schedule-1',
+        ),
       ]);
     },
   );

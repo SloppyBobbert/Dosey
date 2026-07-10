@@ -228,4 +228,39 @@ void main() {
       );
     },
   );
+
+  test(
+    'latest relevant session falls back to the latest row when nothing is unresolved',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalControllerCommandRepository(database);
+      final createdAt = DateTime.utc(2026, 7, 10, 13);
+
+      final olderSucceeded = await repository.createSession(
+        commandType: ControllerCommandType.dispenseNext,
+        now: createdAt,
+      );
+      await repository.updateSessionState(
+        olderSucceeded.id,
+        ControllerCommandSessionState.succeeded,
+        updatedAt: createdAt.add(const Duration(minutes: 1)),
+      );
+
+      final newerSucceeded = await repository.createSession(
+        commandType: ControllerCommandType.dispenseTest,
+        now: createdAt.add(const Duration(minutes: 2)),
+      );
+      await repository.updateSessionState(
+        newerSucceeded.id,
+        ControllerCommandSessionState.succeeded,
+        updatedAt: createdAt.add(const Duration(minutes: 3)),
+      );
+
+      final latest = await repository.getLatestRelevantSession();
+
+      expect(latest?.id, newerSucceeded.id);
+      expect(latest?.state, ControllerCommandSessionState.succeeded);
+    },
+  );
 }

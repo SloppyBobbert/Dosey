@@ -76,13 +76,52 @@ class ControllerCommandEvent {
   final String? details;
 }
 
-class LocalControllerCommandRepository {
+abstract interface class ControllerCommandRepository {
+  Future<ControllerCommandSession> createSession({
+    required ControllerCommandType commandType,
+    required DateTime now,
+    String? doseId,
+    String? scheduleId,
+    String? slotId,
+  });
+
+  Future<ControllerCommandSession> getSession(String sessionId);
+
+  Future<ControllerCommandEvent> appendEvent(
+    String sessionId,
+    ControllerCommandEventType eventType, {
+    required DateTime occurredAt,
+    String? details,
+  });
+
+  Future<void> updateSessionState(
+    String sessionId,
+    ControllerCommandSessionState state, {
+    ControllerCommandFailureReason? failureReason,
+    DateTime? acceptedAt,
+    DateTime? resolvedAt,
+    DateTime? updatedAt,
+  });
+
+  Stream<List<ControllerCommandSession>> watchUnresolvedSessions();
+
+  Future<List<ControllerCommandSession>> getUnresolvedSessions();
+
+  Stream<ControllerCommandSession?> watchLatestRelevantSession();
+
+  Future<ControllerCommandSession?> getLatestRelevantSession();
+
+  Future<List<ControllerCommandEvent>> getEventsForSession(String sessionId);
+}
+
+class LocalControllerCommandRepository implements ControllerCommandRepository {
   LocalControllerCommandRepository(this._database, {Random? random})
     : _random = random ?? Random.secure();
 
   final DoseyDatabase _database;
   final Random _random;
 
+  @override
   Future<ControllerCommandSession> createSession({
     required ControllerCommandType commandType,
     required DateTime now,
@@ -112,10 +151,12 @@ class LocalControllerCommandRepository {
     return _requireSession(id);
   }
 
+  @override
   Future<ControllerCommandSession> getSession(String sessionId) {
     return _requireSession(sessionId);
   }
 
+  @override
   Future<ControllerCommandEvent> appendEvent(
     String sessionId,
     ControllerCommandEventType eventType, {
@@ -149,6 +190,7 @@ class LocalControllerCommandRepository {
     });
   }
 
+  @override
   Future<void> updateSessionState(
     String sessionId,
     ControllerCommandSessionState state, {
@@ -185,26 +227,36 @@ class LocalControllerCommandRepository {
     }
   }
 
+  @override
   Stream<List<ControllerCommandSession>> watchUnresolvedSessions() {
     final query = _unresolvedSessionsQuery();
     return query.watch().map((rows) => rows.map(_sessionFromRow).toList());
   }
 
+  @override
   Future<List<ControllerCommandSession>> getUnresolvedSessions() async {
     final rows = await _unresolvedSessionsQuery().get();
     return rows.map(_sessionFromRow).toList();
   }
 
+  @override
   Stream<ControllerCommandSession?> watchLatestRelevantSession() {
     final query = _latestSessionQuery();
     return query.watch().map(_latestRelevantSessionFromRows);
   }
 
+  @override
   Future<ControllerCommandSession?> getLatestRelevantSession() async {
-    final rows = await _latestSessionQuery().get();
-    return _latestRelevantSessionFromRows(rows);
+    final unresolvedRows = await _unresolvedSessionsLatestFirstQuery().get();
+    if (unresolvedRows.isNotEmpty) {
+      return _sessionFromRow(unresolvedRows.first);
+    }
+
+    final latestRow = await (_latestSessionQuery()..limit(1)).getSingleOrNull();
+    return latestRow == null ? null : _sessionFromRow(latestRow);
   }
 
+  @override
   Future<List<ControllerCommandEvent>> getEventsForSession(
     String sessionId,
   ) async {
@@ -222,8 +274,21 @@ class LocalControllerCommandRepository {
   >
   _unresolvedSessionsQuery() {
     return _database.select(_database.controllerCommandSessions)
-      ..where((session) => session.state.isIn(_unresolvedStateNames))
+      ..where((session) => session.resolvedAt.isNull())
       ..orderBy([(session) => OrderingTerm.asc(session.updatedAt)]);
+  }
+
+  SimpleSelectStatement<
+    $ControllerCommandSessionsTable,
+    ControllerCommandSessionRow
+  >
+  _unresolvedSessionsLatestFirstQuery() {
+    return _database.select(_database.controllerCommandSessions)
+      ..where((session) => session.resolvedAt.isNull())
+      ..orderBy([
+        (session) => OrderingTerm.desc(session.updatedAt),
+        (session) => OrderingTerm.desc(session.createdAt),
+      ]);
   }
 
   SimpleSelectStatement<
@@ -322,15 +387,6 @@ class LocalControllerCommandRepository {
     return const Value(null);
   }
 
-  static const List<String> _unresolvedStateNames = [
-    // "Unresolved" means still actionable/recoverable, not merely in-flight.
-    'pending',
-    'accepted',
-    'failed',
-    'timedOut',
-    'interrupted',
-  ];
-
   static const List<String> _resolvedStateNames = ['succeeded', 'cancelled'];
 
   static ControllerCommandSession? _latestRelevantSessionFromRows(
@@ -340,9 +396,9 @@ class LocalControllerCommandRepository {
       return null;
     }
 
-    final unresolvedRow = rows.where((row) {
-      return _unresolvedStateNames.contains(row.state);
-    }).firstOrNull;
+    final unresolvedRow = rows
+        .where((row) => row.resolvedAt == null)
+        .firstOrNull;
 
     return _sessionFromRow(unresolvedRow ?? rows.first);
   }

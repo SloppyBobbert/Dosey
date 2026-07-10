@@ -3,6 +3,15 @@ import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 
+class DuplicateDispenseRequestException implements Exception {
+  const DuplicateDispenseRequestException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class ControllerLifecycleService {
   ControllerLifecycleService({
     required this._controller,
@@ -15,7 +24,7 @@ class ControllerLifecycleService {
   static const manualTestDoseId = 'manual-test';
 
   final ControllerGateway _controller;
-  final LocalControllerCommandRepository _commandRepository;
+  final ControllerCommandRepository _commandRepository;
   final DoseLogRepository _doseLog;
   final CarouselSlotRepository _carouselSlots;
   final DateTime Function() _now;
@@ -54,7 +63,7 @@ class ControllerLifecycleService {
       activeKeys.add('slot:$slotId');
     }
     if (activeKeys.any(_activeDispenseKeys.contains)) {
-      throw StateError(
+      throw const DuplicateDispenseRequestException(
         'A dispense request is already in progress for this dose.',
       );
     }
@@ -104,12 +113,14 @@ class ControllerLifecycleService {
         if (slotId != null) {
           await _carouselSlots.markDispensed(slotId);
         }
-        await _doseLog.addEvent(
-          DoseLogEvent.controllerDispenseSucceeded(
-            doseId: doseId,
-            occurredAt: resolvedAt,
-          ),
-        );
+        if (commandType == ControllerCommandType.dispenseNext) {
+          await _doseLog.addEvent(
+            DoseLogEvent.controllerDispenseSucceeded(
+              doseId: doseId,
+              occurredAt: resolvedAt,
+            ),
+          );
+        }
         await _commandRepository.updateSessionState(
           session.id,
           ControllerCommandSessionState.succeeded,
@@ -169,12 +180,6 @@ class ControllerLifecycleService {
         } else if (error is ControllerCommandTimeoutException) {
           // Accepted but unresolved is physically ambiguous: do not reopen the
           // carousel slot as loaded, because movement may already have started.
-          acceptedAt ??= failedAt;
-          await _commandRepository.appendEvent(
-            session.id,
-            ControllerCommandEventType.ack,
-            occurredAt: acceptedAt,
-          );
           await _commandRepository.appendEvent(
             session.id,
             ControllerCommandEventType.controllerError,
@@ -187,18 +192,11 @@ class ControllerLifecycleService {
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.timedOut,
-            acceptedAt: acceptedAt,
             updatedAt: failedAt,
           );
         } else if (error is ControllerCommandJamException) {
           // Jams happen after acceptance in this model, so the user must review
           // the slot before another dispense attempt.
-          acceptedAt ??= failedAt;
-          await _commandRepository.appendEvent(
-            session.id,
-            ControllerCommandEventType.ack,
-            occurredAt: acceptedAt,
-          );
           await _commandRepository.appendEvent(
             session.id,
             ControllerCommandEventType.controllerError,
@@ -211,19 +209,12 @@ class ControllerLifecycleService {
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.failed,
-            acceptedAt: acceptedAt,
             failureReason: ControllerCommandFailureReason.jam,
             updatedAt: failedAt,
           );
         } else if (error is ControllerCommandInterruptedException) {
           // A disconnect after possible acceptance is unsafe to classify as
           // failed-before-movement. Preserve the session for review.
-          acceptedAt ??= failedAt;
-          await _commandRepository.appendEvent(
-            session.id,
-            ControllerCommandEventType.ack,
-            occurredAt: acceptedAt,
-          );
           await _commandRepository.appendEvent(
             session.id,
             ControllerCommandEventType.offline,
@@ -236,7 +227,6 @@ class ControllerLifecycleService {
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.interrupted,
-            acceptedAt: acceptedAt,
             failureReason: ControllerCommandFailureReason.disconnect,
             updatedAt: failedAt,
           );

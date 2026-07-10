@@ -553,6 +553,40 @@ void main() {
   );
 
   test(
+    'second robot face dispense request is rejected before another lifecycle call starts',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        scheduleHour: 9,
+        scheduleMinute: 0,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final firstRequest = fixture.controller.requestDispenseForCurrentDose();
+      await fixture.controllerGateway.requestStarted.future;
+
+      await expectLater(
+        fixture.controller.requestDispenseForCurrentDose(),
+        throwsA(
+          isA<DuplicateDispenseRequestException>().having(
+            (error) => error.message,
+            'message',
+            'A dispense request is already in progress for this dose.',
+          ),
+        ),
+      );
+      expect(fixture.controllerGateway.requestedDoseIds, <String>[
+        fixture.currentDoseId,
+      ]);
+
+      fixture.controllerGateway.completeDispense();
+      await firstRequest;
+    },
+  );
+
+  test(
     'dispense request rejects a completed current due dose when the next dose is still in the future',
     () async {
       final now = DateTime(2026, 7, 8, 9, 5);
@@ -836,6 +870,7 @@ class _FakeControllerGateway implements ControllerGateway {
   final _controller = StreamController<ControllerSnapshot>.broadcast();
   ControllerSnapshot _snapshot;
   final List<String> requestedDoseIds = <String>[];
+  final requestStarted = Completer<void>();
   Completer<void>? _dispenseCompleter;
 
   @override
@@ -855,6 +890,9 @@ class _FakeControllerGateway implements ControllerGateway {
   @override
   Future<void> requestDispense({required String doseId}) async {
     requestedDoseIds.add(doseId);
+    if (!requestStarted.isCompleted) {
+      requestStarted.complete();
+    }
     final completer = Completer<void>();
     _dispenseCompleter = completer;
     await completer.future;

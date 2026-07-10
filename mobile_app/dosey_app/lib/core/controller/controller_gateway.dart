@@ -1,70 +1,50 @@
 enum ControllerConnectionState { disconnected, scanning, connected, error }
 
-class ControllerCommandRejectedException implements Exception {
+abstract class ControllerGatewayException implements Exception {
+  const ControllerGatewayException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class ControllerCommandRejectedException extends ControllerGatewayException {
   const ControllerCommandRejectedException([
-    this.message = 'Controller rejected command.',
+    super.message = 'Controller rejected command.',
   ]);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }
 
-class ControllerCommandPreconditionException implements Exception {
+class ControllerCommandPreconditionException
+    extends ControllerGatewayException {
   const ControllerCommandPreconditionException([
-    this.message = 'Controller cannot accept this command yet.',
+    super.message = 'Controller cannot accept this command yet.',
   ]);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }
 
-class ControllerTransportOfflineException implements Exception {
+class ControllerTransportOfflineException extends ControllerGatewayException {
   const ControllerTransportOfflineException([
-    this.message = 'Controller transport is offline.',
+    super.message = 'Controller transport is offline.',
   ]);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }
 
-class ControllerCommandTimeoutException implements Exception {
+class ControllerCommandTimeoutException extends ControllerGatewayException {
   const ControllerCommandTimeoutException([
-    this.message = 'Controller command timed out after acceptance.',
+    super.message = 'Controller command timed out after acceptance.',
   ]);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }
 
-class ControllerCommandJamException implements Exception {
+class ControllerCommandJamException extends ControllerGatewayException {
   const ControllerCommandJamException([
-    this.message = 'Controller reported a jam after acceptance.',
+    super.message = 'Controller reported a jam after acceptance.',
   ]);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }
 
-class ControllerCommandInterruptedException implements Exception {
+class ControllerCommandInterruptedException extends ControllerGatewayException {
   const ControllerCommandInterruptedException([
-    this.message =
+    super.message =
         'Controller connection was lost after the command may have been accepted.',
   ]);
-
-  final String message;
-
-  @override
-  String toString() => message;
 }
 
 class ControllerSnapshot {

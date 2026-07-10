@@ -230,14 +230,13 @@ void main() {
         sessionRows.single.state,
         ControllerCommandSessionState.timedOut.name,
       );
-      expect(sessionRows.single.acceptedAt, isNotNull);
+      expect(sessionRows.single.acceptedAt, isNull);
 
       final eventRows = await fixture.database
           .select(fixture.database.controllerCommandEvents)
           .get();
       expect(eventRows.map((row) => row.eventType).toList(), <String>[
         ControllerCommandEventType.commandSent.name,
-        ControllerCommandEventType.ack.name,
         ControllerCommandEventType.controllerError.name,
       ]);
 
@@ -280,7 +279,7 @@ void main() {
         sessionRows.single.failureReason,
         ControllerCommandFailureReason.jam.name,
       );
-      expect(sessionRows.single.acceptedAt, isNotNull);
+      expect(sessionRows.single.acceptedAt, isNull);
 
       expect(
         (await fixture.slotRow('slot-1')).status,
@@ -321,14 +320,13 @@ void main() {
         sessionRows.single.failureReason,
         ControllerCommandFailureReason.disconnect.name,
       );
-      expect(sessionRows.single.acceptedAt, isNotNull);
+      expect(sessionRows.single.acceptedAt, isNull);
 
       final eventRows = await fixture.database
           .select(fixture.database.controllerCommandEvents)
           .get();
       expect(eventRows.map((row) => row.eventType).toList(), <String>[
         ControllerCommandEventType.commandSent.name,
-        ControllerCommandEventType.ack.name,
         ControllerCommandEventType.offline.name,
       ]);
 
@@ -388,7 +386,7 @@ void main() {
   );
 
   test(
-    'manual dispense persists a session trail and movement-only dose log without slot changes',
+    'manual dispense persists a session trail without writing shared dose log events',
     () async {
       final fixture = await _LifecycleFixture.create();
       addTearDown(fixture.close);
@@ -414,15 +412,10 @@ void main() {
         ControllerCommandEventType.servoDone.name,
       ]);
 
-      final doseLogRows = await fixture.database
-          .select(fixture.database.doseLogEvents)
-          .get();
-      expect(doseLogRows, hasLength(1));
       expect(
-        doseLogRows.single.kind,
-        DoseLogEventKind.controllerDispenseSucceeded.name,
+        await fixture.database.select(fixture.database.doseLogEvents).get(),
+        isEmpty,
       );
-      expect(doseLogRows.single.marksDoseTaken, isFalse);
       expect(await fixture.slotRow('slot-1'), isNotNull);
     },
   );
@@ -448,7 +441,13 @@ void main() {
           scheduleId: 'schedule-1',
           slotId: 'slot-1',
         ),
-        throwsStateError,
+        throwsA(
+          isA<DuplicateDispenseRequestException>().having(
+            (error) => error.message,
+            'message',
+            'A dispense request is already in progress for this dose.',
+          ),
+        ),
       );
 
       gateway.completeRequest();
@@ -478,7 +477,7 @@ void main() {
 
       await expectLater(
         fixture.service.requestDoseDispense(doseId: 'dose-1'),
-        throwsStateError,
+        throwsA(isA<DuplicateDispenseRequestException>()),
       );
 
       gateway.completeRequest();

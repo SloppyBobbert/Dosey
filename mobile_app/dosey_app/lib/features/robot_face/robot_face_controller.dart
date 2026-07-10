@@ -108,6 +108,11 @@ class RobotFaceController {
       throw StateError('No active dose is ready to dispense.');
     }
     final doseId = TodayNextDoseHelper.doseIdForDate(nextDose.id, now);
+    if (_dispensingDoseId != null) {
+      throw const DuplicateDispenseRequestException(
+        'A dispense request is already in progress for this dose.',
+      );
+    }
     // Movement is tracked as command progress only. A separate explicit user
     // action must confirm, skip, or request help for the dose.
     _dispensingDoseId = doseId;
