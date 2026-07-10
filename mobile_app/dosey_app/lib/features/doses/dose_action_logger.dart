@@ -12,7 +12,7 @@ class DoseActionLogger {
 
   static String? inventoryPrescriptionIdFor(
     ReminderSchedule? schedule,
-    Set<String> prescriptionIds,
+    Iterable<String> prescriptionIds,
   ) {
     if (schedule == null ||
         !prescriptionIds.contains(schedule.prescriptionId)) {
@@ -52,13 +52,13 @@ class DoseActionLogger {
           return;
         }
         if (retiresLoadedSlot) {
-          await dependencies.carouselSlots.markNeedsReview(
-            effectiveLoadedSlot.id,
-          );
+          final loadedSlot = effectiveLoadedSlot;
+          await dependencies.carouselSlots.markNeedsReview(loadedSlot.id);
         }
         if (recordsInventory) {
+          final inventoryPrescriptionId = effectiveInventoryPrescriptionId;
           await dependencies.prescriptions.recordTakenDose(
-            effectiveInventoryPrescriptionId,
+            inventoryPrescriptionId,
             occurredAt: event.occurredAt,
           );
         }

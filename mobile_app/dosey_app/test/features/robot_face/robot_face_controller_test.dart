@@ -688,11 +688,13 @@ void main() {
     );
 
     final differentActionDoseState = baseState.copyWith(actionDoseId: 'dose-2');
+    final clearedActionDoseState = baseState.copyWith(actionDoseId: null);
 
     expect(baseState, sameState);
     expect(baseState.hashCode, sameState.hashCode);
     expect(differentActionDoseState, isNot(baseState));
     expect(differentActionDoseState.hashCode, isNot(baseState.hashCode));
+    expect(clearedActionDoseState.actionDoseId, isNull);
   });
 }
 
@@ -818,6 +820,7 @@ class _RobotFaceControllerFixture {
 
   Future<void> close() async {
     await controller.close();
+    await controllerGateway.close();
     await database.close();
   }
 }
@@ -834,7 +837,9 @@ class _FakeControllerGateway implements ControllerGateway {
   Future<void> cancelActiveCommand() async {}
 
   @override
-  Future<void> close() async {}
+  Future<void> close() async {
+    await _controller.close();
+  }
 
   @override
   Future<void> connect() async {}

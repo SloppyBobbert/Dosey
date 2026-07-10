@@ -22,7 +22,6 @@ class RobotFaceScreen extends StatefulWidget {
     this.stateStream,
     this.initialState,
     this.isActive = true,
-    this.doseLog,
     this.doseActionLogger,
   });
 
@@ -49,7 +48,6 @@ class RobotFaceScreen extends StatefulWidget {
   final Stream<RobotFaceState>? stateStream;
   final RobotFaceState? initialState;
   final bool isActive;
-  final DoseLogRepository? doseLog;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
@@ -113,7 +111,6 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
                   Widget frame = _RobotFaceFrame(
                     state: state,
                     isActive: widget.isActive,
-                    doseLog: widget.doseLog,
                     doseActionLogger: widget.doseActionLogger,
                   );
 
@@ -255,13 +252,11 @@ class _RobotFaceFrame extends StatelessWidget {
   const _RobotFaceFrame({
     required this.state,
     required this.isActive,
-    this.doseLog,
     this.doseActionLogger,
   });
 
   final RobotFaceState state;
   final bool isActive;
-  final DoseLogRepository? doseLog;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
@@ -314,7 +309,6 @@ class _RobotFaceFrame extends StatelessWidget {
               _RobotFaceStatusCard(
                 key: RobotFaceScreen.bottomCardKey,
                 state: state,
-                doseLog: doseLog,
                 doseActionLogger: doseActionLogger,
               ),
             ],
@@ -329,12 +323,10 @@ class _RobotFaceStatusCard extends StatelessWidget {
   const _RobotFaceStatusCard({
     super.key,
     required this.state,
-    this.doseLog,
     this.doseActionLogger,
   });
 
   final RobotFaceState state;
-  final DoseLogRepository? doseLog;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
@@ -465,7 +457,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
               const SizedBox(height: 10),
               _RobotFaceActionPanel(
                 state: state,
-                doseLog: doseLog,
                 doseActionLogger: doseActionLogger,
               ),
             ],
@@ -529,14 +520,9 @@ class _RobotFaceStatusCard extends StatelessWidget {
 }
 
 class _RobotFaceActionPanel extends StatefulWidget {
-  const _RobotFaceActionPanel({
-    required this.state,
-    this.doseLog,
-    this.doseActionLogger,
-  });
+  const _RobotFaceActionPanel({required this.state, this.doseActionLogger});
 
   final RobotFaceState state;
-  final DoseLogRepository? doseLog;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
@@ -545,6 +531,8 @@ class _RobotFaceActionPanel extends StatefulWidget {
 
 class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
   bool _isSubmitting = false;
+  // Widget-lifetime local lockout for actions already completed on the
+  // currently rendered dose state.
   final Map<String, Set<RobotFaceActionKind>> _completedActionsByDoseId =
       <String, Set<RobotFaceActionKind>>{};
 
@@ -675,26 +663,14 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     setState(() => _isSubmitting = true);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     try {
-      if (widget.doseLog != null) {
-        await widget.doseLog!.addEvent(event);
-      } else if (widget.doseActionLogger != null) {
-        final logged = await widget.doseActionLogger!(
-          context,
-          event,
-          successMessage,
-        );
-        if (!logged) {
-          return;
-        }
-      } else {
-        final logged = await DoseActionLogger.logDoseAction(
-          context,
-          event,
-          successMessage,
-        );
-        if (!logged) {
-          return;
-        }
+      final logged =
+          await (widget.doseActionLogger ?? DoseActionLogger.logDoseAction)(
+            context,
+            event,
+            successMessage,
+          );
+      if (!logged) {
+        return;
       }
       if (!context.mounted) {
         return;
@@ -708,9 +684,6 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
             completedActions.add(actionKind);
           }
         });
-      }
-      if (widget.doseLog != null) {
-        messenger.showSnackBar(SnackBar(content: Text(successMessage)));
       }
     } on Object catch (error) {
       if (!context.mounted) {

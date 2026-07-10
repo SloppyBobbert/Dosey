@@ -151,7 +151,7 @@ class _TodayDoseContent extends StatelessWidget {
             final inventoryPrescriptionId =
                 DoseActionLogger.inventoryPrescriptionIdFor(
                   currentSchedule,
-                  prescriptionsById.keys.toSet(),
+                  prescriptionsById.keys,
                 );
 
             return Column(
@@ -266,7 +266,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     final loadedSlot = widget.loadedSlot;
     final inventoryPrescriptionId = DoseActionLogger.inventoryPrescriptionIdFor(
       currentSchedule,
-      widget.prescriptionsById.keys.toSet(),
+      widget.prescriptionsById.keys,
     );
     final dispenseKey = loadedSlot == null
         ? null

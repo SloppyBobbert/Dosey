@@ -130,7 +130,6 @@ class _RobotFacePainter extends CustomPainter {
     final concernTilt = _concernTiltFor(state.mode);
     final eyelidOpen = _eyelidOpenFor(state, blink, phase);
     final pupilOffset = _pupilOffsetFor(state, size, phase);
-    final bounceOffset = _bounceOffsetFor(state.mode);
 
     final backgroundPaint = Paint()
       ..shader = LinearGradient(
@@ -164,7 +163,7 @@ class _RobotFacePainter extends CustomPainter {
     final eyeArea = Rect.fromCenter(
       center: Offset(
         size.width * 0.5,
-        size.height * (0.48 - motion.eyeLift) + bounceOffset + motion.idleDrift,
+        size.height * (0.48 - motion.eyeLift) + motion.idleDrift,
       ),
       width: size.width * 0.8,
       height: size.height * 0.48,
@@ -466,10 +465,6 @@ class _RobotFacePainter extends CustomPainter {
       ),
       _ => Offset(horizontal, idleVertical),
     };
-  }
-
-  double _bounceOffsetFor(RobotFaceMode mode) {
-    return 0;
   }
 
   _FaceMotionProfile _motionProfileFor(RobotFaceState state, Size size) {

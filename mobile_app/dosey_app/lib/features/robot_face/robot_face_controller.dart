@@ -137,11 +137,23 @@ class RobotFaceController {
     final now = _current();
     final nextSchedule = _displaySchedule(now);
     final choreography = _choreographyFor(nextSchedule, now);
-    final mode = _modeFor(role, nextSchedule, now);
+    final displayDoseId = nextSchedule == null
+        ? null
+        : TodayNextDoseHelper.doseIdForDate(nextSchedule.id, now);
+    final latestDoseEvent = displayDoseId == null
+        ? null
+        : TodayNextDoseHelper.latestEventForDose(_events, displayDoseId);
+    final dueDoseId = _dueDoseIdFor(nextSchedule, now);
+    final mode = _modeFor(role, nextSchedule, now, dueDoseId, latestDoseEvent);
     final nextEventLabel = nextSchedule == null
         ? 'No reminders scheduled'
         : '${nextSchedule.timeLabel} · ${nextSchedule.label}';
-    final actionDoseId = _actionDoseIdFor(mode, nextSchedule, now);
+    final actionDoseId = _actionDoseIdFor(
+      mode,
+      nextSchedule,
+      dueDoseId,
+      latestDoseEvent,
+    );
     final baseState = RobotFaceState(
       mode: mode,
       nextEventLabel: nextEventLabel,
@@ -149,7 +161,7 @@ class RobotFaceController {
       isLandscapeOnly: role?.canHostRobot ?? false,
       rampProgress: choreography.rampProgress,
       isInAwakeWindow: choreography.isInAwakeWindow,
-      statusLabel: _statusFor(role, nextSchedule, now),
+      statusLabel: _statusFor(role, nextSchedule, dueDoseId, latestDoseEvent),
       actionDoseId: actionDoseId,
       availableActions: _availableActionsFor(actionDoseId),
     );
@@ -165,29 +177,20 @@ class RobotFaceController {
   String? _actionDoseIdFor(
     RobotFaceMode mode,
     ReminderSchedule? nextSchedule,
-    DateTime now,
+    String? dueDoseId,
+    DoseLogEvent? latestDoseEvent,
   ) {
-    if (nextSchedule == null) {
+    if (nextSchedule == null || dueDoseId == null) {
       return null;
     }
-
-    final dueSchedule = _dueSchedule(now);
-    if (dueSchedule == null || dueSchedule.id != nextSchedule.id) {
-      return null;
-    }
-
-    final doseId = TodayNextDoseHelper.doseIdForDate(dueSchedule.id, now);
     if (mode.needsContextualAction) {
-      return doseId;
+      return dueDoseId;
     }
 
     if (mode == RobotFaceMode.offline || mode == RobotFaceMode.error) {
-      final latestEvent = TodayNextDoseHelper.latestEventForDose(
-        _events,
-        doseId,
-      );
-      if (latestEvent != null && _keepsDoseActionable(latestEvent.kind)) {
-        return doseId;
+      if (latestDoseEvent != null &&
+          _keepsDoseActionable(latestDoseEvent.kind)) {
+        return dueDoseId;
       }
     }
 
@@ -231,6 +234,8 @@ class RobotFaceController {
     AppDeviceRole? role,
     ReminderSchedule? nextSchedule,
     DateTime now,
+    String? dueDoseId,
+    DoseLogEvent? latestDoseEvent,
   ) {
     if (role == null || !role.canHostRobot) {
       return RobotFaceMode.offline;
@@ -246,13 +251,11 @@ class RobotFaceController {
     if (nextSchedule == null) {
       return RobotFaceMode.idle;
     }
-    final doseId = TodayNextDoseHelper.doseIdForDate(nextSchedule.id, now);
-    final latestEvent = TodayNextDoseHelper.latestEventForDose(_events, doseId);
-    if (_dispensingDoseId == doseId) {
+    if (dueDoseId != null && _dispensingDoseId == dueDoseId) {
       return RobotFaceMode.dispensing;
     }
-    if (latestEvent != null) {
-      switch (latestEvent.kind) {
+    if (latestDoseEvent != null) {
+      switch (latestDoseEvent.kind) {
         case DoseLogEventKind.controllerDispenseSucceeded:
         case DoseLogEventKind.doseVisibleConfirmed:
         case DoseLogEventKind.doseSnoozed:
@@ -289,7 +292,8 @@ class RobotFaceController {
   String? _statusFor(
     AppDeviceRole? role,
     ReminderSchedule? nextSchedule,
-    DateTime now,
+    String? dueDoseId,
+    DoseLogEvent? latestDoseEvent,
   ) {
     if (role == null || !role.canHostRobot) {
       return 'Robot Face is only available in Robot Mode';
@@ -301,15 +305,13 @@ class RobotFaceController {
     if (nextSchedule == null) {
       return 'No active reminder';
     }
-    final doseId = TodayNextDoseHelper.doseIdForDate(nextSchedule.id, now);
-    final latestEvent = TodayNextDoseHelper.latestEventForDose(_events, doseId);
-    if (_dispensingDoseId == doseId) {
+    if (dueDoseId != null && _dispensingDoseId == dueDoseId) {
       return 'Dispensing in progress';
     }
-    if (latestEvent == null) {
+    if (latestDoseEvent == null) {
       return null;
     }
-    return switch (latestEvent.kind) {
+    return switch (latestDoseEvent.kind) {
       DoseLogEventKind.controllerDispenseSucceeded =>
         'Awaiting dose confirmation',
       DoseLogEventKind.doseVisibleConfirmed =>
@@ -361,6 +363,17 @@ class RobotFaceController {
     }
 
     return null;
+  }
+
+  String? _dueDoseIdFor(ReminderSchedule? nextSchedule, DateTime now) {
+    if (nextSchedule == null) {
+      return null;
+    }
+    final dueSchedule = _dueSchedule(now);
+    if (dueSchedule == null || dueSchedule.id != nextSchedule.id) {
+      return null;
+    }
+    return TodayNextDoseHelper.doseIdForDate(dueSchedule.id, now);
   }
 
   _RobotFaceChoreography _choreographyFor(

@@ -494,11 +494,13 @@ void main() {
   testWidgets('logs confirm taken action and prevents repeat confirm', (
     WidgetTester tester,
   ) async {
-    final doseLog = _FakeDoseLogRepository(delayCompletion: true);
+    final doseActionLogger = _FakeRobotFaceDoseActionLogger(
+      delayCompletion: true,
+    );
 
     await tester.pumpWidget(
       _RobotFaceTestApp(
-        doseLog: doseLog,
+        doseActionLogger: doseActionLogger.call,
         initialState: const RobotFaceState(
           mode: RobotFaceMode.doseReady,
           nextEventLabel: 'Now · Morning meds',
@@ -527,13 +529,16 @@ void main() {
 
     expect(tester.widget<FilledButton>(buttonFinder).onPressed, isNull);
 
-    doseLog.completePendingAdd();
+    doseActionLogger.completePendingLog();
     await tester.pump();
 
-    expect(doseLog.events, hasLength(1));
-    expect(doseLog.events.single.kind, DoseLogEventKind.doseTakenConfirmed);
-    expect(doseLog.events.single.doseId, 'dose-123');
-    expect(doseLog.events.single.marksDoseTaken, isTrue);
+    expect(doseActionLogger.events, hasLength(1));
+    expect(
+      doseActionLogger.events.single.kind,
+      DoseLogEventKind.doseTakenConfirmed,
+    );
+    expect(doseActionLogger.events.single.doseId, 'dose-123');
+    expect(doseActionLogger.events.single.marksDoseTaken, isTrue);
 
     expect(tester.widget<FilledButton>(buttonFinder).onPressed, isNull);
     expect(find.text('Taken logged.'), findsOneWidget);
@@ -747,11 +752,13 @@ void main() {
   testWidgets('ignores duplicate rapid confirm taps before rebuild', (
     WidgetTester tester,
   ) async {
-    final doseLog = _FakeDoseLogRepository(delayCompletion: true);
+    final doseActionLogger = _FakeRobotFaceDoseActionLogger(
+      delayCompletion: true,
+    );
 
     await tester.pumpWidget(
       _RobotFaceTestApp(
-        doseLog: doseLog,
+        doseActionLogger: doseActionLogger.call,
         initialState: const RobotFaceState(
           mode: RobotFaceMode.doseReady,
           nextEventLabel: 'Now · Morning meds',
@@ -778,21 +785,24 @@ void main() {
     await tester.tap(buttonFinder, warnIfMissed: false);
     await tester.pump();
 
-    expect(doseLog.events, hasLength(1));
-    expect(doseLog.events.single.kind, DoseLogEventKind.doseTakenConfirmed);
+    expect(doseActionLogger.events, hasLength(1));
+    expect(
+      doseActionLogger.events.single.kind,
+      DoseLogEventKind.doseTakenConfirmed,
+    );
 
-    doseLog.completePendingAdd();
+    doseActionLogger.completePendingLog();
     await tester.pump();
   });
 
   testWidgets('logs skip action without marking the dose taken', (
     WidgetTester tester,
   ) async {
-    final doseLog = _FakeDoseLogRepository();
+    final doseActionLogger = _FakeRobotFaceDoseActionLogger();
 
     await tester.pumpWidget(
       _RobotFaceTestApp(
-        doseLog: doseLog,
+        doseActionLogger: doseActionLogger.call,
         initialState: const RobotFaceState(
           mode: RobotFaceMode.doseReady,
           nextEventLabel: 'Now · Morning meds',
@@ -815,21 +825,21 @@ void main() {
     await tester.tap(find.byKey(RobotFaceScreen.skipDoseButtonKey));
     await tester.pump();
 
-    expect(doseLog.events, hasLength(1));
-    expect(doseLog.events.single.kind, DoseLogEventKind.doseSkipped);
-    expect(doseLog.events.single.doseId, 'dose-123');
-    expect(doseLog.events.single.marksDoseTaken, isFalse);
+    expect(doseActionLogger.events, hasLength(1));
+    expect(doseActionLogger.events.single.kind, DoseLogEventKind.doseSkipped);
+    expect(doseActionLogger.events.single.doseId, 'dose-123');
+    expect(doseActionLogger.events.single.marksDoseTaken, isFalse);
     expect(find.text('Skip logged.'), findsOneWidget);
   });
 
   testWidgets('logs help action without marking the dose taken', (
     WidgetTester tester,
   ) async {
-    final doseLog = _FakeDoseLogRepository();
+    final doseActionLogger = _FakeRobotFaceDoseActionLogger();
 
     await tester.pumpWidget(
       _RobotFaceTestApp(
-        doseLog: doseLog,
+        doseActionLogger: doseActionLogger.call,
         initialState: const RobotFaceState(
           mode: RobotFaceMode.doseReady,
           nextEventLabel: 'Now · Morning meds',
@@ -852,21 +862,24 @@ void main() {
     await tester.tap(find.byKey(RobotFaceScreen.needHelpButtonKey));
     await tester.pump();
 
-    expect(doseLog.events, hasLength(1));
-    expect(doseLog.events.single.kind, DoseLogEventKind.caregiverHelpRequested);
-    expect(doseLog.events.single.doseId, 'dose-123');
-    expect(doseLog.events.single.marksDoseTaken, isFalse);
+    expect(doseActionLogger.events, hasLength(1));
+    expect(
+      doseActionLogger.events.single.kind,
+      DoseLogEventKind.caregiverHelpRequested,
+    );
+    expect(doseActionLogger.events.single.doseId, 'dose-123');
+    expect(doseActionLogger.events.single.marksDoseTaken, isFalse);
     expect(find.text('Help request logged.'), findsOneWidget);
   });
 
   testWidgets('disables help after the first help request for the same dose', (
     WidgetTester tester,
   ) async {
-    final doseLog = _FakeDoseLogRepository();
+    final doseActionLogger = _FakeRobotFaceDoseActionLogger();
 
     await tester.pumpWidget(
       _RobotFaceTestApp(
-        doseLog: doseLog,
+        doseActionLogger: doseActionLogger.call,
         initialState: const RobotFaceState(
           mode: RobotFaceMode.waitingForConfirmation,
           nextEventLabel: 'Taken? · Morning meds',
@@ -892,14 +905,17 @@ void main() {
     await tester.tap(helpButtonFinder);
     await tester.pump();
 
-    expect(doseLog.events, hasLength(1));
-    expect(doseLog.events.single.kind, DoseLogEventKind.caregiverHelpRequested);
+    expect(doseActionLogger.events, hasLength(1));
+    expect(
+      doseActionLogger.events.single.kind,
+      DoseLogEventKind.caregiverHelpRequested,
+    );
     expect(tester.widget<FilledButton>(helpButtonFinder).onPressed, isNull);
 
     await tester.tap(helpButtonFinder, warnIfMissed: false);
     await tester.pump();
 
-    expect(doseLog.events, hasLength(1));
+    expect(doseActionLogger.events, hasLength(1));
   });
 }
 
@@ -909,13 +925,13 @@ class _RobotFaceTestApp extends StatelessWidget {
     this.stateStream,
     required this.initialState,
     this.isActive = true,
-    this.doseLog,
+    this.doseActionLogger,
   });
 
   final Stream<RobotFaceState>? stateStream;
   final RobotFaceState initialState;
   final bool isActive;
-  final DoseLogRepository? doseLog;
+  final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
   Widget build(BuildContext context) {
@@ -924,35 +940,53 @@ class _RobotFaceTestApp extends StatelessWidget {
         stateStream: stateStream,
         initialState: initialState,
         isActive: isActive,
-        doseLog: doseLog,
+        doseActionLogger: doseActionLogger,
       ),
     );
   }
 }
 
-class _FakeDoseLogRepository implements DoseLogRepository {
-  _FakeDoseLogRepository({this.delayCompletion = false});
+class _FakeRobotFaceDoseActionLogger {
+  _FakeRobotFaceDoseActionLogger({this.delayCompletion = false});
 
   final List<DoseLogEvent> events = <DoseLogEvent>[];
   final bool delayCompletion;
-  Completer<void>? _pendingAddCompleter;
+  Completer<bool>? _pendingLogCompleter;
+  BuildContext? _pendingContext;
+  String? _pendingSuccessMessage;
 
-  @override
-  Future<void> addEvent(DoseLogEvent event) async {
+  Future<bool> call(
+    BuildContext context,
+    DoseLogEvent event,
+    String successMessage,
+  ) async {
     events.add(event);
     if (delayCompletion) {
-      _pendingAddCompleter = Completer<void>();
-      await _pendingAddCompleter!.future;
-      _pendingAddCompleter = null;
+      _pendingContext = context;
+      _pendingSuccessMessage = successMessage;
+      _pendingLogCompleter = Completer<bool>();
+      final result = await _pendingLogCompleter!.future;
+      _pendingLogCompleter = null;
+      _pendingContext = null;
+      _pendingSuccessMessage = null;
+      return result;
     }
+    _showSuccess(context, successMessage);
+    return true;
   }
 
-  @override
-  Stream<List<DoseLogEvent>> watchEvents() {
-    return Stream<List<DoseLogEvent>>.value(events);
+  void completePendingLog({bool result = true}) {
+    if (result && _pendingContext != null && _pendingSuccessMessage != null) {
+      _showSuccess(_pendingContext!, _pendingSuccessMessage!);
+    }
+    _pendingLogCompleter?.complete(result);
   }
 
-  void completePendingAdd() {
-    _pendingAddCompleter?.complete();
+  void _showSuccess(BuildContext context, String successMessage) {
+    if (!context.mounted) {
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    messenger.showSnackBar(SnackBar(content: Text(successMessage)));
   }
 }

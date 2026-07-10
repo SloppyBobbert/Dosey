@@ -15,6 +15,8 @@ enum RobotFaceTone { calm, ready, attention, warning, offline }
 
 enum RobotFaceActionKind { confirmTaken, skipDose, askForHelp }
 
+const Object _unset = Object();
+
 extension RobotFaceModePresentation on RobotFaceMode {
   RobotFaceTone get tone {
     return switch (this) {
@@ -76,7 +78,7 @@ class RobotFaceState {
     double? rampProgress,
     bool? isInAwakeWindow,
     String? statusLabel,
-    String? actionDoseId,
+    Object? actionDoseId = _unset,
     Set<RobotFaceActionKind>? availableActions,
   }) {
     return RobotFaceState(
@@ -87,7 +89,9 @@ class RobotFaceState {
       rampProgress: rampProgress ?? this.rampProgress,
       isInAwakeWindow: isInAwakeWindow ?? this.isInAwakeWindow,
       statusLabel: statusLabel ?? this.statusLabel,
-      actionDoseId: actionDoseId ?? this.actionDoseId,
+      actionDoseId: identical(actionDoseId, _unset)
+          ? this.actionDoseId
+          : actionDoseId as String?,
       availableActions: availableActions ?? this.availableActions,
     );
   }
