@@ -130,6 +130,15 @@ void main() {
       expect(readyState.mode, RobotFaceMode.doseReady);
       expect(readyState.rampProgress, 1);
       expect(readyState.isInAwakeWindow, isTrue);
+      expect(readyState.actionDoseId, fixture.currentDoseId);
+      expect(
+        readyState.availableActions,
+        containsAll(<RobotFaceActionKind>{
+          RobotFaceActionKind.confirmTaken,
+          RobotFaceActionKind.skipDose,
+          RobotFaceActionKind.askForHelp,
+        }),
+      );
 
       await fixture.doseLog.addEvent(
         DoseLogEvent.controllerDispenseSucceeded(
@@ -144,6 +153,97 @@ void main() {
 
       expect(waitingState.mode, isNot(RobotFaceMode.happyConfirmed));
       expect(waitingState.statusLabel, contains('Awaiting'));
+      expect(waitingState.actionDoseId, fixture.currentDoseId);
+      expect(
+        waitingState.availableActions,
+        containsAll(<RobotFaceActionKind>{
+          RobotFaceActionKind.confirmTaken,
+          RobotFaceActionKind.skipDose,
+          RobotFaceActionKind.askForHelp,
+        }),
+      );
+    },
+  );
+
+  test(
+    'caregiver help stays actionable but suppresses repeat help action',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        scheduleHour: 9,
+        scheduleMinute: 0,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.caregiverHelpRequested(
+          doseId: fixture.currentDoseId,
+          occurredAt: fixture.now.toUtc(),
+        ),
+      );
+
+      final waitingState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.waitingForConfirmation,
+      );
+
+      expect(waitingState.actionDoseId, fixture.currentDoseId);
+      expect(
+        waitingState.availableActions,
+        containsAll(<RobotFaceActionKind>{
+          RobotFaceActionKind.confirmTaken,
+          RobotFaceActionKind.skipDose,
+        }),
+      );
+      expect(
+        waitingState.availableActions,
+        isNot(contains(RobotFaceActionKind.askForHelp)),
+      );
+    },
+  );
+
+  test(
+    'dispensed dose stays actionable across controller disconnect',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        scheduleHour: 9,
+        scheduleMinute: 0,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.controllerDispenseSucceeded(
+          doseId: fixture.currentDoseId,
+          occurredAt: fixture.now.toUtc(),
+        ),
+      );
+
+      final waitingState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.waitingForConfirmation,
+      );
+      expect(waitingState.actionDoseId, fixture.currentDoseId);
+
+      fixture.controllerGateway.emitSnapshot(
+        const ControllerSnapshot.disconnected(),
+      );
+
+      final offlineState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.offline,
+      );
+
+      expect(offlineState.actionDoseId, fixture.currentDoseId);
+      expect(
+        offlineState.availableActions,
+        containsAll(<RobotFaceActionKind>{
+          RobotFaceActionKind.confirmTaken,
+          RobotFaceActionKind.skipDose,
+          RobotFaceActionKind.askForHelp,
+        }),
+      );
     },
   );
 
@@ -189,6 +289,51 @@ void main() {
       expect(confirmedState.statusLabel, 'Dose confirmed taken');
       expect(confirmedState.rampProgress, 1);
       expect(confirmedState.isInAwakeWindow, isTrue);
+      expect(confirmedState.actionDoseId, isNull);
+      expect(confirmedState.availableActions, isEmpty);
+    },
+  );
+
+  test('non-actionable states do not carry an action dose id', () async {
+    final fixture = await _RobotFaceControllerFixture.create(
+      now: DateTime(2026, 7, 8, 9),
+      scheduleHour: 10,
+      scheduleMinute: 0,
+    );
+    addTearDown(fixture.close);
+
+    await fixture.settle();
+
+    final idleState = await fixture.controller.watchState().first;
+
+    expect(idleState.mode, RobotFaceMode.idle);
+    expect(idleState.actionDoseId, isNull);
+    expect(idleState.availableActions, isEmpty);
+  });
+
+  test(
+    'controller error with only a future schedule does not carry an action dose id',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9),
+        scheduleHour: 10,
+        scheduleMinute: 0,
+        controllerSnapshot: const ControllerSnapshot(
+          connectionState: ControllerConnectionState.error,
+          canRequestDispense: false,
+          statusLabel: 'Controller error',
+        ),
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final state = await fixture.controller.watchState().first;
+
+      expect(state.mode, RobotFaceMode.error);
+      expect(state.nextEventLabel, '10:00 · Morning meds');
+      expect(state.actionDoseId, isNull);
+      expect(state.availableActions, isEmpty);
     },
   );
 
@@ -486,6 +631,71 @@ void main() {
     expect(missedState.nextEventLabel, '09:00 · Morning meds');
     expect(missedState.statusLabel, 'Dose missed');
   });
+
+  test('robot face mode tone matches the MVP presentation mapping', () {
+    expect(RobotFaceMode.idle.tone, RobotFaceTone.calm);
+    expect(RobotFaceMode.sleepy.tone, RobotFaceTone.calm);
+    expect(RobotFaceMode.doseReady.tone, RobotFaceTone.ready);
+    expect(RobotFaceMode.dispensing.tone, RobotFaceTone.attention);
+    expect(RobotFaceMode.waitingForConfirmation.tone, RobotFaceTone.ready);
+    expect(RobotFaceMode.doseApproaching.tone, RobotFaceTone.attention);
+    expect(RobotFaceMode.happyConfirmed.tone, RobotFaceTone.calm);
+    expect(RobotFaceMode.missed.tone, RobotFaceTone.warning);
+    expect(RobotFaceMode.error.tone, RobotFaceTone.warning);
+    expect(RobotFaceMode.offline.tone, RobotFaceTone.offline);
+  });
+
+  test(
+    'robot face mode contextual actions are only shown for live human-action states',
+    () {
+      expect(RobotFaceMode.idle.needsContextualAction, isFalse);
+      expect(RobotFaceMode.sleepy.needsContextualAction, isFalse);
+      expect(RobotFaceMode.doseApproaching.needsContextualAction, isFalse);
+      expect(RobotFaceMode.doseReady.needsContextualAction, isTrue);
+      expect(RobotFaceMode.dispensing.needsContextualAction, isFalse);
+      expect(
+        RobotFaceMode.waitingForConfirmation.needsContextualAction,
+        isTrue,
+      );
+      expect(RobotFaceMode.happyConfirmed.needsContextualAction, isFalse);
+      expect(RobotFaceMode.missed.needsContextualAction, isFalse);
+      expect(RobotFaceMode.error.needsContextualAction, isFalse);
+      expect(RobotFaceMode.offline.needsContextualAction, isFalse);
+    },
+  );
+
+  test('robot face state equality and hashCode include actionDoseId', () {
+    const baseState = RobotFaceState(
+      mode: RobotFaceMode.doseReady,
+      nextEventLabel: '09:00 · Morning meds',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 1,
+      isInAwakeWindow: true,
+      statusLabel: 'Dose ready',
+      actionDoseId: 'dose-1',
+    );
+
+    const sameState = RobotFaceState(
+      mode: RobotFaceMode.doseReady,
+      nextEventLabel: '09:00 · Morning meds',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 1,
+      isInAwakeWindow: true,
+      statusLabel: 'Dose ready',
+      actionDoseId: 'dose-1',
+    );
+
+    final differentActionDoseState = baseState.copyWith(actionDoseId: 'dose-2');
+    final clearedActionDoseState = baseState.copyWith(actionDoseId: null);
+
+    expect(baseState, sameState);
+    expect(baseState.hashCode, sameState.hashCode);
+    expect(differentActionDoseState, isNot(baseState));
+    expect(differentActionDoseState.hashCode, isNot(baseState.hashCode));
+    expect(clearedActionDoseState.actionDoseId, isNull);
+  });
 }
 
 ReminderSchedule _schedule({
@@ -538,6 +748,8 @@ class _RobotFaceControllerFixture {
     ScheduleProfile? activeProfile,
     bool emitDefaultActiveProfile = true,
     Stream<DateTime>? clock,
+    ControllerSnapshot controllerSnapshot =
+        const ControllerSnapshot.connected(),
   }) async {
     final database = DoseyDatabase.inMemory();
     final settings = LocalAppSettingsRepository(
@@ -548,9 +760,7 @@ class _RobotFaceControllerFixture {
     final profiles = _FakeScheduleProfileRepository();
     final reminders = _FakeReminderRepository();
     final doseLog = _FakeDoseLogRepository();
-    final controllerGateway = _FakeControllerGateway(
-      const ControllerSnapshot.connected(),
-    );
+    final controllerGateway = _FakeControllerGateway(controllerSnapshot);
     var currentNow = now;
 
     await settings.setDeviceRole(AppDeviceRole.androidRobot);
@@ -610,6 +820,7 @@ class _RobotFaceControllerFixture {
 
   Future<void> close() async {
     await controller.close();
+    await controllerGateway.close();
     await database.close();
   }
 }
@@ -617,7 +828,8 @@ class _RobotFaceControllerFixture {
 class _FakeControllerGateway implements ControllerGateway {
   _FakeControllerGateway(this._snapshot);
 
-  final ControllerSnapshot _snapshot;
+  final _controller = StreamController<ControllerSnapshot>.broadcast();
+  ControllerSnapshot _snapshot;
   final List<String> requestedDoseIds = <String>[];
   Completer<void>? _dispenseCompleter;
 
@@ -625,7 +837,9 @@ class _FakeControllerGateway implements ControllerGateway {
   Future<void> cancelActiveCommand() async {}
 
   @override
-  Future<void> close() async {}
+  Future<void> close() async {
+    await _controller.close();
+  }
 
   @override
   Future<void> connect() async {}
@@ -646,8 +860,16 @@ class _FakeControllerGateway implements ControllerGateway {
     _dispenseCompleter = null;
   }
 
+  void emitSnapshot(ControllerSnapshot snapshot) {
+    _snapshot = snapshot;
+    _controller.add(snapshot);
+  }
+
   @override
-  Stream<ControllerSnapshot> watchController() => Stream.value(_snapshot);
+  Stream<ControllerSnapshot> watchController() async* {
+    yield _snapshot;
+    yield* _controller.stream;
+  }
 }
 
 class _FakeDoseLogRepository implements DoseLogRepository {

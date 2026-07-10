@@ -1,10 +1,19 @@
 import 'dart:math' as math;
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/features/doses/dose_action_logger.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:flutter/material.dart';
+
+typedef RobotFaceDoseActionLogger =
+    Future<bool> Function(
+      BuildContext context,
+      DoseLogEvent event,
+      String successMessage,
+    );
 
 class RobotFaceScreen extends StatefulWidget {
   const RobotFaceScreen({
@@ -13,6 +22,7 @@ class RobotFaceScreen extends StatefulWidget {
     this.stateStream,
     this.initialState,
     this.isActive = true,
+    this.doseActionLogger,
   });
 
   static const canvasKey = ValueKey<String>('robot-face-canvas');
@@ -23,11 +33,22 @@ class RobotFaceScreen extends StatefulWidget {
     'robot-face-urgent-prompt-scale',
   );
   static const statusBadgeKey = ValueKey<String>('robot-face-status-badge');
+  static const actionPanelKey = ValueKey<String>('robot-face-action-panel');
+  static const confirmTakenButtonKey = ValueKey<String>(
+    'robot-face-confirm-taken-button',
+  );
+  static const skipDoseButtonKey = ValueKey<String>(
+    'robot-face-skip-dose-button',
+  );
+  static const needHelpButtonKey = ValueKey<String>(
+    'robot-face-need-help-button',
+  );
 
   final RobotFaceController? controller;
   final Stream<RobotFaceState>? stateStream;
   final RobotFaceState? initialState;
   final bool isActive;
+  final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
   State<RobotFaceScreen> createState() => _RobotFaceScreenState();
@@ -90,6 +111,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
                   Widget frame = _RobotFaceFrame(
                     state: state,
                     isActive: widget.isActive,
+                    doseActionLogger: widget.doseActionLogger,
                   );
 
                   if (isPortraitFrame) {
@@ -206,8 +228,8 @@ class _UrgentPromptOverlay extends StatelessWidget {
 
   Color _promptColorFor(RobotFaceMode mode) {
     return switch (mode) {
-      RobotFaceMode.doseReady ||
-      RobotFaceMode.doseApproaching => const Color(0xFFFFB84F),
+      RobotFaceMode.doseReady => const Color(0xFF62E9C5),
+      RobotFaceMode.doseApproaching => const Color(0xFF64D8FF),
       RobotFaceMode.happyConfirmed => const Color(0xFF62E9C5),
       RobotFaceMode.error => const Color(0xFFFF728C),
       RobotFaceMode.offline => const Color(0xFF9AA3B8),
@@ -227,10 +249,15 @@ class _UrgentPromptOverlay extends StatelessWidget {
 }
 
 class _RobotFaceFrame extends StatelessWidget {
-  const _RobotFaceFrame({required this.state, required this.isActive});
+  const _RobotFaceFrame({
+    required this.state,
+    required this.isActive,
+    this.doseActionLogger,
+  });
 
   final RobotFaceState state;
   final bool isActive;
+  final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
   Widget build(BuildContext context) {
@@ -282,6 +309,7 @@ class _RobotFaceFrame extends StatelessWidget {
               _RobotFaceStatusCard(
                 key: RobotFaceScreen.bottomCardKey,
                 state: state,
+                doseActionLogger: doseActionLogger,
               ),
             ],
           ),
@@ -292,13 +320,20 @@ class _RobotFaceFrame extends StatelessWidget {
 }
 
 class _RobotFaceStatusCard extends StatelessWidget {
-  const _RobotFaceStatusCard({super.key, required this.state});
+  const _RobotFaceStatusCard({
+    super.key,
+    required this.state,
+    this.doseActionLogger,
+  });
 
   final RobotFaceState state;
+  final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
   Widget build(BuildContext context) {
     final badgeEmphasis = _badgeEmphasisFor(state);
+    final showActionPanel =
+        state.actionDoseId != null && state.availableActions.isNotEmpty;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -315,102 +350,114 @@ class _RobotFaceStatusCard extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                color: _accentFor(state.mode),
-                shape: BoxShape.circle,
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: _accentFor(state.mode).withValues(alpha: 0.42),
-                    blurRadius: 12,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Text(
-                    _headlineFor(state.mode),
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.2,
-                      color: Color(0xFF8A96AD),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    state.nextEventLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_compactStatusLabelFor(state)
-                case final statusLabel?) ...<Widget>[
-              const SizedBox(width: 12),
-              Flexible(
-                child: AnimatedScale(
-                  duration: const Duration(milliseconds: 280),
-                  scale: 1 + (badgeEmphasis * 0.05),
-                  child: DecoratedBox(
-                    key: RobotFaceScreen.statusBadgeKey,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(
-                        alpha: 0.06 + (badgeEmphasis * 0.05),
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: _accentFor(state.mode),
+                    shape: BoxShape.circle,
+                    boxShadow: <BoxShadow>[
+                      BoxShadow(
+                        color: _accentFor(state.mode).withValues(alpha: 0.42),
+                        blurRadius: 12,
+                        spreadRadius: 2,
                       ),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(
-                        color: _accentFor(
-                          state.mode,
-                        ).withValues(alpha: 0.08 + (badgeEmphasis * 0.14)),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        _headlineFor(state.mode),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                          color: Color(0xFF8A96AD),
+                        ),
                       ),
-                      boxShadow: badgeEmphasis == 0
-                          ? null
-                          : <BoxShadow>[
-                              BoxShadow(
-                                color: _accentFor(state.mode).withValues(
-                                  alpha: 0.12 + (badgeEmphasis * 0.1),
-                                ),
-                                blurRadius: 16,
-                                spreadRadius: 0.5,
-                              ),
-                            ],
-                    ),
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 12 + (badgeEmphasis * 2),
-                        vertical: 8,
-                      ),
-                      child: Text(
-                        statusLabel,
+                      const SizedBox(height: 4),
+                      Text(
+                        state.nextEventLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFFD3DAE7),
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (_compactStatusLabelFor(state)
+                    case final statusLabel?) ...<Widget>[
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: AnimatedScale(
+                      duration: const Duration(milliseconds: 280),
+                      scale: 1 + (badgeEmphasis * 0.05),
+                      child: DecoratedBox(
+                        key: RobotFaceScreen.statusBadgeKey,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(
+                            alpha: 0.06 + (badgeEmphasis * 0.05),
+                          ),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: _accentFor(
+                              state.mode,
+                            ).withValues(alpha: 0.08 + (badgeEmphasis * 0.14)),
+                          ),
+                          boxShadow: badgeEmphasis == 0
+                              ? null
+                              : <BoxShadow>[
+                                  BoxShadow(
+                                    color: _accentFor(state.mode).withValues(
+                                      alpha: 0.12 + (badgeEmphasis * 0.1),
+                                    ),
+                                    blurRadius: 16,
+                                    spreadRadius: 0.5,
+                                  ),
+                                ],
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12 + (badgeEmphasis * 2),
+                            vertical: 8,
+                          ),
+                          child: Text(
+                            statusLabel,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFFD3DAE7),
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
+              ],
+            ),
+            if (showActionPanel) ...<Widget>[
+              const SizedBox(height: 10),
+              _RobotFaceActionPanel(
+                state: state,
+                doseActionLogger: doseActionLogger,
               ),
             ],
           ],
@@ -435,14 +482,11 @@ class _RobotFaceStatusCard extends StatelessWidget {
   }
 
   Color _accentFor(RobotFaceMode mode) {
-    return switch (mode) {
-      RobotFaceMode.doseReady ||
-      RobotFaceMode.doseApproaching => const Color(0xFFFFB84F),
-      RobotFaceMode.happyConfirmed => const Color(0xFF62E9C5),
-      RobotFaceMode.error || RobotFaceMode.missed => const Color(0xFFFF728C),
-      RobotFaceMode.offline => const Color(0xFF98A5BC),
-      RobotFaceMode.sleepy => const Color(0xFF7D93C7),
-      _ => const Color(0xFF4EE6FF),
+    return switch (mode.tone) {
+      RobotFaceTone.ready => const Color(0xFF56EBC6),
+      RobotFaceTone.attention || RobotFaceTone.calm => const Color(0xFF4EE6FF),
+      RobotFaceTone.warning => const Color(0xFFFF728C),
+      RobotFaceTone.offline => const Color(0xFF98A5BC),
     };
   }
 
@@ -472,5 +516,186 @@ class _RobotFaceStatusCard extends StatelessWidget {
       RobotFaceMode.idle when state.isInAwakeWindow => 0.24,
       _ => 0,
     };
+  }
+}
+
+class _RobotFaceActionPanel extends StatefulWidget {
+  const _RobotFaceActionPanel({required this.state, this.doseActionLogger});
+
+  final RobotFaceState state;
+  final RobotFaceDoseActionLogger? doseActionLogger;
+
+  @override
+  State<_RobotFaceActionPanel> createState() => _RobotFaceActionPanelState();
+}
+
+class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
+  bool _isSubmitting = false;
+  // Widget-lifetime local lockout for actions already completed on the
+  // currently rendered dose state.
+  final Map<String, Set<RobotFaceActionKind>> _completedActionsByDoseId =
+      <String, Set<RobotFaceActionKind>>{};
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      key: RobotFaceScreen.actionPanelKey,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          children: <Widget>[
+            _buildActionButton(
+              key: RobotFaceScreen.confirmTakenButtonKey,
+              label: 'Confirm taken',
+              isEnabled: _isActionEnabled(RobotFaceActionKind.confirmTaken),
+              onPressed: () => _logAction(
+                context,
+                actionKind: RobotFaceActionKind.confirmTaken,
+                event: DoseLogEvent.doseTakenConfirmed(
+                  doseId: widget.state.actionDoseId!,
+                  occurredAt: DateTime.now().toUtc(),
+                ),
+                successMessage: 'Taken logged.',
+              ),
+            ),
+            _buildActionButton(
+              key: RobotFaceScreen.skipDoseButtonKey,
+              label: 'Skip',
+              isEnabled: _isActionEnabled(RobotFaceActionKind.skipDose),
+              onPressed: () => _logAction(
+                context,
+                actionKind: RobotFaceActionKind.skipDose,
+                event: DoseLogEvent.doseSkipped(
+                  doseId: widget.state.actionDoseId!,
+                  occurredAt: DateTime.now().toUtc(),
+                ),
+                successMessage: 'Skip logged.',
+              ),
+            ),
+            _buildActionButton(
+              key: RobotFaceScreen.needHelpButtonKey,
+              label: 'Need help',
+              isEnabled: _isActionEnabled(RobotFaceActionKind.askForHelp),
+              onPressed: () => _logAction(
+                context,
+                actionKind: RobotFaceActionKind.askForHelp,
+                event: DoseLogEvent.caregiverHelpRequested(
+                  doseId: widget.state.actionDoseId!,
+                  occurredAt: DateTime.now().toUtc(),
+                ),
+                successMessage: 'Help request logged.',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required Key key,
+    required String label,
+    required bool isEnabled,
+    required VoidCallback onPressed,
+  }) {
+    return FilledButton.tonal(
+      key: key,
+      onPressed: _isSubmitting || !isEnabled ? null : onPressed,
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      ),
+      child: Text(label),
+    );
+  }
+
+  bool _isActionEnabled(RobotFaceActionKind actionKind) {
+    final actionDoseId = widget.state.actionDoseId;
+    if (actionDoseId == null) {
+      return false;
+    }
+
+    if (!widget.state.availableActions.contains(actionKind)) {
+      return false;
+    }
+
+    return !(_completedActionsByDoseId[actionDoseId]?.contains(actionKind) ??
+        false);
+  }
+
+  Set<RobotFaceActionKind> _completedActionsForDose(String actionDoseId) {
+    return _completedActionsByDoseId.putIfAbsent(
+      actionDoseId,
+      () => <RobotFaceActionKind>{},
+    );
+  }
+
+  bool _isTerminalAction(RobotFaceActionKind actionKind) {
+    return switch (actionKind) {
+      RobotFaceActionKind.confirmTaken || RobotFaceActionKind.skipDose => true,
+      RobotFaceActionKind.askForHelp => false,
+    };
+  }
+
+  Future<void> _logAction(
+    BuildContext context, {
+    required RobotFaceActionKind actionKind,
+    required DoseLogEvent event,
+    required String successMessage,
+  }) async {
+    if (_isSubmitting) {
+      return;
+    }
+
+    final actionDoseId = widget.state.actionDoseId;
+    if (actionDoseId == null) {
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    try {
+      final logged =
+          await (widget.doseActionLogger ?? DoseActionLogger.logDoseAction)(
+            context,
+            event,
+            successMessage,
+          );
+      if (!logged) {
+        return;
+      }
+      if (!context.mounted) {
+        return;
+      }
+      if (mounted) {
+        setState(() {
+          final completedActions = _completedActionsForDose(actionDoseId);
+          if (_isTerminalAction(actionKind)) {
+            completedActions.addAll(widget.state.availableActions);
+          } else {
+            completedActions.add(actionKind);
+          }
+        });
+      }
+    } on Object catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Dose action failed: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
   }
 }

@@ -1417,6 +1417,41 @@ void main() {
     expect(find.text('Dispense slot'), findsNothing);
   });
 
+  testWidgets('Today confirm taken retires dispensed carousel slot', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await LocalCarouselSlotRepository(database).assignSlot(
+      CarouselSlot(
+        id: 'schedule-1-vitamin-d-morning',
+        slotNumber: 1,
+        prescriptionId: 'vitamin-d',
+        scheduleId: 'vitamin-d-morning',
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.dispensed,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+      ),
+    );
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Confirm taken'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Confirm taken'));
+    await tester.pumpAndSettle();
+
+    final slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.needsReview.storageValue);
+  });
+
   testWidgets('Today keeps slot loaded when terminal dose log fails', (
     WidgetTester tester,
   ) async {
