@@ -231,6 +231,8 @@ class LocalControllerCommandRepository {
     ControllerCommandSessionRow
   >
   _latestSessionQuery() {
+    // Query newest-first once, then prefer any unresolved session in memory so
+    // an older safety issue is not hidden by a newer successful test command.
     return _database.select(_database.controllerCommandSessions)..orderBy([
       (session) => OrderingTerm.desc(session.updatedAt),
       (session) => OrderingTerm.desc(session.createdAt),
@@ -321,6 +323,7 @@ class LocalControllerCommandRepository {
   }
 
   static const List<String> _unresolvedStateNames = [
+    // "Unresolved" means still actionable/recoverable, not merely in-flight.
     'pending',
     'accepted',
     'failed',

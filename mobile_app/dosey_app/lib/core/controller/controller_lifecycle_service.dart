@@ -47,6 +47,8 @@ class ControllerLifecycleService {
     String? slotId,
     String? scheduleId,
   }) async {
+    // Guard by dose and slot so Today, Carousel, and Robot Face cannot start
+    // duplicate dispense sessions for the same physical dose path.
     final activeKeys = <String>{'dose:$doseId'};
     if (slotId != null) {
       activeKeys.add('slot:$slotId');
@@ -77,6 +79,8 @@ class ControllerLifecycleService {
 
       try {
         await _controller.requestDispense(doseId: doseId);
+        // In the simulator phase, request completion means movement finished.
+        // A real BLE transport should split send, ACK, and servo-done events.
         controllerMoved = true;
         acceptedAt = _current();
         await _commandRepository.appendEvent(
@@ -163,6 +167,8 @@ class ControllerLifecycleService {
             await _carouselSlots.markLoaded(slotId);
           }
         } else if (error is ControllerCommandTimeoutException) {
+          // Accepted but unresolved is physically ambiguous: do not reopen the
+          // carousel slot as loaded, because movement may already have started.
           acceptedAt ??= failedAt;
           await _commandRepository.appendEvent(
             session.id,
@@ -185,6 +191,8 @@ class ControllerLifecycleService {
             updatedAt: failedAt,
           );
         } else if (error is ControllerCommandJamException) {
+          // Jams happen after acceptance in this model, so the user must review
+          // the slot before another dispense attempt.
           acceptedAt ??= failedAt;
           await _commandRepository.appendEvent(
             session.id,
@@ -208,6 +216,8 @@ class ControllerLifecycleService {
             updatedAt: failedAt,
           );
         } else if (error is ControllerCommandInterruptedException) {
+          // A disconnect after possible acceptance is unsafe to classify as
+          // failed-before-movement. Preserve the session for review.
           acceptedAt ??= failedAt;
           await _commandRepository.appendEvent(
             session.id,
@@ -231,6 +241,8 @@ class ControllerLifecycleService {
             updatedAt: failedAt,
           );
         } else if (controllerMoved) {
+          // Local logging or slot writes failed after movement completed. Keep
+          // the physical state conservative instead of rolling back to loaded.
           await _commandRepository.appendEvent(
             session.id,
             ControllerCommandEventType.controllerError,
@@ -247,6 +259,8 @@ class ControllerLifecycleService {
             updatedAt: failedAt,
           );
         } else {
+          // Unknown transport errors are treated as acceptance-ambiguous unless
+          // the gateway proves they happened before the command reached hardware.
           await _commandRepository.appendEvent(
             session.id,
             ControllerCommandEventType.controllerError,
