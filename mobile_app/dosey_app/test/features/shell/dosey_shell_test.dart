@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -7,6 +8,8 @@ import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/shell/dosey_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../../support/fake_app_scope_dependencies.dart';
 
 void main() {
   testWidgets('Robot Mode shows the Robot Face tab', (
@@ -220,9 +223,27 @@ class _TestShellApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return DoseyAppScope(
       database: database,
+      bleGateway: FakeBleGateway(),
+      connectivityGateway: FakeConnectivityGateway(),
+      permissionGateway: const _FakePermissionGateway(),
       reminderScheduler: const _NoopReminderScheduler(),
+      missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
       child: const MaterialApp(home: DoseyShell()),
     );
+  }
+}
+
+class _FakePermissionGateway implements AppPermissionGateway {
+  const _FakePermissionGateway();
+
+  @override
+  Future<AppPermissionState> check(AppPermission permission) async {
+    return AppPermissionState.granted;
+  }
+
+  @override
+  Future<AppPermissionState> request(AppPermission permission) async {
+    return AppPermissionState.granted;
   }
 }
 

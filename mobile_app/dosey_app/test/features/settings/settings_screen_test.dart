@@ -11,6 +11,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_app_scope_dependencies.dart';
+
 void main() {
   testWidgets('robot-capable role shows robot face settings controls', (
     WidgetTester tester,
@@ -262,8 +264,11 @@ class _TestSettingsApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return DoseyAppScope(
       database: database,
+      bleGateway: FakeBleGateway(),
+      connectivityGateway: FakeConnectivityGateway(),
       permissionGateway: const _FakePermissionGateway(),
       reminderScheduler: const _NoopReminderScheduler(),
+      missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
       child: MaterialApp(
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2F6F5E)),

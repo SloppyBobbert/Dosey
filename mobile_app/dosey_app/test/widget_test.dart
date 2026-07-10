@@ -22,6 +22,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/fake_app_scope_dependencies.dart';
+
 void main() {
   testWidgets('first install shows medical-device onboarding before shell', (
     WidgetTester tester,
@@ -3673,6 +3675,9 @@ class DoseyApp extends StatelessWidget {
       reminderScheduler: reminderScheduler ?? const _NoopReminderScheduler(),
       permissionGateway: permissionGateway,
       notificationTapController: notificationTapController,
+      missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
+      bleGateway: FakeBleGateway(),
+      connectivityGateway: FakeConnectivityGateway(),
     );
   }
 }
