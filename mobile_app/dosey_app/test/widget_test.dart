@@ -3275,6 +3275,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Controller disconnected'), findsOneWidget);
+    expect(find.text('Controller command status'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Manual dispense test'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
     expect(find.text('Manual dispense test'), findsOneWidget);
     expect(
       find.text(

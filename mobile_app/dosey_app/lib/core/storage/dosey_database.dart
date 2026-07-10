@@ -153,7 +153,6 @@ class ControllerCommandSessions extends Table {
   @override
   Set<Column> get primaryKey => {id};
 
-  @override
   List<Index> get indexes => [
     Index(
       'controller_command_sessions_unresolved_idx',
@@ -175,7 +174,6 @@ class ControllerCommandEvents extends Table {
   @override
   Set<Column> get primaryKey => {id};
 
-  @override
   List<Index> get indexes => [
     Index(
       'controller_command_events_session_sequence_idx',

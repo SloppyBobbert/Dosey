@@ -17,10 +17,8 @@ enum SimulatedDispenseOutcome {
 class SimulatedControllerGateway implements ControllerGateway {
   SimulatedControllerGateway({
     RobotModeAccess? canHostRobot,
-    SimulatedDispenseOutcome nextDispenseOutcome =
-        SimulatedDispenseOutcome.success,
-  }) : _canHostRobot = canHostRobot ?? _denyRobotMode,
-       _nextDispenseOutcome = nextDispenseOutcome;
+    this._nextDispenseOutcome = SimulatedDispenseOutcome.success,
+  }) : _canHostRobot = canHostRobot ?? _denyRobotMode;
 
   final RobotModeAccess _canHostRobot;
   SimulatedDispenseOutcome _nextDispenseOutcome;
