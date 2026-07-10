@@ -38,6 +38,8 @@ class DoseyAppScope extends StatefulWidget {
     this.permissionGateway,
     this.notificationTapController,
     this.missedDoseReconciliationService,
+    this.bleGateway,
+    this.connectivityGateway,
   });
 
   final Widget child;
@@ -46,6 +48,8 @@ class DoseyAppScope extends StatefulWidget {
   final AppPermissionGateway? permissionGateway;
   final ReminderNotificationTapController? notificationTapController;
   final MissedDoseReconciliationService? missedDoseReconciliationService;
+  final BleGateway? bleGateway;
+  final ConnectivityGateway? connectivityGateway;
 
   static DoseyAppDependencies of(BuildContext context) {
     final scope = context
@@ -142,8 +146,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         doseLog: doseLog,
         clock: _robotFaceClockController.stream,
       ),
-      ble: FlutterBluePlusBleGateway(),
-      connectivity: ConnectivityPlusGateway(),
+      ble: widget.bleGateway ?? FlutterBluePlusBleGateway(),
+      connectivity: widget.connectivityGateway ?? ConnectivityPlusGateway(),
       reminderScheduler: reminderScheduler,
       notificationTaps: notificationTaps,
       permissions: widget.permissionGateway ?? PermissionHandlerGateway(),
