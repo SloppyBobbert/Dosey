@@ -38,6 +38,8 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
   Future<void> assignSlot(CarouselSlot slot) async {
     await _database.transaction(() async {
       await _validateSlot(slot);
+      // Disabled schedules should not keep a loaded bay reserved; clean them
+      // before checking for duplicate slot or schedule assignments.
       await _clearDisabledScheduleSlots(slot.profileId);
       await _rejectDuplicateSlot(slot);
       await _rejectDuplicateSchedule(slot);
@@ -87,6 +89,8 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
 
   @override
   Future<void> markDispensed(String id) {
+    // Only loaded slots can move to dispensed. This keeps duplicate or stale
+    // movement callbacks from changing already-resolved slots.
     return _updateStatus(
       id,
       CarouselSlotStatus.dispensed,
@@ -126,6 +130,8 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
     if (fromStatus != null) {
       update.where((slot) => slot.status.equals(fromStatus.storageValue));
     }
+    // `updated == 0` is treated as a state conflict, not a silent no-op, so the
+    // UI can keep the dose actionable and show a retryable error.
     final updated = await update.write(
       CarouselSlotsCompanion(
         status: Value(status.storageValue),
@@ -194,6 +200,8 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
   }
 
   Future<void> _throwDuplicateConflict(CarouselSlot slot) async {
+    // SQLite only reports the unique-index failure. Re-run focused checks so
+    // callers get user-facing messages for the actual conflict.
     await _rejectDuplicateSlot(slot);
     await _rejectDuplicateSchedule(slot);
     throw ArgumentError(

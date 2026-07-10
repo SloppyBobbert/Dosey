@@ -116,6 +116,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       if (!mounted) return;
 
       if (role == AppDeviceRole.androidRobot) {
+        // The mounted robot phone can finish setup without cloud auth.
         final completed = await _completeOnboarding();
         if (!completed && mounted) {
           setState(() => _isSelectingRole = false);
@@ -427,6 +428,7 @@ class _SignInGatePageState extends State<_SignInGatePage> {
                   });
                   try {
                     if (isIosPersonal) {
+                      // Native Apple sign-in is only offered for iOS Personal Mode.
                       await dependencies.auth.signInWithApple();
                     } else {
                       await dependencies.auth.signInWithGoogle();

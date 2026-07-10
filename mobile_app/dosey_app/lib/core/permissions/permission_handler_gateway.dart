@@ -27,6 +27,7 @@ class PermissionHandlerGateway implements AppPermissionGateway {
 
   static AppPermissionState _mapStatus(PluginPermissionStatus status) {
     return switch (status) {
+      // Limited/provisional access is enough for the prototype features we gate.
       PluginPermissionStatus.granted ||
       PluginPermissionStatus.limited ||
       PluginPermissionStatus.provisional => AppPermissionState.granted,

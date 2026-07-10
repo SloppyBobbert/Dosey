@@ -10,6 +10,8 @@ import 'package:flutter/material.dart';
 class DoseActionLogger {
   const DoseActionLogger._();
 
+  // Returns an inventory id only when the current schedule still points at a
+  // known prescription, so refill counts never move for stale schedule data.
   static String? inventoryPrescriptionIdFor(
     ReminderSchedule? schedule,
     Iterable<String> prescriptionIds,
@@ -30,6 +32,8 @@ class DoseActionLogger {
   }) async {
     try {
       final dependencies = DoseyAppScope.of(context);
+      // Robot Face may only know the dose id; fill in the slot and inventory
+      // context so every surface gets the same transactional side effects.
       final resolvedContext =
           retireLoadedSlot == null || inventoryPrescriptionId == null
           ? await _resolveDoseContext(dependencies, event)
@@ -44,6 +48,8 @@ class DoseActionLogger {
           event.marksDoseTaken && effectiveInventoryPrescriptionId != null;
       var ignoredDoseAction = false;
       await dependencies.database.transaction(() async {
+        // Terminal outcomes are one-shot per dose. Keep stale surfaces from
+        // double-retiring slots or double-decrementing refills.
         if (await _hasPersistedTerminalEventForDose(
           dependencies.database,
           event.doseId,
@@ -124,6 +130,8 @@ class DoseActionLogger {
     if (schedule == null) {
       return null;
     }
+    // After a controller dispense the slot may already be `dispensed`; both
+    // `loaded` and `dispensed` slots should move to needs-review on resolution.
     final loadedSlot =
         await (dependencies.database.select(dependencies.database.carouselSlots)
               ..where(
@@ -137,6 +145,8 @@ class DoseActionLogger {
               ..limit(1))
             .getSingleOrNull();
     final prescriptionId = schedule.prescriptionId;
+    // Schedule links can outlive local prescription rows during edits/imports;
+    // verify the row before recording refill usage.
     final prescriptionExists = prescriptionId != null
         ? await (dependencies.database.select(
                       dependencies.database.prescriptions,

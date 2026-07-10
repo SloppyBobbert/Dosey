@@ -22,6 +22,8 @@ class FlutterLocalNotificationScheduler implements ReminderScheduler {
     }
     final inFlight = _initializing;
     if (inFlight != null) {
+      // Share one initialization future so concurrent permission/schedule calls
+      // do not race plugin setup.
       await inFlight;
       return;
     }
@@ -75,6 +77,8 @@ class FlutterLocalNotificationScheduler implements ReminderScheduler {
   }
 
   static int _notificationIdForDose(String doseId) {
+    // flutter_local_notifications needs an int id; hash the stable dose id so
+    // rescheduling the same reminder replaces its previous notification.
     var hash = 0;
     for (final codeUnit in doseId.codeUnits) {
       hash = ((hash * 31) + codeUnit) & 0x7fffffff;
@@ -180,6 +184,7 @@ class FlutterLocalNotificationsPluginAdapter
     }
     final inFlight = _initializing;
     if (inFlight != null) {
+      // Native plugin setup is not reentrant, so all callers await the same run.
       await inFlight;
       return null;
     }
@@ -211,6 +216,8 @@ class FlutterLocalNotificationsPluginAdapter
     }
     final launchDetails = await _plugin.getNotificationAppLaunchDetails();
     if (launchDetails?.didNotificationLaunchApp ?? false) {
+      // Return the launch payload once; foreground taps use the response
+      // callback above.
       return launchDetails?.notificationResponse?.payload;
     }
     return null;

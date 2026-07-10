@@ -125,6 +125,8 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
     return _database.transaction(() async {
       final row = await _prescriptionById(prescriptionId);
       if (row.remainingDoses == 0) {
+        // Do not underflow inventory if the user confirms an old dose after the
+        // local count already reached zero.
         return;
       }
 
@@ -142,6 +144,8 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
   @override
   Future<void> deletePrescription(String id) {
     return _database.transaction(() async {
+      // Remove dependent local data first so deleted prescriptions do not leave
+      // orphaned schedules, carousel slots, or refill history.
       await (_database.delete(
         _database.carouselSlots,
       )..where((slot) => slot.prescriptionId.equals(id))).go();

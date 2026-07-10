@@ -16,11 +16,15 @@ class CarouselDispenseCoordinator {
   }) async {
     var slotMarkedDispensed = false;
     try {
+      // Mark the slot before movement so stale duplicate taps cannot command
+      // the same loaded slot twice.
       await carouselSlots.markDispensed(slotId);
       slotMarkedDispensed = true;
       await controller.requestDispense(doseId: doseId);
     } catch (_) {
       if (slotMarkedDispensed) {
+        // If the controller command fails, restore the local slot so the user
+        // can retry instead of losing track of the loaded dose.
         await carouselSlots.markLoaded(slotId);
       }
       rethrow;

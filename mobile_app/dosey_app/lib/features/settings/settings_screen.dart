@@ -68,6 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           alignment: 0.08,
         );
       } else if (_scrollController.hasClients) {
+        // Some sections may not have built yet; use stable estimates so deep
+        // links still land near the requested card.
         final position = _scrollController.position;
         final offset = _estimatedSectionOffset(
           target,
@@ -776,6 +778,8 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
   Future<void> _sendTestNotification() async {
     setState(() => _isSendingTest = true);
     try {
+      // Request permission before scheduling the test so the result reflects
+      // the user's current system setting.
       final status = await DoseyAppScope.of(
         context,
       ).permissions.request(AppPermission.notifications);

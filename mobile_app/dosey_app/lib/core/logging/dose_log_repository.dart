@@ -184,6 +184,8 @@ class DriftDoseLogRepository implements DoseLogRepository {
   }
 
   static String _idFor(DoseLogEvent event) {
+    // Include the timestamp so multiple non-terminal notes for the same dose
+    // can coexist while terminal dedupe stays in DoseActionLogger.
     return '${event.kind.name}:${event.doseId}:${event.occurredAt.toUtc().microsecondsSinceEpoch}';
   }
 

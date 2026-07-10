@@ -63,6 +63,8 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
         microseconds: (baseDuration.inMicroseconds * remainingFraction).round(),
       );
       final resumeGeneration = _resumeGeneration;
+      // Resume the current cycle before repeating, so tab switches do not snap
+      // the eyes back to the start of the animation.
       _controller
           .animateTo(
             _controller.upperBound,
@@ -128,6 +130,8 @@ class _RobotFacePainter extends CustomPainter {
 
     final palette = _paletteFor(state.mode);
     final concernTilt = _concernTiltFor(state.mode);
+    // Keep expression changes in the eyes only. Robot Mode intentionally has no
+    // mouth so status color, tilt, blink, and glow carry the state.
     final eyelidOpen = _eyelidOpenFor(state, blink, phase);
     final pupilOffset = _pupilOffsetFor(state, size, phase);
 
@@ -409,6 +413,8 @@ class _RobotFacePainter extends CustomPainter {
     final liveLift = state.mode == RobotFaceMode.idle
         ? ((math.sin(phase * math.pi * 2) + 1) / 2) * 0.03
         : 0.0;
+    // Lower lids communicate sleepy/offline/warning states without adding a
+    // mouth or extra facial features.
     final base = switch (state.mode) {
       RobotFaceMode.sleepy => 0.28,
       RobotFaceMode.offline => 0.54,
@@ -531,6 +537,8 @@ class _RobotFacePainter extends CustomPainter {
   }
 
   _FacePalette _paletteFor(RobotFaceMode mode) {
+    // Ready and waiting states stay on the same green/teal path so follow-up
+    // feels like one safe dose-resolution flow, not a new robot state.
     return switch (mode) {
       RobotFaceMode.sleepy => const _FacePalette(
         backgroundTop: Color(0xFF0C1020),

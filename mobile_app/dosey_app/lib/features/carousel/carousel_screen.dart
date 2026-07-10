@@ -68,6 +68,8 @@ class _CarouselScreenState extends State<CarouselScreen> {
                     final slots = slotRows
                         .where((slot) => scheduleIds.contains(slot.scheduleId))
                         .toList();
+                    // Hide slots for disabled or inactive-profile schedules so
+                    // this screen matches what Today can actually dispense.
                     return StreamBuilder<AppDeviceRole>(
                       stream: dependencies.settings.watchDeviceRole(),
                       builder: (context, roleSnapshot) {
@@ -432,6 +434,8 @@ class _RefillCountdownCard extends StatelessWidget {
     List<CarouselSlot> dispensed,
   ) async {
     try {
+      // Bulk review is only a refill-state cleanup; dose outcomes are still
+      // resolved through Today or Robot Face terminal actions.
       final dependencies = DoseyAppScope.of(context);
       for (final slot in dispensed) {
         await dependencies.carouselSlots.markNeedsReview(slot.id);
@@ -643,6 +647,7 @@ class _AssignmentCard extends StatelessWidget {
   ReminderSchedule? _nextUnassignedSchedule() {
     final assignedScheduleIds = {for (final slot in slots) slot.scheduleId};
     for (final schedule in schedules) {
+      // Only enabled schedules with a prescription id can become physical slots.
       if (schedule.isEnabled &&
           schedule.prescriptionId != null &&
           !assignedScheduleIds.contains(schedule.id)) {
@@ -804,6 +809,8 @@ class _SlotCardState extends State<_SlotCard> {
     });
     final dependencies = DoseyAppScope.of(context);
     try {
+      // Dispense moves the carousel and logs controller progress only. It must
+      // not mark the dose taken.
       await CarouselDispenseCoordinator(
         carouselSlots: dependencies.carouselSlots,
         controller: dependencies.controller,

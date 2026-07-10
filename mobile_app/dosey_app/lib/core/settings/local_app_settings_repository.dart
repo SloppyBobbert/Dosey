@@ -17,6 +17,7 @@ class LocalAppSettingsRepository {
 
     return query.watchSingleOrNull().map((setting) {
       if (setting == null) {
+        // Fall back to the platform-specific default role until setup picks one.
         return defaultRole;
       }
 
@@ -67,6 +68,7 @@ class LocalAppSettingsRepository {
 
   Future<void> resetSetupState() {
     return _database.transaction(() async {
+      // Keep device role intact; setup reset only replays safety/onboarding.
       await _setValue(_safetyAcknowledgedKey, false.toString());
       await _setValue(_onboardingCompletedKey, false.toString());
     });

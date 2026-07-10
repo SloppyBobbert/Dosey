@@ -30,6 +30,8 @@ class RemindersScreen extends StatelessWidget {
               builder: (context, allSchedulesSnapshot) {
                 final allSchedules =
                     allSchedulesSnapshot.data ?? const <ReminderSchedule>[];
+                // Count across all profiles, then render only the active
+                // profile below so saved routines stay visible but separate.
                 final profileScheduleCounts = _profileScheduleCounts(
                   allSchedules,
                 );
@@ -807,6 +809,8 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _setEnabled(BuildContext context, bool value) async {
     try {
+      // Reuse the service path so toggles update local storage and platform
+      // notifications with the same warning behavior as the edit sheet.
       final result = await reminderSchedules.saveSchedule(
         schedule.copyWith(isEnabled: value, updatedAt: DateTime.now().toUtc()),
       );
@@ -824,6 +828,8 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _delete(BuildContext context) async {
     try {
+      // Delete can be retained if the OS notification cannot be canceled;
+      // surface that warning instead of dropping the local schedule blindly.
       final result = await reminderSchedules.deleteSchedule(schedule.id);
       final notificationError = result.notificationError;
       if (notificationError != null && context.mounted) {
@@ -1018,6 +1024,8 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
 
     final now = DateTime.now().toUtc();
     final existing = widget.schedule;
+    // The schedule id is stable across edits so dose ids and loaded slots stay
+    // tied to the same reminder unless the repository clears stale slots.
     final schedule = ReminderSchedule(
       id: existing?.id ?? 'schedule-${now.microsecondsSinceEpoch}',
       label: prescription.name,

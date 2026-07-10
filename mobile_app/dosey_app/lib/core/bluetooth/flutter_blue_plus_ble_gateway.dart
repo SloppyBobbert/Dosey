@@ -31,6 +31,8 @@ class FlutterBluePlusBleGateway implements BleGateway {
   Future<void> connect({required String deviceId, String? deviceName}) async {
     final activeDeviceId = _connectionSnapshot.deviceId;
     if (activeDeviceId != null && activeDeviceId != deviceId) {
+      // Keep one controller connection active at a time so status streams do not
+      // mix events from two BLE devices.
       await disconnect();
     }
     await _clearConnectionSubscription();
@@ -43,6 +45,7 @@ class FlutterBluePlusBleGateway implements BleGateway {
     _connectionSubscription = _plugin.deviceConnectionStates(deviceId).listen((
       state,
     ) {
+      // Mirror native connection changes into an app-owned snapshot stream.
       _setConnection(_mapConnectionState(state, deviceId, deviceName));
     });
     try {
@@ -108,6 +111,8 @@ class FlutterBluePlusBleGateway implements BleGateway {
   }
 
   static BleAvailabilitySnapshot _mapAvailability(PluginBleAdapterState state) {
+    // Treat unauthorized the same as unavailable for now; permissions UI can
+    // explain why scanning/connecting is blocked.
     return switch (state) {
       PluginBleAdapterState.on => const BleAvailabilitySnapshot.available(),
       PluginBleAdapterState.off ||

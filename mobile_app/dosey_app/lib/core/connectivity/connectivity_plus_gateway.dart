@@ -14,6 +14,7 @@ class ConnectivityPlusGateway implements ConnectivityGateway {
 
   @override
   Stream<ConnectivityState> watchConnectivity() async* {
+    // Seed listeners with the current state; plugin streams only emit changes.
     yield await currentConnectivity();
     yield* _plugin.updates.map(_mapConnectivity).distinct();
   }
