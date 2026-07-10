@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
@@ -26,6 +27,7 @@ class MissedDoseReconciliationService {
   final DateTime Function() _now;
   final Duration gracePeriod;
   Future<void>? _reconcileInFlight;
+  static const _logName = 'dosey.missed_dose_reconciliation';
 
   Future<void> reconcile() async {
     final existingRun = _reconcileInFlight;
@@ -66,9 +68,16 @@ class MissedDoseReconciliationService {
         }
         try {
           await _persistMissedDose(candidate);
-        } on Object {
+        } on Object catch (error, stackTrace) {
           // Keep reconciliation best-effort per dose so one bad write does not
           // starve later overdue doses on the same startup or timer tick.
+          developer.log(
+            'Failed to persist missed dose ${candidate.doseId}; continuing reconciliation.',
+            name: _logName,
+            level: 1000,
+            error: error,
+            stackTrace: stackTrace,
+          );
         }
       }
     }

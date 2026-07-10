@@ -2,10 +2,8 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/main.dart' as app;
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
-import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
-import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
@@ -13,7 +11,6 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
-import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
@@ -24,6 +21,8 @@ import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'support/fake_app_scope_dependencies.dart';
 
 void main() {
   testWidgets('first install shows medical-device onboarding before shell', (
@@ -3676,75 +3675,10 @@ class DoseyApp extends StatelessWidget {
       reminderScheduler: reminderScheduler ?? const _NoopReminderScheduler(),
       permissionGateway: permissionGateway,
       notificationTapController: notificationTapController,
-      missedDoseReconciliationService: _FakeMissedDoseReconciliationService(),
-      bleGateway: _FakeBleGateway(),
-      connectivityGateway: _FakeConnectivityGateway(),
+      missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
+      bleGateway: FakeBleGateway(),
+      connectivityGateway: FakeConnectivityGateway(),
     );
-  }
-}
-
-class _FakeMissedDoseReconciliationService
-    extends MissedDoseReconciliationService {
-  _FakeMissedDoseReconciliationService()
-    : super(reminders: _FakeReminderRepository(), doseLog: _FakeDoseLog());
-
-  @override
-  Future<void> reconcile() async {}
-}
-
-class _FakeReminderRepository implements ReminderRepository {
-  @override
-  Future<void> deleteSchedule(String id) async {}
-
-  @override
-  Future<void> upsertSchedule(ReminderSchedule schedule) async {}
-
-  @override
-  Stream<List<ReminderSchedule>> watchSchedules({String? profileId}) {
-    return Stream.value(const <ReminderSchedule>[]);
-  }
-}
-
-class _FakeDoseLog implements DoseLogRepository {
-  @override
-  Future<void> addEvent(DoseLogEvent event) async {}
-
-  @override
-  Stream<List<DoseLogEvent>> watchEvents() {
-    return Stream.value(const <DoseLogEvent>[]);
-  }
-}
-
-class _FakeBleGateway implements BleGateway {
-  @override
-  Future<void> close() async {}
-
-  @override
-  Future<void> connect({required String deviceId, String? deviceName}) async {}
-
-  @override
-  Future<void> disconnect() async {}
-
-  @override
-  Stream<BleAvailabilitySnapshot> watchAvailability() {
-    return Stream.value(const BleAvailabilitySnapshot.available());
-  }
-
-  @override
-  Stream<BleConnectionSnapshot> watchConnection() {
-    return Stream.value(const BleConnectionSnapshot.disconnected());
-  }
-}
-
-class _FakeConnectivityGateway implements ConnectivityGateway {
-  @override
-  Future<ConnectivityState> currentConnectivity() async {
-    return ConnectivityState.wifi;
-  }
-
-  @override
-  Stream<ConnectivityState> watchConnectivity() {
-    return Stream.value(ConnectivityState.wifi);
   }
 }
 

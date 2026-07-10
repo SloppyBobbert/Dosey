@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
@@ -63,11 +64,14 @@ class DoseyAppScope extends StatefulWidget {
 }
 
 class _DoseyAppScopeState extends State<DoseyAppScope> {
+  static const _missedDoseReconciliationInterval = Duration(minutes: 15);
+
   late final DoseyDatabase _database;
   late final bool _ownsDatabase;
   late final bool _ownsNotificationTapController;
   late final StreamController<DateTime> _robotFaceClockController;
   late final Timer _robotFaceClockTimer;
+  late final Timer _missedDoseReconciliationTimer;
   late final MissedDoseReconciliationService _missedDoseReconciliation;
   late final DoseyAppDependencies _dependencies;
 
@@ -83,7 +87,6 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       if (!_robotFaceClockController.isClosed) {
         _robotFaceClockController.add(DateTime.now());
       }
-      unawaited(_runMissedDoseReconciliation());
     });
     final doseLog = DriftDoseLogRepository(_database);
     final localAuth = LocalAuthRepository(_database);
@@ -121,6 +124,10 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
           carouselSlots: LocalCarouselSlotRepository(_database),
           database: _database,
         );
+    _missedDoseReconciliationTimer = Timer.periodic(
+      _missedDoseReconciliationInterval,
+      (_) => unawaited(_runMissedDoseReconciliation()),
+    );
     _dependencies = DoseyAppDependencies(
       database: _database,
       settings: settings,
@@ -159,8 +166,15 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     try {
       // Startup sync repairs local notification state without blocking app boot.
       await _dependencies.reminderSchedules.syncScheduledNotifications();
-    } on Object {
+    } on Object catch (error, stackTrace) {
       // Startup sync is best-effort; schedule edits still surface errors.
+      developer.log(
+        'Startup notification sync failed; continuing app startup.',
+        name: 'dosey.app_scope',
+        level: 1000,
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
 
     await _runMissedDoseReconciliation();
@@ -169,14 +183,22 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
   Future<void> _runMissedDoseReconciliation() async {
     try {
       await _missedDoseReconciliation.reconcile();
-    } on Object {
+    } on Object catch (error, stackTrace) {
       // Missed-dose reconciliation is best-effort during startup and runtime.
+      developer.log(
+        'Missed-dose reconciliation failed; continuing app runtime.',
+        name: 'dosey.app_scope',
+        level: 1000,
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
   @override
   void dispose() {
     _robotFaceClockTimer.cancel();
+    _missedDoseReconciliationTimer.cancel();
     unawaited(_robotFaceClockController.close());
     unawaited(_dependencies.controller.close());
     unawaited(_dependencies.robotFaceController.close());
