@@ -47,6 +47,7 @@ class GoogleAuthService {
   }
 
   Future<void> _ensureInitialized() {
+    // GoogleSignIn initialization is process-wide; share it across restore/sign-in.
     return _initialization ??= _googleAccountGateway.initialize();
   }
 }
@@ -96,6 +97,7 @@ class GoogleSignInAccountGateway implements GoogleAccountGateway {
 
   @override
   Future<GoogleAccountInfo?> attemptLightweightAuthentication() async {
+    // Restore cached Google auth without prompting during app startup.
     final account = await _googleSignIn.attemptLightweightAuthentication();
     return account == null ? null : _fromAccount(account);
   }

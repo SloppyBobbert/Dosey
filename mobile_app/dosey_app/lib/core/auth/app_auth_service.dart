@@ -31,6 +31,8 @@ class AppAuthService implements AuthService {
     final session = await _localAuth.readSession();
     final provider = session.user?.provider;
 
+    // Sign out through the provider that created the cached session, then let
+    // that service clear the local auth row.
     switch (provider) {
       case AuthProvider.google:
         await _googleAuthService.signOut();

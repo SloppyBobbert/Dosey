@@ -67,6 +67,8 @@ class LocalScheduleProfileRepository implements ScheduleProfileRepository {
 
     final now = DateTime.now().toUtc();
     await _database.transaction(() async {
+      // Clear every profile first, then activate the selected one inside the
+      // same transaction so Today never sees two active routines.
       await _database
           .update(_database.scheduleProfiles)
           .write(

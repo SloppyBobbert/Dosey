@@ -46,6 +46,7 @@ class DoseLogScreen extends StatelessWidget {
   }
 
   static String _labelFor(DoseLogEventKind kind) {
+    // Labels stay audit-focused; they do not imply a dose was taken.
     return switch (kind) {
       DoseLogEventKind.controllerDispenseSucceeded =>
         'Controller dispense succeeded',
@@ -89,6 +90,7 @@ class _DoseLogHeroCard extends StatelessWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final confirmedTaken = events.where((event) => event.marksDoseTaken).length;
+    // Everything not explicitly taken is movement, review, or safety context.
     final movementOrReview = events.length - confirmedTaken;
 
     return Card(

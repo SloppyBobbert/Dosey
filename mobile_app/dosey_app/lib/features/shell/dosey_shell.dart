@@ -60,6 +60,7 @@ class _DoseyShellState extends State<DoseyShell> {
       builder: (context, roleSnapshot) {
         final role = _resolvedRole(roleSnapshot.data, platform);
         final tabs = _buildTabs(role);
+        // Role changes can remove Robot Face; clamp before rebuilding the stack.
         final selectedIndex = _selectedIndex.clamp(0, tabs.length - 1);
         if (selectedIndex != _selectedIndex) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -167,6 +168,7 @@ class _DoseyShellState extends State<DoseyShell> {
         ),
         screenBuilder: _buildRemindersScreen,
       ),
+      // iOS and Personal Mode never expose the mounted robot face tab.
       if (role.canHostRobot)
         const _ShellTab(
           id: _ShellTabId.robotFace,
@@ -324,6 +326,7 @@ class _DoseyShellState extends State<DoseyShell> {
   void _openSettings(int settingsTabIndex, {SettingsSection? section}) {
     if (settingsTabIndex < 0) return;
     setState(() {
+      // Bump the key so repeated settings deep links scroll again.
       _settingsSectionTarget = section;
       _settingsNavigationRequest += 1;
       _selectedIndex = settingsTabIndex;

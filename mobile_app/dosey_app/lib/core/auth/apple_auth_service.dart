@@ -27,6 +27,7 @@ class AppleAuthService {
   }
 
   Future<AuthUser> _toAuthUser(AppleAccountInfo account) async {
+    // Apple may omit email after first sign-in, so fall back to local cache.
     final email = account.email ?? await _restoreCachedEmail(account.id);
     if (email == null) {
       throw StateError('Apple sign-in did not provide an email for this user.');

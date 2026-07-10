@@ -65,6 +65,7 @@ class _CompletedOnboardingGate extends StatelessWidget {
         final role = snapshot.data!.isAllowedOn(platform)
             ? snapshot.data!
             : AppDeviceRole.defaultFor(platform);
+        // Robot Mode is local-only; personal phones must pass through sign-in.
         if (role.canHostRobot) {
           return const DoseyShell();
         }

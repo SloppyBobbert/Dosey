@@ -49,6 +49,7 @@ class LocalAuthRepository {
 
   Future<void> saveUser(AuthUser user) {
     return _database.transaction(() async {
+      // The `current` row drives the app session regardless of provider.
       await _database
           .into(_database.authSessions)
           .insertOnConflictUpdate(
@@ -56,6 +57,8 @@ class LocalAuthRepository {
           );
 
       if (user.provider == AuthProvider.apple) {
+        // Apple may only return email on first sign-in; keep a provider-specific
+        // row so later sign-ins can reuse the cached email.
         await _database
             .into(_database.authSessions)
             .insertOnConflictUpdate(
