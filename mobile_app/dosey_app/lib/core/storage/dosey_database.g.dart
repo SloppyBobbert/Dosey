@@ -3442,6 +3442,1111 @@ class DoseLogEventsCompanion extends UpdateCompanion<DoseLogEventRow> {
   }
 }
 
+class $ControllerCommandSessionsTable extends ControllerCommandSessions
+    with
+        TableInfo<
+          $ControllerCommandSessionsTable,
+          ControllerCommandSessionRow
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ControllerCommandSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _commandTypeMeta = const VerificationMeta(
+    'commandType',
+  );
+  @override
+  late final GeneratedColumn<String> commandType = GeneratedColumn<String>(
+    'command_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _doseIdMeta = const VerificationMeta('doseId');
+  @override
+  late final GeneratedColumn<String> doseId = GeneratedColumn<String>(
+    'dose_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _scheduleIdMeta = const VerificationMeta(
+    'scheduleId',
+  );
+  @override
+  late final GeneratedColumn<String> scheduleId = GeneratedColumn<String>(
+    'schedule_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _slotIdMeta = const VerificationMeta('slotId');
+  @override
+  late final GeneratedColumn<String> slotId = GeneratedColumn<String>(
+    'slot_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _stateMeta = const VerificationMeta('state');
+  @override
+  late final GeneratedColumn<String> state = GeneratedColumn<String>(
+    'state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _failureReasonMeta = const VerificationMeta(
+    'failureReason',
+  );
+  @override
+  late final GeneratedColumn<String> failureReason = GeneratedColumn<String>(
+    'failure_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _acceptedAtMeta = const VerificationMeta(
+    'acceptedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> acceptedAt = GeneratedColumn<DateTime>(
+    'accepted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _resolvedAtMeta = const VerificationMeta(
+    'resolvedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> resolvedAt = GeneratedColumn<DateTime>(
+    'resolved_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    commandType,
+    doseId,
+    scheduleId,
+    slotId,
+    state,
+    failureReason,
+    createdAt,
+    acceptedAt,
+    resolvedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'controller_command_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ControllerCommandSessionRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('command_type')) {
+      context.handle(
+        _commandTypeMeta,
+        commandType.isAcceptableOrUnknown(
+          data['command_type']!,
+          _commandTypeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_commandTypeMeta);
+    }
+    if (data.containsKey('dose_id')) {
+      context.handle(
+        _doseIdMeta,
+        doseId.isAcceptableOrUnknown(data['dose_id']!, _doseIdMeta),
+      );
+    }
+    if (data.containsKey('schedule_id')) {
+      context.handle(
+        _scheduleIdMeta,
+        scheduleId.isAcceptableOrUnknown(data['schedule_id']!, _scheduleIdMeta),
+      );
+    }
+    if (data.containsKey('slot_id')) {
+      context.handle(
+        _slotIdMeta,
+        slotId.isAcceptableOrUnknown(data['slot_id']!, _slotIdMeta),
+      );
+    }
+    if (data.containsKey('state')) {
+      context.handle(
+        _stateMeta,
+        state.isAcceptableOrUnknown(data['state']!, _stateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_stateMeta);
+    }
+    if (data.containsKey('failure_reason')) {
+      context.handle(
+        _failureReasonMeta,
+        failureReason.isAcceptableOrUnknown(
+          data['failure_reason']!,
+          _failureReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('accepted_at')) {
+      context.handle(
+        _acceptedAtMeta,
+        acceptedAt.isAcceptableOrUnknown(data['accepted_at']!, _acceptedAtMeta),
+      );
+    }
+    if (data.containsKey('resolved_at')) {
+      context.handle(
+        _resolvedAtMeta,
+        resolvedAt.isAcceptableOrUnknown(data['resolved_at']!, _resolvedAtMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ControllerCommandSessionRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ControllerCommandSessionRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      commandType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}command_type'],
+      )!,
+      doseId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dose_id'],
+      ),
+      scheduleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}schedule_id'],
+      ),
+      slotId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}slot_id'],
+      ),
+      state: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}state'],
+      )!,
+      failureReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}failure_reason'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      acceptedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}accepted_at'],
+      ),
+      resolvedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}resolved_at'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ControllerCommandSessionsTable createAlias(String alias) {
+    return $ControllerCommandSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class ControllerCommandSessionRow extends DataClass
+    implements Insertable<ControllerCommandSessionRow> {
+  final String id;
+  final String commandType;
+  final String? doseId;
+  final String? scheduleId;
+  final String? slotId;
+  final String state;
+  final String? failureReason;
+  final DateTime createdAt;
+  final DateTime? acceptedAt;
+  final DateTime? resolvedAt;
+  final DateTime updatedAt;
+  const ControllerCommandSessionRow({
+    required this.id,
+    required this.commandType,
+    this.doseId,
+    this.scheduleId,
+    this.slotId,
+    required this.state,
+    this.failureReason,
+    required this.createdAt,
+    this.acceptedAt,
+    this.resolvedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['command_type'] = Variable<String>(commandType);
+    if (!nullToAbsent || doseId != null) {
+      map['dose_id'] = Variable<String>(doseId);
+    }
+    if (!nullToAbsent || scheduleId != null) {
+      map['schedule_id'] = Variable<String>(scheduleId);
+    }
+    if (!nullToAbsent || slotId != null) {
+      map['slot_id'] = Variable<String>(slotId);
+    }
+    map['state'] = Variable<String>(state);
+    if (!nullToAbsent || failureReason != null) {
+      map['failure_reason'] = Variable<String>(failureReason);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || acceptedAt != null) {
+      map['accepted_at'] = Variable<DateTime>(acceptedAt);
+    }
+    if (!nullToAbsent || resolvedAt != null) {
+      map['resolved_at'] = Variable<DateTime>(resolvedAt);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  ControllerCommandSessionsCompanion toCompanion(bool nullToAbsent) {
+    return ControllerCommandSessionsCompanion(
+      id: Value(id),
+      commandType: Value(commandType),
+      doseId: doseId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(doseId),
+      scheduleId: scheduleId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(scheduleId),
+      slotId: slotId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(slotId),
+      state: Value(state),
+      failureReason: failureReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(failureReason),
+      createdAt: Value(createdAt),
+      acceptedAt: acceptedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(acceptedAt),
+      resolvedAt: resolvedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resolvedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ControllerCommandSessionRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ControllerCommandSessionRow(
+      id: serializer.fromJson<String>(json['id']),
+      commandType: serializer.fromJson<String>(json['commandType']),
+      doseId: serializer.fromJson<String?>(json['doseId']),
+      scheduleId: serializer.fromJson<String?>(json['scheduleId']),
+      slotId: serializer.fromJson<String?>(json['slotId']),
+      state: serializer.fromJson<String>(json['state']),
+      failureReason: serializer.fromJson<String?>(json['failureReason']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      acceptedAt: serializer.fromJson<DateTime?>(json['acceptedAt']),
+      resolvedAt: serializer.fromJson<DateTime?>(json['resolvedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'commandType': serializer.toJson<String>(commandType),
+      'doseId': serializer.toJson<String?>(doseId),
+      'scheduleId': serializer.toJson<String?>(scheduleId),
+      'slotId': serializer.toJson<String?>(slotId),
+      'state': serializer.toJson<String>(state),
+      'failureReason': serializer.toJson<String?>(failureReason),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'acceptedAt': serializer.toJson<DateTime?>(acceptedAt),
+      'resolvedAt': serializer.toJson<DateTime?>(resolvedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ControllerCommandSessionRow copyWith({
+    String? id,
+    String? commandType,
+    Value<String?> doseId = const Value.absent(),
+    Value<String?> scheduleId = const Value.absent(),
+    Value<String?> slotId = const Value.absent(),
+    String? state,
+    Value<String?> failureReason = const Value.absent(),
+    DateTime? createdAt,
+    Value<DateTime?> acceptedAt = const Value.absent(),
+    Value<DateTime?> resolvedAt = const Value.absent(),
+    DateTime? updatedAt,
+  }) => ControllerCommandSessionRow(
+    id: id ?? this.id,
+    commandType: commandType ?? this.commandType,
+    doseId: doseId.present ? doseId.value : this.doseId,
+    scheduleId: scheduleId.present ? scheduleId.value : this.scheduleId,
+    slotId: slotId.present ? slotId.value : this.slotId,
+    state: state ?? this.state,
+    failureReason: failureReason.present
+        ? failureReason.value
+        : this.failureReason,
+    createdAt: createdAt ?? this.createdAt,
+    acceptedAt: acceptedAt.present ? acceptedAt.value : this.acceptedAt,
+    resolvedAt: resolvedAt.present ? resolvedAt.value : this.resolvedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  ControllerCommandSessionRow copyWithCompanion(
+    ControllerCommandSessionsCompanion data,
+  ) {
+    return ControllerCommandSessionRow(
+      id: data.id.present ? data.id.value : this.id,
+      commandType: data.commandType.present
+          ? data.commandType.value
+          : this.commandType,
+      doseId: data.doseId.present ? data.doseId.value : this.doseId,
+      scheduleId: data.scheduleId.present
+          ? data.scheduleId.value
+          : this.scheduleId,
+      slotId: data.slotId.present ? data.slotId.value : this.slotId,
+      state: data.state.present ? data.state.value : this.state,
+      failureReason: data.failureReason.present
+          ? data.failureReason.value
+          : this.failureReason,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      acceptedAt: data.acceptedAt.present
+          ? data.acceptedAt.value
+          : this.acceptedAt,
+      resolvedAt: data.resolvedAt.present
+          ? data.resolvedAt.value
+          : this.resolvedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ControllerCommandSessionRow(')
+          ..write('id: $id, ')
+          ..write('commandType: $commandType, ')
+          ..write('doseId: $doseId, ')
+          ..write('scheduleId: $scheduleId, ')
+          ..write('slotId: $slotId, ')
+          ..write('state: $state, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('acceptedAt: $acceptedAt, ')
+          ..write('resolvedAt: $resolvedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    commandType,
+    doseId,
+    scheduleId,
+    slotId,
+    state,
+    failureReason,
+    createdAt,
+    acceptedAt,
+    resolvedAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ControllerCommandSessionRow &&
+          other.id == this.id &&
+          other.commandType == this.commandType &&
+          other.doseId == this.doseId &&
+          other.scheduleId == this.scheduleId &&
+          other.slotId == this.slotId &&
+          other.state == this.state &&
+          other.failureReason == this.failureReason &&
+          other.createdAt == this.createdAt &&
+          other.acceptedAt == this.acceptedAt &&
+          other.resolvedAt == this.resolvedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class ControllerCommandSessionsCompanion
+    extends UpdateCompanion<ControllerCommandSessionRow> {
+  final Value<String> id;
+  final Value<String> commandType;
+  final Value<String?> doseId;
+  final Value<String?> scheduleId;
+  final Value<String?> slotId;
+  final Value<String> state;
+  final Value<String?> failureReason;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> acceptedAt;
+  final Value<DateTime?> resolvedAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const ControllerCommandSessionsCompanion({
+    this.id = const Value.absent(),
+    this.commandType = const Value.absent(),
+    this.doseId = const Value.absent(),
+    this.scheduleId = const Value.absent(),
+    this.slotId = const Value.absent(),
+    this.state = const Value.absent(),
+    this.failureReason = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.acceptedAt = const Value.absent(),
+    this.resolvedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ControllerCommandSessionsCompanion.insert({
+    required String id,
+    required String commandType,
+    this.doseId = const Value.absent(),
+    this.scheduleId = const Value.absent(),
+    this.slotId = const Value.absent(),
+    required String state,
+    this.failureReason = const Value.absent(),
+    required DateTime createdAt,
+    this.acceptedAt = const Value.absent(),
+    this.resolvedAt = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       commandType = Value(commandType),
+       state = Value(state),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<ControllerCommandSessionRow> custom({
+    Expression<String>? id,
+    Expression<String>? commandType,
+    Expression<String>? doseId,
+    Expression<String>? scheduleId,
+    Expression<String>? slotId,
+    Expression<String>? state,
+    Expression<String>? failureReason,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? acceptedAt,
+    Expression<DateTime>? resolvedAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (commandType != null) 'command_type': commandType,
+      if (doseId != null) 'dose_id': doseId,
+      if (scheduleId != null) 'schedule_id': scheduleId,
+      if (slotId != null) 'slot_id': slotId,
+      if (state != null) 'state': state,
+      if (failureReason != null) 'failure_reason': failureReason,
+      if (createdAt != null) 'created_at': createdAt,
+      if (acceptedAt != null) 'accepted_at': acceptedAt,
+      if (resolvedAt != null) 'resolved_at': resolvedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ControllerCommandSessionsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? commandType,
+    Value<String?>? doseId,
+    Value<String?>? scheduleId,
+    Value<String?>? slotId,
+    Value<String>? state,
+    Value<String?>? failureReason,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? acceptedAt,
+    Value<DateTime?>? resolvedAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return ControllerCommandSessionsCompanion(
+      id: id ?? this.id,
+      commandType: commandType ?? this.commandType,
+      doseId: doseId ?? this.doseId,
+      scheduleId: scheduleId ?? this.scheduleId,
+      slotId: slotId ?? this.slotId,
+      state: state ?? this.state,
+      failureReason: failureReason ?? this.failureReason,
+      createdAt: createdAt ?? this.createdAt,
+      acceptedAt: acceptedAt ?? this.acceptedAt,
+      resolvedAt: resolvedAt ?? this.resolvedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (commandType.present) {
+      map['command_type'] = Variable<String>(commandType.value);
+    }
+    if (doseId.present) {
+      map['dose_id'] = Variable<String>(doseId.value);
+    }
+    if (scheduleId.present) {
+      map['schedule_id'] = Variable<String>(scheduleId.value);
+    }
+    if (slotId.present) {
+      map['slot_id'] = Variable<String>(slotId.value);
+    }
+    if (state.present) {
+      map['state'] = Variable<String>(state.value);
+    }
+    if (failureReason.present) {
+      map['failure_reason'] = Variable<String>(failureReason.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (acceptedAt.present) {
+      map['accepted_at'] = Variable<DateTime>(acceptedAt.value);
+    }
+    if (resolvedAt.present) {
+      map['resolved_at'] = Variable<DateTime>(resolvedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ControllerCommandSessionsCompanion(')
+          ..write('id: $id, ')
+          ..write('commandType: $commandType, ')
+          ..write('doseId: $doseId, ')
+          ..write('scheduleId: $scheduleId, ')
+          ..write('slotId: $slotId, ')
+          ..write('state: $state, ')
+          ..write('failureReason: $failureReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('acceptedAt: $acceptedAt, ')
+          ..write('resolvedAt: $resolvedAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ControllerCommandEventsTable extends ControllerCommandEvents
+    with TableInfo<$ControllerCommandEventsTable, ControllerCommandEventRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ControllerCommandEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sequenceMeta = const VerificationMeta(
+    'sequence',
+  );
+  @override
+  late final GeneratedColumn<int> sequence = GeneratedColumn<int>(
+    'sequence',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventTypeMeta = const VerificationMeta(
+    'eventType',
+  );
+  @override
+  late final GeneratedColumn<String> eventType = GeneratedColumn<String>(
+    'event_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _occurredAtMeta = const VerificationMeta(
+    'occurredAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> occurredAt = GeneratedColumn<DateTime>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _detailsMeta = const VerificationMeta(
+    'details',
+  );
+  @override
+  late final GeneratedColumn<String> details = GeneratedColumn<String>(
+    'details',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sessionId,
+    sequence,
+    eventType,
+    occurredAt,
+    details,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'controller_command_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ControllerCommandEventRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('sequence')) {
+      context.handle(
+        _sequenceMeta,
+        sequence.isAcceptableOrUnknown(data['sequence']!, _sequenceMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sequenceMeta);
+    }
+    if (data.containsKey('event_type')) {
+      context.handle(
+        _eventTypeMeta,
+        eventType.isAcceptableOrUnknown(data['event_type']!, _eventTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventTypeMeta);
+    }
+    if (data.containsKey('occurred_at')) {
+      context.handle(
+        _occurredAtMeta,
+        occurredAt.isAcceptableOrUnknown(data['occurred_at']!, _occurredAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_occurredAtMeta);
+    }
+    if (data.containsKey('details')) {
+      context.handle(
+        _detailsMeta,
+        details.isAcceptableOrUnknown(data['details']!, _detailsMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ControllerCommandEventRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ControllerCommandEventRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      sequence: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sequence'],
+      )!,
+      eventType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_type'],
+      )!,
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+      details: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}details'],
+      ),
+    );
+  }
+
+  @override
+  $ControllerCommandEventsTable createAlias(String alias) {
+    return $ControllerCommandEventsTable(attachedDatabase, alias);
+  }
+}
+
+class ControllerCommandEventRow extends DataClass
+    implements Insertable<ControllerCommandEventRow> {
+  final String id;
+  final String sessionId;
+  final int sequence;
+  final String eventType;
+  final DateTime occurredAt;
+  final String? details;
+  const ControllerCommandEventRow({
+    required this.id,
+    required this.sessionId,
+    required this.sequence,
+    required this.eventType,
+    required this.occurredAt,
+    this.details,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['session_id'] = Variable<String>(sessionId);
+    map['sequence'] = Variable<int>(sequence);
+    map['event_type'] = Variable<String>(eventType);
+    map['occurred_at'] = Variable<DateTime>(occurredAt);
+    if (!nullToAbsent || details != null) {
+      map['details'] = Variable<String>(details);
+    }
+    return map;
+  }
+
+  ControllerCommandEventsCompanion toCompanion(bool nullToAbsent) {
+    return ControllerCommandEventsCompanion(
+      id: Value(id),
+      sessionId: Value(sessionId),
+      sequence: Value(sequence),
+      eventType: Value(eventType),
+      occurredAt: Value(occurredAt),
+      details: details == null && nullToAbsent
+          ? const Value.absent()
+          : Value(details),
+    );
+  }
+
+  factory ControllerCommandEventRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ControllerCommandEventRow(
+      id: serializer.fromJson<String>(json['id']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      sequence: serializer.fromJson<int>(json['sequence']),
+      eventType: serializer.fromJson<String>(json['eventType']),
+      occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+      details: serializer.fromJson<String?>(json['details']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'sequence': serializer.toJson<int>(sequence),
+      'eventType': serializer.toJson<String>(eventType),
+      'occurredAt': serializer.toJson<DateTime>(occurredAt),
+      'details': serializer.toJson<String?>(details),
+    };
+  }
+
+  ControllerCommandEventRow copyWith({
+    String? id,
+    String? sessionId,
+    int? sequence,
+    String? eventType,
+    DateTime? occurredAt,
+    Value<String?> details = const Value.absent(),
+  }) => ControllerCommandEventRow(
+    id: id ?? this.id,
+    sessionId: sessionId ?? this.sessionId,
+    sequence: sequence ?? this.sequence,
+    eventType: eventType ?? this.eventType,
+    occurredAt: occurredAt ?? this.occurredAt,
+    details: details.present ? details.value : this.details,
+  );
+  ControllerCommandEventRow copyWithCompanion(
+    ControllerCommandEventsCompanion data,
+  ) {
+    return ControllerCommandEventRow(
+      id: data.id.present ? data.id.value : this.id,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      sequence: data.sequence.present ? data.sequence.value : this.sequence,
+      eventType: data.eventType.present ? data.eventType.value : this.eventType,
+      occurredAt: data.occurredAt.present
+          ? data.occurredAt.value
+          : this.occurredAt,
+      details: data.details.present ? data.details.value : this.details,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ControllerCommandEventRow(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('sequence: $sequence, ')
+          ..write('eventType: $eventType, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('details: $details')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, sessionId, sequence, eventType, occurredAt, details);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ControllerCommandEventRow &&
+          other.id == this.id &&
+          other.sessionId == this.sessionId &&
+          other.sequence == this.sequence &&
+          other.eventType == this.eventType &&
+          other.occurredAt == this.occurredAt &&
+          other.details == this.details);
+}
+
+class ControllerCommandEventsCompanion
+    extends UpdateCompanion<ControllerCommandEventRow> {
+  final Value<String> id;
+  final Value<String> sessionId;
+  final Value<int> sequence;
+  final Value<String> eventType;
+  final Value<DateTime> occurredAt;
+  final Value<String?> details;
+  final Value<int> rowid;
+  const ControllerCommandEventsCompanion({
+    this.id = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.sequence = const Value.absent(),
+    this.eventType = const Value.absent(),
+    this.occurredAt = const Value.absent(),
+    this.details = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ControllerCommandEventsCompanion.insert({
+    required String id,
+    required String sessionId,
+    required int sequence,
+    required String eventType,
+    required DateTime occurredAt,
+    this.details = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sessionId = Value(sessionId),
+       sequence = Value(sequence),
+       eventType = Value(eventType),
+       occurredAt = Value(occurredAt);
+  static Insertable<ControllerCommandEventRow> custom({
+    Expression<String>? id,
+    Expression<String>? sessionId,
+    Expression<int>? sequence,
+    Expression<String>? eventType,
+    Expression<DateTime>? occurredAt,
+    Expression<String>? details,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionId != null) 'session_id': sessionId,
+      if (sequence != null) 'sequence': sequence,
+      if (eventType != null) 'event_type': eventType,
+      if (occurredAt != null) 'occurred_at': occurredAt,
+      if (details != null) 'details': details,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ControllerCommandEventsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sessionId,
+    Value<int>? sequence,
+    Value<String>? eventType,
+    Value<DateTime>? occurredAt,
+    Value<String?>? details,
+    Value<int>? rowid,
+  }) {
+    return ControllerCommandEventsCompanion(
+      id: id ?? this.id,
+      sessionId: sessionId ?? this.sessionId,
+      sequence: sequence ?? this.sequence,
+      eventType: eventType ?? this.eventType,
+      occurredAt: occurredAt ?? this.occurredAt,
+      details: details ?? this.details,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (sequence.present) {
+      map['sequence'] = Variable<int>(sequence.value);
+    }
+    if (eventType.present) {
+      map['event_type'] = Variable<String>(eventType.value);
+    }
+    if (occurredAt.present) {
+      map['occurred_at'] = Variable<DateTime>(occurredAt.value);
+    }
+    if (details.present) {
+      map['details'] = Variable<String>(details.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ControllerCommandEventsCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('sequence: $sequence, ')
+          ..write('eventType: $eventType, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('details: $details, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$DoseyDatabase extends GeneratedDatabase {
   _$DoseyDatabase(QueryExecutor e) : super(e);
   $DoseyDatabaseManager get managers => $DoseyDatabaseManager(this);
@@ -3457,6 +4562,10 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
   late final $CarouselSlotsTable carouselSlots = $CarouselSlotsTable(this);
   late final $AuthSessionsTable authSessions = $AuthSessionsTable(this);
   late final $DoseLogEventsTable doseLogEvents = $DoseLogEventsTable(this);
+  late final $ControllerCommandSessionsTable controllerCommandSessions =
+      $ControllerCommandSessionsTable(this);
+  late final $ControllerCommandEventsTable controllerCommandEvents =
+      $ControllerCommandEventsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3470,6 +4579,8 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     carouselSlots,
     authSessions,
     doseLogEvents,
+    controllerCommandSessions,
+    controllerCommandEvents,
   ];
 }
 
@@ -5344,6 +6455,589 @@ typedef $$DoseLogEventsTableProcessedTableManager =
       DoseLogEventRow,
       PrefetchHooks Function()
     >;
+typedef $$ControllerCommandSessionsTableCreateCompanionBuilder =
+    ControllerCommandSessionsCompanion Function({
+      required String id,
+      required String commandType,
+      Value<String?> doseId,
+      Value<String?> scheduleId,
+      Value<String?> slotId,
+      required String state,
+      Value<String?> failureReason,
+      required DateTime createdAt,
+      Value<DateTime?> acceptedAt,
+      Value<DateTime?> resolvedAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$ControllerCommandSessionsTableUpdateCompanionBuilder =
+    ControllerCommandSessionsCompanion Function({
+      Value<String> id,
+      Value<String> commandType,
+      Value<String?> doseId,
+      Value<String?> scheduleId,
+      Value<String?> slotId,
+      Value<String> state,
+      Value<String?> failureReason,
+      Value<DateTime> createdAt,
+      Value<DateTime?> acceptedAt,
+      Value<DateTime?> resolvedAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$ControllerCommandSessionsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $ControllerCommandSessionsTable> {
+  $$ControllerCommandSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get commandType => $composableBuilder(
+    column: $table.commandType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get doseId => $composableBuilder(
+    column: $table.doseId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scheduleId => $composableBuilder(
+    column: $table.scheduleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get slotId => $composableBuilder(
+    column: $table.slotId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get failureReason => $composableBuilder(
+    column: $table.failureReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get acceptedAt => $composableBuilder(
+    column: $table.acceptedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get resolvedAt => $composableBuilder(
+    column: $table.resolvedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ControllerCommandSessionsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $ControllerCommandSessionsTable> {
+  $$ControllerCommandSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get commandType => $composableBuilder(
+    column: $table.commandType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get doseId => $composableBuilder(
+    column: $table.doseId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scheduleId => $composableBuilder(
+    column: $table.scheduleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get slotId => $composableBuilder(
+    column: $table.slotId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get state => $composableBuilder(
+    column: $table.state,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get failureReason => $composableBuilder(
+    column: $table.failureReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get acceptedAt => $composableBuilder(
+    column: $table.acceptedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get resolvedAt => $composableBuilder(
+    column: $table.resolvedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ControllerCommandSessionsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $ControllerCommandSessionsTable> {
+  $$ControllerCommandSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get commandType => $composableBuilder(
+    column: $table.commandType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get doseId =>
+      $composableBuilder(column: $table.doseId, builder: (column) => column);
+
+  GeneratedColumn<String> get scheduleId => $composableBuilder(
+    column: $table.scheduleId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get slotId =>
+      $composableBuilder(column: $table.slotId, builder: (column) => column);
+
+  GeneratedColumn<String> get state =>
+      $composableBuilder(column: $table.state, builder: (column) => column);
+
+  GeneratedColumn<String> get failureReason => $composableBuilder(
+    column: $table.failureReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get acceptedAt => $composableBuilder(
+    column: $table.acceptedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get resolvedAt => $composableBuilder(
+    column: $table.resolvedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$ControllerCommandSessionsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $ControllerCommandSessionsTable,
+          ControllerCommandSessionRow,
+          $$ControllerCommandSessionsTableFilterComposer,
+          $$ControllerCommandSessionsTableOrderingComposer,
+          $$ControllerCommandSessionsTableAnnotationComposer,
+          $$ControllerCommandSessionsTableCreateCompanionBuilder,
+          $$ControllerCommandSessionsTableUpdateCompanionBuilder,
+          (
+            ControllerCommandSessionRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $ControllerCommandSessionsTable,
+              ControllerCommandSessionRow
+            >,
+          ),
+          ControllerCommandSessionRow,
+          PrefetchHooks Function()
+        > {
+  $$ControllerCommandSessionsTableTableManager(
+    _$DoseyDatabase db,
+    $ControllerCommandSessionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ControllerCommandSessionsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ControllerCommandSessionsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ControllerCommandSessionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> commandType = const Value.absent(),
+                Value<String?> doseId = const Value.absent(),
+                Value<String?> scheduleId = const Value.absent(),
+                Value<String?> slotId = const Value.absent(),
+                Value<String> state = const Value.absent(),
+                Value<String?> failureReason = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> acceptedAt = const Value.absent(),
+                Value<DateTime?> resolvedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ControllerCommandSessionsCompanion(
+                id: id,
+                commandType: commandType,
+                doseId: doseId,
+                scheduleId: scheduleId,
+                slotId: slotId,
+                state: state,
+                failureReason: failureReason,
+                createdAt: createdAt,
+                acceptedAt: acceptedAt,
+                resolvedAt: resolvedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String commandType,
+                Value<String?> doseId = const Value.absent(),
+                Value<String?> scheduleId = const Value.absent(),
+                Value<String?> slotId = const Value.absent(),
+                required String state,
+                Value<String?> failureReason = const Value.absent(),
+                required DateTime createdAt,
+                Value<DateTime?> acceptedAt = const Value.absent(),
+                Value<DateTime?> resolvedAt = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ControllerCommandSessionsCompanion.insert(
+                id: id,
+                commandType: commandType,
+                doseId: doseId,
+                scheduleId: scheduleId,
+                slotId: slotId,
+                state: state,
+                failureReason: failureReason,
+                createdAt: createdAt,
+                acceptedAt: acceptedAt,
+                resolvedAt: resolvedAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ControllerCommandSessionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $ControllerCommandSessionsTable,
+      ControllerCommandSessionRow,
+      $$ControllerCommandSessionsTableFilterComposer,
+      $$ControllerCommandSessionsTableOrderingComposer,
+      $$ControllerCommandSessionsTableAnnotationComposer,
+      $$ControllerCommandSessionsTableCreateCompanionBuilder,
+      $$ControllerCommandSessionsTableUpdateCompanionBuilder,
+      (
+        ControllerCommandSessionRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $ControllerCommandSessionsTable,
+          ControllerCommandSessionRow
+        >,
+      ),
+      ControllerCommandSessionRow,
+      PrefetchHooks Function()
+    >;
+typedef $$ControllerCommandEventsTableCreateCompanionBuilder =
+    ControllerCommandEventsCompanion Function({
+      required String id,
+      required String sessionId,
+      required int sequence,
+      required String eventType,
+      required DateTime occurredAt,
+      Value<String?> details,
+      Value<int> rowid,
+    });
+typedef $$ControllerCommandEventsTableUpdateCompanionBuilder =
+    ControllerCommandEventsCompanion Function({
+      Value<String> id,
+      Value<String> sessionId,
+      Value<int> sequence,
+      Value<String> eventType,
+      Value<DateTime> occurredAt,
+      Value<String?> details,
+      Value<int> rowid,
+    });
+
+class $$ControllerCommandEventsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $ControllerCommandEventsTable> {
+  $$ControllerCommandEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sequence => $composableBuilder(
+    column: $table.sequence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get details => $composableBuilder(
+    column: $table.details,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ControllerCommandEventsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $ControllerCommandEventsTable> {
+  $$ControllerCommandEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sequence => $composableBuilder(
+    column: $table.sequence,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get details => $composableBuilder(
+    column: $table.details,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ControllerCommandEventsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $ControllerCommandEventsTable> {
+  $$ControllerCommandEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<int> get sequence =>
+      $composableBuilder(column: $table.sequence, builder: (column) => column);
+
+  GeneratedColumn<String> get eventType =>
+      $composableBuilder(column: $table.eventType, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get details =>
+      $composableBuilder(column: $table.details, builder: (column) => column);
+}
+
+class $$ControllerCommandEventsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $ControllerCommandEventsTable,
+          ControllerCommandEventRow,
+          $$ControllerCommandEventsTableFilterComposer,
+          $$ControllerCommandEventsTableOrderingComposer,
+          $$ControllerCommandEventsTableAnnotationComposer,
+          $$ControllerCommandEventsTableCreateCompanionBuilder,
+          $$ControllerCommandEventsTableUpdateCompanionBuilder,
+          (
+            ControllerCommandEventRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $ControllerCommandEventsTable,
+              ControllerCommandEventRow
+            >,
+          ),
+          ControllerCommandEventRow,
+          PrefetchHooks Function()
+        > {
+  $$ControllerCommandEventsTableTableManager(
+    _$DoseyDatabase db,
+    $ControllerCommandEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ControllerCommandEventsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ControllerCommandEventsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ControllerCommandEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<int> sequence = const Value.absent(),
+                Value<String> eventType = const Value.absent(),
+                Value<DateTime> occurredAt = const Value.absent(),
+                Value<String?> details = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ControllerCommandEventsCompanion(
+                id: id,
+                sessionId: sessionId,
+                sequence: sequence,
+                eventType: eventType,
+                occurredAt: occurredAt,
+                details: details,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sessionId,
+                required int sequence,
+                required String eventType,
+                required DateTime occurredAt,
+                Value<String?> details = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ControllerCommandEventsCompanion.insert(
+                id: id,
+                sessionId: sessionId,
+                sequence: sequence,
+                eventType: eventType,
+                occurredAt: occurredAt,
+                details: details,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ControllerCommandEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $ControllerCommandEventsTable,
+      ControllerCommandEventRow,
+      $$ControllerCommandEventsTableFilterComposer,
+      $$ControllerCommandEventsTableOrderingComposer,
+      $$ControllerCommandEventsTableAnnotationComposer,
+      $$ControllerCommandEventsTableCreateCompanionBuilder,
+      $$ControllerCommandEventsTableUpdateCompanionBuilder,
+      (
+        ControllerCommandEventRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $ControllerCommandEventsTable,
+          ControllerCommandEventRow
+        >,
+      ),
+      ControllerCommandEventRow,
+      PrefetchHooks Function()
+    >;
 
 class $DoseyDatabaseManager {
   final _$DoseyDatabase _db;
@@ -5364,4 +7058,14 @@ class $DoseyDatabaseManager {
       $$AuthSessionsTableTableManager(_db, _db.authSessions);
   $$DoseLogEventsTableTableManager get doseLogEvents =>
       $$DoseLogEventsTableTableManager(_db, _db.doseLogEvents);
+  $$ControllerCommandSessionsTableTableManager get controllerCommandSessions =>
+      $$ControllerCommandSessionsTableTableManager(
+        _db,
+        _db.controllerCommandSessions,
+      );
+  $$ControllerCommandEventsTableTableManager get controllerCommandEvents =>
+      $$ControllerCommandEventsTableTableManager(
+        _db,
+        _db.controllerCommandEvents,
+      );
 }

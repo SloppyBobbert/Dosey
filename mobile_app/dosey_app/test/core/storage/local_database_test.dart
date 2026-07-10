@@ -1,4 +1,5 @@
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
@@ -412,6 +413,30 @@ void main() {
       );
     },
   );
+
+  test('migration from schema ten creates controller command tables', () async {
+    final database = DoseyDatabase(_schemaTenExecutor());
+    addTearDown(database.close);
+
+    final repository = LocalControllerCommandRepository(database);
+    final session = await repository.createSession(
+      commandType: ControllerCommandType.status,
+      now: DateTime.utc(2026, 7, 10, 11),
+    );
+
+    await repository.appendEvent(
+      session.id,
+      ControllerCommandEventType.commandSent,
+      occurredAt: DateTime.utc(2026, 7, 10, 11, 0, 5),
+    );
+
+    final sessions = await repository.getUnresolvedSessions();
+    final events = await repository.getEventsForSession(session.id);
+
+    expect(sessions.single.commandType, ControllerCommandType.status);
+    expect(events.single.sequence, 1);
+    expect(events.single.eventType, ControllerCommandEventType.commandSent);
+  });
 }
 
 NativeDatabase _schemaEightExecutor({required String status}) {
@@ -617,6 +642,108 @@ NativeDatabase _schemaNineExecutor() {
           );
         ''')
         ..execute('PRAGMA user_version = 9;');
+    },
+  );
+}
+
+NativeDatabase _schemaTenExecutor() {
+  final now = DateTime.utc(2026, 6, 25).millisecondsSinceEpoch ~/ 1000;
+  return NativeDatabase.memory(
+    setup: (database) {
+      database
+        ..execute('''
+          CREATE TABLE app_settings (
+            key TEXT NOT NULL PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+        ''')
+        ..execute('''
+          CREATE TABLE reminder_schedules (
+            id TEXT NOT NULL PRIMARY KEY,
+            label TEXT NOT NULL,
+            prescription_id TEXT NULL,
+            profile_id TEXT NOT NULL DEFAULT 'schedule-1',
+            hour INTEGER NOT NULL,
+            minute INTEGER NOT NULL,
+            is_enabled INTEGER NOT NULL CHECK (is_enabled IN (0, 1)),
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            CHECK (hour >= 0 AND hour <= 23),
+            CHECK (minute >= 0 AND minute <= 59)
+          );
+        ''')
+        ..execute('''
+          CREATE TABLE prescriptions (
+            id TEXT NOT NULL PRIMARY KEY,
+            name TEXT NOT NULL,
+            pill_type TEXT NOT NULL,
+            remaining_doses INTEGER NOT NULL DEFAULT 0 CHECK (remaining_doses >= 0),
+            refill_threshold INTEGER NOT NULL DEFAULT 3 CHECK (refill_threshold >= 0),
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+        ''')
+        ..execute('''
+          CREATE TABLE prescription_refills (
+            id TEXT NOT NULL PRIMARY KEY,
+            prescription_id TEXT NOT NULL,
+            dose_delta INTEGER NOT NULL CHECK (dose_delta > 0),
+            remaining_after INTEGER NOT NULL CHECK (remaining_after >= 0),
+            occurred_at INTEGER NOT NULL,
+            note TEXT NULL
+          );
+        ''')
+        ..execute('''
+          CREATE TABLE schedule_profiles (
+            id TEXT NOT NULL PRIMARY KEY,
+            name TEXT NOT NULL,
+            is_active INTEGER NOT NULL CHECK (is_active IN (0, 1)),
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+        ''')
+        ..execute('''
+          INSERT INTO schedule_profiles (id, name, is_active, created_at, updated_at)
+          VALUES ('schedule-1', 'Schedule 1', 1, $now, $now);
+        ''')
+        ..execute('''
+          CREATE TABLE carousel_slots (
+            id TEXT NOT NULL PRIMARY KEY,
+            slot_number INTEGER NOT NULL,
+            prescription_id TEXT NOT NULL,
+            schedule_id TEXT NOT NULL,
+            profile_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            CHECK (slot_number > 0),
+            CHECK (status IN ('assigned', 'loaded', 'dispensed', 'needs_review')),
+            UNIQUE (profile_id, slot_number),
+            UNIQUE (profile_id, schedule_id)
+          );
+        ''')
+        ..execute('''
+          CREATE TABLE auth_sessions (
+            id TEXT NOT NULL PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            email TEXT NOT NULL,
+            display_name TEXT NULL,
+            photo_url TEXT NULL,
+            provider TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+        ''')
+        ..execute('''
+          CREATE TABLE dose_log_events (
+            id TEXT NOT NULL PRIMARY KEY,
+            kind TEXT NOT NULL,
+            dose_id TEXT NOT NULL,
+            occurred_at INTEGER NOT NULL,
+            marks_dose_taken INTEGER NOT NULL CHECK (marks_dose_taken IN (0, 1))
+          );
+        ''')
+        ..execute('PRAGMA user_version = 10;');
     },
   );
 }

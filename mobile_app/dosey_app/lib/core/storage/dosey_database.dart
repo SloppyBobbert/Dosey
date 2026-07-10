@@ -136,6 +136,55 @@ class DoseLogEvents extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('ControllerCommandSessionRow')
+class ControllerCommandSessions extends Table {
+  TextColumn get id => text()();
+  TextColumn get commandType => text()();
+  TextColumn get doseId => text().nullable()();
+  TextColumn get scheduleId => text().nullable()();
+  TextColumn get slotId => text().nullable()();
+  TextColumn get state => text()();
+  TextColumn get failureReason => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get acceptedAt => dateTime().nullable()();
+  DateTimeColumn get resolvedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Index> get indexes => [
+    Index(
+      'controller_command_sessions_unresolved_idx',
+      'CREATE INDEX controller_command_sessions_unresolved_idx '
+          'ON controller_command_sessions (resolved_at, state, updated_at)',
+    ),
+  ];
+}
+
+@DataClassName('ControllerCommandEventRow')
+class ControllerCommandEvents extends Table {
+  TextColumn get id => text()();
+  TextColumn get sessionId => text()();
+  IntColumn get sequence => integer()();
+  TextColumn get eventType => text()();
+  DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get details => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Index> get indexes => [
+    Index(
+      'controller_command_events_session_sequence_idx',
+      'CREATE UNIQUE INDEX controller_command_events_session_sequence_idx '
+          'ON controller_command_events (session_id, sequence)',
+    ),
+  ];
+}
+
 @DriftDatabase(
   tables: [
     AppSettings,
@@ -146,6 +195,8 @@ class DoseLogEvents extends Table {
     CarouselSlots,
     AuthSessions,
     DoseLogEvents,
+    ControllerCommandSessions,
+    ControllerCommandEvents,
   ],
 )
 class DoseyDatabase extends _$DoseyDatabase {
@@ -162,7 +213,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -218,6 +269,10 @@ class DoseyDatabase extends _$DoseyDatabase {
           await _rebuildLegacyPrescriptionsTableWithInventoryTracking();
         }
         await migrator.createTable(prescriptionRefills);
+      }
+      if (from < 11) {
+        await migrator.createTable(controllerCommandSessions);
+        await migrator.createTable(controllerCommandEvents);
       }
     },
   );
