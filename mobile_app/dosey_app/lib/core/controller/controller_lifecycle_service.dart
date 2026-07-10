@@ -59,6 +59,7 @@ class ControllerLifecycleService {
     _activeDispenseKeys.addAll(activeKeys);
 
     var controllerMoved = false;
+    DateTime? acceptedAt;
     final sentAt = _current();
     try {
       final session = await _commandRepository.createSession(
@@ -77,7 +78,7 @@ class ControllerLifecycleService {
       try {
         await _controller.requestDispense(doseId: doseId);
         controllerMoved = true;
-        final acceptedAt = _current();
+        acceptedAt = _current();
         await _commandRepository.appendEvent(
           session.id,
           ControllerCommandEventType.ack,
@@ -114,23 +115,44 @@ class ControllerLifecycleService {
         );
       } on Object catch (error) {
         final failedAt = _current();
-        await _commandRepository.appendEvent(
-          session.id,
-          ControllerCommandEventType.controllerError,
-          occurredAt: failedAt,
-          details: error.toString(),
-        );
-        if (controllerMoved) {
-          if (slotId != null) {
-            await _moveSlotToNeedsReview(slotId);
-          }
+        if (error is ControllerCommandRejectedException) {
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.nack,
+            occurredAt: failedAt,
+            details: error.toString(),
+          );
           await _commandRepository.updateSessionState(
             session.id,
-            ControllerCommandSessionState.interrupted,
-            acceptedAt: failedAt,
+            ControllerCommandSessionState.failed,
+            failureReason: ControllerCommandFailureReason.nack,
             updatedAt: failedAt,
           );
-        } else {
+          if (slotId != null) {
+            await _carouselSlots.markLoaded(slotId);
+          }
+        } else if (error is ControllerCommandPreconditionException) {
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.controllerError,
+            occurredAt: failedAt,
+            details: error.toString(),
+          );
+          await _commandRepository.updateSessionState(
+            session.id,
+            ControllerCommandSessionState.failed,
+            updatedAt: failedAt,
+          );
+          if (slotId != null) {
+            await _carouselSlots.markLoaded(slotId);
+          }
+        } else if (error is ControllerTransportOfflineException) {
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.offline,
+            occurredAt: failedAt,
+            details: error.toString(),
+          );
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.failed,
@@ -140,6 +162,105 @@ class ControllerLifecycleService {
           if (slotId != null) {
             await _carouselSlots.markLoaded(slotId);
           }
+        } else if (error is ControllerCommandTimeoutException) {
+          acceptedAt ??= failedAt;
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.ack,
+            occurredAt: acceptedAt,
+          );
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.controllerError,
+            occurredAt: failedAt,
+            details: error.toString(),
+          );
+          if (slotId != null) {
+            await _moveSlotToNeedsReview(slotId);
+          }
+          await _commandRepository.updateSessionState(
+            session.id,
+            ControllerCommandSessionState.timedOut,
+            acceptedAt: acceptedAt,
+            updatedAt: failedAt,
+          );
+        } else if (error is ControllerCommandJamException) {
+          acceptedAt ??= failedAt;
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.ack,
+            occurredAt: acceptedAt,
+          );
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.controllerError,
+            occurredAt: failedAt,
+            details: error.toString(),
+          );
+          if (slotId != null) {
+            await _moveSlotToNeedsReview(slotId);
+          }
+          await _commandRepository.updateSessionState(
+            session.id,
+            ControllerCommandSessionState.failed,
+            acceptedAt: acceptedAt,
+            failureReason: ControllerCommandFailureReason.jam,
+            updatedAt: failedAt,
+          );
+        } else if (error is ControllerCommandInterruptedException) {
+          acceptedAt ??= failedAt;
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.ack,
+            occurredAt: acceptedAt,
+          );
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.offline,
+            occurredAt: failedAt,
+            details: error.toString(),
+          );
+          if (slotId != null) {
+            await _moveSlotToNeedsReview(slotId);
+          }
+          await _commandRepository.updateSessionState(
+            session.id,
+            ControllerCommandSessionState.interrupted,
+            acceptedAt: acceptedAt,
+            failureReason: ControllerCommandFailureReason.disconnect,
+            updatedAt: failedAt,
+          );
+        } else if (controllerMoved) {
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.controllerError,
+            occurredAt: failedAt,
+            details: error.toString(),
+          );
+          if (slotId != null) {
+            await _moveSlotToNeedsReview(slotId);
+          }
+          await _commandRepository.updateSessionState(
+            session.id,
+            ControllerCommandSessionState.interrupted,
+            acceptedAt: acceptedAt ?? failedAt,
+            updatedAt: failedAt,
+          );
+        } else {
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.controllerError,
+            occurredAt: failedAt,
+            details: error.toString(),
+          );
+          if (slotId != null) {
+            await _moveSlotToNeedsReview(slotId);
+          }
+          await _commandRepository.updateSessionState(
+            session.id,
+            ControllerCommandSessionState.interrupted,
+            updatedAt: failedAt,
+          );
         }
         rethrow;
       }

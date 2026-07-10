@@ -67,10 +67,287 @@ void main() {
   );
 
   test(
-    'failed transport dispense with slot keeps slot loaded, persists failure trail, and skips movement log',
+    'rejected dispense before acceptance keeps slot loaded, marks failed with nack, and skips movement log',
     () async {
       final fixture = await _LifecycleFixture.create(
-        gateway: _ThrowingControllerGateway(),
+        gateway: _RejectingControllerGateway(),
+      );
+      addTearDown(fixture.close);
+
+      await expectLater(
+        fixture.service.requestDoseDispense(
+          doseId: 'dose-1',
+          scheduleId: 'schedule-1',
+          slotId: 'slot-1',
+        ),
+        throwsA(isA<ControllerCommandRejectedException>()),
+      );
+
+      final sessionRows = await fixture.database
+          .select(fixture.database.controllerCommandSessions)
+          .get();
+      expect(sessionRows, hasLength(1));
+      expect(
+        sessionRows.single.state,
+        ControllerCommandSessionState.failed.name,
+      );
+      expect(
+        sessionRows.single.failureReason,
+        ControllerCommandFailureReason.nack.name,
+      );
+
+      final eventRows = await fixture.database
+          .select(fixture.database.controllerCommandEvents)
+          .get();
+      expect(eventRows.map((row) => row.eventType).toList(), <String>[
+        ControllerCommandEventType.commandSent.name,
+        ControllerCommandEventType.nack.name,
+      ]);
+
+      final slot = await fixture.slotRow('slot-1');
+      expect(slot.status, CarouselSlotStatus.loaded.storageValue);
+      expect(
+        await fixture.database.select(fixture.database.doseLogEvents).get(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'offline before acceptance keeps slot loaded, marks failed offline, and skips movement log',
+    () async {
+      final fixture = await _LifecycleFixture.create(
+        gateway: _OfflineBeforeAcceptanceControllerGateway(),
+      );
+      addTearDown(fixture.close);
+
+      await expectLater(
+        fixture.service.requestDoseDispense(
+          doseId: 'dose-1',
+          scheduleId: 'schedule-1',
+          slotId: 'slot-1',
+        ),
+        throwsA(isA<ControllerTransportOfflineException>()),
+      );
+
+      final sessionRows = await fixture.database
+          .select(fixture.database.controllerCommandSessions)
+          .get();
+      expect(
+        sessionRows.single.state,
+        ControllerCommandSessionState.failed.name,
+      );
+      expect(
+        sessionRows.single.failureReason,
+        ControllerCommandFailureReason.offline.name,
+      );
+
+      final eventRows = await fixture.database
+          .select(fixture.database.controllerCommandEvents)
+          .get();
+      expect(eventRows.map((row) => row.eventType).toList(), <String>[
+        ControllerCommandEventType.commandSent.name,
+        ControllerCommandEventType.offline.name,
+      ]);
+
+      expect(
+        (await fixture.slotRow('slot-1')).status,
+        CarouselSlotStatus.loaded.storageValue,
+      );
+      expect(
+        await fixture.database.select(fixture.database.doseLogEvents).get(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'local precondition failures keep the slot loaded and do not quarantine it',
+    () async {
+      final fixture = await _LifecycleFixture.create(
+        gateway: _PreconditionFailureControllerGateway(),
+      );
+      addTearDown(fixture.close);
+
+      await expectLater(
+        fixture.service.requestDoseDispense(
+          doseId: 'dose-1',
+          scheduleId: 'schedule-1',
+          slotId: 'slot-1',
+        ),
+        throwsA(isA<ControllerCommandPreconditionException>()),
+      );
+
+      final sessionRows = await fixture.database
+          .select(fixture.database.controllerCommandSessions)
+          .get();
+      expect(
+        sessionRows.single.state,
+        ControllerCommandSessionState.failed.name,
+      );
+      expect(sessionRows.single.failureReason, isNull);
+
+      final eventRows = await fixture.database
+          .select(fixture.database.controllerCommandEvents)
+          .get();
+      expect(eventRows.map((row) => row.eventType).toList(), <String>[
+        ControllerCommandEventType.commandSent.name,
+        ControllerCommandEventType.controllerError.name,
+      ]);
+
+      expect(
+        (await fixture.slotRow('slot-1')).status,
+        CarouselSlotStatus.loaded.storageValue,
+      );
+      expect(
+        await fixture.database.select(fixture.database.doseLogEvents).get(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'timeout after acceptance moves slot to needs review and marks session timed out',
+    () async {
+      final fixture = await _LifecycleFixture.create(
+        gateway: _TimeoutAfterAcceptanceControllerGateway(),
+      );
+      addTearDown(fixture.close);
+
+      await expectLater(
+        fixture.service.requestDoseDispense(
+          doseId: 'dose-1',
+          scheduleId: 'schedule-1',
+          slotId: 'slot-1',
+        ),
+        throwsA(isA<ControllerCommandTimeoutException>()),
+      );
+
+      final sessionRows = await fixture.database
+          .select(fixture.database.controllerCommandSessions)
+          .get();
+      expect(
+        sessionRows.single.state,
+        ControllerCommandSessionState.timedOut.name,
+      );
+      expect(sessionRows.single.acceptedAt, isNotNull);
+
+      final eventRows = await fixture.database
+          .select(fixture.database.controllerCommandEvents)
+          .get();
+      expect(eventRows.map((row) => row.eventType).toList(), <String>[
+        ControllerCommandEventType.commandSent.name,
+        ControllerCommandEventType.ack.name,
+        ControllerCommandEventType.controllerError.name,
+      ]);
+
+      expect(
+        (await fixture.slotRow('slot-1')).status,
+        CarouselSlotStatus.needsReview.storageValue,
+      );
+      expect(
+        await fixture.database.select(fixture.database.doseLogEvents).get(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'jam after acceptance moves slot to needs review and marks session failed with jam',
+    () async {
+      final fixture = await _LifecycleFixture.create(
+        gateway: _JamAfterAcceptanceControllerGateway(),
+      );
+      addTearDown(fixture.close);
+
+      await expectLater(
+        fixture.service.requestDoseDispense(
+          doseId: 'dose-1',
+          scheduleId: 'schedule-1',
+          slotId: 'slot-1',
+        ),
+        throwsA(isA<ControllerCommandJamException>()),
+      );
+
+      final sessionRows = await fixture.database
+          .select(fixture.database.controllerCommandSessions)
+          .get();
+      expect(
+        sessionRows.single.state,
+        ControllerCommandSessionState.failed.name,
+      );
+      expect(
+        sessionRows.single.failureReason,
+        ControllerCommandFailureReason.jam.name,
+      );
+      expect(sessionRows.single.acceptedAt, isNotNull);
+
+      expect(
+        (await fixture.slotRow('slot-1')).status,
+        CarouselSlotStatus.needsReview.storageValue,
+      );
+      expect(
+        await fixture.database.select(fixture.database.doseLogEvents).get(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'disconnect after ambiguous acceptance moves slot to needs review and marks session interrupted',
+    () async {
+      final fixture = await _LifecycleFixture.create(
+        gateway: _DisconnectAfterAcceptanceControllerGateway(),
+      );
+      addTearDown(fixture.close);
+
+      await expectLater(
+        fixture.service.requestDoseDispense(
+          doseId: 'dose-1',
+          scheduleId: 'schedule-1',
+          slotId: 'slot-1',
+        ),
+        throwsA(isA<ControllerCommandInterruptedException>()),
+      );
+
+      final sessionRows = await fixture.database
+          .select(fixture.database.controllerCommandSessions)
+          .get();
+      expect(
+        sessionRows.single.state,
+        ControllerCommandSessionState.interrupted.name,
+      );
+      expect(
+        sessionRows.single.failureReason,
+        ControllerCommandFailureReason.disconnect.name,
+      );
+      expect(sessionRows.single.acceptedAt, isNotNull);
+
+      final eventRows = await fixture.database
+          .select(fixture.database.controllerCommandEvents)
+          .get();
+      expect(eventRows.map((row) => row.eventType).toList(), <String>[
+        ControllerCommandEventType.commandSent.name,
+        ControllerCommandEventType.ack.name,
+        ControllerCommandEventType.offline.name,
+      ]);
+
+      expect(
+        (await fixture.slotRow('slot-1')).status,
+        CarouselSlotStatus.needsReview.storageValue,
+      );
+      expect(
+        await fixture.database.select(fixture.database.doseLogEvents).get(),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'unknown transport loss keeps the slot in needs review instead of reopening it as loaded',
+    () async {
+      final fixture = await _LifecycleFixture.create(
+        gateway: _UnknownTransportLossControllerGateway(),
       );
       addTearDown(fixture.close);
 
@@ -86,10 +363,9 @@ void main() {
       final sessionRows = await fixture.database
           .select(fixture.database.controllerCommandSessions)
           .get();
-      expect(sessionRows, hasLength(1));
       expect(
         sessionRows.single.state,
-        ControllerCommandSessionState.failed.name,
+        ControllerCommandSessionState.interrupted.name,
       );
 
       final eventRows = await fixture.database
@@ -100,8 +376,10 @@ void main() {
         ControllerCommandEventType.controllerError.name,
       ]);
 
-      final slot = await fixture.slotRow('slot-1');
-      expect(slot.status, CarouselSlotStatus.loaded.storageValue);
+      expect(
+        (await fixture.slotRow('slot-1')).status,
+        CarouselSlotStatus.needsReview.storageValue,
+      );
       expect(
         await fixture.database.select(fixture.database.doseLogEvents).get(),
         isEmpty,
@@ -341,10 +619,59 @@ class _AcceptingControllerGateway implements ControllerGateway {
   }
 }
 
-class _ThrowingControllerGateway extends _AcceptingControllerGateway {
+class _RejectingControllerGateway extends _AcceptingControllerGateway {
   @override
   Future<void> requestDispense({required String doseId}) async {
-    throw StateError('transport rejected');
+    throw const ControllerCommandRejectedException();
+  }
+}
+
+class _OfflineBeforeAcceptanceControllerGateway
+    extends _AcceptingControllerGateway {
+  @override
+  Future<void> requestDispense({required String doseId}) async {
+    throw const ControllerTransportOfflineException();
+  }
+}
+
+class _TimeoutAfterAcceptanceControllerGateway
+    extends _AcceptingControllerGateway {
+  @override
+  Future<void> requestDispense({required String doseId}) async {
+    throw const ControllerCommandTimeoutException();
+  }
+}
+
+class _PreconditionFailureControllerGateway
+    extends _AcceptingControllerGateway {
+  @override
+  Future<void> requestDispense({required String doseId}) async {
+    throw const ControllerCommandPreconditionException(
+      'Robot Mode must be active before dispense.',
+    );
+  }
+}
+
+class _JamAfterAcceptanceControllerGateway extends _AcceptingControllerGateway {
+  @override
+  Future<void> requestDispense({required String doseId}) async {
+    throw const ControllerCommandJamException();
+  }
+}
+
+class _DisconnectAfterAcceptanceControllerGateway
+    extends _AcceptingControllerGateway {
+  @override
+  Future<void> requestDispense({required String doseId}) async {
+    throw const ControllerCommandInterruptedException();
+  }
+}
+
+class _UnknownTransportLossControllerGateway
+    extends _AcceptingControllerGateway {
+  @override
+  Future<void> requestDispense({required String doseId}) async {
+    throw StateError('transport dropped before acknowledgment was observable');
   }
 }
 
