@@ -18,6 +18,7 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
@@ -36,6 +37,7 @@ class DoseyAppScope extends StatefulWidget {
     this.reminderScheduler,
     this.permissionGateway,
     this.notificationTapController,
+    this.missedDoseReconciliationService,
   });
 
   final Widget child;
@@ -43,6 +45,7 @@ class DoseyAppScope extends StatefulWidget {
   final ReminderScheduler? reminderScheduler;
   final AppPermissionGateway? permissionGateway;
   final ReminderNotificationTapController? notificationTapController;
+  final MissedDoseReconciliationService? missedDoseReconciliationService;
 
   static DoseyAppDependencies of(BuildContext context) {
     final scope = context
@@ -61,6 +64,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
   late final bool _ownsNotificationTapController;
   late final StreamController<DateTime> _robotFaceClockController;
   late final Timer _robotFaceClockTimer;
+  late final MissedDoseReconciliationService _missedDoseReconciliation;
   late final DoseyAppDependencies _dependencies;
 
   @override
@@ -75,6 +79,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       if (!_robotFaceClockController.isClosed) {
         _robotFaceClockController.add(DateTime.now());
       }
+      unawaited(_runMissedDoseReconciliation());
     });
     final doseLog = DriftDoseLogRepository(_database);
     final localAuth = LocalAuthRepository(_database);
@@ -104,6 +109,14 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         return role.canHostRobot;
       },
     );
+    _missedDoseReconciliation =
+        widget.missedDoseReconciliationService ??
+        MissedDoseReconciliationService(
+          reminders: reminders,
+          doseLog: doseLog,
+          carouselSlots: LocalCarouselSlotRepository(_database),
+          database: _database,
+        );
     _dependencies = DoseyAppDependencies(
       database: _database,
       settings: settings,
@@ -135,15 +148,25 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       notificationTaps: notificationTaps,
       permissions: widget.permissionGateway ?? PermissionHandlerGateway(),
     );
-    unawaited(_syncReminderNotifications());
+    unawaited(_runStartupMaintenance());
   }
 
-  Future<void> _syncReminderNotifications() async {
+  Future<void> _runStartupMaintenance() async {
     try {
       // Startup sync repairs local notification state without blocking app boot.
       await _dependencies.reminderSchedules.syncScheduledNotifications();
     } on Object {
       // Startup sync is best-effort; schedule edits still surface errors.
+    }
+
+    await _runMissedDoseReconciliation();
+  }
+
+  Future<void> _runMissedDoseReconciliation() async {
+    try {
+      await _missedDoseReconciliation.reconcile();
+    } on Object {
+      // Missed-dose reconciliation is best-effort during startup and runtime.
     }
   }
 

@@ -43,5 +43,7 @@ void main() {
     expect(dependencies.permissions, isA<PermissionHandlerGateway>());
     expect(dependencies.robotFaceSettings, isNotNull);
     expect(dependencies.robotFaceController, isNotNull);
+
+    await tester.pumpWidget(const SizedBox());
   });
 }
