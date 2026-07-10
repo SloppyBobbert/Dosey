@@ -40,6 +40,8 @@ class SimulatedControllerGateway implements ControllerGateway {
       throw StateError('Robot Mode must be active before dispense.');
     }
 
+    // The simulator records movement only. Taken/skipped/help outcomes must be
+    // logged by the human follow-up flow.
     await _doseLog.addEvent(
       DoseLogEvent.controllerDispenseSucceeded(
         doseId: doseId,

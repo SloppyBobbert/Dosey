@@ -54,6 +54,8 @@ class TodayNextDoseHelper {
       if (scheduledTime.isAfter(referenceTime)) {
         continue;
       }
+      // Remember the latest due schedule even if it is resolved, so Today and
+      // Robot Face do not jump ahead before the current dose state is visible.
       if (latestDueTime == null || scheduledTime.isAfter(latestDueTime)) {
         latestDueTime = scheduledTime;
         latestDueSchedule = schedule;
@@ -75,6 +77,8 @@ class TodayNextDoseHelper {
   ) {
     DoseLogEvent? latest;
     for (final event in events) {
+      // Log streams are usually newest-first, but compare timestamps so callers
+      // are correct even after database or test ordering changes.
       if (event.doseId == doseId &&
           (latest == null || event.occurredAt.isAfter(latest.occurredAt))) {
         latest = event;
@@ -103,6 +107,8 @@ class TodayNextDoseHelper {
       _terminalDoseEventKindNames;
 
   static String doseIdForDate(String scheduleId, DateTime now) {
+    // Dose ids are per local calendar day, matching how daily reminders are
+    // shown and resolved in the prototype.
     final month = now.month.toString().padLeft(2, '0');
     final day = now.day.toString().padLeft(2, '0');
     return '$scheduleId:${now.year}-$month-$day';

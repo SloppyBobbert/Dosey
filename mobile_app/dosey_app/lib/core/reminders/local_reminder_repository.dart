@@ -39,6 +39,8 @@ class LocalReminderRepository implements ReminderRepository {
     final existing = await (_database.select(
       _database.reminderSchedules,
     )..where((row) => row.id.equals(schedule.id))).getSingleOrNull();
+    // If the schedule no longer maps to the same enabled dose, clear its slot
+    // so the carousel cannot dispense stale loading instructions.
     final clearsLoadedSlot =
         existing != null &&
         (!schedule.isEnabled ||

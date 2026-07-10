@@ -129,6 +129,8 @@ class PrescriptionsScreen extends StatelessWidget {
     List<ReminderSchedule> schedules,
   ) {
     final prescriptionIds = prescriptions.map((item) => item.id).toSet();
+    // Count each prescription once even if it appears in several schedule
+    // profiles or times.
     return schedules
         .where((schedule) => prescriptionIds.contains(schedule.prescriptionId))
         .map((schedule) => schedule.prescriptionId)
@@ -474,6 +476,8 @@ class _PrescriptionTile extends StatelessWidget {
 
   Future<void> _delete(BuildContext context) async {
     try {
+      // Repository deletion also clears local schedules, carousel slots, and
+      // refill rows that depend on this prescription.
       await prescriptions.deletePrescription(prescription.id);
     } on Object catch (error) {
       if (!context.mounted) return;
@@ -781,7 +785,8 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
     );
   }
 
-  // save local med label and counts
+  // Save only the local label/count metadata. The app does not verify the
+  // prescription or identify pills.
   Future<void> _save() async {
     if (_isSaving) return;
 
@@ -945,6 +950,7 @@ class _RefillSheetState extends State<_RefillSheet> {
     });
 
     try {
+      // Refill rows preserve an audit trail while updating the current count.
       await widget.prescriptions.addRefill(
         prescriptionId: widget.prescription.id,
         doseCount: doseCount,

@@ -105,6 +105,8 @@ class RobotFaceController {
       throw StateError('No active dose is ready to dispense.');
     }
     final doseId = TodayNextDoseHelper.doseIdForDate(nextDose.id, now);
+    // Movement is tracked as command progress only. A separate explicit user
+    // action must confirm, skip, or request help for the dose.
     _dispensingDoseId = doseId;
     _emit();
     try {
@@ -140,6 +142,8 @@ class RobotFaceController {
     final displayDoseId = nextSchedule == null
         ? null
         : TodayNextDoseHelper.doseIdForDate(nextSchedule.id, now);
+    // Compute the current dose event once so mode, status, and actions cannot
+    // drift from separate scans of the log.
     final latestDoseEvent = displayDoseId == null
         ? null
         : TodayNextDoseHelper.latestEventForDose(_events, displayDoseId);
@@ -188,6 +192,8 @@ class RobotFaceController {
     }
 
     if (mode == RobotFaceMode.offline || mode == RobotFaceMode.error) {
+      // A controller fault should not strand a visible dispensed dose; keep the
+      // human follow-up actions available until a terminal dose event lands.
       if (latestDoseEvent != null &&
           _keepsDoseActionable(latestDoseEvent.kind)) {
         return dueDoseId;
@@ -223,6 +229,8 @@ class RobotFaceController {
           event.doseId == actionDoseId &&
           event.kind == DoseLogEventKind.caregiverHelpRequested,
     );
+    // Help requests are informational. Confirm/skip stay available so the dose
+    // can still reach a terminal state after help is requested.
     if (hasHelpRequest) {
       actions.remove(RobotFaceActionKind.askForHelp);
     }
@@ -331,6 +339,8 @@ class RobotFaceController {
   DateTime _current() => _currentTime ?? _now();
 
   ReminderSchedule? _displaySchedule(DateTime now) {
+    // Keep showing the latest unresolved due dose before advancing to future
+    // reminders, so follow-up actions stay attached to the right dose.
     return TodayNextDoseHelper.currentOrLatestDueSchedule(
       _activeSchedules,
       _events,
@@ -373,6 +383,8 @@ class RobotFaceController {
     if (dueSchedule == null || dueSchedule.id != nextSchedule.id) {
       return null;
     }
+    // Action ids are only minted for the actual due schedule, not for future
+    // reminders shown in the status card.
     return TodayNextDoseHelper.doseIdForDate(dueSchedule.id, now);
   }
 
@@ -401,6 +413,8 @@ class RobotFaceController {
     final wakeWindowStart = scheduledTime.subtract(wakeBeforeWindow);
     final wakeWindowEnd = scheduledTime.add(stayAwakeWindow);
 
+    // Ramp drives visual urgency before the dose time while stay-awake keeps the
+    // face active afterward for confirmation/help.
     final rampProgress = switch (now.compareTo(scheduledTime)) {
       >= 0 => 1.0,
       _ when wakeBeforeWindow == Duration.zero => 0.0,

@@ -69,6 +69,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     _database = widget.database ?? DoseyDatabase();
     _ownsDatabase = widget.database == null;
     _robotFaceClockController = StreamController<DateTime>.broadcast();
+    // Robot Face only needs coarse time ticks for reminder ramp/sleep state;
+    // user actions and dose logs still update it immediately through streams.
     _robotFaceClockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!_robotFaceClockController.isClosed) {
         _robotFaceClockController.add(DateTime.now());
@@ -138,6 +140,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
 
   Future<void> _syncReminderNotifications() async {
     try {
+      // Startup sync repairs local notification state without blocking app boot.
       await _dependencies.reminderSchedules.syncScheduledNotifications();
     } on Object {
       // Startup sync is best-effort; schedule edits still surface errors.

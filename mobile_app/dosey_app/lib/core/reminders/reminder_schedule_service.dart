@@ -16,6 +16,8 @@ class ReminderScheduleService {
   Future<ReminderScheduleSaveResult> saveSchedule(
     ReminderSchedule schedule,
   ) async {
+    // Persist first. Notification failures should warn the user, not discard
+    // the reminder they just configured.
     await repository.upsertSchedule(schedule);
     try {
       if (!schedule.isEnabled) {
@@ -67,6 +69,8 @@ class ReminderScheduleService {
     try {
       await scheduler.cancelDoseReminder(id);
     } on Exception catch (error) {
+      // Keep the schedule if the platform reminder may still exist; otherwise
+      // the user would lose the only local handle to cancel it later.
       return ReminderScheduleDeleteResult.retained(notificationError: error);
     }
     await repository.deleteSchedule(id);
@@ -94,6 +98,8 @@ class ReminderScheduleService {
     if (!today.isBefore(current)) {
       return today;
     }
+    // Daily reminders missed for today roll to tomorrow instead of firing
+    // immediately on save/startup.
     return today.add(const Duration(days: 1));
   }
 }

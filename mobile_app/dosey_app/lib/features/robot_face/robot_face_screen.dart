@@ -85,6 +85,8 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   }
 
   void _bindStream() {
+    // Tests can inject a controller, stream, or fixed state. Production falls
+    // back to the app-scoped Robot Face controller.
     _stateStream = widget.stateStream ?? widget.controller?.watchState();
     if (_stateStream == null && widget.initialState == null) {
       _stateStream = DoseyAppScope.of(context).robotFaceController.watchState();
@@ -334,6 +336,8 @@ class _RobotFaceStatusCard extends StatelessWidget {
     final badgeEmphasis = _badgeEmphasisFor(state);
     final showActionPanel =
         state.actionDoseId != null && state.availableActions.isNotEmpty;
+    // The controller owns action availability, including offline/error
+    // follow-up states after a dispense. The screen only renders that contract.
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -669,6 +673,8 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
             event,
             successMessage,
           );
+      // The shared logger returns false after handled failures. Leave the
+      // buttons available so the user can retry instead of locking the dose.
       if (!logged) {
         return;
       }
@@ -679,6 +685,8 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
         setState(() {
           final completedActions = _completedActionsForDose(actionDoseId);
           if (_isTerminalAction(actionKind)) {
+            // A terminal outcome resolves the dose; suppress every local action
+            // until controller state rebuilds without the panel.
             completedActions.addAll(widget.state.availableActions);
           } else {
             completedActions.add(actionKind);

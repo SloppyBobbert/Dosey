@@ -219,6 +219,8 @@ class _CurrentDoseSection extends StatefulWidget {
     List<CarouselSlot> slots,
     ReminderSchedule schedule,
   ) {
+    // Today only offers dispense for loaded slots. Terminal logging can still
+    // retire an already-dispensed slot through DoseActionLogger's fallback.
     for (final slot in slots) {
       if (slot.scheduleId == schedule.id &&
           slot.status == CarouselSlotStatus.loaded) {

@@ -26,6 +26,8 @@ class ControllerScreen extends StatelessWidget {
             final controller =
                 controllerSnapshot.data ??
                 const ControllerSnapshot.disconnected();
+            // Manual commands are allowed only from a robot-capable phone with
+            // a connected controller; Personal Mode stays read-only here.
             final canDispense =
                 role.canHostRobot && controller.canRequestDispense;
             return ListView(

@@ -15,6 +15,8 @@ enum RobotFaceTone { calm, ready, attention, warning, offline }
 
 enum RobotFaceActionKind { confirmTaken, skipDose, askForHelp }
 
+// Allows copyWith(actionDoseId: null) to clear the dose id instead of keeping
+// the previous value.
 const Object _unset = Object();
 
 extension RobotFaceModePresentation on RobotFaceMode {
@@ -68,6 +70,7 @@ class RobotFaceState {
   final bool isInAwakeWindow;
   final String? statusLabel;
   final String? actionDoseId;
+  // Non-empty only when the current dose should expose explicit human actions.
   final Set<RobotFaceActionKind> availableActions;
 
   RobotFaceState copyWith({
