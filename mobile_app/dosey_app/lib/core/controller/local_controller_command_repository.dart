@@ -195,6 +195,16 @@ class LocalControllerCommandRepository {
     return rows.map(_sessionFromRow).toList();
   }
 
+  Stream<ControllerCommandSession?> watchLatestRelevantSession() {
+    final query = _latestSessionQuery();
+    return query.watch().map(_latestRelevantSessionFromRows);
+  }
+
+  Future<ControllerCommandSession?> getLatestRelevantSession() async {
+    final rows = await _latestSessionQuery().get();
+    return _latestRelevantSessionFromRows(rows);
+  }
+
   Future<List<ControllerCommandEvent>> getEventsForSession(
     String sessionId,
   ) async {
@@ -214,6 +224,17 @@ class LocalControllerCommandRepository {
     return _database.select(_database.controllerCommandSessions)
       ..where((session) => session.state.isIn(_unresolvedStateNames))
       ..orderBy([(session) => OrderingTerm.asc(session.updatedAt)]);
+  }
+
+  SimpleSelectStatement<
+    $ControllerCommandSessionsTable,
+    ControllerCommandSessionRow
+  >
+  _latestSessionQuery() {
+    return _database.select(_database.controllerCommandSessions)..orderBy([
+      (session) => OrderingTerm.desc(session.updatedAt),
+      (session) => OrderingTerm.desc(session.createdAt),
+    ]);
   }
 
   String _nextSessionId(ControllerCommandType commandType, DateTime now) {
@@ -308,4 +329,18 @@ class LocalControllerCommandRepository {
   ];
 
   static const List<String> _resolvedStateNames = ['succeeded', 'cancelled'];
+
+  static ControllerCommandSession? _latestRelevantSessionFromRows(
+    List<ControllerCommandSessionRow> rows,
+  ) {
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    final unresolvedRow = rows.where((row) {
+      return _unresolvedStateNames.contains(row.state);
+    }).firstOrNull;
+
+    return _sessionFromRow(unresolvedRow ?? rows.first);
+  }
 }

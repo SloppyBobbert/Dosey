@@ -172,4 +172,60 @@ void main() {
       expect(persisted.failureReason, isNull);
     },
   );
+
+  test(
+    'latest relevant session prefers unresolved work over newer resolved history',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalControllerCommandRepository(database);
+      final createdAt = DateTime.utc(2026, 7, 10, 12);
+      final timedOutAt = createdAt.add(const Duration(minutes: 2));
+      final succeededAt = createdAt.add(const Duration(minutes: 5));
+
+      final timedOutSession = await repository.createSession(
+        commandType: ControllerCommandType.dispenseNext,
+        now: createdAt,
+      );
+      await repository.updateSessionState(
+        timedOutSession.id,
+        ControllerCommandSessionState.timedOut,
+        updatedAt: timedOutAt,
+      );
+
+      final succeededSession = await repository.createSession(
+        commandType: ControllerCommandType.dispenseTest,
+        now: succeededAt,
+      );
+      await repository.updateSessionState(
+        succeededSession.id,
+        ControllerCommandSessionState.succeeded,
+        updatedAt: succeededAt,
+      );
+
+      expect(
+        await repository.getLatestRelevantSession(),
+        isA<ControllerCommandSession>()
+            .having((session) => session.id, 'id', timedOutSession.id)
+            .having(
+              (session) => session.state,
+              'state',
+              ControllerCommandSessionState.timedOut,
+            ),
+      );
+
+      await expectLater(
+        repository.watchLatestRelevantSession(),
+        emits(
+          isA<ControllerCommandSession>()
+              .having((session) => session.id, 'id', timedOutSession.id)
+              .having(
+                (session) => session.state,
+                'state',
+                ControllerCommandSessionState.timedOut,
+              ),
+        ),
+      );
+    },
+  );
 }
