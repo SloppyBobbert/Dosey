@@ -64,7 +64,12 @@ class MissedDoseReconciliationService {
         if (candidate == null) {
           continue;
         }
-        await _persistMissedDose(candidate);
+        try {
+          await _persistMissedDose(candidate);
+        } on Object {
+          // Keep reconciliation best-effort per dose so one bad write does not
+          // starve later overdue doses on the same startup or timer tick.
+        }
       }
     }
   }

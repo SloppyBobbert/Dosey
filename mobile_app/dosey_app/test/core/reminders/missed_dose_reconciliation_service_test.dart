@@ -197,6 +197,37 @@ void main() {
         );
       },
     );
+
+    test(
+      'continues reconciling later candidates after one write fails',
+      () async {
+        final reminders = _FakeReminderRepository([
+          _schedule(id: 'first-dose', hour: 8, minute: 0),
+          _schedule(id: 'second-dose', hour: 9, minute: 0),
+        ]);
+        final doseLog = _FakeDoseLogRepository()..remainingAddFailures = 1;
+        final service = MissedDoseReconciliationService(
+          reminders: reminders,
+          doseLog: doseLog,
+          now: () => DateTime(2026, 7, 9, 12),
+        );
+
+        await service.reconcile();
+
+        expect(doseLog.addAttempts, 4);
+        expect(doseLog.addedEvents.map((event) => event.doseId).toList(), [
+          TodayNextDoseHelper.doseIdForDate(
+            'second-dose',
+            DateTime(2026, 7, 8),
+          ),
+          TodayNextDoseHelper.doseIdForDate('first-dose', DateTime(2026, 7, 9)),
+          TodayNextDoseHelper.doseIdForDate(
+            'second-dose',
+            DateTime(2026, 7, 9),
+          ),
+        ]);
+      },
+    );
   });
 }
 
@@ -223,9 +254,16 @@ class _FakeDoseLogRepository implements DoseLogRepository {
 
   final List<DoseLogEvent> _events;
   final List<DoseLogEvent> addedEvents = <DoseLogEvent>[];
+  int remainingAddFailures = 0;
+  int addAttempts = 0;
 
   @override
   Future<void> addEvent(DoseLogEvent event) async {
+    addAttempts += 1;
+    if (remainingAddFailures > 0) {
+      remainingAddFailures -= 1;
+      throw StateError('dose log write failed');
+    }
     addedEvents.add(event);
   }
 
