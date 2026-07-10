@@ -1,15 +1,13 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/controller/controller_gateway.dart';
-import 'package:dosey_app/core/logging/dose_log_repository.dart';
 
 typedef RobotModeAccess = FutureOr<bool> Function();
 
 class SimulatedControllerGateway implements ControllerGateway {
-  SimulatedControllerGateway(this._doseLog, {RobotModeAccess? canHostRobot})
+  SimulatedControllerGateway({RobotModeAccess? canHostRobot})
     : _canHostRobot = canHostRobot ?? _denyRobotMode;
 
-  final DoseLogRepository _doseLog;
   final RobotModeAccess _canHostRobot;
   final _controller = StreamController<ControllerSnapshot>.broadcast();
 
@@ -39,15 +37,6 @@ class SimulatedControllerGateway implements ControllerGateway {
     if (!await Future<bool>.value(_canHostRobot())) {
       throw StateError('Robot Mode must be active before dispense.');
     }
-
-    // The simulator records movement only. Taken/skipped/help outcomes must be
-    // logged by the human follow-up flow.
-    await _doseLog.addEvent(
-      DoseLogEvent.controllerDispenseSucceeded(
-        doseId: doseId,
-        occurredAt: DateTime.now().toUtc(),
-      ),
-    );
   }
 
   @override

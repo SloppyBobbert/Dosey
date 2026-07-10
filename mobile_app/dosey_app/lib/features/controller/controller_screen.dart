@@ -69,9 +69,9 @@ class ControllerScreen extends StatelessWidget {
                           onPressed: canDispense
                               ? () => _runControllerAction(
                                   context,
-                                  () => dependencies.controller.requestDispense(
-                                    doseId: 'manual-test',
-                                  ),
+                                  dependencies
+                                      .controllerLifecycle
+                                      .requestManualDispenseTest,
                                 )
                               : null,
                           icon: Icon(

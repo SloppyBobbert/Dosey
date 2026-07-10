@@ -812,11 +812,11 @@ class _SlotCardState extends State<_SlotCard> {
       // Dispense moves the carousel and logs controller progress only. It must
       // not mark the dose taken.
       await CarouselDispenseCoordinator(
-        carouselSlots: dependencies.carouselSlots,
-        controller: dependencies.controller,
+        controllerLifecycle: dependencies.controllerLifecycle,
       ).dispenseLoadedSlot(
         slotId: widget.slot.id,
         doseId: _CarouselScreenState.doseIdForToday(widget.slot.scheduleId),
+        scheduleId: widget.slot.scheduleId,
       );
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

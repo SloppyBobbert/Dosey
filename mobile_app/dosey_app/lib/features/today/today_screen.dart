@@ -448,9 +448,12 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     final dependencies = DoseyAppScope.of(context);
     try {
       await CarouselDispenseCoordinator(
-        carouselSlots: dependencies.carouselSlots,
-        controller: dependencies.controller,
-      ).dispenseLoadedSlot(slotId: slot.id, doseId: doseId);
+        controllerLifecycle: dependencies.controllerLifecycle,
+      ).dispenseLoadedSlot(
+        slotId: slot.id,
+        doseId: doseId,
+        scheduleId: slot.scheduleId,
+      );
       succeeded = true;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

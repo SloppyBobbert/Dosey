@@ -10,6 +10,8 @@ import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_plus_gateway.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
+import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
@@ -105,8 +107,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     );
     final robotFaceSettings = RobotFaceSettingsRepository(_database);
     final scheduleProfiles = LocalScheduleProfileRepository(_database);
+    final carouselSlots = LocalCarouselSlotRepository(_database);
     final controller = SimulatedControllerGateway(
-      doseLog,
       canHostRobot: () async {
         final platform = currentAppDevicePlatform();
         final storedRole = await settings.getDeviceRole();
@@ -116,12 +118,18 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         return role.canHostRobot;
       },
     );
+    final controllerLifecycle = ControllerLifecycleService(
+      controller: controller,
+      commandRepository: LocalControllerCommandRepository(_database),
+      doseLog: doseLog,
+      carouselSlots: carouselSlots,
+    );
     _missedDoseReconciliation =
         widget.missedDoseReconciliationService ??
         MissedDoseReconciliationService(
           reminders: reminders,
           doseLog: doseLog,
-          carouselSlots: LocalCarouselSlotRepository(_database),
+          carouselSlots: carouselSlots,
           database: _database,
         );
     _missedDoseReconciliationTimer = Timer.periodic(
@@ -138,16 +146,18 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         repository: reminders,
         scheduler: reminderScheduler,
       ),
-      carouselSlots: LocalCarouselSlotRepository(_database),
+      carouselSlots: carouselSlots,
       doseLog: doseLog,
       localAuth: localAuth,
       auth: AppAuthService(localAuth: localAuth),
       controller: controller,
+      controllerLifecycle: controllerLifecycle,
       robotFaceSettings: robotFaceSettings,
       robotFaceController: RobotFaceController(
         settings: settings,
         robotFaceSettings: robotFaceSettings,
         controller: controller,
+        controllerLifecycle: controllerLifecycle,
         scheduleProfiles: scheduleProfiles,
         reminders: reminders,
         doseLog: doseLog,
@@ -234,6 +244,7 @@ class DoseyAppDependencies {
     required this.localAuth,
     required this.auth,
     required this.controller,
+    required this.controllerLifecycle,
     required this.robotFaceSettings,
     required this.robotFaceController,
     required this.ble,
@@ -254,6 +265,7 @@ class DoseyAppDependencies {
   final LocalAuthRepository localAuth;
   final AuthService auth;
   final ControllerGateway controller;
+  final ControllerLifecycleService controllerLifecycle;
   final RobotFaceSettingsRepository robotFaceSettings;
   final RobotFaceController robotFaceController;
   final BleGateway ble;

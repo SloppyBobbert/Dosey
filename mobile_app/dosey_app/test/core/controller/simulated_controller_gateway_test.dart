@@ -1,16 +1,11 @@
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
-import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test('simulated controller starts disconnected and unsafe', () async {
-    final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
-    final gateway = SimulatedControllerGateway(
-      DriftDoseLogRepository(database),
-    );
+    final gateway = SimulatedControllerGateway();
     addTearDown(gateway.close);
 
     final snapshot = await gateway.watchController().first;
@@ -22,11 +17,7 @@ void main() {
   test('simulated controller gates dispense on connection', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
-    final doseLog = DriftDoseLogRepository(database);
-    final gateway = SimulatedControllerGateway(
-      doseLog,
-      canHostRobot: () => true,
-    );
+    final gateway = SimulatedControllerGateway(canHostRobot: () => true);
     addTearDown(gateway.close);
 
     expect(gateway.requestDispense(doseId: 'morning'), throwsStateError);
@@ -38,9 +29,7 @@ void main() {
 
     await gateway.requestDispense(doseId: 'morning');
 
-    final events = await doseLog.watchEvents().first;
-    expect(events.single.kind, DoseLogEventKind.controllerDispenseSucceeded);
-    expect(events.single.marksDoseTaken, isFalse);
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
   });
 
   test(
@@ -48,34 +37,27 @@ void main() {
     () async {
       final database = DoseyDatabase.inMemory();
       addTearDown(database.close);
-      final doseLog = DriftDoseLogRepository(database);
-      final gateway = SimulatedControllerGateway(doseLog);
+      final gateway = SimulatedControllerGateway();
       addTearDown(gateway.close);
 
       await gateway.connect();
 
       expect(gateway.requestDispense(doseId: 'morning'), throwsStateError);
 
-      final events = await doseLog.watchEvents().first;
-      expect(events, isEmpty);
+      expect(await database.select(database.doseLogEvents).get(), isEmpty);
     },
   );
 
   test('simulated controller rejects dispense outside Robot Mode', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
-    final doseLog = DriftDoseLogRepository(database);
-    final gateway = SimulatedControllerGateway(
-      doseLog,
-      canHostRobot: () async => false,
-    );
+    final gateway = SimulatedControllerGateway(canHostRobot: () async => false);
     addTearDown(gateway.close);
 
     await gateway.connect();
 
     expect(gateway.requestDispense(doseId: 'morning'), throwsStateError);
 
-    final events = await doseLog.watchEvents().first;
-    expect(events, isEmpty);
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
   });
 }

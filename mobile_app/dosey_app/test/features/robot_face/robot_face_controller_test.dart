@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -761,6 +762,9 @@ class _RobotFaceControllerFixture {
     final reminders = _FakeReminderRepository();
     final doseLog = _FakeDoseLogRepository();
     final controllerGateway = _FakeControllerGateway(controllerSnapshot);
+    final controllerLifecycle = _FakeControllerLifecycleService(
+      controllerGateway: controllerGateway,
+    );
     var currentNow = now;
 
     await settings.setDeviceRole(AppDeviceRole.androidRobot);
@@ -794,6 +798,7 @@ class _RobotFaceControllerFixture {
       settings: settings,
       robotFaceSettings: robotFaceSettingsRepository,
       controller: controllerGateway,
+      controllerLifecycle: controllerLifecycle,
       scheduleProfiles: profiles,
       reminders: reminders,
       doseLog: doseLog,
@@ -870,6 +875,24 @@ class _FakeControllerGateway implements ControllerGateway {
     yield _snapshot;
     yield* _controller.stream;
   }
+}
+
+class _FakeControllerLifecycleService implements ControllerLifecycleService {
+  _FakeControllerLifecycleService({required this.controllerGateway});
+
+  final _FakeControllerGateway controllerGateway;
+
+  @override
+  Future<void> requestDoseDispense({
+    required String doseId,
+    String? slotId,
+    String? scheduleId,
+  }) {
+    return controllerGateway.requestDispense(doseId: doseId);
+  }
+
+  @override
+  Future<void> requestManualDispenseTest() async {}
 }
 
 class _FakeDoseLogRepository implements DoseLogRepository {
