@@ -785,8 +785,8 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
     );
   }
 
-  // Save only the local label/count metadata. The app does not verify the
-  // prescription or identify pills.
+  // Save local label, count, pill graphic, and refill settings only. The app
+  // does not verify prescriptions or identify pills.
   Future<void> _save() async {
     if (_isSaving) return;
 

@@ -46,7 +46,7 @@ class DoseLogScreen extends StatelessWidget {
   }
 
   static String _labelFor(DoseLogEventKind kind) {
-    // Labels stay audit-focused; they do not imply a dose was taken.
+    // Labels describe audit events; marksDoseTaken drives summaries and effects.
     return switch (kind) {
       DoseLogEventKind.controllerDispenseSucceeded =>
         'Controller dispense succeeded',

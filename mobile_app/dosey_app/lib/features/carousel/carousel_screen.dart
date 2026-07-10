@@ -647,7 +647,7 @@ class _AssignmentCard extends StatelessWidget {
   ReminderSchedule? _nextUnassignedSchedule() {
     final assignedScheduleIds = {for (final slot in slots) slot.scheduleId};
     for (final schedule in schedules) {
-      // Only prescription-backed schedules can become physical Daviky slots.
+      // Only enabled schedules with a prescription id can become physical slots.
       if (schedule.isEnabled &&
           schedule.prescriptionId != null &&
           !assignedScheduleIds.contains(schedule.id)) {
