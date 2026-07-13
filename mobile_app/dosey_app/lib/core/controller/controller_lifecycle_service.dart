@@ -30,6 +30,8 @@ class ControllerLifecycleService {
   final DateTime Function() _now;
   final Set<String> _activeDispenseKeys = <String>{};
 
+  static const _controllerDispenseKey = 'controller:dispense';
+
   Future<void> requestManualDispenseTest() {
     return _runDispense(
       commandType: ControllerCommandType.dispenseTest,
@@ -56,8 +58,8 @@ class ControllerLifecycleService {
     String? slotId,
     String? scheduleId,
   }) async {
-    // Guard by dose and slot so Today, Carousel, and Robot Face cannot start
-    // duplicate dispense sessions for the same physical dose path.
+    // The controller has one physical dispense path. Serialize every dispense
+    // command globally, then keep dose/slot keys for clearer duplicate errors.
     final activeKeys = <String>{'dose:$doseId'};
     if (slotId != null) {
       activeKeys.add('slot:$slotId');
@@ -67,6 +69,12 @@ class ControllerLifecycleService {
         'A dispense request is already in progress for this dose.',
       );
     }
+    if (_activeDispenseKeys.contains(_controllerDispenseKey)) {
+      throw const DuplicateDispenseRequestException(
+        'A controller dispense request is already in progress.',
+      );
+    }
+    activeKeys.add(_controllerDispenseKey);
     _activeDispenseKeys.addAll(activeKeys);
 
     var controllerMoved = false;

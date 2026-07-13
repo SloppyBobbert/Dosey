@@ -490,6 +490,81 @@ void main() {
     },
   );
 
+  test('manual test in flight blocks dose dispense', () async {
+    final gateway = _BlockingControllerGateway();
+    final fixture = await _LifecycleFixture.create(gateway: gateway);
+    addTearDown(fixture.close);
+
+    final manualRequest = fixture.service.requestManualDispenseTest();
+
+    await gateway.requestStarted.future;
+
+    await expectLater(
+      fixture.service.requestDoseDispense(
+        doseId: 'dose-1',
+        scheduleId: 'schedule-1',
+        slotId: 'slot-1',
+      ),
+      throwsA(
+        isA<DuplicateDispenseRequestException>().having(
+          (error) => error.message,
+          'message',
+          'A controller dispense request is already in progress.',
+        ),
+      ),
+    );
+
+    gateway.completeRequest();
+    await manualRequest;
+
+    final sessionRows = await fixture.database
+        .select(fixture.database.controllerCommandSessions)
+        .get();
+    expect(sessionRows, hasLength(1));
+    expect(
+      sessionRows.single.commandType,
+      ControllerCommandType.dispenseTest.name,
+    );
+  });
+
+  test('one dose dispense in flight blocks a different dose', () async {
+    final gateway = _BlockingControllerGateway();
+    final fixture = await _LifecycleFixture.create(gateway: gateway);
+    addTearDown(fixture.close);
+
+    final firstRequest = fixture.service.requestDoseDispense(
+      doseId: 'dose-1',
+      scheduleId: 'schedule-1',
+      slotId: 'slot-1',
+    );
+
+    await gateway.requestStarted.future;
+
+    await expectLater(
+      fixture.service.requestDoseDispense(
+        doseId: 'dose-2',
+        scheduleId: 'schedule-2',
+        slotId: 'slot-2',
+      ),
+      throwsA(
+        isA<DuplicateDispenseRequestException>().having(
+          (error) => error.message,
+          'message',
+          'A controller dispense request is already in progress.',
+        ),
+      ),
+    );
+
+    gateway.completeRequest();
+    await firstRequest;
+
+    final sessionRows = await fixture.database
+        .select(fixture.database.controllerCommandSessions)
+        .get();
+    expect(sessionRows, hasLength(1));
+    expect(sessionRows.single.doseId, 'dose-1');
+  });
+
   test('post-send local failures do not reopen the slot as loaded', () async {
     final fixture = await _LifecycleFixture.create(
       doseLog: _ThrowingDoseLogRepository(),
