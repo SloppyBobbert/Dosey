@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -552,6 +553,40 @@ void main() {
   );
 
   test(
+    'second robot face dispense request is rejected before another lifecycle call starts',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        scheduleHour: 9,
+        scheduleMinute: 0,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final firstRequest = fixture.controller.requestDispenseForCurrentDose();
+      await fixture.controllerGateway.requestStarted.future;
+
+      await expectLater(
+        fixture.controller.requestDispenseForCurrentDose(),
+        throwsA(
+          isA<DuplicateDispenseRequestException>().having(
+            (error) => error.message,
+            'message',
+            'A dispense request is already in progress for this dose.',
+          ),
+        ),
+      );
+      expect(fixture.controllerGateway.requestedDoseIds, <String>[
+        fixture.currentDoseId,
+      ]);
+
+      fixture.controllerGateway.completeDispense();
+      await firstRequest;
+    },
+  );
+
+  test(
     'dispense request rejects a completed current due dose when the next dose is still in the future',
     () async {
       final now = DateTime(2026, 7, 8, 9, 5);
@@ -761,6 +796,9 @@ class _RobotFaceControllerFixture {
     final reminders = _FakeReminderRepository();
     final doseLog = _FakeDoseLogRepository();
     final controllerGateway = _FakeControllerGateway(controllerSnapshot);
+    final controllerLifecycle = _FakeControllerLifecycleService(
+      controllerGateway: controllerGateway,
+    );
     var currentNow = now;
 
     await settings.setDeviceRole(AppDeviceRole.androidRobot);
@@ -794,6 +832,7 @@ class _RobotFaceControllerFixture {
       settings: settings,
       robotFaceSettings: robotFaceSettingsRepository,
       controller: controllerGateway,
+      controllerLifecycle: controllerLifecycle,
       scheduleProfiles: profiles,
       reminders: reminders,
       doseLog: doseLog,
@@ -831,6 +870,7 @@ class _FakeControllerGateway implements ControllerGateway {
   final _controller = StreamController<ControllerSnapshot>.broadcast();
   ControllerSnapshot _snapshot;
   final List<String> requestedDoseIds = <String>[];
+  final requestStarted = Completer<void>();
   Completer<void>? _dispenseCompleter;
 
   @override
@@ -850,6 +890,9 @@ class _FakeControllerGateway implements ControllerGateway {
   @override
   Future<void> requestDispense({required String doseId}) async {
     requestedDoseIds.add(doseId);
+    if (!requestStarted.isCompleted) {
+      requestStarted.complete();
+    }
     final completer = Completer<void>();
     _dispenseCompleter = completer;
     await completer.future;
@@ -870,6 +913,24 @@ class _FakeControllerGateway implements ControllerGateway {
     yield _snapshot;
     yield* _controller.stream;
   }
+}
+
+class _FakeControllerLifecycleService implements ControllerLifecycleService {
+  _FakeControllerLifecycleService({required this.controllerGateway});
+
+  final _FakeControllerGateway controllerGateway;
+
+  @override
+  Future<void> requestDoseDispense({
+    required String doseId,
+    String? slotId,
+    String? scheduleId,
+  }) {
+    return controllerGateway.requestDispense(doseId: doseId);
+  }
+
+  @override
+  Future<void> requestManualDispenseTest() async {}
 }
 
 class _FakeDoseLogRepository implements DoseLogRepository {

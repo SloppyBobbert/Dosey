@@ -1,5 +1,52 @@
 enum ControllerConnectionState { disconnected, scanning, connected, error }
 
+abstract class ControllerGatewayException implements Exception {
+  const ControllerGatewayException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+class ControllerCommandRejectedException extends ControllerGatewayException {
+  const ControllerCommandRejectedException([
+    super.message = 'Controller rejected command.',
+  ]);
+}
+
+class ControllerCommandPreconditionException
+    extends ControllerGatewayException {
+  const ControllerCommandPreconditionException([
+    super.message = 'Controller cannot accept this command yet.',
+  ]);
+}
+
+class ControllerTransportOfflineException extends ControllerGatewayException {
+  const ControllerTransportOfflineException([
+    super.message = 'Controller transport is offline.',
+  ]);
+}
+
+class ControllerCommandTimeoutException extends ControllerGatewayException {
+  const ControllerCommandTimeoutException([
+    super.message = 'Controller command timed out after acceptance.',
+  ]);
+}
+
+class ControllerCommandJamException extends ControllerGatewayException {
+  const ControllerCommandJamException([
+    super.message = 'Controller reported a jam after acceptance.',
+  ]);
+}
+
+class ControllerCommandInterruptedException extends ControllerGatewayException {
+  const ControllerCommandInterruptedException([
+    super.message =
+        'Controller connection was lost after the command may have been accepted.',
+  ]);
+}
+
 class ControllerSnapshot {
   const ControllerSnapshot({
     required this.connectionState,
@@ -29,6 +76,11 @@ abstract interface class ControllerGateway {
 
   Future<void> disconnect();
 
+  /// Throws a typed exception so lifecycle code can distinguish between:
+  /// - definite pre-accept failures (`ControllerCommandPreconditionException`,
+  ///   `ControllerCommandRejectedException`, `ControllerTransportOfflineException`)
+  /// - accepted or acceptance-ambiguous failures (`ControllerCommandTimeoutException`,
+  ///   `ControllerCommandJamException`, `ControllerCommandInterruptedException`)
   Future<void> requestDispense({required String doseId});
 
   Future<void> cancelActiveCommand();

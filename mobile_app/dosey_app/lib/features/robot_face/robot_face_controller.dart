@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
@@ -18,6 +19,7 @@ class RobotFaceController {
     required this._settings,
     required this._robotFaceSettings,
     required this._controller,
+    required this._controllerLifecycle,
     required this._scheduleProfiles,
     required this._reminders,
     required this._doseLog,
@@ -66,6 +68,7 @@ class RobotFaceController {
   final LocalAppSettingsRepository _settings;
   final RobotFaceSettingsRepository _robotFaceSettings;
   final ControllerGateway _controller;
+  final ControllerLifecycleService _controllerLifecycle;
   final ScheduleProfileRepository _scheduleProfiles;
   final ReminderRepository _reminders;
   final DoseLogRepository _doseLog;
@@ -105,12 +108,20 @@ class RobotFaceController {
       throw StateError('No active dose is ready to dispense.');
     }
     final doseId = TodayNextDoseHelper.doseIdForDate(nextDose.id, now);
+    if (_dispensingDoseId != null) {
+      throw const DuplicateDispenseRequestException(
+        'A dispense request is already in progress for this dose.',
+      );
+    }
     // Movement is tracked as command progress only. A separate explicit user
     // action must confirm, skip, or request help for the dose.
     _dispensingDoseId = doseId;
     _emit();
     try {
-      await _controller.requestDispense(doseId: doseId);
+      await _controllerLifecycle.requestDoseDispense(
+        doseId: doseId,
+        scheduleId: nextDose.id,
+      );
     } finally {
       _dispensingDoseId = null;
       _lastInteractionAt = _current();

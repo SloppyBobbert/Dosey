@@ -1,16 +1,36 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/controller/controller_gateway.dart';
-import 'package:dosey_app/core/logging/dose_log_repository.dart';
 
 typedef RobotModeAccess = FutureOr<bool> Function();
 
-class SimulatedControllerGateway implements ControllerGateway {
-  SimulatedControllerGateway(this._doseLog, {RobotModeAccess? canHostRobot})
-    : _canHostRobot = canHostRobot ?? _denyRobotMode;
+enum SimulatedDispenseOutcome {
+  success,
+  rejected,
+  offlineBeforeAcceptance,
+  disconnectBeforeAcceptance,
+  timeoutAfterAcceptance,
+  jamAfterAcceptance,
+  disconnectAfterAcceptance,
+}
 
-  final DoseLogRepository _doseLog;
+class SimulatedControllerGateway implements ControllerGateway {
+  SimulatedControllerGateway({
+    RobotModeAccess? canHostRobot,
+    SimulatedDispenseOutcome nextDispenseOutcome =
+        SimulatedDispenseOutcome.success,
+  }) : this._internal(
+         canHostRobot: canHostRobot,
+         nextDispenseOutcome: nextDispenseOutcome,
+       );
+
+  SimulatedControllerGateway._internal({
+    RobotModeAccess? canHostRobot,
+    required this._nextDispenseOutcome,
+  }) : _canHostRobot = canHostRobot ?? _denyRobotMode;
+
   final RobotModeAccess _canHostRobot;
+  SimulatedDispenseOutcome _nextDispenseOutcome;
   final _controller = StreamController<ControllerSnapshot>.broadcast();
 
   ControllerSnapshot _snapshot = const ControllerSnapshot.disconnected();
@@ -34,20 +54,37 @@ class SimulatedControllerGateway implements ControllerGateway {
   @override
   Future<void> requestDispense({required String doseId}) async {
     if (!_snapshot.canRequestDispense) {
-      throw StateError('Controller must be connected before dispense.');
+      throw const ControllerCommandPreconditionException(
+        'Controller must be connected before dispense.',
+      );
     }
     if (!await Future<bool>.value(_canHostRobot())) {
-      throw StateError('Robot Mode must be active before dispense.');
+      throw const ControllerCommandPreconditionException(
+        'Robot Mode must be active before dispense.',
+      );
     }
 
-    // The simulator records movement only. Taken/skipped/help outcomes must be
-    // logged by the human follow-up flow.
-    await _doseLog.addEvent(
-      DoseLogEvent.controllerDispenseSucceeded(
-        doseId: doseId,
-        occurredAt: DateTime.now().toUtc(),
-      ),
-    );
+    final outcome = _nextDispenseOutcome;
+    _nextDispenseOutcome = SimulatedDispenseOutcome.success;
+    switch (outcome) {
+      case SimulatedDispenseOutcome.success:
+        return;
+      case SimulatedDispenseOutcome.rejected:
+        throw const ControllerCommandRejectedException();
+      case SimulatedDispenseOutcome.offlineBeforeAcceptance:
+      case SimulatedDispenseOutcome.disconnectBeforeAcceptance:
+        throw const ControllerTransportOfflineException();
+      case SimulatedDispenseOutcome.timeoutAfterAcceptance:
+        throw const ControllerCommandTimeoutException();
+      case SimulatedDispenseOutcome.jamAfterAcceptance:
+        throw const ControllerCommandJamException();
+      case SimulatedDispenseOutcome.disconnectAfterAcceptance:
+        throw const ControllerCommandInterruptedException();
+    }
+  }
+
+  void queueNextDispenseOutcome(SimulatedDispenseOutcome outcome) {
+    _nextDispenseOutcome = outcome;
   }
 
   @override

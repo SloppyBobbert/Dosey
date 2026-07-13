@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,9 @@ class ControllerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.of(context);
+    final commandRepository = LocalControllerCommandRepository(
+      dependencies.database,
+    );
 
     return StreamBuilder<AppDeviceRole>(
       stream: dependencies.settings.watchDeviceRole(),
@@ -46,6 +50,15 @@ class ControllerScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
+                StreamBuilder<ControllerCommandSession?>(
+                  stream: commandRepository.watchLatestRelevantSession(),
+                  builder: (context, sessionSnapshot) {
+                    return _ControllerCommandStatusCard(
+                      session: sessionSnapshot.data,
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -69,9 +82,9 @@ class ControllerScreen extends StatelessWidget {
                           onPressed: canDispense
                               ? () => _runControllerAction(
                                   context,
-                                  () => dependencies.controller.requestDispense(
-                                    doseId: 'manual-test',
-                                  ),
+                                  dependencies
+                                      .controllerLifecycle
+                                      .requestManualDispenseTest,
                                 )
                               : null,
                           icon: Icon(
@@ -109,6 +122,80 @@ class ControllerScreen extends StatelessWidget {
         SnackBar(content: Text('Controller action failed: $error')),
       );
     }
+  }
+}
+
+class _ControllerCommandStatusCard extends StatelessWidget {
+  const _ControllerCommandStatusCard({required this.session});
+
+  final ControllerCommandSession? session;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final status = _ControllerCommandStatusViewData.fromSession(session);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Controller command status',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(status.icon, color: status.color),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: status.color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          status.label,
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: status.color,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        status.headline,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        status.detail,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -276,5 +363,124 @@ class _ControllerHeroChip extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _ControllerCommandStatusViewData {
+  const _ControllerCommandStatusViewData({
+    required this.label,
+    required this.headline,
+    required this.detail,
+    required this.icon,
+    required this.color,
+  });
+
+  final String label;
+  final String headline;
+  final String detail;
+  final IconData icon;
+  final Color color;
+
+  static _ControllerCommandStatusViewData fromSession(
+    ControllerCommandSession? session,
+  ) {
+    if (session == null) {
+      return const _ControllerCommandStatusViewData(
+        label: 'No activity',
+        headline: 'No controller command yet.',
+        detail: 'Movement stays separate from dose taken confirmation.',
+        icon: Icons.hourglass_empty,
+        color: Colors.grey,
+      );
+    }
+
+    switch (session.state) {
+      case ControllerCommandSessionState.pending:
+        return const _ControllerCommandStatusViewData(
+          label: 'Waiting',
+          headline: 'The last controller command was sent.',
+          detail: 'Waiting for the controller to respond.',
+          icon: Icons.schedule,
+          color: Colors.orange,
+        );
+      case ControllerCommandSessionState.accepted:
+        return const _ControllerCommandStatusViewData(
+          label: 'In progress',
+          headline: 'The controller accepted the last command.',
+          detail: 'Waiting for movement to finish.',
+          icon: Icons.motion_photos_on_outlined,
+          color: Colors.orange,
+        );
+      case ControllerCommandSessionState.succeeded:
+        return const _ControllerCommandStatusViewData(
+          label: 'Completed',
+          headline: 'The last controller command completed.',
+          detail: 'Movement stays separate from dose taken confirmation.',
+          icon: Icons.check_circle_outline,
+          color: Colors.green,
+        );
+      case ControllerCommandSessionState.failed:
+        return switch (session.failureReason) {
+          ControllerCommandFailureReason.nack =>
+            const _ControllerCommandStatusViewData(
+              label: 'Rejected',
+              headline: 'The last controller command was rejected.',
+              detail: 'No dose should be treated as taken from this result.',
+              icon: Icons.block_outlined,
+              color: Colors.red,
+            ),
+          ControllerCommandFailureReason.offline =>
+            const _ControllerCommandStatusViewData(
+              label: 'Offline',
+              headline:
+                  'The last controller command could not reach the controller.',
+              detail: 'Reconnect before trying again.',
+              icon: Icons.wifi_off_outlined,
+              color: Colors.red,
+            ),
+          ControllerCommandFailureReason.jam =>
+            const _ControllerCommandStatusViewData(
+              label: 'Needs review',
+              headline: 'The last controller command reported a jam.',
+              detail: 'Check the dispenser before trying again.',
+              icon: Icons.error_outline,
+              color: Colors.red,
+            ),
+          ControllerCommandFailureReason.disconnect ||
+          null => const _ControllerCommandStatusViewData(
+            label: 'Failed',
+            headline:
+                'The last controller command failed before movement was confirmed.',
+            detail: 'Check the dispenser before trying again.',
+            icon: Icons.error_outline,
+            color: Colors.red,
+          ),
+        };
+      case ControllerCommandSessionState.timedOut:
+        return const _ControllerCommandStatusViewData(
+          label: 'Needs review',
+          headline: 'The last controller command timed out after acceptance.',
+          detail: 'Check the dispenser before trying again.',
+          icon: Icons.error_outline,
+          color: Colors.red,
+        );
+      case ControllerCommandSessionState.cancelled:
+        return const _ControllerCommandStatusViewData(
+          label: 'Cancelled',
+          headline: 'The last controller command was cancelled.',
+          detail: 'Movement stays separate from dose taken confirmation.',
+          icon: Icons.cancel_outlined,
+          color: Colors.grey,
+        );
+      case ControllerCommandSessionState.interrupted:
+        return const _ControllerCommandStatusViewData(
+          label: 'Needs review',
+          headline:
+              'The last controller command was interrupted after it may have started.',
+          detail: 'Check the dispenser before trying again.',
+          icon: Icons.error_outline,
+          color: Colors.red,
+        );
+    }
   }
 }
