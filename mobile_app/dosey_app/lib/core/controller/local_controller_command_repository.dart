@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -241,8 +242,11 @@ class LocalControllerCommandRepository implements ControllerCommandRepository {
 
   @override
   Stream<ControllerCommandSession?> watchLatestRelevantSession() {
-    final query = _latestSessionQuery();
-    return query.watch().map(_latestRelevantSessionFromRows);
+    // Combine two bounded queries instead of scanning the whole table: prefer
+    // the newest unresolved session, otherwise fall back to the newest row.
+    final unresolvedStream = _unresolvedSessionsLatestFirstQuery().watch();
+    final latestStream = (_latestSessionQuery()..limit(1)).watch();
+    return _combineLatestRelevantSession(unresolvedStream, latestStream);
   }
 
   @override
@@ -389,17 +393,55 @@ class LocalControllerCommandRepository implements ControllerCommandRepository {
 
   static const List<String> _resolvedStateNames = ['succeeded', 'cancelled'];
 
-  static ControllerCommandSession? _latestRelevantSessionFromRows(
-    List<ControllerCommandSessionRow> rows,
+  // combineLatest-style merge without adding an rxdart dependency: emit only
+  // after both bounded streams have produced a value, then prefer the newest
+  // unresolved session and fall back to the newest row overall.
+  static Stream<ControllerCommandSession?> _combineLatestRelevantSession(
+    Stream<List<ControllerCommandSessionRow>> unresolvedStream,
+    Stream<List<ControllerCommandSessionRow>> latestStream,
   ) {
-    if (rows.isEmpty) {
-      return null;
+    late final StreamController<ControllerCommandSession?> controller;
+    StreamSubscription<List<ControllerCommandSessionRow>>? unresolvedSub;
+    StreamSubscription<List<ControllerCommandSessionRow>>? latestSub;
+    List<ControllerCommandSessionRow> unresolvedRows =
+        const <ControllerCommandSessionRow>[];
+    List<ControllerCommandSessionRow> latestRows =
+        const <ControllerCommandSessionRow>[];
+    var hasUnresolved = false;
+    var hasLatest = false;
+
+    void emit() {
+      if (!hasUnresolved || !hasLatest) {
+        return;
+      }
+      if (unresolvedRows.isNotEmpty) {
+        controller.add(_sessionFromRow(unresolvedRows.first));
+        return;
+      }
+      controller.add(
+        latestRows.isEmpty ? null : _sessionFromRow(latestRows.first),
+      );
     }
 
-    final unresolvedRow = rows
-        .where((row) => row.resolvedAt == null)
-        .firstOrNull;
+    controller = StreamController<ControllerCommandSession?>(
+      onListen: () {
+        unresolvedSub = unresolvedStream.listen((rows) {
+          unresolvedRows = rows;
+          hasUnresolved = true;
+          emit();
+        }, onError: controller.addError);
+        latestSub = latestStream.listen((rows) {
+          latestRows = rows;
+          hasLatest = true;
+          emit();
+        }, onError: controller.addError);
+      },
+      onCancel: () async {
+        await unresolvedSub?.cancel();
+        await latestSub?.cancel();
+      },
+    );
 
-    return _sessionFromRow(unresolvedRow ?? rows.first);
+    return controller.stream;
   }
 }
