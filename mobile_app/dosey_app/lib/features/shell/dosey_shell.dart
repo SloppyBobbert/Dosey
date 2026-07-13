@@ -23,7 +23,7 @@ class DoseyShell extends StatefulWidget {
 }
 
 class _DoseyShellState extends State<DoseyShell> {
-  int _selectedIndex = 0;
+  _ShellTabId? _selectedTabId;
   SettingsSection? _settingsSectionTarget;
   int _settingsNavigationRequest = 0;
   ReminderNotificationTapController? _notificationTaps;
@@ -60,16 +60,7 @@ class _DoseyShellState extends State<DoseyShell> {
       builder: (context, roleSnapshot) {
         final role = _resolvedRole(roleSnapshot.data, platform);
         final tabs = _buildTabs(role);
-        // Role changes can remove Robot Face; clamp before rebuilding the stack.
-        final selectedIndex = _selectedIndex.clamp(0, tabs.length - 1);
-        if (selectedIndex != _selectedIndex) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            setState(() {
-              _selectedIndex = selectedIndex;
-            });
-          });
-        }
+        final selectedIndex = _selectedIndexForTabs(tabs, role);
 
         final activeTab = tabs[selectedIndex];
         final settingsTabIndex = tabs.indexWhere(
@@ -126,7 +117,7 @@ class _DoseyShellState extends State<DoseyShell> {
             selectedIndex: selectedIndex,
             onDestinationSelected: (index) {
               setState(() {
-                _selectedIndex = index;
+                _selectedTabId = tabs[index].id;
               });
             },
             destinations: tabs.map((tab) => tab.destination).toList(),
@@ -329,16 +320,17 @@ class _DoseyShellState extends State<DoseyShell> {
       // Bump the key so repeated settings deep links scroll again.
       _settingsSectionTarget = section;
       _settingsNavigationRequest += 1;
-      _selectedIndex = settingsTabIndex;
+      _selectedTabId = _ShellTabId.settings;
     });
   }
 
   void _selectTab(int index) {
-    if (_selectedIndex == index) {
+    final nextTabId = _ShellTabId.values[index];
+    if (_selectedTabId == nextTabId) {
       return;
     }
     setState(() {
-      _selectedIndex = index;
+      _selectedTabId = nextTabId;
     });
   }
 
@@ -347,6 +339,18 @@ class _DoseyShellState extends State<DoseyShell> {
       return;
     }
     _selectTab(_todayTabIndex);
+  }
+
+  int _selectedIndexForTabs(List<_ShellTab> tabs, AppDeviceRole role) {
+    final selectedTabId = _selectedTabId ?? _defaultTabIdFor(role);
+    final selectedIndex = tabs.indexWhere((tab) => tab.id == selectedTabId);
+    return selectedIndex >= 0 ? selectedIndex : 0;
+  }
+
+  _ShellTabId _defaultTabIdFor(AppDeviceRole role) {
+    return role == AppDeviceRole.androidRobot
+        ? _ShellTabId.robotFace
+        : _ShellTabId.today;
   }
 }
 
