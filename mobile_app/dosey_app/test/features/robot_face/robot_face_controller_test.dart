@@ -667,6 +667,164 @@ void main() {
     expect(missedState.statusLabel, 'Dose missed');
   });
 
+  test(
+    'latest doseMissed shows missed alert with recognition action available',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        scheduleHour: 9,
+        scheduleMinute: 0,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissed(
+          doseId: fixture.currentDoseId,
+          occurredAt: fixture.now.toUtc(),
+        ),
+      );
+
+      final missedState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.missed,
+      );
+
+      expect(missedState.actionDoseId, fixture.currentDoseId);
+      expect(missedState.availableActions, <RobotFaceActionKind>{
+        RobotFaceActionKind.recognizeMissedDose,
+      });
+      expect(missedState.statusLabel, 'Dose missed');
+    },
+  );
+
+  test(
+    'doseMissed followed by doseMissedRecognized clears the missed alert and recognition action',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        schedules: <ReminderSchedule>[
+          _schedule(
+            id: 'schedule-1',
+            profileId: 'profile-1',
+            hour: 9,
+            minute: 0,
+            now: DateTime(2026, 7, 8, 9, 5),
+          ),
+          _schedule(
+            id: 'schedule-2',
+            profileId: 'profile-1',
+            hour: 13,
+            minute: 0,
+            now: DateTime(2026, 7, 8, 9, 5),
+            label: 'Afternoon meds',
+          ),
+        ],
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissed(
+          doseId: fixture.currentDoseId,
+          occurredAt: DateTime(2026, 7, 8, 9, 5).toUtc(),
+        ),
+      );
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissedRecognized(
+          doseId: fixture.currentDoseId,
+          occurredAt: DateTime(2026, 7, 8, 9, 6).toUtc(),
+        ),
+      );
+
+      final clearedState = await fixture.controller.watchState().firstWhere(
+        (state) => state.nextEventLabel == '13:00 · Afternoon meds',
+      );
+
+      expect(clearedState.mode, RobotFaceMode.idle);
+      expect(clearedState.actionDoseId, isNull);
+      expect(clearedState.availableActions, isEmpty);
+    },
+  );
+
+  test(
+    'missed recognition does not revive confirm skip or help actions for that dose',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        scheduleHour: 9,
+        scheduleMinute: 0,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissed(
+          doseId: fixture.currentDoseId,
+          occurredAt: DateTime(2026, 7, 8, 9, 5).toUtc(),
+        ),
+      );
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissedRecognized(
+          doseId: fixture.currentDoseId,
+          occurredAt: DateTime(2026, 7, 8, 9, 6).toUtc(),
+        ),
+      );
+
+      final recognizedState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.idle,
+      );
+
+      expect(
+        recognizedState.availableActions,
+        isNot(
+          containsAll(<RobotFaceActionKind>{
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+            RobotFaceActionKind.askForHelp,
+          }),
+        ),
+      );
+      expect(recognizedState.availableActions, isEmpty);
+    },
+  );
+
+  test(
+    'missed recognition keeps missed-dose status language and does not show taken copy',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        scheduleHour: 9,
+        scheduleMinute: 0,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissed(
+          doseId: fixture.currentDoseId,
+          occurredAt: DateTime(2026, 7, 8, 9, 5).toUtc(),
+        ),
+      );
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissedRecognized(
+          doseId: fixture.currentDoseId,
+          occurredAt: DateTime(2026, 7, 8, 9, 6).toUtc(),
+        ),
+      );
+
+      final recognizedState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.idle,
+      );
+
+      expect(recognizedState.statusLabel, isNot(contains('taken')));
+      expect(recognizedState.statusLabel, contains('Missed'));
+    },
+  );
+
   test('robot face mode tone matches the MVP presentation mapping', () {
     expect(RobotFaceMode.idle.tone, RobotFaceTone.calm);
     expect(RobotFaceMode.sleepy.tone, RobotFaceTone.calm);

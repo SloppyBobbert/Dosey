@@ -13,7 +13,12 @@ enum RobotFaceMode {
 
 enum RobotFaceTone { calm, ready, attention, warning, offline }
 
-enum RobotFaceActionKind { confirmTaken, skipDose, askForHelp }
+enum RobotFaceActionKind {
+  confirmTaken,
+  skipDose,
+  askForHelp,
+  recognizeMissedDose,
+}
 
 // Allows copyWith(actionDoseId: null) to clear the dose id instead of keeping
 // the previous value.
