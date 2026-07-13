@@ -12,6 +12,7 @@ enum DoseLogEventKind {
   caregiverHelpRequested,
   doseSkipped,
   doseMissed,
+  doseMissedRecognized,
   error,
 }
 
@@ -137,6 +138,18 @@ class DoseLogEvent {
   }) {
     return DoseLogEvent(
       kind: DoseLogEventKind.doseMissed,
+      doseId: doseId,
+      occurredAt: occurredAt,
+      marksDoseTaken: false,
+    );
+  }
+
+  factory DoseLogEvent.doseMissedRecognized({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return DoseLogEvent(
+      kind: DoseLogEventKind.doseMissedRecognized,
       doseId: doseId,
       occurredAt: occurredAt,
       marksDoseTaken: false,

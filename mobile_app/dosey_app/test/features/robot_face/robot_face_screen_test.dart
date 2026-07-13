@@ -1,12 +1,17 @@
 import 'dart:async';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
@@ -404,6 +409,173 @@ void main() {
 
     expect(find.text('Controller connected'), findsOneWidget);
     expect(border.top.color.a, greaterThan(0.08));
+  });
+
+  testWidgets('shows red missed-dose treatment and safe copy', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.missed,
+          nextEventLabel: '8:00 AM · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Missed dose alert',
+          actionDoseId: 'dose-123',
+          availableActions: {RobotFaceActionKind.recognizeMissedDose},
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('MISSED'), findsWidgets);
+    expect(find.text('This dose was missed.'), findsOneWidget);
+    expect(
+      find.text(
+        'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+      ),
+      findsOneWidget,
+    );
+
+    final badge = tester.widget<DecoratedBox>(
+      find.byKey(RobotFaceScreen.statusBadgeKey),
+    );
+    final border = (badge.decoration as BoxDecoration).border! as Border;
+    expect(border.top.color.r, greaterThan(border.top.color.g));
+  });
+
+  testWidgets(
+    'shows missed-dose recognition button for actionable missed state',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const _RobotFaceTestApp(
+          initialState: RobotFaceState(
+            mode: RobotFaceMode.missed,
+            nextEventLabel: '8:00 AM · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            statusLabel: 'Missed dose alert',
+            actionDoseId: 'dose-123',
+            availableActions: {RobotFaceActionKind.recognizeMissedDose},
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.byKey(RobotFaceScreen.actionPanelKey), findsOneWidget);
+      expect(
+        find.byKey(RobotFaceScreen.recognizeMissedDoseButtonKey),
+        findsOneWidget,
+      );
+      expect(find.byKey(RobotFaceScreen.confirmTakenButtonKey), findsNothing);
+      expect(find.byKey(RobotFaceScreen.skipDoseButtonKey), findsNothing);
+      expect(find.byKey(RobotFaceScreen.needHelpButtonKey), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'hides missed-dose recognition button when the missed state is not actionable',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const _RobotFaceTestApp(
+          initialState: RobotFaceState(
+            mode: RobotFaceMode.missed,
+            nextEventLabel: '8:00 AM · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            statusLabel: 'Missed dose alert',
+            actionDoseId: 'dose-123',
+            availableActions: <RobotFaceActionKind>{},
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(
+        find.byKey(RobotFaceScreen.recognizeMissedDoseButtonKey),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('logs missed-dose recognition without marking the dose taken', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    const scheduleId = 'schedule-1';
+    final doseId = TodayNextDoseHelper.doseIdForDate(
+      scheduleId,
+      DateTime(2026, 7, 8, 9, 5),
+    );
+    await DriftDoseLogRepository(database).addEvent(
+      DoseLogEvent.doseMissed(
+        doseId: doseId,
+        occurredAt: DateTime(2026, 7, 8, 9, 5).toUtc(),
+      ),
+    );
+
+    await tester.pumpWidget(
+      DoseyAppScope(
+        database: database,
+        reminderScheduler: _FakeReminderScheduler(),
+        permissionGateway: _FakePermissionGateway(),
+        missedDoseReconciliationService: _FakeMissedDoseReconciliationService(),
+        bleGateway: _FakeBleGateway(),
+        connectivityGateway: _FakeConnectivityGateway(),
+        child: MaterialApp(
+          home: RobotFaceScreen(
+            initialState: RobotFaceState(
+              mode: RobotFaceMode.missed,
+              nextEventLabel: '8:00 AM · Morning meds',
+              isFlipped: false,
+              isLandscapeOnly: true,
+              rampProgress: 1,
+              isInAwakeWindow: true,
+              statusLabel: 'Missed dose alert',
+              actionDoseId: doseId,
+              availableActions: const {RobotFaceActionKind.recognizeMissedDose},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.recognizeMissedDoseButtonKey));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    final events = await (database.select(
+      database.doseLogEvents,
+    )..where((row) => row.doseId.equals(doseId))).get();
+
+    expect(events, hasLength(2));
+    expect(
+      events.map((event) => event.kind),
+      containsAll(<String>[
+        DoseLogEventKind.doseMissed.name,
+        DoseLogEventKind.doseMissedRecognized.name,
+      ]),
+    );
+    final recognizedEvent = events.firstWhere(
+      (event) => event.kind == DoseLogEventKind.doseMissedRecognized.name,
+    );
+    expect(recognizedEvent.marksDoseTaken, isFalse);
+    expect(find.text('Missed dose noted.'), findsOneWidget);
+    expect(find.text('Dose already logged for today.'), findsNothing);
+
+    await tester.pumpWidget(const SizedBox());
   });
 
   testWidgets('hides action panel for idle state without actionable dose', (
@@ -988,5 +1160,98 @@ class _FakeRobotFaceDoseActionLogger {
     }
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     messenger.showSnackBar(SnackBar(content: Text(successMessage)));
+  }
+}
+
+class _FakeMissedDoseReconciliationService
+    extends MissedDoseReconciliationService {
+  _FakeMissedDoseReconciliationService()
+    : super(reminders: _FakeReminderRepository(), doseLog: _FakeDoseLog());
+
+  @override
+  Future<void> reconcile() async {}
+}
+
+class _FakeReminderRepository implements ReminderRepository {
+  @override
+  Future<void> deleteSchedule(String id) async {}
+
+  @override
+  Future<void> upsertSchedule(ReminderSchedule schedule) async {}
+
+  @override
+  Stream<List<ReminderSchedule>> watchSchedules({String? profileId}) {
+    return Stream.value(const <ReminderSchedule>[]);
+  }
+}
+
+class _FakeDoseLog implements DoseLogRepository {
+  @override
+  Future<void> addEvent(DoseLogEvent event) async {}
+
+  @override
+  Stream<List<DoseLogEvent>> watchEvents() {
+    return Stream.value(const <DoseLogEvent>[]);
+  }
+}
+
+class _FakeBleGateway implements BleGateway {
+  @override
+  Future<void> close() async {}
+
+  @override
+  Future<void> connect({required String deviceId, String? deviceName}) async {}
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Stream<BleAvailabilitySnapshot> watchAvailability() {
+    return Stream.value(const BleAvailabilitySnapshot.available());
+  }
+
+  @override
+  Stream<BleConnectionSnapshot> watchConnection() {
+    return Stream.value(const BleConnectionSnapshot.disconnected());
+  }
+}
+
+class _FakeConnectivityGateway implements ConnectivityGateway {
+  @override
+  Future<ConnectivityState> currentConnectivity() async {
+    return ConnectivityState.wifi;
+  }
+
+  @override
+  Stream<ConnectivityState> watchConnectivity() {
+    return Stream.value(ConnectivityState.wifi);
+  }
+}
+
+class _FakeReminderScheduler implements ReminderScheduler {
+  @override
+  Future<void> cancelDoseReminder(String doseId) async {}
+
+  @override
+  Future<void> requestPermission() async {}
+
+  @override
+  Future<void> scheduleDoseReminder({
+    required String doseId,
+    required DateTime scheduledFor,
+    required String label,
+    required bool repeatsDaily,
+  }) async {}
+}
+
+class _FakePermissionGateway implements AppPermissionGateway {
+  @override
+  Future<AppPermissionState> check(AppPermission permission) async {
+    return AppPermissionState.granted;
+  }
+
+  @override
+  Future<AppPermissionState> request(AppPermission permission) async {
+    return AppPermissionState.granted;
   }
 }

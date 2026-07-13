@@ -12,17 +12,27 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_app_scope_dependencies.dart';
 
 void main() {
-  testWidgets('Robot Mode shows the Robot Face tab', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('Robot Mode opens Robot Face first', (WidgetTester tester) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _setDeviceRole(database, AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestShellApp(database: database));
-    await tester.pumpAndSettle();
+    await _pumpShell(tester, _TestShellApp(database: database));
 
-    expect(find.text('Robot Face'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('Robot Face'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(NavigationBar),
+        matching: find.text('Robot Face'),
+      ),
+      findsOneWidget,
+    );
     expect(find.byType(RobotFaceScreen, skipOffstage: false), findsOneWidget);
     expect(
       tester
@@ -30,7 +40,7 @@ void main() {
             find.byType(RobotFaceScreen, skipOffstage: false),
           )
           .isActive,
-      isFalse,
+      isTrue,
     );
   });
 
@@ -41,10 +51,13 @@ void main() {
     addTearDown(database.close);
     await _setDeviceRole(database, AppDeviceRole.androidPersonal);
 
-    await tester.pumpWidget(_TestShellApp(database: database));
-    await tester.pumpAndSettle();
+    await _pumpShell(tester, _TestShellApp(database: database));
 
     expect(find.text('Robot Face'), findsNothing);
+    expect(
+      find.descendant(of: find.byType(AppBar), matching: find.text('Today')),
+      findsOneWidget,
+    );
     expect(find.byType(RobotFaceScreen), findsNothing);
   });
 
@@ -55,11 +68,17 @@ void main() {
     addTearDown(database.close);
     await _setDeviceRole(database, AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestShellApp(database: database));
-    await tester.pumpAndSettle();
+    await _pumpShell(tester, _TestShellApp(database: database));
 
-    await tester.tap(find.text('Robot Face'));
-    await tester.pump();
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Robot Face'),
+          )
+          .hitTestable(),
+    );
+    await _pumpShellFrame(tester);
 
     expect(
       tester
@@ -72,7 +91,7 @@ void main() {
     expect(find.text('Robot Face'), findsNWidgets(2));
 
     await tester.tap(find.text('Controller'));
-    await tester.pump();
+    await _pumpShellFrame(tester);
 
     expect(find.byType(RobotFaceScreen, skipOffstage: false), findsOneWidget);
     expect(
@@ -93,8 +112,7 @@ void main() {
     addTearDown(database.close);
     await _setDeviceRole(database, AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestShellApp(database: database));
-    await tester.pumpAndSettle();
+    await _pumpShell(tester, _TestShellApp(database: database));
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
@@ -103,7 +121,7 @@ void main() {
     await DoseyAppScope.of(
       shellContext,
     ).settings.setDeviceRole(AppDeviceRole.androidPersonal);
-    await tester.pumpAndSettle();
+    await _pumpShellFrame(tester);
 
     expect(find.byType(DoseyShell), findsOneWidget);
     expect(find.text('Robot Face'), findsNothing);
@@ -121,8 +139,7 @@ void main() {
     addTearDown(database.close);
     await _setDeviceRole(database, AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestShellApp(database: database));
-    await tester.pumpAndSettle();
+    await _pumpShell(tester, _TestShellApp(database: database));
 
     await _openSettingsMenu(tester);
 
@@ -136,7 +153,7 @@ void main() {
     expect(find.text('All settings'), findsOneWidget);
 
     await tester.tap(find.text('Prototype safety').hitTestable());
-    await tester.pumpAndSettle();
+    await _pumpShellFrame(tester);
 
     expect(
       find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
@@ -149,12 +166,12 @@ void main() {
     );
 
     await tester.drag(find.byType(Scrollable).first, const Offset(0, 700));
-    await tester.pumpAndSettle();
+    await _pumpShellFrame(tester);
     expect(find.text('Account').hitTestable(), findsWidgets);
 
     await _openSettingsMenu(tester);
     await tester.tap(find.text('Prototype safety').hitTestable());
-    await tester.pumpAndSettle();
+    await _pumpShellFrame(tester);
 
     expect(
       find.text('I understand prototype safety rules').hitTestable(),
@@ -169,15 +186,14 @@ void main() {
     addTearDown(database.close);
     await _setDeviceRole(database, AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestShellApp(database: database));
-    await tester.pumpAndSettle();
+    await _pumpShell(tester, _TestShellApp(database: database));
 
     await _openSettingsMenu(tester);
 
     expect(find.text('Help & About'), findsOneWidget);
 
     await tester.tap(find.text('Help & About').hitTestable());
-    await tester.pumpAndSettle();
+    await _pumpShellFrame(tester);
 
     expect(
       find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
@@ -211,7 +227,17 @@ Future<void> _setDeviceRole(DoseyDatabase database, AppDeviceRole role) async {
 
 Future<void> _openSettingsMenu(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Open settings menu'));
-  await tester.pumpAndSettle();
+  await _pumpShellFrame(tester);
+}
+
+Future<void> _pumpShell(WidgetTester tester, Widget widget) async {
+  await tester.pumpWidget(widget);
+  await _pumpShellFrame(tester);
+}
+
+Future<void> _pumpShellFrame(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 300));
 }
 
 class _TestShellApp extends StatelessWidget {

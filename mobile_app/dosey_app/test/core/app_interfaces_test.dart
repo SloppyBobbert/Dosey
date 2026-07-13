@@ -2,6 +2,7 @@ import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/features/today/today_next_dose_helper.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -33,6 +34,22 @@ void main() {
     expect(event.kind, DoseLogEventKind.doseTakenConfirmed);
     expect(event.marksDoseTaken, isTrue);
     expect(event.doseId, 'morning-dose');
+  });
+
+  test('missed recognition stays non-terminal and does not mark taken', () {
+    final event = DoseLogEvent.doseMissedRecognized(
+      doseId: 'morning-dose',
+      occurredAt: DateTime.utc(2026, 6, 8, 12, 10),
+    );
+
+    expect(event.kind, DoseLogEventKind.doseMissedRecognized);
+    expect(event.marksDoseTaken, isFalse);
+    expect(
+      TodayNextDoseHelper.isTerminalDoseEventKind(
+        DoseLogEventKind.doseMissedRecognized,
+      ),
+      isFalse,
+    );
   });
 
   test('ble snapshots stay app-owned and protocol agnostic', () {

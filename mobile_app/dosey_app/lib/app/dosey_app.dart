@@ -19,6 +19,7 @@ class DoseyApp extends StatelessWidget {
     this.missedDoseReconciliationService,
     this.bleGateway,
     this.connectivityGateway,
+    this.shellForceTodayTab = false,
   });
 
   final DoseyDatabase? database;
@@ -28,6 +29,7 @@ class DoseyApp extends StatelessWidget {
   final MissedDoseReconciliationService? missedDoseReconciliationService;
   final BleGateway? bleGateway;
   final ConnectivityGateway? connectivityGateway;
+  final bool shellForceTodayTab;
 
   @override
   Widget build(BuildContext context) {
@@ -48,7 +50,7 @@ class DoseyApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: seed),
           useMaterial3: true,
         ),
-        home: const OnboardingGate(),
+        home: OnboardingGate(shellForceTodayTab: shellForceTodayTab),
       ),
     );
   }

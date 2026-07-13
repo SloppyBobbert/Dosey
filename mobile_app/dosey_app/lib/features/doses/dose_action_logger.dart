@@ -48,12 +48,20 @@ class DoseActionLogger {
           event.marksDoseTaken && effectiveInventoryPrescriptionId != null;
       var ignoredDoseAction = false;
       await dependencies.database.transaction(() async {
+        if (await _shouldIgnorePostTerminalAuditEvent(
+          dependencies.database,
+          event,
+        )) {
+          ignoredDoseAction = true;
+          return;
+        }
         // Terminal outcomes are one-shot per dose. Keep stale surfaces from
         // double-retiring slots or double-decrementing refills.
-        if (await _hasPersistedTerminalEventForDose(
-          dependencies.database,
-          event.doseId,
-        )) {
+        if (!_canPersistAfterTerminal(event) &&
+            await _hasPersistedTerminalEventForDose(
+              dependencies.database,
+              event.doseId,
+            )) {
           ignoredDoseAction = true;
           return;
         }
@@ -98,6 +106,34 @@ class DoseActionLogger {
     return TodayNextDoseHelper.isTerminalDoseEventKind(event.kind);
   }
 
+  static bool _canPersistAfterTerminal(DoseLogEvent event) {
+    return event.kind == DoseLogEventKind.doseMissedRecognized;
+  }
+
+  static Future<bool> _shouldIgnorePostTerminalAuditEvent(
+    DoseyDatabase database,
+    DoseLogEvent event,
+  ) async {
+    if (!_canPersistAfterTerminal(event)) {
+      return false;
+    }
+
+    final hasMissedEvent = await _hasPersistedEventKindForDose(
+      database,
+      event.doseId,
+      DoseLogEventKind.doseMissed.name,
+    );
+    if (!hasMissedEvent) {
+      return true;
+    }
+
+    return _hasPersistedEventKindForDose(
+      database,
+      event.doseId,
+      DoseLogEventKind.doseMissedRecognized.name,
+    );
+  }
+
   static Future<bool> _hasPersistedTerminalEventForDose(
     DoseyDatabase database,
     String doseId,
@@ -110,6 +146,21 @@ class DoseActionLogger {
                     row.kind.isIn(
                       TodayNextDoseHelper.terminalDoseEventKindNames,
                     ),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+    return existingEvent != null;
+  }
+
+  static Future<bool> _hasPersistedEventKindForDose(
+    DoseyDatabase database,
+    String doseId,
+    String kind,
+  ) async {
+    final existingEvent =
+        await (database.select(database.doseLogEvents)
+              ..where(
+                (row) => row.doseId.equals(doseId) & row.kind.equals(kind),
               )
               ..limit(1))
             .getSingleOrNull();

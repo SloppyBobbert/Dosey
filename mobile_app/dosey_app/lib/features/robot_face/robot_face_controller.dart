@@ -148,18 +148,36 @@ class RobotFaceController {
   RobotFaceState _computeState() {
     final role = _role;
     final now = _current();
-    final nextSchedule = _displaySchedule(now);
-    final choreography = _choreographyFor(nextSchedule, now);
-    final displayDoseId = nextSchedule == null
-        ? null
-        : TodayNextDoseHelper.doseIdForDate(nextSchedule.id, now);
+    final activeMissedDose = _activeMissedAlertDose(now);
+    final displaySchedule = activeMissedDose?.schedule ?? _displaySchedule(now);
+    final displayDoseId =
+        activeMissedDose?.doseId ??
+        (displaySchedule == null
+            ? null
+            : TodayNextDoseHelper.doseIdForDate(displaySchedule.id, now));
     // Compute the current dose event once so mode, status, and actions cannot
     // drift from separate scans of the log.
     final latestDoseEvent = displayDoseId == null
         ? null
         : TodayNextDoseHelper.latestEventForDose(_events, displayDoseId);
+    final hasActiveMissedAlert = activeMissedDose != null;
+    final nextSchedule = hasActiveMissedAlert
+        ? displaySchedule
+        : _scheduleForPostMissedRecognition(
+            displaySchedule,
+            now,
+            latestDoseEvent,
+          );
+    final choreography = _choreographyFor(nextSchedule, now);
     final dueDoseId = _dueDoseIdFor(nextSchedule, now);
-    final mode = _modeFor(role, nextSchedule, now, dueDoseId, latestDoseEvent);
+    final mode = _modeFor(
+      role,
+      nextSchedule,
+      now,
+      dueDoseId,
+      latestDoseEvent,
+      hasActiveMissedAlert: hasActiveMissedAlert,
+    );
     final nextEventLabel = nextSchedule == null
         ? 'No reminders scheduled'
         : '${nextSchedule.timeLabel} · ${nextSchedule.label}';
@@ -168,6 +186,8 @@ class RobotFaceController {
       nextSchedule,
       dueDoseId,
       latestDoseEvent,
+      hasActiveMissedAlert: hasActiveMissedAlert,
+      displayDoseId: displayDoseId,
     );
     final baseState = RobotFaceState(
       mode: mode,
@@ -178,7 +198,11 @@ class RobotFaceController {
       isInAwakeWindow: choreography.isInAwakeWindow,
       statusLabel: _statusFor(role, nextSchedule, dueDoseId, latestDoseEvent),
       actionDoseId: actionDoseId,
-      availableActions: _availableActionsFor(actionDoseId),
+      availableActions: _availableActionsFor(
+        actionDoseId,
+        mode: mode,
+        hasActiveMissedAlert: hasActiveMissedAlert,
+      ),
     );
     if (baseState.mode == RobotFaceMode.idle &&
         !baseState.isInAwakeWindow &&
@@ -193,8 +217,14 @@ class RobotFaceController {
     RobotFaceMode mode,
     ReminderSchedule? nextSchedule,
     String? dueDoseId,
-    DoseLogEvent? latestDoseEvent,
-  ) {
+    DoseLogEvent? latestDoseEvent, {
+    required bool hasActiveMissedAlert,
+    required String? displayDoseId,
+  }) {
+    if (mode == RobotFaceMode.missed && hasActiveMissedAlert) {
+      return displayDoseId;
+    }
+
     if (nextSchedule == null || dueDoseId == null) {
       return null;
     }
@@ -224,9 +254,19 @@ class RobotFaceController {
     };
   }
 
-  Set<RobotFaceActionKind> _availableActionsFor(String? actionDoseId) {
+  Set<RobotFaceActionKind> _availableActionsFor(
+    String? actionDoseId, {
+    required RobotFaceMode mode,
+    required bool hasActiveMissedAlert,
+  }) {
     if (actionDoseId == null) {
       return const <RobotFaceActionKind>{};
+    }
+
+    if (mode == RobotFaceMode.missed && hasActiveMissedAlert) {
+      return const <RobotFaceActionKind>{
+        RobotFaceActionKind.recognizeMissedDose,
+      };
     }
 
     final actions = <RobotFaceActionKind>{
@@ -254,8 +294,9 @@ class RobotFaceController {
     ReminderSchedule? nextSchedule,
     DateTime now,
     String? dueDoseId,
-    DoseLogEvent? latestDoseEvent,
-  ) {
+    DoseLogEvent? latestDoseEvent, {
+    required bool hasActiveMissedAlert,
+  }) {
     if (role == null || !role.canHostRobot) {
       return RobotFaceMode.offline;
     }
@@ -288,6 +329,11 @@ class RobotFaceController {
           return RobotFaceMode.happyConfirmed;
         case DoseLogEventKind.doseMissed:
           return RobotFaceMode.missed;
+        case DoseLogEventKind.doseMissedRecognized:
+          if (hasActiveMissedAlert) {
+            return RobotFaceMode.missed;
+          }
+          break;
         case DoseLogEventKind.error:
           return RobotFaceMode.error;
       }
@@ -321,6 +367,9 @@ class RobotFaceController {
         ControllerConnectionState.connected) {
       return _controllerSnapshot.statusLabel;
     }
+    if (latestDoseEvent?.kind == DoseLogEventKind.doseMissedRecognized) {
+      return 'Missed dose acknowledged';
+    }
     if (nextSchedule == null) {
       return 'No active reminder';
     }
@@ -343,8 +392,97 @@ class RobotFaceController {
       DoseLogEventKind.doseTakenLate => 'Dose taken late',
       DoseLogEventKind.doseSkipped => 'Dose skipped',
       DoseLogEventKind.doseMissed => 'Dose missed',
+      DoseLogEventKind.doseMissedRecognized => 'Missed dose acknowledged',
       DoseLogEventKind.error => 'Dose error logged',
     };
+  }
+
+  bool _hasActiveMissedAlert(String doseId) {
+    DateTime? missedAt;
+    DateTime? recognizedAt;
+    for (final event in _events) {
+      if (event.doseId != doseId) {
+        continue;
+      }
+      switch (event.kind) {
+        case DoseLogEventKind.doseMissed:
+          missedAt = missedAt == null || event.occurredAt.isAfter(missedAt)
+              ? event.occurredAt
+              : missedAt;
+        case DoseLogEventKind.doseMissedRecognized:
+          recognizedAt =
+              recognizedAt == null || event.occurredAt.isAfter(recognizedAt)
+              ? event.occurredAt
+              : recognizedAt;
+        default:
+          break;
+      }
+    }
+
+    return missedAt != null &&
+        (recognizedAt == null || recognizedAt.isBefore(missedAt));
+  }
+
+  _RobotFaceDisplayDose? _activeMissedAlertDose(DateTime now) {
+    _RobotFaceDisplayDose? activeDose;
+    DateTime? activeScheduledTime;
+    final today = DateTime(now.year, now.month, now.day);
+    final candidateDates = <DateTime>[
+      today.subtract(const Duration(days: 1)),
+      today,
+    ];
+
+    for (final schedule in _activeSchedules) {
+      if (!schedule.isEnabled) {
+        continue;
+      }
+
+      for (final doseDate in candidateDates) {
+        final scheduledTime = DateTime(
+          doseDate.year,
+          doseDate.month,
+          doseDate.day,
+          schedule.hour,
+          schedule.minute,
+        );
+        if (scheduledTime.isAfter(now)) {
+          continue;
+        }
+
+        final doseId = TodayNextDoseHelper.doseIdForDate(schedule.id, doseDate);
+        if (!_hasActiveMissedAlert(doseId)) {
+          continue;
+        }
+
+        if (activeScheduledTime == null ||
+            scheduledTime.isAfter(activeScheduledTime)) {
+          activeScheduledTime = scheduledTime;
+          activeDose = _RobotFaceDisplayDose(
+            schedule: schedule,
+            doseId: doseId,
+          );
+        }
+      }
+    }
+
+    return activeDose;
+  }
+
+  ReminderSchedule? _scheduleForPostMissedRecognition(
+    ReminderSchedule? displaySchedule,
+    DateTime now,
+    DoseLogEvent? latestDoseEvent,
+  ) {
+    if (displaySchedule == null ||
+        latestDoseEvent?.kind != DoseLogEventKind.doseMissedRecognized) {
+      return displaySchedule;
+    }
+
+    return TodayNextDoseHelper.currentSchedule(
+      _activeSchedules,
+      _events,
+      now: now,
+    );
   }
 
   DateTime _current() => _currentTime ?? _now();
@@ -468,4 +606,11 @@ class _RobotFaceChoreography {
 
   final double rampProgress;
   final bool isInAwakeWindow;
+}
+
+class _RobotFaceDisplayDose {
+  const _RobotFaceDisplayDose({required this.schedule, required this.doseId});
+
+  final ReminderSchedule schedule;
+  final String doseId;
 }

@@ -43,6 +43,9 @@ class RobotFaceScreen extends StatefulWidget {
   static const needHelpButtonKey = ValueKey<String>(
     'robot-face-need-help-button',
   );
+  static const recognizeMissedDoseButtonKey = ValueKey<String>(
+    'robot-face-recognize-missed-dose-button',
+  );
 
   final RobotFaceController? controller;
   final Stream<RobotFaceState>? stateStream;
@@ -221,6 +224,7 @@ class _UrgentPromptOverlay extends StatelessWidget {
     return switch (state.mode) {
       RobotFaceMode.doseReady => 'READY',
       RobotFaceMode.doseApproaching => 'SOON',
+      RobotFaceMode.missed => 'MISSED',
       RobotFaceMode.happyConfirmed => 'DONE',
       RobotFaceMode.error => 'HELP',
       RobotFaceMode.offline => 'OFFLINE',
@@ -336,18 +340,27 @@ class _RobotFaceStatusCard extends StatelessWidget {
     final badgeEmphasis = _badgeEmphasisFor(state);
     final showActionPanel =
         state.actionDoseId != null && state.availableActions.isNotEmpty;
+    final isMissedState = state.mode == RobotFaceMode.missed;
     // The controller owns action availability, including offline/error
     // follow-up states after a dispense. The screen only renders that contract.
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: const Color(0xC20B111B),
+        color: isMissedState
+            ? const Color(0xD11E0C12)
+            : const Color(0xC20B111B),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(
+          color: isMissedState
+              ? const Color(0x66FF728C)
+              : Colors.white.withValues(alpha: 0.08),
+        ),
         boxShadow: <BoxShadow>[
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.26),
-            blurRadius: 22,
+            color: isMissedState
+                ? const Color(0x66FF728C)
+                : Colors.black.withValues(alpha: 0.26),
+            blurRadius: isMissedState ? 28 : 22,
             offset: const Offset(0, 10),
           ),
         ],
@@ -382,24 +395,58 @@ class _RobotFaceStatusCard extends StatelessWidget {
                     children: <Widget>[
                       Text(
                         _headlineFor(state.mode),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.2,
-                          color: Color(0xFF8A96AD),
+                          color: isMissedState
+                              ? const Color(0xFFFFB4C1)
+                              : const Color(0xFF8A96AD),
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        state.nextEventLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                      if (isMissedState) ...<Widget>[
+                        const Text(
+                          'This dose was missed.',
+                          style: TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            height: 1.05,
+                          ),
                         ),
-                      ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFFF4D7DD),
+                            height: 1.3,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          state.nextEventLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFFFFB4C1),
+                          ),
+                        ),
+                      ] else
+                        Text(
+                          state.nextEventLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -506,6 +553,7 @@ class _RobotFaceStatusCard extends StatelessWidget {
       RobotFaceMode.happyConfirmed => 'Dose logged',
       RobotFaceMode.sleepy => 'Sleep mode',
       RobotFaceMode.error => 'Check robot',
+      RobotFaceMode.missed => 'Missed dose',
       RobotFaceMode.offline => 'Reconnect needed',
       _ => statusLabel,
     };
@@ -517,6 +565,7 @@ class _RobotFaceStatusCard extends StatelessWidget {
     return switch (state.mode) {
       RobotFaceMode.doseApproaching => 0.28 + (ramp * 0.52),
       RobotFaceMode.doseReady => 1,
+      RobotFaceMode.missed => 0.92,
       RobotFaceMode.idle when state.isInAwakeWindow => 0.24,
       _ => 0,
     };
@@ -542,12 +591,20 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
 
   @override
   Widget build(BuildContext context) {
+    final isMissedState = widget.state.mode == RobotFaceMode.missed;
+
     return DecoratedBox(
       key: RobotFaceScreen.actionPanelKey,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: isMissedState
+            ? const Color(0x26FF728C)
+            : Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(
+          color: isMissedState
+              ? const Color(0x66FF728C)
+              : Colors.white.withValues(alpha: 0.06),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(8),
@@ -555,53 +612,99 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           spacing: 8,
           runSpacing: 8,
           alignment: WrapAlignment.center,
-          children: <Widget>[
-            _buildActionButton(
-              key: RobotFaceScreen.confirmTakenButtonKey,
-              label: 'Confirm taken',
-              isEnabled: _isActionEnabled(RobotFaceActionKind.confirmTaken),
-              onPressed: () => _logAction(
-                context,
-                actionKind: RobotFaceActionKind.confirmTaken,
-                event: DoseLogEvent.doseTakenConfirmed(
-                  doseId: widget.state.actionDoseId!,
-                  occurredAt: DateTime.now().toUtc(),
-                ),
-                successMessage: 'Taken logged.',
-              ),
-            ),
-            _buildActionButton(
-              key: RobotFaceScreen.skipDoseButtonKey,
-              label: 'Skip',
-              isEnabled: _isActionEnabled(RobotFaceActionKind.skipDose),
-              onPressed: () => _logAction(
-                context,
-                actionKind: RobotFaceActionKind.skipDose,
-                event: DoseLogEvent.doseSkipped(
-                  doseId: widget.state.actionDoseId!,
-                  occurredAt: DateTime.now().toUtc(),
-                ),
-                successMessage: 'Skip logged.',
-              ),
-            ),
-            _buildActionButton(
-              key: RobotFaceScreen.needHelpButtonKey,
-              label: 'Need help',
-              isEnabled: _isActionEnabled(RobotFaceActionKind.askForHelp),
-              onPressed: () => _logAction(
-                context,
-                actionKind: RobotFaceActionKind.askForHelp,
-                event: DoseLogEvent.caregiverHelpRequested(
-                  doseId: widget.state.actionDoseId!,
-                  occurredAt: DateTime.now().toUtc(),
-                ),
-                successMessage: 'Help request logged.',
-              ),
-            ),
-          ],
+          children: _buildActionButtons(context),
         ),
       ),
     );
+  }
+
+  List<Widget> _buildActionButtons(BuildContext context) {
+    final buttons = <Widget>[];
+
+    if (widget.state.availableActions.contains(
+      RobotFaceActionKind.recognizeMissedDose,
+    )) {
+      buttons.add(
+        _buildActionButton(
+          key: RobotFaceScreen.recognizeMissedDoseButtonKey,
+          label: 'I saw this missed dose',
+          isEnabled: _isActionEnabled(RobotFaceActionKind.recognizeMissedDose),
+          isProminent: true,
+          onPressed: () => _logAction(
+            context,
+            actionKind: RobotFaceActionKind.recognizeMissedDose,
+            event: DoseLogEvent.doseMissedRecognized(
+              doseId: widget.state.actionDoseId!,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            successMessage: 'Missed dose noted.',
+          ),
+        ),
+      );
+    }
+
+    if (widget.state.availableActions.contains(
+      RobotFaceActionKind.confirmTaken,
+    )) {
+      buttons.add(
+        _buildActionButton(
+          key: RobotFaceScreen.confirmTakenButtonKey,
+          label: 'Confirm taken',
+          isEnabled: _isActionEnabled(RobotFaceActionKind.confirmTaken),
+          onPressed: () => _logAction(
+            context,
+            actionKind: RobotFaceActionKind.confirmTaken,
+            event: DoseLogEvent.doseTakenConfirmed(
+              doseId: widget.state.actionDoseId!,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            successMessage: 'Taken logged.',
+          ),
+        ),
+      );
+    }
+
+    if (widget.state.availableActions.contains(RobotFaceActionKind.skipDose)) {
+      buttons.add(
+        _buildActionButton(
+          key: RobotFaceScreen.skipDoseButtonKey,
+          label: 'Skip',
+          isEnabled: _isActionEnabled(RobotFaceActionKind.skipDose),
+          onPressed: () => _logAction(
+            context,
+            actionKind: RobotFaceActionKind.skipDose,
+            event: DoseLogEvent.doseSkipped(
+              doseId: widget.state.actionDoseId!,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            successMessage: 'Skip logged.',
+          ),
+        ),
+      );
+    }
+
+    if (widget.state.availableActions.contains(
+      RobotFaceActionKind.askForHelp,
+    )) {
+      buttons.add(
+        _buildActionButton(
+          key: RobotFaceScreen.needHelpButtonKey,
+          label: 'Need help',
+          isEnabled: _isActionEnabled(RobotFaceActionKind.askForHelp),
+          onPressed: () => _logAction(
+            context,
+            actionKind: RobotFaceActionKind.askForHelp,
+            event: DoseLogEvent.caregiverHelpRequested(
+              doseId: widget.state.actionDoseId!,
+              occurredAt: DateTime.now().toUtc(),
+            ),
+            successMessage: 'Help request logged.',
+          ),
+        ),
+      );
+    }
+
+    return buttons;
   }
 
   Widget _buildActionButton({
@@ -609,7 +712,33 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     required String label,
     required bool isEnabled,
     required VoidCallback onPressed,
+    bool isProminent = false,
   }) {
+    final child = Text(label, textAlign: TextAlign.center);
+
+    if (isProminent) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minWidth: 280),
+        child: FilledButton(
+          key: key,
+          onPressed: _isSubmitting || !isEnabled ? null : onPressed,
+          style: FilledButton.styleFrom(
+            backgroundColor: const Color(0xFFD94A66),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            textStyle: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+          ),
+          child: child,
+        ),
+      );
+    }
+
     return FilledButton.tonal(
       key: key,
       onPressed: _isSubmitting || !isEnabled ? null : onPressed,
@@ -617,7 +746,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
       ),
-      child: Text(label),
+      child: child,
     );
   }
 
@@ -645,7 +774,8 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
   bool _isTerminalAction(RobotFaceActionKind actionKind) {
     return switch (actionKind) {
       RobotFaceActionKind.confirmTaken || RobotFaceActionKind.skipDose => true,
-      RobotFaceActionKind.askForHelp => false,
+      RobotFaceActionKind.askForHelp ||
+      RobotFaceActionKind.recognizeMissedDose => false,
     };
   }
 
