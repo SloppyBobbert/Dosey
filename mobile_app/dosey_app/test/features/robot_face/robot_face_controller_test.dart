@@ -744,6 +744,34 @@ void main() {
     },
   );
 
+  test('yesterday missed dose stays visible until recognition', () async {
+    final fixture = await _RobotFaceControllerFixture.create(
+      now: DateTime(2026, 7, 9, 8, 5),
+      scheduleHour: 9,
+      scheduleMinute: 0,
+    );
+    addTearDown(fixture.close);
+
+    await fixture.settle();
+
+    await fixture.doseLog.addEvent(
+      DoseLogEvent.doseMissed(
+        doseId: fixture.currentDoseId,
+        occurredAt: DateTime(2026, 7, 8, 9, 5).toUtc(),
+      ),
+    );
+
+    final missedState = await fixture.controller.watchState().firstWhere(
+      (state) => state.mode == RobotFaceMode.missed,
+    );
+
+    expect(missedState.actionDoseId, fixture.currentDoseId);
+    expect(missedState.nextEventLabel, '09:00 · Morning meds');
+    expect(missedState.availableActions, <RobotFaceActionKind>{
+      RobotFaceActionKind.recognizeMissedDose,
+    });
+  });
+
   test(
     'doseMissed followed by doseMissedRecognized clears the missed alert and recognition action',
     () async {

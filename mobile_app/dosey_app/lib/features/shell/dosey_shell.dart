@@ -353,9 +353,7 @@ class _DoseyShellState extends State<DoseyShell> {
     if (widget.forceTodayTab) {
       return _ShellTabId.today;
     }
-    return role == AppDeviceRole.androidRobot
-        ? _ShellTabId.robotFace
-        : _ShellTabId.today;
+    return role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.today;
   }
 }
 
