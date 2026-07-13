@@ -59,6 +59,7 @@ class DoseLogScreen extends StatelessWidget {
       DoseLogEventKind.caregiverHelpRequested => 'Caregiver help requested',
       DoseLogEventKind.doseSkipped => 'Dose skipped',
       DoseLogEventKind.doseMissed => 'Dose missed',
+      DoseLogEventKind.doseMissedRecognized => 'Missed dose recognized',
       DoseLogEventKind.error => 'Error',
     };
   }
@@ -75,6 +76,7 @@ class DoseLogScreen extends StatelessWidget {
       DoseLogEventKind.caregiverHelpRequested => Icons.support_agent_outlined,
       DoseLogEventKind.doseSkipped => Icons.skip_next_outlined,
       DoseLogEventKind.doseMissed => Icons.schedule_outlined,
+      DoseLogEventKind.doseMissedRecognized => Icons.visibility_outlined,
       DoseLogEventKind.error => Icons.error_outline,
     };
   }
