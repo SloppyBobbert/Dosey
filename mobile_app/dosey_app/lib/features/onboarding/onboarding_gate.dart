@@ -7,9 +7,14 @@ import 'package:dosey_app/features/shell/dosey_shell.dart';
 import 'package:flutter/material.dart';
 
 class OnboardingGate extends StatelessWidget {
-  const OnboardingGate({super.key, this.onboardingCompletedStream});
+  const OnboardingGate({
+    super.key,
+    this.onboardingCompletedStream,
+    this.shellForceTodayTab = false,
+  });
 
   final Stream<bool>? onboardingCompletedStream;
+  final bool shellForceTodayTab;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +39,10 @@ class OnboardingGate extends StatelessWidget {
         }
 
         if (snapshot.data!) {
-          return _CompletedOnboardingGate(dependencies: dependencies!);
+          return _CompletedOnboardingGate(
+            dependencies: dependencies!,
+            shellForceTodayTab: shellForceTodayTab,
+          );
         }
 
         return const OnboardingFlow();
@@ -44,9 +52,13 @@ class OnboardingGate extends StatelessWidget {
 }
 
 class _CompletedOnboardingGate extends StatelessWidget {
-  const _CompletedOnboardingGate({required this.dependencies});
+  const _CompletedOnboardingGate({
+    required this.dependencies,
+    required this.shellForceTodayTab,
+  });
 
   final DoseyAppDependencies dependencies;
+  final bool shellForceTodayTab;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +79,7 @@ class _CompletedOnboardingGate extends StatelessWidget {
             : AppDeviceRole.defaultFor(platform);
         // Robot Mode is local-only; personal phones must pass through sign-in.
         if (role.canHostRobot) {
-          return const DoseyShell();
+          return DoseyShell(forceTodayTab: shellForceTodayTab);
         }
 
         return StreamBuilder<AuthSession>(
@@ -82,7 +94,7 @@ class _CompletedOnboardingGate extends StatelessWidget {
             }
 
             if (authSnapshot.data!.isSignedIn) {
-              return const DoseyShell();
+              return DoseyShell(forceTodayTab: shellForceTodayTab);
             }
 
             return OnboardingFlow(signInRole: role);

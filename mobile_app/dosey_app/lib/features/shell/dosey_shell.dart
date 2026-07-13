@@ -16,7 +16,9 @@ import 'package:dosey_app/features/today/today_screen.dart';
 import 'package:flutter/material.dart';
 
 class DoseyShell extends StatefulWidget {
-  const DoseyShell({super.key});
+  const DoseyShell({super.key, this.forceTodayTab = false});
+
+  final bool forceTodayTab;
 
   @override
   State<DoseyShell> createState() => _DoseyShellState();
@@ -348,6 +350,9 @@ class _DoseyShellState extends State<DoseyShell> {
   }
 
   _ShellTabId _defaultTabIdFor(AppDeviceRole role) {
+    if (widget.forceTodayTab) {
+      return _ShellTabId.today;
+    }
     return role == AppDeviceRole.androidRobot
         ? _ShellTabId.robotFace
         : _ShellTabId.today;
