@@ -406,6 +406,139 @@ void main() {
     expect(border.top.color.a, greaterThan(0.08));
   });
 
+  testWidgets('shows red missed-dose treatment and safe copy', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.missed,
+          nextEventLabel: '8:00 AM · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Missed dose alert',
+          actionDoseId: 'dose-123',
+          availableActions: {RobotFaceActionKind.recognizeMissedDose},
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('MISSED'), findsWidgets);
+    expect(find.text('This dose was missed.'), findsOneWidget);
+    expect(
+      find.text(
+        'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+      ),
+      findsOneWidget,
+    );
+
+    final badge = tester.widget<DecoratedBox>(
+      find.byKey(RobotFaceScreen.statusBadgeKey),
+    );
+    final border = (badge.decoration as BoxDecoration).border! as Border;
+    expect(border.top.color.r, greaterThan(border.top.color.g));
+  });
+
+  testWidgets(
+    'shows missed-dose recognition button for actionable missed state',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const _RobotFaceTestApp(
+          initialState: RobotFaceState(
+            mode: RobotFaceMode.missed,
+            nextEventLabel: '8:00 AM · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            statusLabel: 'Missed dose alert',
+            actionDoseId: 'dose-123',
+            availableActions: {RobotFaceActionKind.recognizeMissedDose},
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.byKey(RobotFaceScreen.actionPanelKey), findsOneWidget);
+      expect(
+        find.byKey(RobotFaceScreen.recognizeMissedDoseButtonKey),
+        findsOneWidget,
+      );
+      expect(find.byKey(RobotFaceScreen.confirmTakenButtonKey), findsNothing);
+      expect(find.byKey(RobotFaceScreen.skipDoseButtonKey), findsNothing);
+      expect(find.byKey(RobotFaceScreen.needHelpButtonKey), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'hides missed-dose recognition button when the missed state is not actionable',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const _RobotFaceTestApp(
+          initialState: RobotFaceState(
+            mode: RobotFaceMode.missed,
+            nextEventLabel: '8:00 AM · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            statusLabel: 'Missed dose alert',
+            actionDoseId: 'dose-123',
+            availableActions: <RobotFaceActionKind>{},
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(
+        find.byKey(RobotFaceScreen.recognizeMissedDoseButtonKey),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('logs missed-dose recognition without marking the dose taken', (
+    WidgetTester tester,
+  ) async {
+    final doseActionLogger = _FakeRobotFaceDoseActionLogger();
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        doseActionLogger: doseActionLogger.call,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.missed,
+          nextEventLabel: '8:00 AM · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Missed dose alert',
+          actionDoseId: 'dose-123',
+          availableActions: {RobotFaceActionKind.recognizeMissedDose},
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.recognizeMissedDoseButtonKey));
+    await tester.pump();
+
+    expect(doseActionLogger.events, hasLength(1));
+    expect(
+      doseActionLogger.events.single.kind,
+      DoseLogEventKind.doseMissedRecognized,
+    );
+    expect(doseActionLogger.events.single.doseId, 'dose-123');
+    expect(doseActionLogger.events.single.marksDoseTaken, isFalse);
+    expect(find.text('Missed dose noted.'), findsOneWidget);
+  });
+
   testWidgets('hides action panel for idle state without actionable dose', (
     WidgetTester tester,
   ) async {
