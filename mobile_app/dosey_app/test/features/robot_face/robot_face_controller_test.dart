@@ -699,6 +699,52 @@ void main() {
   );
 
   test(
+    'an unrecognized missed dose stays visible even after a later dose becomes due',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 13, 5),
+        schedules: <ReminderSchedule>[
+          _schedule(
+            id: 'schedule-1',
+            profileId: 'profile-1',
+            hour: 9,
+            minute: 0,
+            now: DateTime(2026, 7, 8, 13, 5),
+          ),
+          _schedule(
+            id: 'schedule-2',
+            profileId: 'profile-1',
+            hour: 13,
+            minute: 0,
+            now: DateTime(2026, 7, 8, 13, 5),
+            label: 'Afternoon meds',
+          ),
+        ],
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissed(
+          doseId: fixture.currentDoseId,
+          occurredAt: DateTime(2026, 7, 8, 9, 5).toUtc(),
+        ),
+      );
+
+      final missedState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.missed,
+      );
+
+      expect(missedState.actionDoseId, fixture.currentDoseId);
+      expect(missedState.nextEventLabel, '09:00 · Morning meds');
+      expect(missedState.availableActions, <RobotFaceActionKind>{
+        RobotFaceActionKind.recognizeMissedDose,
+      });
+    },
+  );
+
+  test(
     'doseMissed followed by doseMissedRecognized clears the missed alert and recognition action',
     () async {
       final fixture = await _RobotFaceControllerFixture.create(
