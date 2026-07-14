@@ -33,9 +33,26 @@ void main() {
 
     expect(find.text('Robot Face'), findsOneWidget);
     expect(find.text('Flip face 180°'), findsOneWidget);
+    expect(find.text('For upside-down mounts.'), findsOneWidget);
     expect(find.text('Dim after inactivity'), findsOneWidget);
+    expect(
+      find.text(
+        'After quiet time, show a darker resting face. Dose alerts still stay bright.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Wake before dose'), findsOneWidget);
     expect(find.text('Stay awake after dose'), findsOneWidget);
+    expect(
+      find.text('Brighten the face before a scheduled dose.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Keep the face awake while someone confirms, skips, or asks for help.',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('10 minutes'), findsNWidgets(2));
   });
 

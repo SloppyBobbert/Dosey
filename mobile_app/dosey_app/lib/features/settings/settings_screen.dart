@@ -509,14 +509,14 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
               title: 'Robot Face',
               children: [
                 const Text(
-                  'Keep the face horizontal and match your phone mount.',
+                  'Keep the mounted phone face readable while Dosey is resting or waiting for a dose.',
                 ),
                 const SizedBox(height: 12),
                 _SettingsSwitchTile(
                   value: settings.isFlipped,
                   enabled: !_isSaving,
                   title: 'Flip face 180°',
-                  subtitle: 'Use this if the phone is mounted upside down.',
+                  subtitle: 'For upside-down mounts.',
                   onChanged: (value) =>
                       _saveSettings(settings.copyWith(isFlipped: value)),
                 ),
@@ -525,7 +525,8 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   value: settings.dimAfterInactivity,
                   enabled: !_isSaving,
                   title: 'Dim after inactivity',
-                  subtitle: 'Lets the screen dim or sleep when idle.',
+                  subtitle:
+                      'After quiet time, show a darker resting face. Dose alerts still stay bright.',
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(dimAfterInactivity: value),
                   ),
@@ -536,6 +537,8 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                     Expanded(
                       child: _RobotFaceTimingDropdown(
                         label: 'Wake before dose',
+                        helperText:
+                            'Brighten the face before a scheduled dose.',
                         value: settings.wakeBeforeDoseMinutes,
                         fallbackValue: _defaultWakeBeforeDoseMinutes,
                         enabled: !_isSaving,
@@ -549,6 +552,8 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                     Expanded(
                       child: _RobotFaceTimingDropdown(
                         label: 'Stay awake after dose',
+                        helperText:
+                            'Keep the face awake while someone confirms, skips, or asks for help.',
                         value: settings.stayAwakeAfterDoseMinutes,
                         fallbackValue: _defaultStayAwakeAfterDoseMinutes,
                         enabled: !_isSaving,
@@ -588,6 +593,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
 class _RobotFaceTimingDropdown extends StatelessWidget {
   const _RobotFaceTimingDropdown({
     required this.label,
+    required this.helperText,
     required this.value,
     required this.fallbackValue,
     required this.enabled,
@@ -596,6 +602,7 @@ class _RobotFaceTimingDropdown extends StatelessWidget {
   });
 
   final String label;
+  final String helperText;
   final int value;
   final int fallbackValue;
   final bool enabled;
@@ -608,6 +615,7 @@ class _RobotFaceTimingDropdown extends StatelessWidget {
     final theme = Theme.of(context);
     final decoration = InputDecoration(
       labelText: label,
+      helperText: helperText,
       filled: true,
       fillColor: theme.colorScheme.surfaceContainerHighest,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
