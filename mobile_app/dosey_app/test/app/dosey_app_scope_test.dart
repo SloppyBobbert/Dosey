@@ -13,6 +13,26 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('maybeOf returns null when the app scope is absent', (
+    WidgetTester tester,
+  ) async {
+    late final DoseyAppDependencies? dependencies;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Builder(
+          builder: (context) {
+            dependencies = DoseyAppScope.maybeOf(context);
+            return const SizedBox();
+          },
+        ),
+      ),
+    );
+
+    expect(dependencies, isNull);
+  });
+
   testWidgets('app scope wires the combined auth service', (
     WidgetTester tester,
   ) async {

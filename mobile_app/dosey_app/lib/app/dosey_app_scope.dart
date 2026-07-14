@@ -55,10 +55,18 @@ class DoseyAppScope extends StatefulWidget {
   final ConnectivityGateway? connectivityGateway;
 
   static DoseyAppDependencies of(BuildContext context) {
+    final dependencies = maybeOf(context);
+    assert(
+      dependencies != null,
+      'DoseyAppScope was not found in the widget tree.',
+    );
+    return dependencies!;
+  }
+
+  static DoseyAppDependencies? maybeOf(BuildContext context) {
     final scope = context
         .dependOnInheritedWidgetOfExactType<_DoseyAppScopeInherited>();
-    assert(scope != null, 'DoseyAppScope was not found in the widget tree.');
-    return scope!.dependencies;
+    return scope?.dependencies;
   }
 
   @override

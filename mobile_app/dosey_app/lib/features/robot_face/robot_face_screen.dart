@@ -19,6 +19,7 @@ class RobotFaceScreen extends StatefulWidget {
   const RobotFaceScreen({
     super.key,
     this.controller,
+    this.controllerResolver,
     this.stateStream,
     this.initialState,
     this.isActive = true,
@@ -27,6 +28,7 @@ class RobotFaceScreen extends StatefulWidget {
 
   static const canvasKey = ValueKey<String>('robot-face-canvas');
   static const bottomCardKey = ValueKey<String>('robot-face-bottom-card');
+  static const displayFrameKey = ValueKey<String>('robot-face-display-frame');
   static const flipTransformKey = ValueKey<String>('robot-face-flip-transform');
   static const urgentPromptKey = ValueKey<String>('robot-face-urgent-prompt');
   static const urgentPromptScaleKey = ValueKey<String>(
@@ -48,6 +50,7 @@ class RobotFaceScreen extends StatefulWidget {
   );
 
   final RobotFaceController? controller;
+  final RobotFaceController Function(BuildContext context)? controllerResolver;
   final Stream<RobotFaceState>? stateStream;
   final RobotFaceState? initialState;
   final bool isActive;
@@ -70,6 +73,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
 
   Stream<RobotFaceState>? _stateStream;
   RobotFaceState? _initialState;
+  RobotFaceController? _interactionController;
 
   @override
   void didChangeDependencies() {
@@ -81,6 +85,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   void didUpdateWidget(covariant RobotFaceScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller ||
+        oldWidget.controllerResolver != widget.controllerResolver ||
         oldWidget.stateStream != widget.stateStream ||
         oldWidget.initialState != widget.initialState) {
       _bindStream();
@@ -90,11 +95,21 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   void _bindStream() {
     // Tests can inject a controller, stream, or fixed state. Production falls
     // back to the app-scoped Robot Face controller.
+    _interactionController = widget.controller;
+    if (_interactionController == null && widget.stateStream == null) {
+      _interactionController =
+          widget.controllerResolver?.call(context) ??
+          DoseyAppScope.maybeOf(context)?.robotFaceController;
+    }
     _stateStream = widget.stateStream ?? widget.controller?.watchState();
     if (_stateStream == null && widget.initialState == null) {
-      _stateStream = DoseyAppScope.of(context).robotFaceController.watchState();
+      _stateStream = _interactionController?.watchState();
     }
     _initialState = widget.initialState;
+  }
+
+  void _handleInteraction() {
+    _interactionController?.recordInteraction();
   }
 
   @override
@@ -116,6 +131,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
                   Widget frame = _RobotFaceFrame(
                     state: state,
                     isActive: widget.isActive,
+                    onInteraction: _handleInteraction,
                     doseActionLogger: widget.doseActionLogger,
                   );
 
@@ -258,15 +274,20 @@ class _RobotFaceFrame extends StatelessWidget {
   const _RobotFaceFrame({
     required this.state,
     required this.isActive,
+    required this.onInteraction,
     this.doseActionLogger,
   });
 
   final RobotFaceState state;
   final bool isActive;
+  final VoidCallback onInteraction;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
   Widget build(BuildContext context) {
+    final isMissedState = state.mode == RobotFaceMode.missed;
+    final displayAccent = _displayAccentFor(state);
+
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: Padding(
@@ -280,35 +301,80 @@ class _RobotFaceFrame extends StatelessWidget {
           child: Column(
             children: <Widget>[
               Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(36),
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: const Color(
-                              0xFF43E7FF,
-                            ).withValues(alpha: 0.12),
-                            blurRadius: 50,
-                            spreadRadius: 6,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (_) => onInteraction(),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      AnimatedContainer(
+                        key: RobotFaceScreen.displayFrameKey,
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOutCubic,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF02050A),
+                          borderRadius: BorderRadius.circular(36),
+                          border: Border.all(
+                            color: displayAccent.withValues(
+                              alpha: isMissedState ? 0.42 : 0.16,
+                            ),
+                            width: isMissedState ? 1.6 : 1.2,
                           ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(36),
-                        child: SizedBox.expand(
-                          key: RobotFaceScreen.canvasKey,
-                          child: RobotFaceCanvas(
-                            state: state,
-                            isActive: isActive,
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: displayAccent.withValues(
+                                alpha: isMissedState ? 0.22 : 0.12,
+                              ),
+                              blurRadius: isMissedState ? 56 : 44,
+                              spreadRadius: isMissedState ? 8 : 4,
+                            ),
+                            const BoxShadow(
+                              color: Color(0xCC010203),
+                              blurRadius: 18,
+                              spreadRadius: -4,
+                              offset: Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(30),
+                            child: SizedBox.expand(
+                              key: RobotFaceScreen.canvasKey,
+                              child: RobotFaceCanvas(
+                                state: state,
+                                isActive: isActive,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    _UrgentPromptOverlay(state: state),
-                  ],
+                      IgnorePointer(
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 260),
+                          curve: Curves.easeOut,
+                          opacity: _displayGlassOpacityFor(state),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(36),
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: <Color>[
+                                  Colors.white.withValues(alpha: 0.08),
+                                  Colors.transparent,
+                                  Colors.black.withValues(alpha: 0.08),
+                                ],
+                                stops: const <double>[0, 0.26, 1],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      _UrgentPromptOverlay(state: state),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -322,6 +388,37 @@ class _RobotFaceFrame extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  Color _displayAccentFor(RobotFaceState state) {
+    if (state.mode == RobotFaceMode.missed) {
+      return const Color(0xFFFF728C);
+    }
+    if (state.mode == RobotFaceMode.sleepy) {
+      return const Color(0xFF7288B5);
+    }
+    if (state.mode == RobotFaceMode.idle && state.isInAwakeWindow) {
+      return const Color(0xFF67E8FF);
+    }
+
+    return switch (state.mode.tone) {
+      RobotFaceTone.ready => const Color(0xFF56EBC6),
+      RobotFaceTone.attention || RobotFaceTone.calm => const Color(0xFF43E7FF),
+      RobotFaceTone.warning => const Color(0xFFFF728C),
+      RobotFaceTone.offline => const Color(0xFF98A5BC),
+    };
+  }
+
+  double _displayGlassOpacityFor(RobotFaceState state) {
+    return switch (state.mode) {
+      RobotFaceMode.missed => 0.08,
+      RobotFaceMode.sleepy => 0.22,
+      RobotFaceMode.idle when state.isInAwakeWindow => 0.14,
+      RobotFaceMode.doseApproaching ||
+      RobotFaceMode.doseReady ||
+      RobotFaceMode.dispensing => 0.12,
+      _ => 0.1,
+    };
   }
 }
 
@@ -341,6 +438,7 @@ class _RobotFaceStatusCard extends StatelessWidget {
     final showActionPanel =
         state.actionDoseId != null && state.availableActions.isNotEmpty;
     final isMissedState = state.mode == RobotFaceMode.missed;
+    final isSleepyState = state.mode == RobotFaceMode.sleepy;
     // The controller owns action availability, including offline/error
     // follow-up states after a dispense. The screen only renders that contract.
 
@@ -348,17 +446,23 @@ class _RobotFaceStatusCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: isMissedState
             ? const Color(0xD11E0C12)
+            : isSleepyState
+            ? const Color(0xC20A0E16)
             : const Color(0xC20B111B),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
           color: isMissedState
               ? const Color(0x66FF728C)
+              : isSleepyState
+              ? const Color(0x4D92A2C8)
               : Colors.white.withValues(alpha: 0.08),
         ),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: isMissedState
                 ? const Color(0x66FF728C)
+                : isSleepyState
+                ? const Color(0x2F6477A8)
                 : Colors.black.withValues(alpha: 0.26),
             blurRadius: isMissedState ? 28 : 22,
             offset: const Offset(0, 10),
@@ -566,6 +670,7 @@ class _RobotFaceStatusCard extends StatelessWidget {
       RobotFaceMode.doseApproaching => 0.28 + (ramp * 0.52),
       RobotFaceMode.doseReady => 1,
       RobotFaceMode.missed => 0.92,
+      RobotFaceMode.sleepy => 0.18,
       RobotFaceMode.idle when state.isInAwakeWindow => 0.24,
       _ => 0,
     };

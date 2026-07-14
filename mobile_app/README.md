@@ -8,7 +8,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 
 | Item | Status |
 | --- | --- |
-| App shell | Today, Prescriptions, Schedule, Robot Face in Android Robot Mode, Carousel, Controller, Log, Settings, plus profile menu and active section title |
+| App shell | Today, Prescriptions, Schedule, Robot Face-first Android Robot Mode, Carousel, Controller, Log, Settings, plus profile menu and active section title |
 | Local storage | Drift/SQLite on the phone app only |
 | Prescriptions and schedules | Local prescriptions, refill inventory tracking, schedule profiles, schedule editing, and enabled state |
 | Auth | Google + Apple wrappers, no backend yet |
@@ -24,7 +24,8 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 - Local prescription and schedule editing with remaining-dose counts, refill thresholds, refill-add history, schedule profiles, enabled/disabled state, and duplicate-time checks.
 - Today dose actions only spend inventory for taken-style confirmations, while duplicate terminal actions for the same dose are ignored.
 - Daviky carousel loading workflow that assigns schedules to slots, marks slots loaded, shows loaded/ready counts, disables dispense buttons while the controller is offline, and logs dispense movement separately from taken confirmation.
-- Robot Face scaffolding with local wake-before-dose and stay-awake timing settings.
+- Android Robot Mode opens Robot Face first, with tap-to-wake interaction, clearer mounted-phone sleepy/awake visuals, and local wake-before-dose, stay-awake, flip, and dimming settings.
+- Robot Face has simulator-backed dose states, a dominant red missed-dose alert, and a non-terminal missed-dose recognition action. Recognition records that the warning was seen; it does not mark the dose taken, skipped, or inventory-changing.
 - Device roles: Android robot phone, Android personal phone, and iOS personal phone only.
 - `flutter_blue_plus` BLE foundation behind an app-owned interface; protocol still incomplete.
 - `connectivity_plus` behind an app-owned interface for advisory connectivity/Wi-Fi status only, not provisioning.
@@ -36,7 +37,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 
 ## Target app direction
 
-Robot Mode on the mounted Android phone should handle the face screen, reminders, dispense UI, hardware test screen, Bluetooth connection, refill status, dose history, sounds or text-to-speech, and full-screen behavior when practical.
+Robot Mode on the mounted Android phone should handle the face screen, reminders, dispense UI, missed-dose recognition, hardware test screen, Bluetooth connection, refill status, dose history, sounds or text-to-speech, and full-screen behavior when practical.
 
 Personal Mode should handle patient or caregiver notifications, missed dose/refill alerts, dose history, and medication schedule editing when permissions allow.
 

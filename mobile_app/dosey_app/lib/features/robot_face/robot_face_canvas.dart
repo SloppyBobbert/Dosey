@@ -143,6 +143,8 @@ class _RobotFacePainter extends CustomPainter {
       ).createShader(rect);
     canvas.drawRect(rect, backgroundPaint);
 
+    _paintDisplayTexture(canvas, size, palette, state, pulse);
+
     _paintGlowOrb(
       canvas,
       center: Offset(size.width * 0.22, size.height * 0.18),
@@ -227,6 +229,8 @@ class _RobotFacePainter extends CustomPainter {
       concernTilt,
       motion.glowBoost,
     );
+
+    _paintDisplayVignette(canvas, rect, state);
   }
 
   void _paintEye(
@@ -355,6 +359,72 @@ class _RobotFacePainter extends CustomPainter {
     );
   }
 
+  void _paintDisplayTexture(
+    Canvas canvas,
+    Size size,
+    _FacePalette palette,
+    RobotFaceState state,
+    double pulse,
+  ) {
+    final sheenRect = Rect.fromLTWH(0, 0, size.width, size.height * 0.62);
+    canvas.drawRect(
+      sheenRect,
+      Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: <Color>[
+            Colors.white.withValues(
+              alpha: state.mode == RobotFaceMode.sleepy ? 0.03 : 0.05,
+            ),
+            Colors.transparent,
+          ],
+        ).createShader(sheenRect),
+    );
+
+    if (state.mode == RobotFaceMode.sleepy) {
+      final restBand = Rect.fromCenter(
+        center: Offset(size.width * 0.5, size.height * 0.82),
+        width: size.width * 0.6,
+        height: size.height * 0.06,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(restBand, Radius.circular(restBand.height)),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: <Color>[
+              palette.accent.withValues(alpha: 0),
+              palette.accent.withValues(alpha: 0.16 + (pulse * 0.04)),
+              palette.accent.withValues(alpha: 0),
+            ],
+          ).createShader(restBand),
+      );
+    }
+
+    if (state.mode == RobotFaceMode.idle && state.isInAwakeWindow) {
+      final awakeRect = Rect.fromCenter(
+        center: Offset(size.width * 0.5, size.height * 0.18),
+        width: size.width * 0.84,
+        height: size.height * 0.16,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(awakeRect, Radius.circular(awakeRect.height)),
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+            colors: <Color>[
+              palette.glow.withValues(alpha: 0),
+              palette.glow.withValues(alpha: 0.12 + (pulse * 0.04)),
+              palette.glow.withValues(alpha: 0),
+            ],
+          ).createShader(awakeRect),
+      );
+    }
+  }
+
   void _paintSleepVeil(Canvas canvas, Size size, double phase) {
     final rect = Offset.zero & size;
     canvas.drawRect(
@@ -391,6 +461,29 @@ class _RobotFacePainter extends CustomPainter {
     }
   }
 
+  void _paintDisplayVignette(Canvas canvas, Rect rect, RobotFaceState state) {
+    final edgeAlpha = switch (state.mode) {
+      RobotFaceMode.missed => 0.08,
+      RobotFaceMode.sleepy => 0.28,
+      RobotFaceMode.idle when state.isInAwakeWindow => 0.12,
+      _ => 0.16,
+    };
+
+    canvas.drawRect(
+      rect,
+      Paint()
+        ..shader = RadialGradient(
+          center: Alignment.center,
+          radius: 0.92,
+          colors: <Color>[
+            Colors.transparent,
+            const Color(0xFF010204).withValues(alpha: edgeAlpha),
+          ],
+          stops: const <double>[0.58, 1],
+        ).createShader(rect),
+    );
+  }
+
   double _blinkValue() {
     final time = phase;
     if (time > 0.18 && time < 0.22) {
@@ -416,7 +509,7 @@ class _RobotFacePainter extends CustomPainter {
     // Lower lids communicate sleepy/offline/warning states without adding a
     // mouth or extra facial features.
     final base = switch (state.mode) {
-      RobotFaceMode.sleepy => 0.28,
+      RobotFaceMode.sleepy => 0.22,
       RobotFaceMode.offline => 0.54,
       RobotFaceMode.error || RobotFaceMode.missed => 0.46,
       RobotFaceMode.happyConfirmed => 1.08,
@@ -424,7 +517,7 @@ class _RobotFacePainter extends CustomPainter {
       RobotFaceMode.doseReady => 1.06,
       RobotFaceMode.dispensing => 0.92,
       RobotFaceMode.waitingForConfirmation => 0.9 + awakeLift,
-      RobotFaceMode.idle => 0.98 + awakeLift + liveLift,
+      RobotFaceMode.idle => 0.94 + awakeLift + liveLift,
     };
     return (base - blink * 0.94).clamp(0.12, 1.08);
   }
@@ -467,7 +560,7 @@ class _RobotFacePainter extends CustomPainter {
       RobotFaceMode.offline => Offset(-size.width * 0.006, size.height * 0.01),
       RobotFaceMode.idle when state.isInAwakeWindow => Offset(
         horizontal * 0.5,
-        -size.height * 0.008 + idleVertical,
+        -size.height * 0.012 + idleVertical,
       ),
       _ => Offset(horizontal, idleVertical),
     };
@@ -510,11 +603,11 @@ class _RobotFacePainter extends CustomPainter {
         idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.002,
       ),
       RobotFaceMode.idle when state.isInAwakeWindow => _FaceMotionProfile(
-        breathingAmplitude: 0.022,
-        glowBoost: 0.07,
-        eyeLift: 0.01,
-        attentionRingStrength: 0.16,
-        wakeAura: 0.38,
+        breathingAmplitude: 0.02,
+        glowBoost: 0.1,
+        eyeLift: 0.014,
+        attentionRingStrength: 0.24,
+        wakeAura: 0.52,
         idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.006,
       ),
       RobotFaceMode.idle => _FaceMotionProfile(
@@ -541,13 +634,13 @@ class _RobotFacePainter extends CustomPainter {
     // feels like one safe dose-resolution flow, not a new robot state.
     return switch (mode) {
       RobotFaceMode.sleepy => const _FacePalette(
-        backgroundTop: Color(0xFF0C1020),
-        backgroundBottom: Color(0xFF03050B),
-        eyeTop: Color(0xFF5F7CA8),
-        eyeBottom: Color(0xFF22324C),
+        backgroundTop: Color(0xFF11172A),
+        backgroundBottom: Color(0xFF04070D),
+        eyeTop: Color(0xFFB8C8EE),
+        eyeBottom: Color(0xFF3B4E73),
         pupil: Color(0xFFF2F7FF),
-        glow: Color(0xFF5877A8),
-        accent: Color(0xFF7E90D9),
+        glow: Color(0xFF6E86B8),
+        accent: Color(0xFF9AA8E8),
       ),
       RobotFaceMode.doseReady => const _FacePalette(
         backgroundTop: Color(0xFF08161A),
@@ -613,13 +706,13 @@ class _RobotFacePainter extends CustomPainter {
         accent: Color(0xFF8D93A7),
       ),
       _ => const _FacePalette(
-        backgroundTop: Color(0xFF0B1521),
+        backgroundTop: Color(0xFF0D1726),
         backgroundBottom: Color(0xFF04070D),
-        eyeTop: Color(0xFFC6F8FF),
-        eyeBottom: Color(0xFF67D5EB),
+        eyeTop: Color(0xFFD9FBFF),
+        eyeBottom: Color(0xFF78DDF1),
         pupil: Color(0xFF062E3C),
-        glow: Color(0xFF54E6FF),
-        accent: Color(0xFF9D8CFF),
+        glow: Color(0xFF62ECFF),
+        accent: Color(0xFF8EEBFF),
       ),
     };
   }
