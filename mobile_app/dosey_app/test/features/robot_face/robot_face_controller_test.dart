@@ -98,10 +98,8 @@ void main() {
 
       await fixture.settle();
 
-      expect(
-        await fixture.controller.watchState().first,
-        isA<RobotFaceState>(),
-      );
+      final initialState = await fixture.controller.watchState().first;
+      expect(initialState.mode, RobotFaceMode.idle);
 
       now = now.add(const Duration(minutes: 31));
       fixture.now = now;
@@ -112,6 +110,84 @@ void main() {
       );
 
       expect(sleepyState.nextEventLabel, '14:00 · Morning meds');
+    },
+  );
+
+  test('recordInteraction wakes a sleepy idle face back to idle', () async {
+    final clock = StreamController<DateTime>.broadcast();
+    var now = DateTime(2026, 7, 8, 9);
+    final fixture = await _RobotFaceControllerFixture.create(
+      now: now,
+      scheduleHour: 14,
+      scheduleMinute: 0,
+      clock: clock.stream,
+    );
+    addTearDown(() async {
+      await clock.close();
+      await fixture.close();
+    });
+
+    await fixture.settle();
+
+    now = now.add(const Duration(minutes: 31));
+    fixture.now = now;
+    clock.add(now);
+
+    await fixture.controller.watchState().firstWhere(
+      (state) => state.mode == RobotFaceMode.sleepy,
+    );
+
+    fixture.controller.recordInteraction();
+
+    final awakeState = await fixture.controller.watchState().firstWhere(
+      (state) => state.mode == RobotFaceMode.idle,
+    );
+
+    expect(awakeState.isInAwakeWindow, isFalse);
+    expect(awakeState.actionDoseId, isNull);
+  });
+
+  test(
+    'recordInteraction refreshes the inactivity timer before the sleepy timeout',
+    () async {
+      final clock = StreamController<DateTime>.broadcast();
+      var now = DateTime(2026, 7, 8, 9);
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: now,
+        scheduleHour: 14,
+        scheduleMinute: 0,
+        clock: clock.stream,
+      );
+      addTearDown(() async {
+        await clock.close();
+        await fixture.close();
+      });
+
+      await fixture.settle();
+
+      now = now.add(const Duration(minutes: 20));
+      fixture.now = now;
+      fixture.controller.recordInteraction();
+
+      now = now.add(const Duration(minutes: 20));
+      fixture.now = now;
+      clock.add(now);
+      await fixture.settle();
+
+      final state = await fixture.controller.watchState().first;
+
+      expect(state.mode, RobotFaceMode.idle);
+      expect(state.isInAwakeWindow, isFalse);
+
+      now = now.add(const Duration(minutes: 11));
+      fixture.now = now;
+      clock.add(now);
+
+      final sleepyState = await fixture.controller.watchState().firstWhere(
+        (nextState) => nextState.mode == RobotFaceMode.sleepy,
+      );
+
+      expect(sleepyState.isInAwakeWindow, isFalse);
     },
   );
 
@@ -339,18 +415,16 @@ void main() {
   );
 
   test(
-    'awake window keeps the face awake after a dose for the configured time',
+    'due-dose awake window prevents sleepy mode after the inactivity timeout',
     () async {
       final clock = StreamController<DateTime>.broadcast();
-      var now = DateTime(2026, 7, 8, 9, 5);
+      var now = DateTime(2026, 7, 8, 9, 20);
       final fixture = await _RobotFaceControllerFixture.create(
         now: now,
-        scheduleHour: 9,
+        scheduleHour: 10,
         scheduleMinute: 0,
         clock: clock.stream,
-        robotFaceSettings: const RobotFaceSettings(
-          stayAwakeAfterDoseMinutes: 10,
-        ),
+        robotFaceSettings: const RobotFaceSettings(wakeBeforeDoseMinutes: 15),
       );
       addTearDown(() async {
         await clock.close();
@@ -359,7 +433,12 @@ void main() {
 
       await fixture.settle();
 
-      now = DateTime(2026, 7, 8, 9, 9);
+      expect(
+        (await fixture.controller.watchState().first).mode,
+        RobotFaceMode.idle,
+      );
+
+      now = DateTime(2026, 7, 8, 9, 51);
       fixture.now = now;
       clock.add(now);
 
@@ -367,19 +446,102 @@ void main() {
         (state) => state.isInAwakeWindow,
       );
 
-      expect(awakeState.mode, RobotFaceMode.doseReady);
-      expect(awakeState.rampProgress, 1);
+      expect(awakeState.mode, RobotFaceMode.doseApproaching);
+      expect(awakeState.rampProgress, greaterThan(0));
+    },
+  );
 
-      now = DateTime(2026, 7, 8, 9, 11);
+  test(
+    'active missed-dose alert stays missed after inactivity timeout and interaction does not change its only action',
+    () async {
+      final clock = StreamController<DateTime>.broadcast();
+      var now = DateTime(2026, 7, 8, 9, 5);
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: now,
+        scheduleHour: 9,
+        scheduleMinute: 0,
+        clock: clock.stream,
+      );
+      addTearDown(() async {
+        await clock.close();
+        await fixture.close();
+      });
+
+      await fixture.settle();
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissed(
+          doseId: fixture.currentDoseId,
+          occurredAt: fixture.now.toUtc(),
+        ),
+      );
+
+      final missedState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.missed,
+      );
+      expect(missedState.isInAwakeWindow, isTrue);
+      expect(missedState.availableActions, <RobotFaceActionKind>{
+        RobotFaceActionKind.recognizeMissedDose,
+      });
+
+      now = now.add(const Duration(minutes: 31));
       fixture.now = now;
       clock.add(now);
+      await fixture.settle();
 
-      final noLongerAwakeState = await fixture.controller
-          .watchState()
-          .firstWhere((state) => !state.isInAwakeWindow);
+      final timedOutState = await fixture.controller.watchState().first;
+      expect(timedOutState.mode, RobotFaceMode.missed);
+      expect(timedOutState.isInAwakeWindow, isFalse);
+      expect(timedOutState.availableActions, <RobotFaceActionKind>{
+        RobotFaceActionKind.recognizeMissedDose,
+      });
 
-      expect(noLongerAwakeState.mode, RobotFaceMode.doseReady);
-      expect(noLongerAwakeState.rampProgress, 1);
+      fixture.controller.recordInteraction();
+
+      final afterInteractionState = await fixture.controller.watchState().first;
+      expect(afterInteractionState.mode, RobotFaceMode.missed);
+      expect(afterInteractionState.availableActions, <RobotFaceActionKind>{
+        RobotFaceActionKind.recognizeMissedDose,
+      });
+    },
+  );
+
+  test(
+    'recordInteraction does not add dose log events or revive missed alert actions on its own',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        scheduleHour: 9,
+        scheduleMinute: 0,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissed(
+          doseId: fixture.currentDoseId,
+          occurredAt: fixture.now.toUtc(),
+        ),
+      );
+      await fixture.doseLog.addEvent(
+        DoseLogEvent.doseMissedRecognized(
+          doseId: fixture.currentDoseId,
+          occurredAt: fixture.now.add(const Duration(minutes: 1)).toUtc(),
+        ),
+      );
+
+      final recognizedState = await fixture.controller.watchState().firstWhere(
+        (state) => state.mode == RobotFaceMode.idle,
+      );
+      final eventCountBeforeInteraction = fixture.doseLog.events.length;
+
+      fixture.controller.recordInteraction();
+
+      final afterInteractionState = await fixture.controller.watchState().first;
+      expect(fixture.doseLog.events, hasLength(eventCountBeforeInteraction));
+      expect(afterInteractionState.mode, RobotFaceMode.idle);
+      expect(afterInteractionState.availableActions, isEmpty);
+      expect(afterInteractionState.actionDoseId, isNull);
+      expect(recognizedState.availableActions, isEmpty);
     },
   );
 
@@ -1168,6 +1330,8 @@ class _FakeControllerLifecycleService implements ControllerLifecycleService {
 class _FakeDoseLogRepository implements DoseLogRepository {
   final _controller = StreamController<List<DoseLogEvent>>.broadcast();
   final List<DoseLogEvent> _events = <DoseLogEvent>[];
+
+  List<DoseLogEvent> get events => List<DoseLogEvent>.unmodifiable(_events);
 
   @override
   Future<void> addEvent(DoseLogEvent event) async {
