@@ -470,14 +470,8 @@ void main() {
 
     final awakeBorder = frameDecoration().border! as Border;
 
-    expect(
-      awakeBorder.top.color.green,
-      greaterThan(sleepyBorder.top.color.green),
-    );
-    expect(
-      awakeBorder.top.color.blue,
-      greaterThan(sleepyBorder.top.color.blue),
-    );
+    expect(awakeBorder.top.color.g, greaterThan(sleepyBorder.top.color.g));
+    expect(awakeBorder.top.color.b, greaterThan(sleepyBorder.top.color.b));
   });
 
   testWidgets('shows red missed-dose treatment and safe copy', (
@@ -1270,7 +1264,6 @@ class _RobotFaceTestApp extends StatelessWidget {
   const _RobotFaceTestApp({
     super.key,
     this.controller,
-    this.controllerResolver,
     this.stateStream,
     this.initialState,
     this.isActive = true,
@@ -1278,7 +1271,6 @@ class _RobotFaceTestApp extends StatelessWidget {
   });
 
   final RobotFaceController? controller;
-  final RobotFaceController Function(BuildContext context)? controllerResolver;
   final Stream<RobotFaceState>? stateStream;
   final RobotFaceState? initialState;
   final bool isActive;
@@ -1289,7 +1281,6 @@ class _RobotFaceTestApp extends StatelessWidget {
     return MaterialApp(
       home: RobotFaceScreen(
         controller: controller,
-        controllerResolver: controllerResolver,
         stateStream: stateStream,
         initialState: initialState,
         isActive: isActive,
@@ -1419,8 +1410,8 @@ class _IdleScheduleProfileRepository implements ScheduleProfileRepository {
 }
 
 class _FixedAppSettingsRepository extends LocalAppSettingsRepository {
-  _FixedAppSettingsRepository(DoseyDatabase database, this._role)
-    : super(database, defaultRole: _role);
+  _FixedAppSettingsRepository(super.database, this._role)
+    : super(defaultRole: _role);
 
   final AppDeviceRole _role;
 
@@ -1431,7 +1422,7 @@ class _FixedAppSettingsRepository extends LocalAppSettingsRepository {
 }
 
 class _FixedRobotFaceSettingsRepository extends RobotFaceSettingsRepository {
-  _FixedRobotFaceSettingsRepository(DoseyDatabase database) : super(database);
+  _FixedRobotFaceSettingsRepository(super.database);
 
   @override
   Stream<RobotFaceSettings> watchSettings() {
