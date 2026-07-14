@@ -97,13 +97,9 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
     // back to the app-scoped Robot Face controller.
     _interactionController = widget.controller;
     if (_interactionController == null && widget.stateStream == null) {
-      try {
-        _interactionController =
-            widget.controllerResolver?.call(context) ??
-            DoseyAppScope.of(context).robotFaceController;
-      } on AssertionError {
-        _interactionController = null;
-      }
+      _interactionController =
+          widget.controllerResolver?.call(context) ??
+          DoseyAppScope.maybeOf(context)?.robotFaceController;
     }
     _stateStream = widget.stateStream ?? widget.controller?.watchState();
     if (_stateStream == null && widget.initialState == null) {
