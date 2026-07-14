@@ -421,6 +421,65 @@ void main() {
     expect(border.top.color.a, greaterThan(0.08));
   });
 
+  testWidgets('gives awake idle frame brighter treatment than sleepy mode', (
+    WidgetTester tester,
+  ) async {
+    final states = StreamController<RobotFaceState>.broadcast();
+    addTearDown(states.close);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        stateStream: states.stream,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.sleepy,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+          statusLabel: 'Sleep mode',
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    BoxDecoration frameDecoration() =>
+        tester
+                .widget<AnimatedContainer>(
+                  find.byKey(RobotFaceScreen.displayFrameKey),
+                )
+                .decoration!
+            as BoxDecoration;
+
+    final sleepyBorder = frameDecoration().border! as Border;
+
+    states.add(
+      const RobotFaceState(
+        mode: RobotFaceMode.idle,
+        nextEventLabel: '8:00 PM · Evening meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 0,
+        isInAwakeWindow: true,
+        statusLabel: 'Controller connected',
+      ),
+    );
+
+    await tester.pump();
+
+    final awakeBorder = frameDecoration().border! as Border;
+
+    expect(
+      awakeBorder.top.color.green,
+      greaterThan(sleepyBorder.top.color.green),
+    );
+    expect(
+      awakeBorder.top.color.blue,
+      greaterThan(sleepyBorder.top.color.blue),
+    );
+  });
+
   testWidgets('shows red missed-dose treatment and safe copy', (
     WidgetTester tester,
   ) async {
@@ -455,7 +514,13 @@ void main() {
       find.byKey(RobotFaceScreen.statusBadgeKey),
     );
     final border = (badge.decoration as BoxDecoration).border! as Border;
+    final displayFrame = tester.widget<AnimatedContainer>(
+      find.byKey(RobotFaceScreen.displayFrameKey),
+    );
+    final displayBorder =
+        (displayFrame.decoration! as BoxDecoration).border! as Border;
     expect(border.top.color.r, greaterThan(border.top.color.g));
+    expect(displayBorder.top.color.r, greaterThan(displayBorder.top.color.b));
   });
 
   testWidgets(
