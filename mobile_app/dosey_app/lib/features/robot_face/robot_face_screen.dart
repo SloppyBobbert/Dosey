@@ -19,6 +19,7 @@ class RobotFaceScreen extends StatefulWidget {
   const RobotFaceScreen({
     super.key,
     this.controller,
+    this.controllerResolver,
     this.stateStream,
     this.initialState,
     this.isActive = true,
@@ -48,6 +49,7 @@ class RobotFaceScreen extends StatefulWidget {
   );
 
   final RobotFaceController? controller;
+  final RobotFaceController Function(BuildContext context)? controllerResolver;
   final Stream<RobotFaceState>? stateStream;
   final RobotFaceState? initialState;
   final bool isActive;
@@ -70,6 +72,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
 
   Stream<RobotFaceState>? _stateStream;
   RobotFaceState? _initialState;
+  RobotFaceController? _interactionController;
 
   @override
   void didChangeDependencies() {
@@ -81,6 +84,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   void didUpdateWidget(covariant RobotFaceScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.controller != widget.controller ||
+        oldWidget.controllerResolver != widget.controllerResolver ||
         oldWidget.stateStream != widget.stateStream ||
         oldWidget.initialState != widget.initialState) {
       _bindStream();
@@ -90,11 +94,25 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   void _bindStream() {
     // Tests can inject a controller, stream, or fixed state. Production falls
     // back to the app-scoped Robot Face controller.
+    _interactionController = widget.controller;
+    if (_interactionController == null && widget.stateStream == null) {
+      try {
+        _interactionController =
+            widget.controllerResolver?.call(context) ??
+            DoseyAppScope.of(context).robotFaceController;
+      } on AssertionError {
+        _interactionController = null;
+      }
+    }
     _stateStream = widget.stateStream ?? widget.controller?.watchState();
     if (_stateStream == null && widget.initialState == null) {
-      _stateStream = DoseyAppScope.of(context).robotFaceController.watchState();
+      _stateStream = _interactionController?.watchState();
     }
     _initialState = widget.initialState;
+  }
+
+  void _handleInteraction() {
+    _interactionController?.recordInteraction();
   }
 
   @override
@@ -116,6 +134,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
                   Widget frame = _RobotFaceFrame(
                     state: state,
                     isActive: widget.isActive,
+                    onInteraction: _handleInteraction,
                     doseActionLogger: widget.doseActionLogger,
                   );
 
@@ -258,11 +277,13 @@ class _RobotFaceFrame extends StatelessWidget {
   const _RobotFaceFrame({
     required this.state,
     required this.isActive,
+    required this.onInteraction,
     this.doseActionLogger,
   });
 
   final RobotFaceState state;
   final bool isActive;
+  final VoidCallback onInteraction;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
@@ -280,35 +301,39 @@ class _RobotFaceFrame extends StatelessWidget {
           child: Column(
             children: <Widget>[
               Expanded(
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: <Widget>[
-                    DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(36),
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: const Color(
-                              0xFF43E7FF,
-                            ).withValues(alpha: 0.12),
-                            blurRadius: 50,
-                            spreadRadius: 6,
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(36),
-                        child: SizedBox.expand(
-                          key: RobotFaceScreen.canvasKey,
-                          child: RobotFaceCanvas(
-                            state: state,
-                            isActive: isActive,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTapDown: (_) => onInteraction(),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: <Widget>[
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(36),
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: const Color(
+                                0xFF43E7FF,
+                              ).withValues(alpha: 0.12),
+                              blurRadius: 50,
+                              spreadRadius: 6,
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(36),
+                          child: SizedBox.expand(
+                            key: RobotFaceScreen.canvasKey,
+                            child: RobotFaceCanvas(
+                              state: state,
+                              isActive: isActive,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    _UrgentPromptOverlay(state: state),
-                  ],
+                      _UrgentPromptOverlay(state: state),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),

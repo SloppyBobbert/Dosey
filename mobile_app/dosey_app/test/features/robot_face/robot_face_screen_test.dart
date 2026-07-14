@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
+import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
+import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -13,8 +16,15 @@ import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
+import 'package:dosey_app/core/schedules/schedule_profile.dart';
+import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:dosey_app/features/today/today_next_dose_helper.dart';
@@ -578,6 +588,106 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets(
+    'tapping the face with a missed alert only records interaction until the explicit button is tapped',
+    (WidgetTester tester) async {
+      final doseActionLogger = _FakeRobotFaceDoseActionLogger();
+      const state = RobotFaceState(
+        mode: RobotFaceMode.missed,
+        nextEventLabel: '8:00 AM · Morning meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+        statusLabel: 'Missed dose alert',
+        actionDoseId: 'dose-123',
+        availableActions: {RobotFaceActionKind.recognizeMissedDose},
+      );
+
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          doseActionLogger: doseActionLogger.call,
+          initialState: state,
+        ),
+      );
+
+      await tester.pump();
+      await tester.tapAt(
+        tester.getCenter(find.byKey(RobotFaceScreen.canvasKey)),
+      );
+      await tester.pump();
+
+      expect(doseActionLogger.events, isEmpty);
+      expect(find.text('Missed dose noted.'), findsNothing);
+
+      await tester.tap(
+        find.byKey(RobotFaceScreen.recognizeMissedDoseButtonKey),
+      );
+      await tester.pump();
+
+      expect(doseActionLogger.events, hasLength(1));
+      expect(
+        doseActionLogger.events.single.kind,
+        DoseLogEventKind.doseMissedRecognized,
+      );
+      expect(find.text('Missed dose noted.'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'tapping the Robot Face display records interaction through an injected controller',
+    (WidgetTester tester) async {
+      final harness = _RobotFaceInteractionControllerHarness();
+      addTearDown(harness.dispose);
+
+      await tester.pumpWidget(
+        _RobotFaceTestApp(controller: harness.controller),
+      );
+
+      await tester.pump();
+      harness.advance(const Duration(minutes: 31));
+      await tester.pump();
+
+      expect(find.text('Sleep mode'), findsOneWidget);
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(RobotFaceScreen.canvasKey)),
+      );
+      await tester.pump();
+
+      expect(find.text('Sleep mode'), findsNothing);
+      expect(find.text('No active reminder'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'tapping the Robot Face display records interaction through the app-owned controller',
+    (WidgetTester tester) async {
+      final harness = _RobotFaceInteractionControllerHarness();
+      addTearDown(harness.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RobotFaceScreen(controllerResolver: (_) => harness.controller),
+        ),
+      );
+
+      await tester.pump();
+      harness.advance(const Duration(minutes: 31));
+      await tester.pump();
+
+      expect(find.text('Sleep mode'), findsOneWidget);
+
+      await tester.tapAt(
+        tester.getCenter(find.byKey(RobotFaceScreen.canvasKey)),
+      );
+      await tester.pump();
+
+      expect(find.text('Sleep mode'), findsNothing);
+      expect(find.text('No active reminder'), findsOneWidget);
+    },
+  );
+
   testWidgets('hides action panel for idle state without actionable dose', (
     WidgetTester tester,
   ) async {
@@ -1094,14 +1204,18 @@ void main() {
 class _RobotFaceTestApp extends StatelessWidget {
   const _RobotFaceTestApp({
     super.key,
+    this.controller,
+    this.controllerResolver,
     this.stateStream,
-    required this.initialState,
+    this.initialState,
     this.isActive = true,
     this.doseActionLogger,
   });
 
+  final RobotFaceController? controller;
+  final RobotFaceController Function(BuildContext context)? controllerResolver;
   final Stream<RobotFaceState>? stateStream;
-  final RobotFaceState initialState;
+  final RobotFaceState? initialState;
   final bool isActive;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
@@ -1109,6 +1223,8 @@ class _RobotFaceTestApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       home: RobotFaceScreen(
+        controller: controller,
+        controllerResolver: controllerResolver,
         stateStream: stateStream,
         initialState: initialState,
         isActive: isActive,
@@ -1160,6 +1276,232 @@ class _FakeRobotFaceDoseActionLogger {
     }
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     messenger.showSnackBar(SnackBar(content: Text(successMessage)));
+  }
+}
+
+class _IdleControllerGateway implements ControllerGateway {
+  @override
+  Future<void> cancelActiveCommand() async {}
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  Future<void> connect() async {}
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> requestDispense({required String doseId}) async {}
+
+  @override
+  Stream<ControllerSnapshot> watchController() {
+    return Stream.value(const ControllerSnapshot.disconnected());
+  }
+}
+
+class _ConnectedControllerGateway implements ControllerGateway {
+  const _ConnectedControllerGateway();
+
+  @override
+  Future<void> cancelActiveCommand() async {}
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  Future<void> connect() async {}
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> requestDispense({required String doseId}) async {}
+
+  @override
+  Stream<ControllerSnapshot> watchController() {
+    return Stream.value(const ControllerSnapshot.connected());
+  }
+}
+
+class _IdleControllerLifecycleService extends ControllerLifecycleService {
+  _IdleControllerLifecycleService()
+    : super(
+        controller: _IdleControllerGateway(),
+        commandRepository: _UnusedControllerCommandRepository(),
+        doseLog: _FakeDoseLog(),
+        carouselSlots: _UnusedCarouselSlotRepository(),
+      );
+}
+
+class _IdleScheduleProfileRepository implements ScheduleProfileRepository {
+  @override
+  Future<void> setActiveProfile(String id) async {}
+
+  @override
+  Future<void> upsertProfile(ScheduleProfile profile) async {}
+
+  @override
+  Stream<ScheduleProfile?> watchActiveProfile() {
+    return Stream.value(null);
+  }
+
+  @override
+  Stream<List<ScheduleProfile>> watchProfiles() {
+    return Stream.value(const <ScheduleProfile>[]);
+  }
+}
+
+class _FixedAppSettingsRepository extends LocalAppSettingsRepository {
+  _FixedAppSettingsRepository(DoseyDatabase database, this._role)
+    : super(database, defaultRole: _role);
+
+  final AppDeviceRole _role;
+
+  @override
+  Stream<AppDeviceRole> watchDeviceRole() {
+    return Stream.value(_role);
+  }
+}
+
+class _FixedRobotFaceSettingsRepository extends RobotFaceSettingsRepository {
+  _FixedRobotFaceSettingsRepository(DoseyDatabase database) : super(database);
+
+  @override
+  Stream<RobotFaceSettings> watchSettings() {
+    return Stream.value(const RobotFaceSettings());
+  }
+}
+
+class _RobotFaceInteractionControllerHarness {
+  _RobotFaceInteractionControllerHarness()
+    : database = DoseyDatabase.inMemory(),
+      clock = StreamController<DateTime>.broadcast(),
+      initialTime = DateTime(2026, 7, 13, 12) {
+    currentTime = initialTime;
+    controller = RobotFaceController(
+      settings: _FixedAppSettingsRepository(
+        database,
+        AppDeviceRole.androidRobot,
+      ),
+      robotFaceSettings: _FixedRobotFaceSettingsRepository(database),
+      controller: const _ConnectedControllerGateway(),
+      controllerLifecycle: _IdleControllerLifecycleService(),
+      scheduleProfiles: _IdleScheduleProfileRepository(),
+      reminders: _FakeReminderRepository(),
+      doseLog: _FakeDoseLog(),
+      clock: clock.stream,
+      now: () => currentTime,
+    );
+  }
+
+  final DoseyDatabase database;
+  final StreamController<DateTime> clock;
+  final DateTime initialTime;
+  late final RobotFaceController controller;
+  late DateTime currentTime;
+
+  void advance(Duration duration) {
+    currentTime = currentTime.add(duration);
+    clock.add(currentTime);
+  }
+
+  Future<void> dispose() async {
+    await clock.close();
+    await controller.close();
+    await database.close();
+  }
+}
+
+class _UnusedControllerCommandRepository
+    implements ControllerCommandRepository {
+  @override
+  Future<ControllerCommandEvent> appendEvent(
+    String sessionId,
+    ControllerCommandEventType eventType, {
+    required DateTime occurredAt,
+    String? details,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ControllerCommandSession> createSession({
+    required ControllerCommandType commandType,
+    required DateTime now,
+    String? doseId,
+    String? scheduleId,
+    String? slotId,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<ControllerCommandEvent>> getEventsForSession(String sessionId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ControllerCommandSession?> getLatestRelevantSession() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<ControllerCommandSession> getSession(String sessionId) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<List<ControllerCommandSession>> getUnresolvedSessions() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Future<void> updateSessionState(
+    String sessionId,
+    ControllerCommandSessionState state, {
+    ControllerCommandFailureReason? failureReason,
+    DateTime? acceptedAt,
+    DateTime? resolvedAt,
+    DateTime? updatedAt,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Stream<ControllerCommandSession?> watchLatestRelevantSession() {
+    return const Stream<ControllerCommandSession?>.empty();
+  }
+
+  @override
+  Stream<List<ControllerCommandSession>> watchUnresolvedSessions() {
+    return const Stream<List<ControllerCommandSession>>.empty();
+  }
+}
+
+class _UnusedCarouselSlotRepository implements CarouselSlotRepository {
+  @override
+  Future<void> assignSlot(CarouselSlot slot) async {}
+
+  @override
+  Future<void> clearProfile(String profileId) async {}
+
+  @override
+  Future<void> clearSlot(String id) async {}
+
+  @override
+  Future<void> markDispensed(String id) async {}
+
+  @override
+  Future<void> markLoaded(String id) async {}
+
+  @override
+  Future<void> markNeedsReview(String id) async {}
+
+  @override
+  Stream<List<CarouselSlot>> watchSlots({String? profileId}) {
+    return Stream.value(const <CarouselSlot>[]);
   }
 }
 
