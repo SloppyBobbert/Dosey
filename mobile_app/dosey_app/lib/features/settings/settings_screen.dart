@@ -1,6 +1,7 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
+import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
@@ -9,6 +10,7 @@ import 'package:flutter/material.dart';
 enum SettingsSection {
   account,
   deviceMode,
+  actionPin,
   robotFace,
   notifications,
   safety,
@@ -83,11 +85,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return switch (section) {
       SettingsSection.account => 120,
       SettingsSection.deviceMode => 320,
-      SettingsSection.robotFace => 500,
-      SettingsSection.notifications => 760,
-      SettingsSection.safety => 940,
-      SettingsSection.helpAbout => 1120,
-      SettingsSection.setup => 1320,
+      SettingsSection.actionPin => 500,
+      SettingsSection.robotFace => 700,
+      SettingsSection.notifications => 960,
+      SettingsSection.safety => 1140,
+      SettingsSection.helpAbout => 1320,
+      SettingsSection.setup => 1520,
     };
   }
 
@@ -151,6 +154,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               key: _sectionKeys[SettingsSection.deviceMode],
               platform: platform,
             ),
+            const SizedBox(height: 12),
+            _ActionPinCard(key: _sectionKeys[SettingsSection.actionPin]),
             _RobotFaceSettingsSection(
               sectionKey: _sectionKeys[SettingsSection.robotFace],
             ),
@@ -423,6 +428,102 @@ class _DeviceModeDropdownState extends State<_DeviceModeDropdown> {
         }
       },
     );
+  }
+}
+
+class _ActionPinCard extends StatelessWidget {
+  const _ActionPinCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = DoseyAppScope.of(context).settings;
+
+    return StreamBuilder<bool>(
+      stream: settings.watchActionPinEnabled(),
+      builder: (context, snapshot) {
+        final pinEnabled = snapshot.data ?? false;
+
+        return _SettingsSectionCard(
+          icon: Icons.pin_outlined,
+          title: 'Action PIN',
+          children: [
+            Text(pinEnabled ? 'PIN is on' : 'PIN is off'),
+            const SizedBox(height: 8),
+            const Text(
+              'Require a local PIN before confirming or skipping doses and before running robot actions.',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: () =>
+                      pinEnabled ? _changePin(context) : _enablePin(context),
+                  icon: Icon(
+                    pinEnabled ? Icons.edit_outlined : Icons.lock_outline,
+                  ),
+                  label: Text(pinEnabled ? 'Change PIN' : 'Enable PIN'),
+                ),
+                if (pinEnabled)
+                  OutlinedButton.icon(
+                    onPressed: () => _disablePin(context),
+                    icon: const Icon(Icons.lock_open_outlined),
+                    label: const Text('Disable PIN'),
+                  ),
+              ],
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _enablePin(BuildContext context) async {
+    final newPin = await showActionPinSetupDialog(context);
+    if (newPin == null || !context.mounted) return;
+    await _savePin(context, newPin);
+  }
+
+  Future<void> _changePin(BuildContext context) async {
+    final currentPin = await _requestVerifiedCurrentPin(context);
+    if (currentPin == null || !context.mounted) return;
+    final newPin = await showActionPinSetupDialog(context, title: 'Change PIN');
+    if (newPin == null || !context.mounted) return;
+    await _savePin(context, newPin);
+  }
+
+  Future<void> _disablePin(BuildContext context) async {
+    final currentPin = await _requestVerifiedCurrentPin(context);
+    if (currentPin == null || !context.mounted) return;
+    await DoseyAppScope.of(context).settings.clearActionPin();
+  }
+
+  Future<String?> _requestVerifiedCurrentPin(BuildContext context) async {
+    final settings = DoseyAppScope.of(context).settings;
+    while (context.mounted) {
+      final pin = await showActionPinPromptDialog(context);
+      if (pin == null || !context.mounted) return null;
+      if (await settings.verifyActionPin(pin)) {
+        return pin;
+      }
+      if (!context.mounted) return null;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Wrong PIN.')));
+    }
+    return null;
+  }
+
+  Future<void> _savePin(BuildContext context, String pin) async {
+    try {
+      await DoseyAppScope.of(context).settings.setActionPin(pin);
+    } on Object catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Action PIN update failed: $error')),
+      );
+    }
   }
 }
 
