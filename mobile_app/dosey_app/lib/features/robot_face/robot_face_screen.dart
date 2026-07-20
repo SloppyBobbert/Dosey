@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/features/doses/dose_action_logger.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
@@ -896,6 +897,13 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
 
     final actionDoseId = widget.state.actionDoseId;
     if (actionDoseId == null) {
+      return;
+    }
+
+    if (_isTerminalAction(actionKind) && !await authorizeActionPin(context)) {
+      return;
+    }
+    if (!context.mounted) {
       return;
     }
 

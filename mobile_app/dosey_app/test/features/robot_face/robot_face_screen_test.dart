@@ -885,6 +885,111 @@ void main() {
     expect(find.text('Taken logged.'), findsOneWidget);
   });
 
+  testWidgets('action PIN blocks Robot Face confirm taken until accepted', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    ).setActionPin('1234');
+    final doseActionLogger = _FakeRobotFaceDoseActionLogger();
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        doseActionLogger: doseActionLogger.call,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.doseReady,
+          nextEventLabel: 'Now · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Ready to dispense',
+          actionDoseId: 'dose-123',
+          availableActions: {
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+          },
+        ),
+      ),
+    );
+
+    await tester.pump();
+    expect(find.byKey(RobotFaceScreen.confirmTakenButtonKey), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(RobotFaceScreen.confirmTakenButtonKey),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    await tester.tap(find.byKey(RobotFaceScreen.confirmTakenButtonKey));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Enter Action PIN'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    expect(doseActionLogger.events, isEmpty);
+
+    await tester.tap(find.byKey(RobotFaceScreen.confirmTakenButtonKey));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+
+    expect(doseActionLogger.events, hasLength(1));
+    expect(
+      doseActionLogger.events.single.kind,
+      DoseLogEventKind.doseTakenConfirmed,
+    );
+  });
+
+  testWidgets('action PIN does not gate missed-dose recognition', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    ).setActionPin('1234');
+    final doseActionLogger = _FakeRobotFaceDoseActionLogger();
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        doseActionLogger: doseActionLogger.call,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.missed,
+          nextEventLabel: '8:00 AM · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Missed dose alert',
+          actionDoseId: 'dose-123',
+          availableActions: {RobotFaceActionKind.recognizeMissedDose},
+        ),
+      ),
+    );
+
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.recognizeMissedDoseButtonKey));
+    await tester.pump();
+
+    expect(find.text('Enter Action PIN'), findsNothing);
+    expect(doseActionLogger.events, hasLength(1));
+    expect(
+      doseActionLogger.events.single.kind,
+      DoseLogEventKind.doseMissedRecognized,
+    );
+    expect(doseActionLogger.events.single.marksDoseTaken, isFalse);
+  });
+
   testWidgets(
     'Robot Face confirm taken reuses Today terminal dose side effects',
     (WidgetTester tester) async {
@@ -1058,24 +1163,22 @@ void main() {
     'keeps actions available when shared dose logging reports failure',
     (WidgetTester tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: RobotFaceScreen(
-            doseActionLogger: (_, _, _) async => false,
-            initialState: const RobotFaceState(
-              mode: RobotFaceMode.waitingForConfirmation,
-              nextEventLabel: 'Taken? · Morning meds',
-              isFlipped: false,
-              isLandscapeOnly: true,
-              rampProgress: 1,
-              isInAwakeWindow: true,
-              statusLabel: 'Waiting for confirmation',
-              actionDoseId: 'vitamin-d-morning:2026-07-08',
-              availableActions: {
-                RobotFaceActionKind.confirmTaken,
-                RobotFaceActionKind.skipDose,
-                RobotFaceActionKind.askForHelp,
-              },
-            ),
+        _RobotFaceTestApp(
+          doseActionLogger: (_, _, _) async => false,
+          initialState: const RobotFaceState(
+            mode: RobotFaceMode.waitingForConfirmation,
+            nextEventLabel: 'Taken? · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            statusLabel: 'Waiting for confirmation',
+            actionDoseId: 'vitamin-d-morning:2026-07-08',
+            availableActions: {
+              RobotFaceActionKind.confirmTaken,
+              RobotFaceActionKind.skipDose,
+              RobotFaceActionKind.askForHelp,
+            },
           ),
         ),
       );
@@ -1260,9 +1363,10 @@ void main() {
   });
 }
 
-class _RobotFaceTestApp extends StatelessWidget {
+class _RobotFaceTestApp extends StatefulWidget {
   const _RobotFaceTestApp({
     super.key,
+    this.database,
     this.controller,
     this.stateStream,
     this.initialState,
@@ -1270,6 +1374,7 @@ class _RobotFaceTestApp extends StatelessWidget {
     this.doseActionLogger,
   });
 
+  final DoseyDatabase? database;
   final RobotFaceController? controller;
   final Stream<RobotFaceState>? stateStream;
   final RobotFaceState? initialState;
@@ -1277,14 +1382,38 @@ class _RobotFaceTestApp extends StatelessWidget {
   final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
+  State<_RobotFaceTestApp> createState() => _RobotFaceTestAppState();
+}
+
+class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
+  late final DoseyDatabase _database =
+      widget.database ?? DoseyDatabase.inMemory();
+
+  @override
+  void dispose() {
+    if (widget.database == null) {
+      unawaited(_database.close());
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: RobotFaceScreen(
-        controller: controller,
-        stateStream: stateStream,
-        initialState: initialState,
-        isActive: isActive,
-        doseActionLogger: doseActionLogger,
+    return DoseyAppScope(
+      database: _database,
+      bleGateway: _FakeBleGateway(),
+      connectivityGateway: _FakeConnectivityGateway(),
+      permissionGateway: _FakePermissionGateway(),
+      reminderScheduler: _FakeReminderScheduler(),
+      missedDoseReconciliationService: _FakeMissedDoseReconciliationService(),
+      child: MaterialApp(
+        home: RobotFaceScreen(
+          controller: widget.controller,
+          stateStream: widget.stateStream,
+          initialState: widget.initialState,
+          isActive: widget.isActive,
+          doseActionLogger: widget.doseActionLogger,
+        ),
       ),
     );
   }
