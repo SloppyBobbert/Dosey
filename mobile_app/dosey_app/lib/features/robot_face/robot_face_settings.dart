@@ -3,7 +3,7 @@
 enum RobotVoiceVolumePreset {
   quiet(0.45),
   normal(1.0),
-  loud(1.4);
+  loud(1.0);
 
   const RobotVoiceVolumePreset(this.volume);
 
@@ -50,8 +50,15 @@ class RobotFaceSettings {
        stayAwakeAfterDoseMinutes = stayAwakeAfterDoseMinutes < 0
            ? defaultStayAwakeAfterDoseMinutes
            : stayAwakeAfterDoseMinutes,
-       voiceQuietHoursStartMinutes = voiceQuietHoursStartMinutes,
-       voiceQuietHoursEndMinutes = voiceQuietHoursEndMinutes;
+       voiceQuietHoursStartMinutes =
+           voiceQuietHoursStartMinutes < 0 ||
+               voiceQuietHoursStartMinutes >= 24 * 60
+           ? defaultVoiceQuietHoursStartMinutes
+           : voiceQuietHoursStartMinutes,
+       voiceQuietHoursEndMinutes =
+           voiceQuietHoursEndMinutes < 0 || voiceQuietHoursEndMinutes >= 24 * 60
+           ? defaultVoiceQuietHoursEndMinutes
+           : voiceQuietHoursEndMinutes;
 
   static const int defaultWakeBeforeDoseMinutes = 10;
   static const int defaultStayAwakeAfterDoseMinutes = 10;

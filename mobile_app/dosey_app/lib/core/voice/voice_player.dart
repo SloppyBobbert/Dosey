@@ -1,3 +1,5 @@
+// ignore_for_file: prefer_initializing_formals
+
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -11,13 +13,19 @@ class JustAudioVoicePlaybackGateway implements VoicePlaybackGateway {
     : _player = player ?? AudioPlayer();
 
   final AudioPlayer _player;
+  Future<void> _playbackQueue = Future<void>.value();
 
   @override
   Future<void> playAsset(String assetPath, {required double volume}) async {
-    await _player.stop();
-    await _player.setVolume(volume.clamp(0.0, 1.4));
-    await _player.setAsset(assetPath);
-    await _player.play();
+    final clampedVolume = volume.clamp(0.0, 1.0).toDouble();
+    final playbackFuture = _playbackQueue.then((_) async {
+      await _player.stop();
+      await _player.setVolume(clampedVolume);
+      await _player.setAsset(assetPath);
+      await _player.play();
+    });
+    _playbackQueue = playbackFuture.catchError((_) {});
+    await playbackFuture;
   }
 
   @override
@@ -27,7 +35,8 @@ class JustAudioVoicePlaybackGateway implements VoicePlaybackGateway {
 }
 
 class DoseyVoicePlayer {
-  DoseyVoicePlayer({required this._playbackGateway});
+  DoseyVoicePlayer({required VoicePlaybackGateway playbackGateway})
+    : _playbackGateway = playbackGateway;
 
   final VoicePlaybackGateway _playbackGateway;
 

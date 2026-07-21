@@ -356,7 +356,8 @@ void main() {
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
-    final voiceGateway = _FakeVoicePlaybackGateway();
+    final liveVoiceGateway = _FakeVoicePlaybackGateway();
+    final previewVoiceGateway = _FakeVoicePlaybackGateway();
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
 
@@ -370,7 +371,10 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
-        voicePlayer: DoseyVoicePlayer(playbackGateway: voiceGateway),
+        voicePlayer: DoseyVoicePlayer(playbackGateway: liveVoiceGateway),
+        previewVoicePlayer: DoseyVoicePlayer(
+          playbackGateway: previewVoiceGateway,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -385,15 +389,17 @@ void main() {
     await tester.tap(find.text('Test voice'));
     await tester.pumpAndSettle();
 
-    expect(voiceGateway.playedPhrases, [DoseyVoicePhrase.ready]);
-    expect(voiceGateway.lastVolume, RobotVoiceVolumePreset.loud.volume);
+    expect(previewVoiceGateway.playedPhrases, [DoseyVoicePhrase.ready]);
+    expect(previewVoiceGateway.lastVolume, RobotVoiceVolumePreset.loud.volume);
+    expect(liveVoiceGateway.playedPhrases, isEmpty);
   });
 
   testWidgets('category preview uses expected phrase and current volume', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
-    final voiceGateway = _FakeVoicePlaybackGateway();
+    final liveVoiceGateway = _FakeVoicePlaybackGateway();
+    final previewVoiceGateway = _FakeVoicePlaybackGateway();
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
 
@@ -407,7 +413,10 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
-        voicePlayer: DoseyVoicePlayer(playbackGateway: voiceGateway),
+        voicePlayer: DoseyVoicePlayer(playbackGateway: liveVoiceGateway),
+        previewVoicePlayer: DoseyVoicePlayer(
+          playbackGateway: previewVoiceGateway,
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -424,8 +433,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(voiceGateway.playedPhrases, [DoseyVoicePhrase.doseSoon]);
-    expect(voiceGateway.lastVolume, RobotVoiceVolumePreset.quiet.volume);
+    expect(previewVoiceGateway.playedPhrases, [DoseyVoicePhrase.doseSoon]);
+    expect(previewVoiceGateway.lastVolume, RobotVoiceVolumePreset.quiet.volume);
+    expect(liveVoiceGateway.playedPhrases, isEmpty);
     final scope = tester.element(find.byType(MaterialApp));
     expect(
       await DoseyAppScope.of(scope).robotFaceSettings.getSettings(),
@@ -732,10 +742,15 @@ Future<void> _markOnboardingComplete(
 }
 
 class _TestSettingsApp extends StatelessWidget {
-  const _TestSettingsApp({required this.database, this.voicePlayer});
+  const _TestSettingsApp({
+    required this.database,
+    this.voicePlayer,
+    this.previewVoicePlayer,
+  });
 
   final DoseyDatabase database;
   final DoseyVoicePlayer? voicePlayer;
+  final DoseyVoicePlayer? previewVoicePlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -752,7 +767,9 @@ class _TestSettingsApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2F6F5E)),
           useMaterial3: true,
         ),
-        home: const Scaffold(body: SettingsScreen()),
+        home: Scaffold(
+          body: SettingsScreen(previewVoicePlayer: previewVoicePlayer),
+        ),
       ),
     );
   }

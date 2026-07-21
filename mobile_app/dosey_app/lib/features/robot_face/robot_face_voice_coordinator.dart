@@ -344,10 +344,6 @@ class RobotFaceVoiceCoordinator {
     RobotFaceState state, {
     required RobotFaceState? previousState,
   }) {
-    if (_isControllerRecovered(state, previousState: previousState)) {
-      return _VoiceTrigger.controllerRecovered;
-    }
-
     return switch (state.mode) {
       RobotFaceMode.doseApproaching => _VoiceTrigger.reminderApproaching,
       RobotFaceMode.doseReady => _VoiceTrigger.doseReady,
@@ -358,6 +354,8 @@ class RobotFaceVoiceCoordinator {
       RobotFaceMode.missed => _VoiceTrigger.missed,
       RobotFaceMode.offline => _VoiceTrigger.controllerOffline,
       RobotFaceMode.error => _VoiceTrigger.controllerError,
+      _ when _isControllerRecovered(state, previousState: previousState) =>
+        _VoiceTrigger.controllerRecovered,
       _ => null,
     };
   }

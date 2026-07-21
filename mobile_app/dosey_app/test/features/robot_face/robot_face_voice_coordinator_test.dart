@@ -917,6 +917,8 @@ void main() {
       harness.emit(
         _state(
           RobotFaceMode.waitingForConfirmation,
+          actionDoseId: 'dose-1',
+          voiceOccurrenceKey: 'schedule-1:2026-07-20',
           isAwaitingControllerConfirmation: true,
         ),
       );
@@ -928,7 +930,7 @@ void main() {
         DoseyVoicePhrase.missedWarning,
         DoseyVoicePhrase.controllerOffline,
         DoseyVoicePhrase.needsCheckingBeforeContinue,
-        DoseyVoicePhrase.controllerReadyAgain,
+        DoseyVoicePhrase.checkRightDose,
       ]);
     },
   );
@@ -1120,16 +1122,45 @@ void main() {
       addTearDown(harness.dispose);
 
       harness.emit(_state(RobotFaceMode.error));
-      harness.emit(_state(RobotFaceMode.doseReady));
       harness.emit(
-        _state(RobotFaceMode.doseReady, nextEventLabel: 'Still ready'),
+        _state(
+          RobotFaceMode.doseReady,
+          actionDoseId: 'dose-1',
+          voiceOccurrenceKey: 'schedule-1:2026-07-20',
+        ),
+      );
+      harness.emit(
+        _state(
+          RobotFaceMode.doseReady,
+          actionDoseId: 'dose-1',
+          voiceOccurrenceKey: 'schedule-1:2026-07-20',
+          statusLabel: 'Still ready',
+        ),
       );
       await pumpEventQueue();
 
       expect(harness.voiceGateway.playedPhrases, [
         DoseyVoicePhrase.needsCheckingBeforeContinue,
-        DoseyVoicePhrase.controllerReadyAgain,
         DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
+    'controller recovery keeps recovery voice only for non-actionable healthy transitions',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: true),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.offline));
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.controllerOffline,
+        DoseyVoicePhrase.controllerReadyAgain,
       ]);
     },
   );

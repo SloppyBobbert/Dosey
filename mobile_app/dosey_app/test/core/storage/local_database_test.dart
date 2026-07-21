@@ -114,6 +114,32 @@ void main() {
     },
   );
 
+  test(
+    'robot face settings constructor validates quiet-hours minute bounds',
+    () {
+      const settings = RobotFaceSettings(
+        voiceQuietHoursStartMinutes: -1,
+        voiceQuietHoursEndMinutes: 24 * 60,
+      );
+
+      expect(
+        settings.voiceQuietHoursStartMinutes,
+        RobotFaceSettings.defaultVoiceQuietHoursStartMinutes,
+      );
+      expect(
+        settings.voiceQuietHoursEndMinutes,
+        RobotFaceSettings.defaultVoiceQuietHoursEndMinutes,
+      );
+
+      const validSettings = RobotFaceSettings(
+        voiceQuietHoursStartMinutes: 21 * 60,
+        voiceQuietHoursEndMinutes: 6 * 60,
+      );
+      expect(validSettings.voiceQuietHoursStartMinutes, 21 * 60);
+      expect(validSettings.voiceQuietHoursEndMinutes, 6 * 60);
+    },
+  );
+
   test('robot face settings stream updates after save', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);

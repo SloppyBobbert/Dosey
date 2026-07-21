@@ -5,6 +5,7 @@ import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
+import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:flutter/material.dart';
 
@@ -20,9 +21,14 @@ enum SettingsSection {
 }
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.sectionTarget});
+  const SettingsScreen({
+    super.key,
+    this.sectionTarget,
+    this.previewVoicePlayer,
+  });
 
   final SettingsSection? sectionTarget;
+  final DoseyVoicePlayer? previewVoicePlayer;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -34,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   };
 
   late final ScrollController _scrollController;
+  late final DoseyVoicePlayer _previewVoicePlayer;
   bool _isSigningIn = false;
   String? _authMessage;
 
@@ -41,11 +48,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _previewVoicePlayer =
+        widget.previewVoicePlayer ??
+        DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway());
     _scrollToTargetAfterBuild();
   }
 
   @override
   void dispose() {
+    if (widget.previewVoicePlayer == null) {
+      _previewVoicePlayer.dispose();
+    }
     _scrollController.dispose();
     super.dispose();
   }
@@ -159,6 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _ActionPinCard(key: _sectionKeys[SettingsSection.actionPin]),
             _RobotFaceSettingsSection(
               sectionKey: _sectionKeys[SettingsSection.robotFace],
+              previewVoicePlayer: _previewVoicePlayer,
             ),
             const SizedBox(height: 12),
             _ReminderNotificationCard(
@@ -537,16 +551,22 @@ class _ReminderNotificationCard extends StatefulWidget {
 }
 
 class _RobotFaceSettingsCard extends StatefulWidget {
-  const _RobotFaceSettingsCard({super.key});
+  const _RobotFaceSettingsCard({super.key, required this.previewVoicePlayer});
+
+  final DoseyVoicePlayer previewVoicePlayer;
 
   @override
   State<_RobotFaceSettingsCard> createState() => _RobotFaceSettingsCardState();
 }
 
 class _RobotFaceSettingsSection extends StatelessWidget {
-  const _RobotFaceSettingsSection({required this.sectionKey});
+  const _RobotFaceSettingsSection({
+    required this.sectionKey,
+    required this.previewVoicePlayer,
+  });
 
   final Key? sectionKey;
+  final DoseyVoicePlayer previewVoicePlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -567,7 +587,10 @@ class _RobotFaceSettingsSection extends StatelessWidget {
         return Column(
           children: [
             const SizedBox(height: 12),
-            _RobotFaceSettingsCard(key: sectionKey),
+            _RobotFaceSettingsCard(
+              key: sectionKey,
+              previewVoicePlayer: previewVoicePlayer,
+            ),
           ],
         );
       },
@@ -582,15 +605,6 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
   static final List<int> _quietHourOptions = <int>[
     for (var hour = 0; hour < 24; hour++) hour * 60,
   ];
-  static const Map<String, DoseyVoicePhrase> _voicePreviewPhrases =
-      <String, DoseyVoicePhrase>{
-        'Reminder voice': DoseyVoicePhrase.doseSoon,
-        'Dispense narration': DoseyVoicePhrase.movingCarousel,
-        'Safety/confirmation voice': DoseyVoicePhrase.confirmAfterTaken,
-        'Missed dose voice': DoseyVoicePhrase.missedWarning,
-        'Controller alert voice': DoseyVoicePhrase.controllerOffline,
-        'Idle chatter voice': DoseyVoicePhrase.standingBy,
-      };
   static const int _defaultWakeBeforeDoseMinutes =
       RobotFaceSettings.defaultWakeBeforeDoseMinutes;
   static const int _defaultStayAwakeAfterDoseMinutes =
@@ -803,6 +817,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   action: _buildVoicePreviewButton(
                     settings: settings,
                     title: 'Reminder voice',
+                    phrase: DoseyVoicePhrase.doseSoon,
                     enabled:
                         settings.voiceEnabled && settings.reminderVoiceEnabled,
                   ),
@@ -819,6 +834,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   action: _buildVoicePreviewButton(
                     settings: settings,
                     title: 'Dispense narration',
+                    phrase: DoseyVoicePhrase.movingCarousel,
                     enabled:
                         settings.voiceEnabled &&
                         settings.dispenseNarrationEnabled,
@@ -836,6 +852,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   action: _buildVoicePreviewButton(
                     settings: settings,
                     title: 'Safety/confirmation voice',
+                    phrase: DoseyVoicePhrase.confirmAfterTaken,
                     enabled:
                         settings.voiceEnabled &&
                         settings.safetyConfirmationVoiceEnabled,
@@ -853,6 +870,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   action: _buildVoicePreviewButton(
                     settings: settings,
                     title: 'Missed dose voice',
+                    phrase: DoseyVoicePhrase.missedWarning,
                     enabled:
                         settings.voiceEnabled &&
                         settings.missedDoseVoiceEnabled,
@@ -870,6 +888,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   action: _buildVoicePreviewButton(
                     settings: settings,
                     title: 'Controller alert voice',
+                    phrase: DoseyVoicePhrase.controllerOffline,
                     enabled:
                         settings.voiceEnabled &&
                         settings.controllerAlertVoiceEnabled,
@@ -887,6 +906,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   action: _buildVoicePreviewButton(
                     settings: settings,
                     title: 'Idle chatter voice',
+                    phrase: DoseyVoicePhrase.standingBy,
                     enabled:
                         settings.voiceEnabled &&
                         settings.idleChatterVoiceEnabled,
@@ -963,7 +983,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
 
   Future<void> _testVoice(RobotFaceSettings settings) async {
     try {
-      await DoseyAppScope.of(context).voicePlayer.speak(
+      await widget.previewVoicePlayer.speak(
         DoseyVoicePhrase.ready,
         volume: settings.voiceVolumePreset.volume,
       );
@@ -978,9 +998,9 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
   Widget _buildVoicePreviewButton({
     required RobotFaceSettings settings,
     required String title,
+    required DoseyVoicePhrase phrase,
     required bool enabled,
   }) {
-    final phrase = _voicePreviewPhrases[title]!;
     return IconButton(
       key: ValueKey<String>('voice-preview:$title'),
       tooltip: 'Preview $title',
@@ -995,9 +1015,10 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
     DoseyVoicePhrase phrase,
   ) async {
     try {
-      await DoseyAppScope.of(
-        context,
-      ).voicePlayer.speak(phrase, volume: settings.voiceVolumePreset.volume);
+      await widget.previewVoicePlayer.speak(
+        phrase,
+        volume: settings.voiceVolumePreset.volume,
+      );
     } on Object catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
