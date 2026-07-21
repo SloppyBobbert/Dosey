@@ -254,6 +254,38 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets('action PIN section rejects non-digit new PIN values', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    final scope = tester.element(find.byType(MaterialApp));
+    final settings = DoseyAppScope.of(scope).settings;
+
+    await _scrollToActionPin(tester);
+    await tester.tap(find.text('Enable PIN'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('new-action-pin-field')),
+      '12a4',
+    );
+    await tester.enterText(
+      find.byKey(const Key('confirm-action-pin-field')),
+      '12a4',
+    );
+    await tester.tap(find.text('Save PIN'));
+    await tester.pump();
+
+    expect(await settings.verifyActionPin('12a4'), isFalse);
+    expect(find.text('Use digits only.'), findsOneWidget);
+
+    Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+    await tester.pump();
+  });
+
   testWidgets('action PIN section requires current PIN before disabling', (
     WidgetTester tester,
   ) async {

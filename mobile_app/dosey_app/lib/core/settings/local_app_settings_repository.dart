@@ -97,6 +97,9 @@ class LocalAppSettingsRepository {
     if (normalizedPin.length < 4) {
       throw ArgumentError.value(pin, 'pin', 'PIN must be at least 4 digits.');
     }
+    if (!_isDigitsOnly(normalizedPin)) {
+      throw ArgumentError.value(pin, 'pin', 'PIN must contain only digits.');
+    }
 
     final salt = _newActionPinSalt();
     final hash = _hashActionPin(normalizedPin, salt);
@@ -146,6 +149,10 @@ class LocalAppSettingsRepository {
 
   static String _normalizePin(String pin) {
     return pin.trim();
+  }
+
+  static bool _isDigitsOnly(String pin) {
+    return RegExp(r'^\d+$').hasMatch(pin);
   }
 
   static String _newActionPinSalt() {

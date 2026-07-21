@@ -1,6 +1,7 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/settings/action_pin_gate.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 Future<bool> authorizeActionPin(BuildContext context) async {
   final gate = ActionPinGate(DoseyAppScope.of(context).settings);
@@ -32,6 +33,7 @@ Future<String?> showActionPinPromptDialog(BuildContext context) {
               autofocus: true,
               obscureText: true,
               keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: InputDecoration(
                 labelText: 'PIN',
                 errorText: errorText,
@@ -96,6 +98,7 @@ Future<String?> showActionPinSetupDialog(
                   controller: confirmController,
                   obscureText: true,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: const InputDecoration(labelText: 'Confirm PIN'),
                 ),
               ],
@@ -109,6 +112,10 @@ Future<String?> showActionPinSetupDialog(
                 onPressed: () {
                   final pin = pinController.text.trim();
                   final confirmation = confirmController.text.trim();
+                  if (!_isDigitsOnly(pin) || !_isDigitsOnly(confirmation)) {
+                    setState(() => errorText = 'Use digits only.');
+                    return;
+                  }
                   if (pin.length < 4) {
                     setState(() => errorText = 'Use at least 4 digits.');
                     return;
@@ -127,4 +134,8 @@ Future<String?> showActionPinSetupDialog(
       );
     },
   );
+}
+
+bool _isDigitsOnly(String pin) {
+  return RegExp(r'^\d+$').hasMatch(pin);
 }

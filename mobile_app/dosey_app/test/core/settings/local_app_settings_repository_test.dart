@@ -87,6 +87,19 @@ void main() {
     );
   });
 
+  test('action PIN rejects non-digit values', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    await expectLater(repository.setActionPin('12a4'), throwsArgumentError);
+    await expectLater(repository.setActionPin('12 34'), throwsArgumentError);
+    expect(await repository.watchActionPinEnabled().first, isFalse);
+  });
+
   test('action PIN can be cleared', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
