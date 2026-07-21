@@ -10,6 +10,12 @@ enum RobotVoiceVolumePreset {
   final double volume;
 }
 
+enum RobotReminderRepeatPolicy {
+  noRepeats,
+  repeatRemindersOnly,
+  repeatRemindersAndReady,
+}
+
 class RobotFaceSettings {
   const RobotFaceSettings({
     this.isFlipped = false,
@@ -29,6 +35,7 @@ class RobotFaceSettings {
     this.idleChatterVoiceEnabled = true,
     int idleChatterCooldownMinutes = defaultIdleChatterCooldownMinutes,
     int reminderRepeatCooldownMinutes = defaultReminderRepeatCooldownMinutes,
+    this.reminderRepeatPolicy = RobotReminderRepeatPolicy.noRepeats,
     int wakeBeforeDoseMinutes = defaultWakeBeforeDoseMinutes,
     int stayAwakeAfterDoseMinutes = defaultStayAwakeAfterDoseMinutes,
   }) : wakeBeforeDoseMinutes = wakeBeforeDoseMinutes < 0
@@ -70,6 +77,7 @@ class RobotFaceSettings {
   final bool idleChatterVoiceEnabled;
   final int idleChatterCooldownMinutes;
   final int reminderRepeatCooldownMinutes;
+  final RobotReminderRepeatPolicy reminderRepeatPolicy;
   final int wakeBeforeDoseMinutes;
   final int stayAwakeAfterDoseMinutes;
 
@@ -91,6 +99,7 @@ class RobotFaceSettings {
     bool? idleChatterVoiceEnabled,
     int? idleChatterCooldownMinutes,
     int? reminderRepeatCooldownMinutes,
+    RobotReminderRepeatPolicy? reminderRepeatPolicy,
     int? wakeBeforeDoseMinutes,
     int? stayAwakeAfterDoseMinutes,
   }) {
@@ -124,6 +133,7 @@ class RobotFaceSettings {
           idleChatterCooldownMinutes ?? this.idleChatterCooldownMinutes,
       reminderRepeatCooldownMinutes:
           reminderRepeatCooldownMinutes ?? this.reminderRepeatCooldownMinutes,
+      reminderRepeatPolicy: reminderRepeatPolicy ?? this.reminderRepeatPolicy,
       wakeBeforeDoseMinutes:
           wakeBeforeDoseMinutes ?? this.wakeBeforeDoseMinutes,
       stayAwakeAfterDoseMinutes:
@@ -157,6 +167,7 @@ class RobotFaceSettings {
         other.idleChatterVoiceEnabled == idleChatterVoiceEnabled &&
         other.idleChatterCooldownMinutes == idleChatterCooldownMinutes &&
         other.reminderRepeatCooldownMinutes == reminderRepeatCooldownMinutes &&
+        other.reminderRepeatPolicy == reminderRepeatPolicy &&
         other.wakeBeforeDoseMinutes == wakeBeforeDoseMinutes &&
         other.stayAwakeAfterDoseMinutes == stayAwakeAfterDoseMinutes;
   }
@@ -180,6 +191,7 @@ class RobotFaceSettings {
     idleChatterVoiceEnabled,
     idleChatterCooldownMinutes,
     reminderRepeatCooldownMinutes,
+    reminderRepeatPolicy,
     wakeBeforeDoseMinutes,
     stayAwakeAfterDoseMinutes,
   );

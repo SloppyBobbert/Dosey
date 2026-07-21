@@ -32,6 +32,7 @@ class RobotFaceSettingsRepository {
       'robot_face_idle_chatter_cooldown_minutes';
   static const _reminderRepeatCooldownMinutesKey =
       'robot_face_reminder_repeat_cooldown_minutes';
+  static const _reminderRepeatPolicyKey = 'robot_face_reminder_repeat_policy';
   static const _wakeBeforeDoseMinutesKey =
       'robot_face_wake_before_dose_minutes';
   static const _stayAwakeAfterDoseMinutesKey =
@@ -59,6 +60,7 @@ class RobotFaceSettingsRepository {
           _idleChatterVoiceEnabledKey,
           _idleChatterCooldownMinutesKey,
           _reminderRepeatCooldownMinutesKey,
+          _reminderRepeatPolicyKey,
           _wakeBeforeDoseMinutesKey,
           _stayAwakeAfterDoseMinutesKey,
         })
@@ -84,6 +86,7 @@ class RobotFaceSettingsRepository {
       _idleChatterVoiceEnabledKey,
       _idleChatterCooldownMinutesKey,
       _reminderRepeatCooldownMinutesKey,
+      _reminderRepeatPolicyKey,
       _wakeBeforeDoseMinutesKey,
       _stayAwakeAfterDoseMinutesKey,
     });
@@ -162,6 +165,10 @@ class RobotFaceSettingsRepository {
         settings.reminderRepeatCooldownMinutes.toString(),
       );
       await _database.setAppSetting(
+        _reminderRepeatPolicyKey,
+        settings.reminderRepeatPolicy.name,
+      );
+      await _database.setAppSetting(
         _wakeBeforeDoseMinutesKey,
         settings.wakeBeforeDoseMinutes.toString(),
       );
@@ -230,6 +237,10 @@ class RobotFaceSettingsRepository {
       reminderRepeatCooldownMinutes:
           int.tryParse(values[_reminderRepeatCooldownMinutesKey] ?? '') ??
           RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
+      reminderRepeatPolicy: _reminderRepeatPolicyFor(
+        values[_reminderRepeatPolicyKey],
+        defaultSettings.reminderRepeatPolicy,
+      ),
       wakeBeforeDoseMinutes:
           int.tryParse(values[_wakeBeforeDoseMinutesKey] ?? '') ??
           RobotFaceSettings.defaultWakeBeforeDoseMinutes,
@@ -246,6 +257,18 @@ class RobotFaceSettingsRepository {
     for (final preset in RobotVoiceVolumePreset.values) {
       if (preset.name == rawValue) {
         return preset;
+      }
+    }
+    return fallback;
+  }
+
+  RobotReminderRepeatPolicy _reminderRepeatPolicyFor(
+    String? rawValue,
+    RobotReminderRepeatPolicy fallback,
+  ) {
+    for (final policy in RobotReminderRepeatPolicy.values) {
+      if (policy.name == rawValue) {
+        return policy;
       }
     }
     return fallback;

@@ -41,6 +41,7 @@ class RobotFaceVoiceCoordinator {
   AppDeviceRole? _role;
   RobotFaceState? _lastState;
   String? _lastEffectiveKey;
+  final Set<String> _repeatRestrictedEffectiveKeys = <String>{};
   DateTime? _lastIdleChatterAt;
   final Map<_VoiceEffectKind, DateTime> _lastCategorySpokenAt =
       <_VoiceEffectKind, DateTime>{};
@@ -55,7 +56,17 @@ class RobotFaceVoiceCoordinator {
     final effect = _effectFor(state, previousState: _lastState);
     _lastState = state;
 
-    if (effect == null || !_shouldSpeak) {
+    if (effect == null) {
+      _lastEffectiveKey = null;
+      return;
+    }
+
+    final effectiveKey = '${effect.triggerKey}:${effect.phrase.name}';
+    final isConsecutiveDuplicate =
+        effect.dedupe && effectiveKey == _lastEffectiveKey;
+    _lastEffectiveKey = effect.dedupe ? effectiveKey : null;
+
+    if (!_shouldSpeak) {
       return;
     }
     if (_isInsideQuietHours && !_canSpeakDuringQuietHours(effect)) {
@@ -65,15 +76,17 @@ class RobotFaceVoiceCoordinator {
       return;
     }
 
-    final effectiveKey = '${effect.triggerKey}:${effect.phrase.name}';
-    if (effect.dedupe && effectiveKey == _lastEffectiveKey) {
+    if (isConsecutiveDuplicate) {
+      return;
+    }
+    if (_repeatRestrictedEffectiveKeys.contains(effectiveKey)) {
       return;
     }
     if (_isCooldownSuppressed(effect)) {
       return;
     }
-    if (effect.dedupe) {
-      _lastEffectiveKey = effectiveKey;
+    if (_isRepeatRestricted(effect.kind)) {
+      _repeatRestrictedEffectiveKeys.add(effectiveKey);
     }
     if (_usesReminderRepeatCooldown(effect.kind)) {
       _lastCategorySpokenAt[effect.kind] = _now();
@@ -195,7 +208,7 @@ class RobotFaceVoiceCoordinator {
   }
 
   bool _isCooldownSuppressed(_VoiceEffect effect) {
-    if (!_usesReminderRepeatCooldown(effect.kind)) {
+    if (!_isRepeatableAfterCooldown(effect.kind)) {
       return false;
     }
 
@@ -214,6 +227,24 @@ class RobotFaceVoiceCoordinator {
 
   bool _usesReminderRepeatCooldown(_VoiceEffectKind kind) {
     return kind == _VoiceEffectKind.reminder || kind == _VoiceEffectKind.ready;
+  }
+
+  bool _isRepeatableAfterCooldown(_VoiceEffectKind kind) {
+    return switch (_settings.reminderRepeatPolicy) {
+      RobotReminderRepeatPolicy.noRepeats => false,
+      RobotReminderRepeatPolicy.repeatRemindersOnly =>
+        kind == _VoiceEffectKind.reminder,
+      RobotReminderRepeatPolicy.repeatRemindersAndReady =>
+        _usesReminderRepeatCooldown(kind),
+    };
+  }
+
+  bool _isRepeatRestricted(_VoiceEffectKind kind) {
+    if (!_usesReminderRepeatCooldown(kind)) {
+      return false;
+    }
+
+    return !_isRepeatableAfterCooldown(kind);
   }
 
   _VoiceTrigger? _triggerFor(RobotFaceState state) {

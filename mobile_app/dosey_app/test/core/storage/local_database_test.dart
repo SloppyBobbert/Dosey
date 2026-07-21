@@ -55,6 +55,7 @@ void main() {
               RobotFaceSettings.defaultIdleChatterCooldownMinutes,
           reminderRepeatCooldownMinutes:
               RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
           wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
           stayAwakeAfterDoseMinutes:
               RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -104,6 +105,7 @@ void main() {
               RobotFaceSettings.defaultIdleChatterCooldownMinutes,
           reminderRepeatCooldownMinutes:
               RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
           wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
           stayAwakeAfterDoseMinutes:
               RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -140,6 +142,7 @@ void main() {
         idleChatterVoiceEnabled: false,
         idleChatterCooldownMinutes: 15,
         reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),
@@ -165,6 +168,7 @@ void main() {
             RobotFaceSettings.defaultIdleChatterCooldownMinutes,
         reminderRepeatCooldownMinutes:
             RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
         wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
         stayAwakeAfterDoseMinutes:
             RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -187,6 +191,7 @@ void main() {
         idleChatterVoiceEnabled: false,
         idleChatterCooldownMinutes: 15,
         reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),

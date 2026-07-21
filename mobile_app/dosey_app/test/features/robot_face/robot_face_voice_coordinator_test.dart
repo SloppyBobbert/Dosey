@@ -249,12 +249,106 @@ void main() {
   );
 
   test(
-    'reminder repeat cooldown throttles reminder and ready speech',
+    'no-repeats policy keeps reminder and ready speech one-time per trigger key',
     () async {
       final harness = _VoiceCoordinatorHarness(
         settings: const RobotFaceSettings(
           voiceEnabled: true,
           reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+
+      harness.now = harness.now.add(const Duration(minutes: 6));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.doseSoon,
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
+    'reminders-only policy lets reminder speech replay after cooldown',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      await pumpEventQueue();
+
+      harness.now = harness.now.add(const Duration(minutes: 6));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.doseSoon,
+        DoseyVoicePhrase.doseSoon,
+      ]);
+    },
+  );
+
+  test(
+    'reminders-only policy keeps ready speech one-time per trigger key',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseReady));
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      harness.now = harness.now.add(const Duration(minutes: 6));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
+    'full repeat policy lets reminder and ready speech replay after cooldown',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy:
+              RobotReminderRepeatPolicy.repeatRemindersAndReady,
         ),
         now: DateTime(2026, 7, 20, 9),
       );
@@ -291,6 +385,7 @@ void main() {
         settings: const RobotFaceSettings(
           voiceEnabled: true,
           reminderRepeatCooldownMinutes: 15,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
         ),
       );
       addTearDown(harness.dispose);

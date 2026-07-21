@@ -188,6 +188,13 @@ void main() {
       key: const ValueKey<String>('Reminder repeat cooldown:5'),
       value: 10,
     );
+    await _setDropdownValue<RobotReminderRepeatPolicy>(
+      tester,
+      key: const ValueKey<String>(
+        'Reminder repeat policy:RobotReminderRepeatPolicy.noRepeats',
+      ),
+      value: RobotReminderRepeatPolicy.repeatRemindersOnly,
+    );
     await tester.tap(find.text('Quiet hours'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
@@ -228,6 +235,7 @@ void main() {
         idleChatterVoiceEnabled: true,
         idleChatterCooldownMinutes: 15,
         reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
       ),
     );
 
@@ -286,6 +294,10 @@ void main() {
     expect(updatedSettings.idleChatterVoiceEnabled, isFalse);
     expect(updatedSettings.idleChatterCooldownMinutes, 15);
     expect(updatedSettings.reminderRepeatCooldownMinutes, 10);
+    expect(
+      updatedSettings.reminderRepeatPolicy,
+      RobotReminderRepeatPolicy.repeatRemindersOnly,
+    );
     expect(updatedSettings.wakeBeforeDoseMinutes, 15);
     expect(updatedSettings.stayAwakeAfterDoseMinutes, 30);
 
@@ -323,6 +335,7 @@ void main() {
       const RobotFaceSettings(
         idleChatterCooldownMinutes: 15,
         reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersAndReady,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 30,
       ),
@@ -335,6 +348,7 @@ void main() {
 
     expect(find.text('15 minutes'), findsWidgets);
     expect(find.text('10 minutes'), findsWidgets);
+    expect(find.text('Repeat reminders and dose ready'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
   });
 
@@ -624,6 +638,7 @@ void main() {
       const RobotFaceSettings(
         idleChatterCooldownMinutes: 15,
         reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersAndReady,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 30,
       ),
@@ -632,6 +647,7 @@ void main() {
 
     expect(find.text('10 minutes'), findsWidgets);
     expect(find.text('15 minutes'), findsWidgets);
+    expect(find.text('Repeat reminders and dose ready'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
   });
 

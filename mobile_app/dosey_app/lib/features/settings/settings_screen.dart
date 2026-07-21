@@ -706,7 +706,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                       child: _RobotFaceTimingDropdown(
                         label: 'Reminder repeat cooldown',
                         helperText:
-                            'Prevent repeated normal reminder voice when screens or state refresh quickly.',
+                            'Wait this long before allowed reminder repeats can speak again.',
                         value: settings.reminderRepeatCooldownMinutes,
                         fallbackValue: _defaultReminderRepeatCooldownMinutes,
                         enabled: !_isSaving,
@@ -719,6 +719,19 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 12),
+                _RobotFaceEnumDropdown<RobotReminderRepeatPolicy>(
+                  label: 'Reminder repeat policy',
+                  helperText:
+                      'Choose whether normal reminder voice can replay after the reminder cooldown.',
+                  value: settings.reminderRepeatPolicy,
+                  enabled: !_isSaving,
+                  options: RobotReminderRepeatPolicy.values,
+                  labelBuilder: _robotReminderRepeatPolicyLabel,
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(reminderRepeatPolicy: value),
+                  ),
                 ),
                 const SizedBox(height: 8),
                 _SettingsSwitchTile(
@@ -1128,6 +1141,15 @@ String _robotVoiceVolumePresetLabel(RobotVoiceVolumePreset preset) {
     RobotVoiceVolumePreset.quiet => 'Quiet',
     RobotVoiceVolumePreset.normal => 'Normal',
     RobotVoiceVolumePreset.loud => 'Loud',
+  };
+}
+
+String _robotReminderRepeatPolicyLabel(RobotReminderRepeatPolicy policy) {
+  return switch (policy) {
+    RobotReminderRepeatPolicy.noRepeats => 'No repeats',
+    RobotReminderRepeatPolicy.repeatRemindersOnly => 'Repeat reminders only',
+    RobotReminderRepeatPolicy.repeatRemindersAndReady =>
+      'Repeat reminders and dose ready',
   };
 }
 
