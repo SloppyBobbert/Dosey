@@ -576,6 +576,9 @@ class _RobotFaceSettingsSection extends StatelessWidget {
 
 class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
   static const List<int> _timingOptions = [0, 5, 10, 15, 30, 60];
+  static final List<int> _quietHourOptions = <int>[
+    for (var hour = 0; hour < 24; hour++) hour * 60,
+  ];
   static const int _defaultWakeBeforeDoseMinutes =
       RobotFaceSettings.defaultWakeBeforeDoseMinutes;
   static const int _defaultStayAwakeAfterDoseMinutes =
@@ -651,6 +654,74 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                       'Use alternate safe phrases when Robot voice is on.',
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(voiceVarietyEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _RobotFaceEnumDropdown<RobotVoiceVolumePreset>(
+                  label: 'Voice volume',
+                  helperText: 'Choose how loud Robot voice should play.',
+                  value: settings.voiceVolumePreset,
+                  enabled: !_isSaving,
+                  options: RobotVoiceVolumePreset.values,
+                  labelBuilder: _robotVoiceVolumePresetLabel,
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(voiceVolumePreset: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.voiceQuietHoursEnabled,
+                  enabled: !_isSaving,
+                  title: 'Quiet hours',
+                  subtitle: 'Mute Robot voice during your chosen quiet window.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(voiceQuietHoursEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _RobotFaceEnumDropdown<int>(
+                        label: 'Quiet hours start',
+                        helperText:
+                            'When Robot voice should start staying quiet.',
+                        value: settings.voiceQuietHoursStartMinutes,
+                        enabled: !_isSaving,
+                        options: _quietHourOptions,
+                        labelBuilder: _clockTimeLabel,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(voiceQuietHoursStartMinutes: value),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _RobotFaceEnumDropdown<int>(
+                        label: 'Quiet hours end',
+                        helperText: 'When Robot voice can resume normally.',
+                        value: settings.voiceQuietHoursEndMinutes,
+                        enabled: !_isSaving,
+                        options: _quietHourOptions,
+                        labelBuilder: _clockTimeLabel,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(voiceQuietHoursEndMinutes: value),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.voiceSafetyDuringQuietHoursEnabled,
+                  enabled: !_isSaving,
+                  title: 'Allow safety voice during quiet hours',
+                  subtitle:
+                      'Let missed-dose, controller, and safety/check prompts still speak.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(
+                      voiceSafetyDuringQuietHoursEnabled: value,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -772,6 +843,63 @@ class _RobotFaceTimingDropdown extends StatelessWidget {
   }
 }
 
+class _RobotFaceEnumDropdown<T> extends StatelessWidget {
+  const _RobotFaceEnumDropdown({
+    required this.label,
+    required this.helperText,
+    required this.value,
+    required this.enabled,
+    required this.options,
+    required this.labelBuilder,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String helperText;
+  final T value;
+  final bool enabled;
+  final List<T> options;
+  final String Function(T value) labelBuilder;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InputDecorator(
+      key: ValueKey('$label:$value'),
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: helperText,
+        filled: true,
+        fillColor: theme.colorScheme.surfaceContainerHighest,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          items: options
+              .map(
+                (option) => DropdownMenuItem<T>(
+                  value: option,
+                  child: Text(labelBuilder(option)),
+                ),
+              )
+              .toList(),
+          onChanged: enabled
+              ? (newValue) {
+                  if (newValue != null) {
+                    onChanged(newValue);
+                  }
+                }
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
 String _robotFaceTimingLabel(int minutes) {
   if (minutes == 0) {
     return 'Off';
@@ -782,6 +910,24 @@ String _robotFaceTimingLabel(int minutes) {
   }
 
   return '$minutes minutes';
+}
+
+String _robotVoiceVolumePresetLabel(RobotVoiceVolumePreset preset) {
+  return switch (preset) {
+    RobotVoiceVolumePreset.quiet => 'Quiet',
+    RobotVoiceVolumePreset.normal => 'Normal',
+    RobotVoiceVolumePreset.loud => 'Loud',
+  };
+}
+
+String _clockTimeLabel(int minutes) {
+  final normalizedMinutes = ((minutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  final hour = normalizedMinutes ~/ 60;
+  final minute = normalizedMinutes % 60;
+  final suffix = hour >= 12 ? 'PM' : 'AM';
+  final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+  final paddedMinute = minute.toString().padLeft(2, '0');
+  return '$displayHour:$paddedMinute $suffix';
 }
 
 class _ReminderNotificationCardState extends State<_ReminderNotificationCard>

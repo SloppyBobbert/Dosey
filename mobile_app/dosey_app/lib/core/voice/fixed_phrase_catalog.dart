@@ -65,6 +65,7 @@ enum DoseyVoicePhraseCategory {
   wakeIdle,
   reminderApproaching,
   doseReadyCupCheck,
+  quietHoursReadySafety,
   dispensingMovement,
   confirmationSafety,
   missedReview,
@@ -149,6 +150,7 @@ class FixedPhraseCatalog {
       assetPath: '${assetDirectory}reminder_check_cup_time.wav',
       categories: <DoseyVoicePhraseCategory>{
         DoseyVoicePhraseCategory.doseReadyCupCheck,
+        DoseyVoicePhraseCategory.quietHoursReadySafety,
       },
     ),
     FixedPhraseDefinition(
@@ -157,6 +159,7 @@ class FixedPhraseCatalog {
       assetPath: '${assetDirectory}reminder_check_cup_before_taking.wav',
       categories: <DoseyVoicePhraseCategory>{
         DoseyVoicePhraseCategory.doseReadyCupCheck,
+        DoseyVoicePhraseCategory.quietHoursReadySafety,
       },
     ),
     FixedPhraseDefinition(
@@ -372,6 +375,7 @@ class FixedPhraseCatalog {
       assetPath: '${assetDirectory}reminder_ready_check_cup.wav',
       categories: <DoseyVoicePhraseCategory>{
         DoseyVoicePhraseCategory.doseReadyCupCheck,
+        DoseyVoicePhraseCategory.quietHoursReadySafety,
       },
     ),
     FixedPhraseDefinition(
@@ -380,6 +384,7 @@ class FixedPhraseCatalog {
       assetPath: '${assetDirectory}reminder_look_in_cup.wav',
       categories: <DoseyVoicePhraseCategory>{
         DoseyVoicePhraseCategory.doseReadyCupCheck,
+        DoseyVoicePhraseCategory.quietHoursReadySafety,
       },
     ),
     FixedPhraseDefinition(
@@ -388,6 +393,7 @@ class FixedPhraseCatalog {
       assetPath: '${assetDirectory}reminder_confirm_after.wav',
       categories: <DoseyVoicePhraseCategory>{
         DoseyVoicePhraseCategory.doseReadyCupCheck,
+        DoseyVoicePhraseCategory.quietHoursReadySafety,
       },
     ),
     FixedPhraseDefinition(

@@ -58,6 +58,9 @@ class RobotFaceVoiceCoordinator {
     if (effect == null || !_shouldSpeak) {
       return;
     }
+    if (_isInsideQuietHours && !_canSpeakDuringQuietHours(effect)) {
+      return;
+    }
 
     final effectiveKey = '${effect.triggerKey}:${effect.phrase.name}';
     if (effect.dedupe && effectiveKey == _lastEffectiveKey) {
@@ -75,7 +78,10 @@ class RobotFaceVoiceCoordinator {
 
   Future<void> _speakBestEffort(DoseyVoicePhrase phrase) async {
     try {
-      await _voicePlayer.speak(phrase);
+      await _voicePlayer.speak(
+        phrase,
+        volume: _settings.voiceVolumePreset.volume,
+      );
     } on Object catch (error, stackTrace) {
       developer.log(
         'Robot Face voice playback failed; continuing without speech.',
@@ -93,16 +99,42 @@ class RobotFaceVoiceCoordinator {
         _settings.voiceEnabled;
   }
 
+  bool get _isInsideQuietHours {
+    if (!_settings.voiceQuietHoursEnabled) {
+      return false;
+    }
+    final now = _now();
+    final currentMinutes = now.hour * 60 + now.minute;
+    final start = _normalizeMinutes(_settings.voiceQuietHoursStartMinutes);
+    final end = _normalizeMinutes(_settings.voiceQuietHoursEndMinutes);
+    if (start == end) {
+      return true;
+    }
+    if (start < end) {
+      return currentMinutes >= start && currentMinutes < end;
+    }
+    return currentMinutes >= start || currentMinutes < end;
+  }
+
   _VoiceEffect? _effectFor(
     RobotFaceState state, {
     required RobotFaceState? previousState,
   }) {
     final trigger = _triggerFor(state);
     if (trigger != null) {
+      final allowQuietSafetyOverride =
+          _isInsideQuietHours && _settings.voiceSafetyDuringQuietHoursEnabled;
       return _VoiceEffect(
-        phrase: _phraseForTrigger(trigger),
+        phrase: _phraseForTrigger(
+          trigger,
+          allowQuietSafetyOverride: allowQuietSafetyOverride,
+        ),
         triggerKey: trigger.name,
         dedupe: true,
+        kind: _effectKindForTrigger(
+          trigger,
+          allowQuietSafetyOverride: allowQuietSafetyOverride,
+        ),
       );
     }
 
@@ -112,6 +144,7 @@ class RobotFaceVoiceCoordinator {
         triggerKey: 'idle:${state.mode.name}',
         dedupe: false,
         isIdleChatter: true,
+        kind: _VoiceEffectKind.idle,
       );
     }
 
@@ -160,7 +193,10 @@ class RobotFaceVoiceCoordinator {
     };
   }
 
-  DoseyVoicePhrase _phraseForTrigger(_VoiceTrigger trigger) {
+  DoseyVoicePhrase _phraseForTrigger(
+    _VoiceTrigger trigger, {
+    required bool allowQuietSafetyOverride,
+  }) {
     if (!_settings.voiceVarietyEnabled) {
       return switch (trigger) {
         _VoiceTrigger.reminderApproaching => DoseyVoicePhrase.doseSoon,
@@ -174,27 +210,84 @@ class RobotFaceVoiceCoordinator {
       };
     }
 
+    if (allowQuietSafetyOverride && trigger == _VoiceTrigger.doseReady) {
+      return _phraseForCategory(DoseyVoicePhraseCategory.quietHoursReadySafety);
+    }
+
     return _phraseForCategory(trigger.category);
+  }
+
+  _VoiceEffectKind _effectKindForTrigger(
+    _VoiceTrigger trigger, {
+    required bool allowQuietSafetyOverride,
+  }) {
+    if (allowQuietSafetyOverride && trigger == _VoiceTrigger.doseReady) {
+      return _VoiceEffectKind.confirmationSafety;
+    }
+    return trigger.effectKind;
   }
 
   DoseyVoicePhrase _phraseForCategory(DoseyVoicePhraseCategory category) {
     final options = FixedPhraseCatalog.phrasesForCategory(category);
     return options[_randomIndex(options.length)].phrase;
   }
+
+  bool _canSpeakDuringQuietHours(_VoiceEffect effect) {
+    if (!_settings.voiceSafetyDuringQuietHoursEnabled) {
+      return false;
+    }
+    return switch (effect.kind) {
+      _VoiceEffectKind.confirmationSafety ||
+      _VoiceEffectKind.missedReview ||
+      _VoiceEffectKind.controllerHardware => true,
+      _ => false,
+    };
+  }
+
+  static int _normalizeMinutes(int minutes) {
+    const dayMinutes = 24 * 60;
+    return ((minutes % dayMinutes) + dayMinutes) % dayMinutes;
+  }
 }
 
 enum _VoiceTrigger {
-  reminderApproaching(DoseyVoicePhraseCategory.reminderApproaching),
-  doseReady(DoseyVoicePhraseCategory.doseReadyCupCheck),
-  dispensing(DoseyVoicePhraseCategory.dispensingMovement),
-  confirmation(DoseyVoicePhraseCategory.confirmationSafety),
-  missed(DoseyVoicePhraseCategory.missedReview),
-  controllerOffline(DoseyVoicePhraseCategory.controllerHardware),
-  controllerError(DoseyVoicePhraseCategory.controllerHardware);
+  reminderApproaching(
+    DoseyVoicePhraseCategory.reminderApproaching,
+    _VoiceEffectKind.reminder,
+  ),
+  doseReady(DoseyVoicePhraseCategory.doseReadyCupCheck, _VoiceEffectKind.ready),
+  dispensing(
+    DoseyVoicePhraseCategory.dispensingMovement,
+    _VoiceEffectKind.dispensing,
+  ),
+  confirmation(
+    DoseyVoicePhraseCategory.confirmationSafety,
+    _VoiceEffectKind.confirmationSafety,
+  ),
+  missed(DoseyVoicePhraseCategory.missedReview, _VoiceEffectKind.missedReview),
+  controllerOffline(
+    DoseyVoicePhraseCategory.controllerHardware,
+    _VoiceEffectKind.controllerHardware,
+  ),
+  controllerError(
+    DoseyVoicePhraseCategory.controllerHardware,
+    _VoiceEffectKind.controllerHardware,
+  );
 
-  const _VoiceTrigger(this.category);
+  const _VoiceTrigger(this.category, this.effectKind);
 
   final DoseyVoicePhraseCategory category;
+  final _VoiceEffectKind effectKind;
+}
+
+enum _VoiceEffectKind {
+  idle,
+  reminder,
+  ready,
+  dispensing,
+  confirmationSafety,
+  missedReview,
+  controllerHardware,
 }
 
 class _VoiceEffect {
@@ -202,11 +295,13 @@ class _VoiceEffect {
     required this.phrase,
     required this.triggerKey,
     required this.dedupe,
+    required this.kind,
     this.isIdleChatter = false,
   });
 
   final DoseyVoicePhrase phrase;
   final String triggerKey;
   final bool dedupe;
+  final _VoiceEffectKind kind;
   final bool isIdleChatter;
 }

@@ -137,6 +137,37 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Voice variety'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Voice volume'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await _setDropdownValue<RobotVoiceVolumePreset>(
+      tester,
+      key: const ValueKey<String>('Voice volume:RobotVoiceVolumePreset.normal'),
+      value: RobotVoiceVolumePreset.loud,
+    );
+    await tester.tap(find.text('Quiet hours'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Quiet hours end'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Quiet hours start:1320'),
+      value: 21 * 60,
+    );
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Quiet hours end:420'),
+      value: 6 * 60,
+    );
+    await tester.tap(find.text('Allow safety voice during quiet hours'));
+    await tester.pumpAndSettle();
     expect(
       await repository.getSettings(),
       const RobotFaceSettings(
@@ -144,6 +175,11 @@ void main() {
         dimAfterInactivity: false,
         voiceEnabled: true,
         voiceVarietyEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.loud,
+        voiceQuietHoursEnabled: true,
+        voiceQuietHoursStartMinutes: 21 * 60,
+        voiceQuietHoursEndMinutes: 6 * 60,
+        voiceSafetyDuringQuietHoursEnabled: true,
       ),
     );
 
@@ -164,6 +200,11 @@ void main() {
         dimAfterInactivity: false,
         voiceEnabled: true,
         voiceVarietyEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.loud,
+        voiceQuietHoursEnabled: true,
+        voiceQuietHoursStartMinutes: 21 * 60,
+        voiceQuietHoursEndMinutes: 6 * 60,
+        voiceSafetyDuringQuietHoursEnabled: true,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 30,
       ),
@@ -176,6 +217,11 @@ void main() {
     expect(switches.elementAt(1).value, isFalse);
     expect(switches.elementAt(2).value, isTrue);
     expect(switches.elementAt(3).value, isTrue);
+    expect(switches.elementAt(4).value, isTrue);
+    expect(switches.elementAt(5).value, isTrue);
+    expect(find.text('Loud'), findsOneWidget);
+    expect(find.text('9:00 PM'), findsOneWidget);
+    expect(find.text('6:00 AM'), findsOneWidget);
     expect(find.text('15 minutes'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
   });
@@ -419,6 +465,21 @@ Future<void> _scrollToActionPin(WidgetTester tester) async {
     300,
     scrollable: find.byType(Scrollable).first,
   );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _setDropdownValue<T>(
+  WidgetTester tester, {
+  required Key key,
+  required T value,
+}) async {
+  final dropdown = tester.widget<DropdownButton<T>>(
+    find.descendant(
+      of: find.byKey(key),
+      matching: find.byType(DropdownButton<T>),
+    ),
+  );
+  dropdown.onChanged?.call(value);
   await tester.pumpAndSettle();
 }
 

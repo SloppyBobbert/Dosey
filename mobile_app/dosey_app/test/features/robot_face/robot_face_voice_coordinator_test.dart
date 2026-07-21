@@ -110,6 +110,56 @@ void main() {
   });
 
   test(
+    'quiet hours helper handles overnight and daytime ranges safely',
+    () async {
+      final overnightHarness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          voiceQuietHoursEnabled: true,
+        ),
+        now: DateTime(2026, 7, 20, 23),
+      );
+      addTearDown(overnightHarness.dispose);
+      overnightHarness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+      expect(overnightHarness.voiceGateway.playedPhrases, isEmpty);
+
+      overnightHarness.now = DateTime(2026, 7, 21, 6, 59);
+      overnightHarness.emit(_state(RobotFaceMode.doseApproaching));
+      await pumpEventQueue();
+      expect(overnightHarness.voiceGateway.playedPhrases, isEmpty);
+
+      final daytimeHarness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          voiceQuietHoursEnabled: true,
+          voiceQuietHoursStartMinutes: 8 * 60,
+          voiceQuietHoursEndMinutes: 17 * 60,
+        ),
+        now: DateTime(2026, 7, 20, 12),
+      );
+      addTearDown(daytimeHarness.dispose);
+      daytimeHarness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+      expect(daytimeHarness.voiceGateway.playedPhrases, isEmpty);
+
+      final outsideHarness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          voiceQuietHoursEnabled: true,
+        ),
+        now: DateTime(2026, 7, 20, 12),
+      );
+      addTearDown(outsideHarness.dispose);
+      outsideHarness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+      expect(outsideHarness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
     'variety mode chooses from the safe category for each trigger',
     () async {
       final harness = _VoiceCoordinatorHarness(
@@ -173,6 +223,63 @@ void main() {
   });
 
   test(
+    'quiet hours without safety override mute event and idle speech',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          voiceVarietyEnabled: true,
+          voiceQuietHoursEnabled: true,
+        ),
+        now: DateTime(2026, 7, 20, 23),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.missed));
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, isEmpty);
+    },
+  );
+
+  test('quiet hours with safety override allow only safety classes', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceVarietyEnabled: true,
+        voiceQuietHoursEnabled: true,
+        voiceSafetyDuringQuietHoursEnabled: true,
+      ),
+      now: DateTime(2026, 7, 20, 23),
+    );
+    addTearDown(harness.dispose);
+
+    harness.emit(_state(RobotFaceMode.doseApproaching));
+    harness.emit(_state(RobotFaceMode.doseReady));
+    harness.emit(_state(RobotFaceMode.dispensing));
+    harness.emit(
+      _state(
+        RobotFaceMode.waitingForConfirmation,
+        isAwaitingControllerConfirmation: true,
+      ),
+    );
+    harness.emit(_state(RobotFaceMode.missed));
+    harness.emit(_state(RobotFaceMode.offline));
+    harness.emit(_state(RobotFaceMode.error));
+    harness.emit(_state(RobotFaceMode.idle));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, [
+      DoseyVoicePhrase.checkCupTime,
+      DoseyVoicePhrase.checkRightDose,
+      DoseyVoicePhrase.missedWarning,
+      DoseyVoicePhrase.controllerOffline,
+      DoseyVoicePhrase.controllerOffline,
+    ]);
+  });
+
+  test(
     'idle chatter never starts directly from missed or dispensing states',
     () async {
       final harness = _VoiceCoordinatorHarness(
@@ -201,7 +308,10 @@ void main() {
 
   test('voice playback does not write dose-state side effects', () async {
     final harness = _VoiceCoordinatorHarness(
-      settings: const RobotFaceSettings(voiceEnabled: true),
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.quiet,
+      ),
     );
     addTearDown(harness.dispose);
 
@@ -216,6 +326,10 @@ void main() {
     expect(harness.voiceGateway.playedPhrases, [
       DoseyVoicePhrase.checkRightDose,
     ]);
+    expect(
+      harness.voiceGateway.lastVolume,
+      RobotVoiceVolumePreset.quiet.volume,
+    );
     expect(harness.voiceGateway.sideEffectsSeen, isFalse);
   });
 
@@ -313,11 +427,14 @@ abstract interface class _InspectableVoicePlaybackGateway
     implements VoicePlaybackGateway {
   List<DoseyVoicePhrase> get playedPhrases;
   bool get sideEffectsSeen;
+  double? get lastVolume;
 }
 
 class _FakeVoicePlaybackGateway implements _InspectableVoicePlaybackGateway {
   @override
   final List<DoseyVoicePhrase> playedPhrases = <DoseyVoicePhrase>[];
+  @override
+  double? lastVolume;
 
   @override
   bool sideEffectsSeen = false;
@@ -326,12 +443,13 @@ class _FakeVoicePlaybackGateway implements _InspectableVoicePlaybackGateway {
   Future<void> dispose() async {}
 
   @override
-  Future<void> playAsset(String assetPath) async {
+  Future<void> playAsset(String assetPath, {required double volume}) async {
     playedPhrases.add(
       FixedPhraseCatalog.phrases
           .singleWhere((phrase) => phrase.assetPath == assetPath)
           .phrase,
     );
+    lastVolume = volume;
   }
 }
 
@@ -344,10 +462,13 @@ class _ThrowingVoicePlaybackGateway
   bool get sideEffectsSeen => false;
 
   @override
+  double? get lastVolume => null;
+
+  @override
   Future<void> dispose() async {}
 
   @override
-  Future<void> playAsset(String assetPath) {
+  Future<void> playAsset(String assetPath, {required double volume}) {
     throw StateError('Playback failed for $assetPath');
   }
 }
