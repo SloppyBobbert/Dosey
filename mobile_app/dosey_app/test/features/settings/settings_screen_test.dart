@@ -133,9 +133,15 @@ void main() {
 
     await tester.tap(find.text('Dim after inactivity'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot voice'));
+    await tester.pumpAndSettle();
     expect(
       await repository.getSettings(),
-      const RobotFaceSettings(isFlipped: true, dimAfterInactivity: false),
+      const RobotFaceSettings(
+        isFlipped: true,
+        dimAfterInactivity: false,
+        voiceEnabled: false,
+      ),
     );
 
     await tester.tap(find.text('10 minutes').first);
@@ -153,6 +159,7 @@ void main() {
       const RobotFaceSettings(
         isFlipped: true,
         dimAfterInactivity: false,
+        voiceEnabled: false,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 30,
       ),
@@ -161,8 +168,9 @@ void main() {
     final switches = tester.widgetList<SwitchListTile>(
       find.byType(SwitchListTile),
     );
-    expect(switches.first.value, isTrue);
-    expect(switches.last.value, isFalse);
+    expect(switches.elementAt(0).value, isTrue);
+    expect(switches.elementAt(1).value, isFalse);
+    expect(switches.elementAt(2).value, isFalse);
     expect(find.text('15 minutes'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
   });

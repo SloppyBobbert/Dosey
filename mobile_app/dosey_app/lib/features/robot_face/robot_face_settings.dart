@@ -2,6 +2,7 @@ class RobotFaceSettings {
   const RobotFaceSettings({
     this.isFlipped = false,
     this.dimAfterInactivity = true,
+    this.voiceEnabled = true,
     int wakeBeforeDoseMinutes = defaultWakeBeforeDoseMinutes,
     int stayAwakeAfterDoseMinutes = defaultStayAwakeAfterDoseMinutes,
   }) : wakeBeforeDoseMinutes = wakeBeforeDoseMinutes < 0
@@ -16,18 +17,21 @@ class RobotFaceSettings {
 
   final bool isFlipped;
   final bool dimAfterInactivity;
+  final bool voiceEnabled;
   final int wakeBeforeDoseMinutes;
   final int stayAwakeAfterDoseMinutes;
 
   RobotFaceSettings copyWith({
     bool? isFlipped,
     bool? dimAfterInactivity,
+    bool? voiceEnabled,
     int? wakeBeforeDoseMinutes,
     int? stayAwakeAfterDoseMinutes,
   }) {
     return RobotFaceSettings(
       isFlipped: isFlipped ?? this.isFlipped,
       dimAfterInactivity: dimAfterInactivity ?? this.dimAfterInactivity,
+      voiceEnabled: voiceEnabled ?? this.voiceEnabled,
       wakeBeforeDoseMinutes:
           wakeBeforeDoseMinutes ?? this.wakeBeforeDoseMinutes,
       stayAwakeAfterDoseMinutes:
@@ -44,6 +48,7 @@ class RobotFaceSettings {
     return other is RobotFaceSettings &&
         other.isFlipped == isFlipped &&
         other.dimAfterInactivity == dimAfterInactivity &&
+        other.voiceEnabled == voiceEnabled &&
         other.wakeBeforeDoseMinutes == wakeBeforeDoseMinutes &&
         other.stayAwakeAfterDoseMinutes == stayAwakeAfterDoseMinutes;
   }
@@ -52,6 +57,7 @@ class RobotFaceSettings {
   int get hashCode => Object.hash(
     isFlipped,
     dimAfterInactivity,
+    voiceEnabled,
     wakeBeforeDoseMinutes,
     stayAwakeAfterDoseMinutes,
   );

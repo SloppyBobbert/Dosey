@@ -6,6 +6,7 @@ class RobotFaceSettingsRepository {
 
   static const _isFlippedKey = 'robot_face_is_flipped';
   static const _dimAfterInactivityKey = 'robot_face_dim_after_inactivity';
+  static const _voiceEnabledKey = 'robot_face_voice_enabled';
   static const _wakeBeforeDoseMinutesKey =
       'robot_face_wake_before_dose_minutes';
   static const _stayAwakeAfterDoseMinutesKey =
@@ -18,6 +19,7 @@ class RobotFaceSettingsRepository {
         .watchAppSettings({
           _isFlippedKey,
           _dimAfterInactivityKey,
+          _voiceEnabledKey,
           _wakeBeforeDoseMinutesKey,
           _stayAwakeAfterDoseMinutesKey,
         })
@@ -28,6 +30,7 @@ class RobotFaceSettingsRepository {
     final settings = await _database.getAppSettings({
       _isFlippedKey,
       _dimAfterInactivityKey,
+      _voiceEnabledKey,
       _wakeBeforeDoseMinutesKey,
       _stayAwakeAfterDoseMinutesKey,
     });
@@ -44,6 +47,10 @@ class RobotFaceSettingsRepository {
       await _database.setAppSetting(
         _dimAfterInactivityKey,
         settings.dimAfterInactivity.toString(),
+      );
+      await _database.setAppSetting(
+        _voiceEnabledKey,
+        settings.voiceEnabled.toString(),
       );
       await _database.setAppSetting(
         _wakeBeforeDoseMinutesKey,
@@ -65,6 +72,9 @@ class RobotFaceSettingsRepository {
       dimAfterInactivity: values.containsKey(_dimAfterInactivityKey)
           ? values[_dimAfterInactivityKey] == 'true'
           : defaultSettings.dimAfterInactivity,
+      voiceEnabled: values.containsKey(_voiceEnabledKey)
+          ? values[_voiceEnabledKey] == 'true'
+          : defaultSettings.voiceEnabled,
       wakeBeforeDoseMinutes:
           int.tryParse(values[_wakeBeforeDoseMinutesKey] ?? '') ??
           RobotFaceSettings.defaultWakeBeforeDoseMinutes,

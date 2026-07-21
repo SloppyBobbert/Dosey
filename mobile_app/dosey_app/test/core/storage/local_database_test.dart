@@ -29,7 +29,7 @@ void main() {
   });
 
   test(
-    'robot face settings default to not flipped and dim after inactivity',
+    'robot face settings default to not flipped, dim after inactivity, and keep voice on',
     () async {
       final database = DoseyDatabase.inMemory();
       addTearDown(database.close);
@@ -83,6 +83,7 @@ void main() {
       const RobotFaceSettings(
         isFlipped: true,
         dimAfterInactivity: false,
+        voiceEnabled: false,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),
@@ -98,6 +99,7 @@ void main() {
       const RobotFaceSettings(
         isFlipped: true,
         dimAfterInactivity: false,
+        voiceEnabled: false,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),

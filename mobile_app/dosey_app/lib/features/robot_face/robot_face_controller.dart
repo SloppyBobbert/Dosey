@@ -198,6 +198,8 @@ class RobotFaceController {
       isInAwakeWindow: choreography.isInAwakeWindow,
       statusLabel: _statusFor(role, nextSchedule, dueDoseId, latestDoseEvent),
       actionDoseId: actionDoseId,
+      isAwaitingControllerConfirmation:
+          latestDoseEvent?.kind == DoseLogEventKind.controllerDispenseSucceeded,
       availableActions: _availableActionsFor(
         actionDoseId,
         mode: mode,

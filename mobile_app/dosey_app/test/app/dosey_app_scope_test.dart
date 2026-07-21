@@ -71,6 +71,7 @@ void main() {
     expect(dependencies.ble, same(bleGateway));
     expect(dependencies.connectivity, same(connectivityGateway));
     expect(dependencies.reminderScheduler, same(reminderScheduler));
+    expect(dependencies.voicePlayer, isNotNull);
     expect(dependencies.permissions, same(permissionGateway));
     expect(dependencies.robotFaceSettings, isNotNull);
     expect(dependencies.robotFaceController, isNotNull);

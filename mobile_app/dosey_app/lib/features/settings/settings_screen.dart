@@ -632,6 +632,16 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                     settings.copyWith(dimAfterInactivity: value),
                   ),
                 ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.voiceEnabled,
+                  enabled: !_isSaving,
+                  title: 'Robot voice',
+                  subtitle:
+                      'Play short Robot Face voice prompts in Robot Mode.',
+                  onChanged: (value) =>
+                      _saveSettings(settings.copyWith(voiceEnabled: value)),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [
