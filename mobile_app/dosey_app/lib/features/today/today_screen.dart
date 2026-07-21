@@ -7,6 +7,7 @@ import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
+import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/doses/dose_action_logger.dart';
@@ -169,16 +170,22 @@ class _TodayDoseContent extends StatelessWidget {
                       .length,
                   onConfirmDoseTaken: currentDoseId == null
                       ? null
-                      : () => DoseActionLogger.logDoseAction(
-                          context,
-                          DoseLogEvent.doseTakenConfirmed(
-                            doseId: currentDoseId,
-                            occurredAt: DateTime.now().toUtc(),
-                          ),
-                          'Dose confirmation logged.',
-                          retireLoadedSlot: loadedSlot,
-                          inventoryPrescriptionId: inventoryPrescriptionId,
-                        ),
+                      : () async {
+                          if (!await authorizeActionPin(context)) {
+                            return;
+                          }
+                          if (!context.mounted) return;
+                          await DoseActionLogger.logDoseAction(
+                            context,
+                            DoseLogEvent.doseTakenConfirmed(
+                              doseId: currentDoseId,
+                              occurredAt: DateTime.now().toUtc(),
+                            ),
+                            'Dose confirmation logged.',
+                            retireLoadedSlot: loadedSlot,
+                            inventoryPrescriptionId: inventoryPrescriptionId,
+                          );
+                        },
                 ),
                 const SizedBox(height: 12),
                 _CurrentDoseSection(
@@ -275,14 +282,21 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
         : '${loadedSlot.id}:$currentDoseId';
     final isDispenseInFlight =
         dispenseKey != null && _dispenseRequestsInFlight.contains(dispenseKey);
-    VoidCallback? doseAction(Future<void> Function() action) {
+    VoidCallback? doseAction(
+      Future<void> Function() action, {
+      bool requiresPin = false,
+    }) {
       if (isDispenseInFlight) return null;
-      return () {
+      return () async {
         if (dispenseKey != null &&
             _dispenseRequestsInFlight.contains(dispenseKey)) {
           return;
         }
-        action();
+        if (requiresPin && !await authorizeActionPin(context)) {
+          return;
+        }
+        if (!context.mounted) return;
+        await action();
       };
     }
 
@@ -335,6 +349,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   retireLoadedSlot: loadedSlot,
                   inventoryPrescriptionId: inventoryPrescriptionId,
                 ),
+                requiresPin: true,
               ),
               onAlreadyTaken: doseAction(
                 () => DoseActionLogger.logDoseAction(
@@ -347,6 +362,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   retireLoadedSlot: loadedSlot,
                   inventoryPrescriptionId: inventoryPrescriptionId,
                 ),
+                requiresPin: true,
               ),
               onTakenEarly: doseAction(
                 () => DoseActionLogger.logDoseAction(
@@ -359,6 +375,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   retireLoadedSlot: loadedSlot,
                   inventoryPrescriptionId: inventoryPrescriptionId,
                 ),
+                requiresPin: true,
               ),
               onTakenLate: doseAction(
                 () => DoseActionLogger.logDoseAction(
@@ -371,6 +388,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   retireLoadedSlot: loadedSlot,
                   inventoryPrescriptionId: inventoryPrescriptionId,
                 ),
+                requiresPin: true,
               ),
               onConfirmVisible: hasDispenseSucceeded && !hasVisibleConfirmed
                   ? doseAction(
@@ -404,6 +422,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   'Dose skipped.',
                   retireLoadedSlot: loadedSlot,
                 ),
+                requiresPin: true,
               ),
               onMarkMissed: doseAction(
                 () => DoseActionLogger.logDoseAction(
@@ -445,8 +464,12 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
       _dispenseRequestsInFlight.add(dispenseKey);
     });
     var succeeded = false;
-    final dependencies = DoseyAppScope.of(context);
     try {
+      if (!await authorizeActionPin(context)) {
+        return;
+      }
+      if (!context.mounted) return;
+      final dependencies = DoseyAppScope.of(context);
       await CarouselDispenseCoordinator(
         controllerLifecycle: dependencies.controllerLifecycle,
       ).dispenseLoadedSlot(

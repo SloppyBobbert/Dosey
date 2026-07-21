@@ -72,6 +72,47 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('manual dispense requires action PIN when enabled', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    ).setActionPin('1234');
+    final repository = LocalControllerCommandRepository(database);
+
+    await tester.pumpWidget(_TestControllerApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect simulator'));
+    await tester.pumpAndSettle();
+
+    final dispenseButton = find.text('Run simulated dispense');
+    await tester.drag(find.byType(ListView), const Offset(0, -220));
+    await tester.pump();
+    await tester.tap(dispenseButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter Action PIN'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(await repository.getLatestRelevantSession(), isNull);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -220));
+    await tester.pump();
+    await tester.tap(dispenseButton);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    final session = await repository.getLatestRelevantSession();
+    expect(session, isNotNull);
+    expect(session!.commandType, ControllerCommandType.dispenseTest);
+  });
 }
 
 Future<void> _setDeviceRole(DoseyDatabase database, AppDeviceRole role) async {

@@ -381,6 +381,12 @@ class DoseyDatabase extends _$DoseyDatabase {
       ),
     );
   }
+
+  Future<void> deleteAppSettings(Set<String> keys) {
+    return (delete(
+      appSettings,
+    )..where((setting) => setting.key.isIn(keys))).go();
+  }
 }
 
 QueryExecutor _openConnection() {

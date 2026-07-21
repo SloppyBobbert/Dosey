@@ -165,7 +165,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, 700));
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 900));
     await _pumpShellFrame(tester);
     expect(find.text('Account').hitTestable(), findsWidgets);
 

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 
@@ -7,6 +9,8 @@ class LocalAppSettingsRepository {
   static const _deviceRoleKey = 'device_role';
   static const _onboardingCompletedKey = 'onboarding_completed';
   static const _safetyAcknowledgedKey = 'safety_acknowledged';
+  static const _actionPinHashKey = 'action_pin_hash';
+  static const _actionPinSaltKey = 'action_pin_salt';
 
   final DoseyDatabase _database;
   final AppDeviceRole defaultRole;
@@ -74,6 +78,58 @@ class LocalAppSettingsRepository {
     });
   }
 
+  Stream<bool> watchActionPinEnabled() {
+    return _database
+        .watchAppSettings({_actionPinHashKey, _actionPinSaltKey})
+        .map(_hasCompleteActionPinSettings);
+  }
+
+  Future<bool> isActionPinEnabled() async {
+    final settings = await _database.getAppSettings({
+      _actionPinHashKey,
+      _actionPinSaltKey,
+    });
+    return _hasCompleteActionPinSettings(settings);
+  }
+
+  Future<void> setActionPin(String pin) async {
+    final normalizedPin = _normalizePin(pin);
+    if (normalizedPin.length < 4) {
+      throw ArgumentError.value(pin, 'pin', 'PIN must be at least 4 digits.');
+    }
+    if (!_isDigitsOnly(normalizedPin)) {
+      throw ArgumentError.value(pin, 'pin', 'PIN must contain only digits.');
+    }
+
+    final salt = _newActionPinSalt();
+    final hash = _hashActionPin(normalizedPin, salt);
+    await _database.transaction(() async {
+      await _setValue(_actionPinSaltKey, salt);
+      await _setValue(_actionPinHashKey, hash);
+    });
+  }
+
+  Future<bool> verifyActionPin(String pin) async {
+    final settings = await _database.getAppSettings({
+      _actionPinHashKey,
+      _actionPinSaltKey,
+    });
+    final valuesByKey = {
+      for (final setting in settings) setting.key: setting.value,
+    };
+    final expectedHash = valuesByKey[_actionPinHashKey];
+    final salt = valuesByKey[_actionPinSaltKey];
+    if (expectedHash == null || salt == null) {
+      return false;
+    }
+
+    return _hashActionPin(_normalizePin(pin), salt) == expectedHash;
+  }
+
+  Future<void> clearActionPin() {
+    return _database.deleteAppSettings({_actionPinHashKey, _actionPinSaltKey});
+  }
+
   Future<void> _setValue(String key, String value) {
     return _database
         .into(_database.appSettings)
@@ -84,5 +140,36 @@ class LocalAppSettingsRepository {
             updatedAt: DateTime.now().toUtc(),
           ),
         );
+  }
+
+  static bool _hasCompleteActionPinSettings(List<AppSetting> settings) {
+    final keys = settings.map((setting) => setting.key).toSet();
+    return keys.contains(_actionPinHashKey) && keys.contains(_actionPinSaltKey);
+  }
+
+  static String _normalizePin(String pin) {
+    return pin.trim();
+  }
+
+  static bool _isDigitsOnly(String pin) {
+    return RegExp(r'^\d+$').hasMatch(pin);
+  }
+
+  static String _newActionPinSalt() {
+    final random = Random.secure();
+    return List<int>.generate(
+      16,
+      (_) => random.nextInt(256),
+    ).map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+  }
+
+  static String _hashActionPin(String pin, String salt) {
+    // This is a lightweight local deterrent, not medical-grade security.
+    var hash = 0xcbf29ce484222325;
+    for (final codeUnit in '$salt:$pin'.codeUnits) {
+      hash ^= codeUnit;
+      hash = (hash * 0x100000001b3) & 0x7fffffffffffffff;
+    }
+    return hash.toRadixString(16).padLeft(16, '0');
   }
 }

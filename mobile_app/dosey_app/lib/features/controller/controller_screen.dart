@@ -1,6 +1,7 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
+import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:flutter/material.dart';
@@ -85,6 +86,7 @@ class ControllerScreen extends StatelessWidget {
                                   dependencies
                                       .controllerLifecycle
                                       .requestManualDispenseTest,
+                                  requiresPin: true,
                                 )
                               : null,
                           icon: Icon(
@@ -110,8 +112,13 @@ class ControllerScreen extends StatelessWidget {
 
   Future<void> _runControllerAction(
     BuildContext context,
-    Future<void> Function() action,
-  ) async {
+    Future<void> Function() action, {
+    bool requiresPin = false,
+  }) async {
+    if (requiresPin && !await authorizeActionPin(context)) {
+      return;
+    }
+    if (!context.mounted) return;
     try {
       await action();
     } on Object catch (error) {

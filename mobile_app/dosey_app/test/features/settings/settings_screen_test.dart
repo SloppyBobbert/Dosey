@@ -87,14 +87,18 @@ void main() {
 
     expect(deviceModeIndex, isNonNegative);
     expect(
-      children[deviceModeIndex + 1].runtimeType.toString(),
+      children[deviceModeIndex + 2].runtimeType.toString(),
+      '_ActionPinCard',
+    );
+    expect(
+      children[deviceModeIndex + 3].runtimeType.toString(),
       '_RobotFaceSettingsSection',
     );
 
-    final spacer = children[deviceModeIndex + 2] as SizedBox;
+    final spacer = children[deviceModeIndex + 4] as SizedBox;
     expect(spacer.height, 12);
     expect(
-      children[deviceModeIndex + 3].runtimeType.toString(),
+      children[deviceModeIndex + 5].runtimeType.toString(),
       '_ReminderNotificationCard',
     );
   });
@@ -186,6 +190,142 @@ void main() {
     expect(find.text('30 minutes'), findsOneWidget);
   });
 
+  testWidgets('action PIN section enables PIN after matching entry', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    final scope = tester.element(find.byType(MaterialApp));
+    final settings = DoseyAppScope.of(scope).settings;
+
+    await _scrollToActionPin(tester);
+    expect(find.text('Action PIN'), findsOneWidget);
+    expect(find.text('PIN is off'), findsOneWidget);
+
+    await tester.tap(find.text('Enable PIN'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('new-action-pin-field')),
+      '1234',
+    );
+    await tester.enterText(
+      find.byKey(const Key('confirm-action-pin-field')),
+      '1234',
+    );
+    await tester.tap(find.text('Save PIN'));
+    await tester.pumpAndSettle();
+
+    expect(await settings.verifyActionPin('1234'), isTrue);
+    expect(find.text('PIN is on'), findsOneWidget);
+  });
+
+  testWidgets('action PIN section rejects mismatched new PIN values', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    final scope = tester.element(find.byType(MaterialApp));
+    final settings = DoseyAppScope.of(scope).settings;
+
+    await _scrollToActionPin(tester);
+    await tester.tap(find.text('Enable PIN'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('new-action-pin-field')),
+      '1234',
+    );
+    await tester.enterText(
+      find.byKey(const Key('confirm-action-pin-field')),
+      '4321',
+    );
+    await tester.tap(find.text('Save PIN'));
+    await tester.pump();
+
+    expect(await settings.verifyActionPin('1234'), isFalse);
+    expect(find.text('PIN entries do not match.'), findsOneWidget);
+
+    Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+    await tester.pump();
+  });
+
+  testWidgets('action PIN section filters non-digit new PIN values', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    final scope = tester.element(find.byType(MaterialApp));
+    final settings = DoseyAppScope.of(scope).settings;
+
+    await _scrollToActionPin(tester);
+    await tester.tap(find.text('Enable PIN'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('new-action-pin-field')),
+      '12a4',
+    );
+    await tester.enterText(
+      find.byKey(const Key('confirm-action-pin-field')),
+      '12a4',
+    );
+    final newPinField = tester.widget<TextField>(
+      find.byKey(const Key('new-action-pin-field')),
+    );
+    expect(newPinField.controller?.text, '124');
+    await tester.tap(find.text('Save PIN'));
+    await tester.pump();
+
+    expect(await settings.verifyActionPin('12a4'), isFalse);
+    expect(find.text('Use at least 4 digits.'), findsOneWidget);
+
+    Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+    await tester.pump();
+  });
+
+  testWidgets('action PIN section requires current PIN before disabling', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    await repository.setActionPin('1234');
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    final scope = tester.element(find.byType(MaterialApp));
+    final settings = DoseyAppScope.of(scope).settings;
+
+    await _scrollToActionPin(tester);
+    expect(find.text('PIN is on'), findsOneWidget);
+
+    await tester.tap(find.text('Disable PIN'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '4321');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(await settings.verifyActionPin('1234'), isTrue);
+    expect(find.text('Wrong PIN.'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(await settings.verifyActionPin('1234'), isFalse);
+    expect(find.text('PIN is off'), findsOneWidget);
+  });
+
   testWidgets('robot face timing dropdowns resync after repository update', (
     WidgetTester tester,
   ) async {
@@ -254,6 +394,15 @@ void main() {
 Future<void> _scrollToRobotFace(WidgetTester tester) async {
   await tester.scrollUntilVisible(
     find.text('Robot Face'),
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+}
+
+Future<void> _scrollToActionPin(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.text('Action PIN'),
     300,
     scrollable: find.byType(Scrollable).first,
   );

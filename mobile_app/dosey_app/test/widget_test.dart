@@ -4,6 +4,7 @@ import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
+import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
@@ -1164,6 +1165,59 @@ void main() {
     );
   });
 
+  testWidgets('Today action PIN blocks confirm taken and inventory spend', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
+    await _addVitaminPrescription(database, remainingDoses: 2);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await _pumpAppFrame(tester);
+
+    final confirmButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Confirm taken'),
+    );
+    expect(confirmButton.onPressed, isNotNull);
+
+    final pendingCancel = (confirmButton.onPressed as dynamic)();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter Action PIN'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    if (pendingCancel is Future<void>) {
+      await pendingCancel;
+    }
+    await tester.pump();
+
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
+    var prescription = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    expect(prescription.remainingDoses, 2);
+
+    final pendingWrongPin = (confirmButton.onPressed as dynamic)();
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '4321');
+    await tester.tap(find.text('Continue'));
+    if (pendingWrongPin is Future<void>) {
+      await pendingWrongPin;
+    }
+    await tester.pump();
+
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
+    prescription = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    expect(prescription.remainingDoses, 2);
+  });
+
   testWidgets('Today ignores stale duplicate dispense callbacks', (
     WidgetTester tester,
   ) async {
@@ -1604,6 +1658,50 @@ void main() {
               ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
             .getSingle();
     expect(slot.status, CarouselSlotStatus.dispensed.storageValue);
+  });
+
+  testWidgets('Carousel action PIN cancel blocks slot dispense movement', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
+    await _addVitaminPrescription(database);
+    await _addVitaminReminder(database, id: 'vitamin-d-morning');
+    await _addLoadedVitaminSlot(database);
+
+    await tester.pumpWidget(DoseyApp(database: database));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.text('Controller'));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.text('Connect simulator'));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.text('Carousel'));
+    await _pumpAppFrame(tester);
+    await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
+    await _pumpAppFrame(tester);
+
+    await tester.tap(find.text('Dispense slot'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter Action PIN'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    final commandSession = await LocalControllerCommandRepository(
+      database,
+    ).getLatestRelevantSession();
+    expect(commandSession, isNull);
+    expect(await database.select(database.doseLogEvents).get(), isEmpty);
+    final slot =
+        await (database.select(database.carouselSlots)
+              ..where((row) => row.id.equals('schedule-1-vitamin-d-morning')))
+            .getSingle();
+    expect(slot.status, CarouselSlotStatus.loaded.storageValue);
   });
 
   testWidgets('Carousel does not log movement when slot update fails', (
@@ -2065,6 +2163,10 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _markOnboardingComplete(database);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
     await _addVitaminReminder(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
@@ -2088,6 +2190,10 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _markOnboardingComplete(database);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
     await _addVitaminReminder(database);
 
     await tester.pumpWidget(DoseyApp(database: database));
@@ -2096,6 +2202,7 @@ void main() {
     await tester.tap(find.text('Log snooze'));
     await _pumpAppFrame(tester);
 
+    expect(find.text('Enter Action PIN'), findsNothing);
     expect(
       find.text('Snooze logged locally; reminder timing is unchanged.'),
       findsOneWidget,
@@ -2292,6 +2399,7 @@ void main() {
     await tester.tap(find.text('Ask caregiver'));
     await _pumpAppFrame(tester);
 
+    expect(find.text('Enter Action PIN'), findsNothing);
     expect(
       find.text(
         'Caregiver request noted locally. Contact your caregiver, pharmacist, or doctor if you are unsure what to do.',

@@ -6,6 +6,7 @@ import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
+import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:flutter/material.dart';
@@ -804,6 +805,10 @@ class _SlotCardState extends State<_SlotCard> {
 
   Future<void> _dispense(BuildContext context) async {
     if (_isDispensing) return;
+    if (!await authorizeActionPin(context)) {
+      return;
+    }
+    if (!context.mounted) return;
     setState(() {
       _isDispensing = true;
     });
