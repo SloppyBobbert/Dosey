@@ -958,7 +958,9 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           final completedActions = _completedActionsForDose(actionDoseId);
           if (_isTerminalAction(actionKind)) {
             // A terminal outcome resolves the dose; suppress every local action
-            // until controller state rebuilds without the panel.
+            // until controller state rebuilds without the panel. This avoids a
+            // brief second tap window while async streams catch up to the new
+            // dose-log state.
             completedActions.addAll(widget.state.availableActions);
           } else {
             completedActions.add(actionKind);

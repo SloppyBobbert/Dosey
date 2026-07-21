@@ -186,6 +186,10 @@ class ControllerLifecycleService {
             await _carouselSlots.markLoaded(slotId);
           }
         } else if (error is ControllerCommandTimeoutException) {
+          // From here down, the command may have reached hardware even when the
+          // app did not observe a clean completion path. Treat those cases as
+          // physically ambiguous and preserve a review trail instead of
+          // pretending the slot is safely loaded again.
           // Accepted but unresolved is physically ambiguous: do not reopen the
           // carousel slot as loaded, because movement may already have started.
           await _commandRepository.appendEvent(
