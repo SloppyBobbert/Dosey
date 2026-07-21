@@ -61,7 +61,7 @@ class RobotFaceVoiceCoordinator {
       return;
     }
 
-    final effectiveKey = '${effect.triggerKey}:${effect.phrase.name}';
+    final effectiveKey = _effectiveKeyFor(effect, state);
     final isConsecutiveDuplicate =
         effect.dedupe && effectiveKey == _lastEffectiveKey;
     _lastEffectiveKey = effect.dedupe ? effectiveKey : null;
@@ -245,6 +245,21 @@ class RobotFaceVoiceCoordinator {
     }
 
     return !_isRepeatableAfterCooldown(kind);
+  }
+
+  String _effectiveKeyFor(_VoiceEffect effect, RobotFaceState state) {
+    final occurrenceKey = _occurrenceKeyFor(effect.kind, state);
+    if (occurrenceKey == null) {
+      return '${effect.triggerKey}:${effect.phrase.name}';
+    }
+    return '${effect.triggerKey}:$occurrenceKey:${effect.phrase.name}';
+  }
+
+  String? _occurrenceKeyFor(_VoiceEffectKind kind, RobotFaceState state) {
+    if (!_usesReminderRepeatCooldown(kind)) {
+      return null;
+    }
+    return state.actionDoseId ?? state.nextEventLabel;
   }
 
   _VoiceTrigger? _triggerFor(RobotFaceState state) {

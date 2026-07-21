@@ -284,6 +284,40 @@ void main() {
   );
 
   test(
+    'no-repeats policy still allows a later dose-ready occurrence to speak',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseReady, actionDoseId: 'dose-1'));
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      harness.now = harness.now.add(const Duration(hours: 4));
+      harness.emit(
+        _state(
+          RobotFaceMode.doseReady,
+          nextEventLabel: '1:00 · Lunch meds',
+          actionDoseId: 'dose-2',
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.scheduledDoseReady,
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
     'reminders-only policy lets reminder speech replay after cooldown',
     () async {
       final harness = _VoiceCoordinatorHarness(
@@ -304,6 +338,39 @@ void main() {
       harness.now = harness.now.add(const Duration(minutes: 6));
       harness.emit(_state(RobotFaceMode.idle));
       harness.emit(_state(RobotFaceMode.doseApproaching));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.doseSoon,
+        DoseyVoicePhrase.doseSoon,
+      ]);
+    },
+  );
+
+  test(
+    'no-repeats policy still allows a later dose-approaching occurrence to speak',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      harness.now = harness.now.add(const Duration(hours: 4));
+      harness.emit(
+        _state(
+          RobotFaceMode.doseApproaching,
+          nextEventLabel: '1:00 · Lunch meds',
+        ),
+      );
       await pumpEventQueue();
 
       expect(harness.voiceGateway.playedPhrases, [
@@ -687,14 +754,17 @@ void main() {
 RobotFaceState _state(
   RobotFaceMode mode, {
   bool isAwaitingControllerConfirmation = false,
+  String nextEventLabel = '9:00 · Morning meds',
+  String? actionDoseId,
 }) {
   return RobotFaceState(
     mode: mode,
-    nextEventLabel: '9:00 · Morning meds',
+    nextEventLabel: nextEventLabel,
     isFlipped: false,
     isLandscapeOnly: true,
     rampProgress: mode == RobotFaceMode.doseApproaching ? 0.5 : 1,
     isInAwakeWindow: true,
+    actionDoseId: actionDoseId,
     isAwaitingControllerConfirmation: isAwaitingControllerConfirmation,
   );
 }
