@@ -26,7 +26,7 @@ class RobotFaceVoiceCoordinator {
        _randomIndex = randomIndex ?? ((max) => Random().nextInt(max)) {
     _subscriptions = <StreamSubscription<Object?>>[
       settingsStream.listen(_handleSettings),
-      roleStream.listen((value) => _role = value),
+      roleStream.listen(_handleRole),
       stateStream.listen(_handleState),
     ];
   }
@@ -39,6 +39,9 @@ class RobotFaceVoiceCoordinator {
 
   RobotFaceSettings _settings = const RobotFaceSettings();
   AppDeviceRole? _role;
+  bool _hasInitialSettings = false;
+  bool _hasInitialRole = false;
+  RobotFaceState? _pendingStartupState;
   RobotFaceState? _lastState;
   String? _lastEffectiveKey;
   final Set<String> _repeatRestrictedEffectiveKeys = <String>{};
@@ -53,6 +56,7 @@ class RobotFaceVoiceCoordinator {
   }
 
   void _handleSettings(RobotFaceSettings settings) {
+    _hasInitialSettings = true;
     if (_settings.reminderRepeatPolicy != settings.reminderRepeatPolicy) {
       _invalidateRepeatRestrictionsForPolicyChange(
         _settings.reminderRepeatPolicy,
@@ -60,6 +64,13 @@ class RobotFaceVoiceCoordinator {
       );
     }
     _settings = settings;
+    _reconcilePendingStartupState();
+  }
+
+  void _handleRole(AppDeviceRole role) {
+    _hasInitialRole = true;
+    _role = role;
+    _reconcilePendingStartupState();
   }
 
   void _invalidateRepeatRestrictionsForPolicyChange(
@@ -81,6 +92,11 @@ class RobotFaceVoiceCoordinator {
   }
 
   void _handleState(RobotFaceState state) {
+    if (!_hasInitialInputs) {
+      _pendingStartupState = state;
+      return;
+    }
+
     final effect = _effectFor(state, previousState: _lastState);
     _lastState = state;
 
@@ -126,6 +142,18 @@ class RobotFaceVoiceCoordinator {
     unawaited(_speakBestEffort(effect.phrase));
   }
 
+  void _reconcilePendingStartupState() {
+    if (!_hasInitialInputs) {
+      return;
+    }
+    final pendingStartupState = _pendingStartupState;
+    if (pendingStartupState == null) {
+      return;
+    }
+    _pendingStartupState = null;
+    _handleState(pendingStartupState);
+  }
+
   Future<void> _speakBestEffort(DoseyVoicePhrase phrase) async {
     try {
       await _voicePlayer.speak(
@@ -148,6 +176,8 @@ class RobotFaceVoiceCoordinator {
         _role == AppDeviceRole.androidRobot &&
         _settings.voiceEnabled;
   }
+
+  bool get _hasInitialInputs => _hasInitialSettings && _hasInitialRole;
 
   bool get _isInsideQuietHours {
     if (!_settings.voiceQuietHoursEnabled) {

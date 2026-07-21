@@ -60,6 +60,104 @@ void main() {
   });
 
   test(
+    'eligible state emitted before initial inputs resolves speaks once after startup gating arrives',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: true),
+        emitInitialInputsOnStart: false,
+      );
+      addTearDown(harness.dispose);
+
+      final state = _state(
+        RobotFaceMode.doseReady,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      );
+      harness.emit(state);
+      await pumpEventQueue();
+      expect(harness.voiceGateway.playedPhrases, isEmpty);
+
+      harness.emitInitialInputs();
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
+    'buffered startup state stays silent when initial inputs resolve disallowed',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: false),
+        emitInitialInputsOnStart: false,
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+
+      harness.emitInitialInputs();
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, isEmpty);
+    },
+  );
+
+  test(
+    'startup-buffered decision does not double-play when the same occurrence is emitted again',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        emitInitialInputsOnStart: false,
+      );
+      addTearDown(harness.dispose);
+
+      final state = _state(
+        RobotFaceMode.doseReady,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      );
+      harness.emit(state);
+      await pumpEventQueue();
+
+      harness.emitInitialInputs();
+      await pumpEventQueue();
+      harness.emit(state.copyWith(statusLabel: 'Still ready'));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
+    'urgent startup-buffered state still plays correctly once inputs allow voice',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: true),
+        emitInitialInputsOnStart: false,
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.missed));
+      await pumpEventQueue();
+
+      harness.emitInitialInputs();
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.missedWarning,
+      ]);
+    },
+  );
+
+  test(
     'dedupe prevents repeated playback for the same effective state',
     () async {
       final harness = _VoiceCoordinatorHarness(
@@ -1074,6 +1172,7 @@ class _VoiceCoordinatorHarness {
     this.role = AppDeviceRole.androidRobot,
     RobotFaceSettings settings = const RobotFaceSettings(),
     this.platform = AppDevicePlatform.android,
+    this.emitInitialInputsOnStart = true,
     DateTime? now,
     List<int> randomIndexes = const <int>[0],
     _InspectableVoicePlaybackGateway? voiceGateway,
@@ -1091,12 +1190,14 @@ class _VoiceCoordinatorHarness {
       now: () => this.now,
       randomIndex: _nextRandomIndex,
     );
-    _settingsController.add(_settings);
-    _roleController.add(role);
+    if (emitInitialInputsOnStart) {
+      emitInitialInputs();
+    }
   }
 
   final AppDeviceRole role;
   final AppDevicePlatform platform;
+  final bool emitInitialInputsOnStart;
   final List<int> _randomIndexes;
   final states = StreamController<RobotFaceState>.broadcast();
   final _settingsController = StreamController<RobotFaceSettings>.broadcast();
@@ -1116,6 +1217,11 @@ class _VoiceCoordinatorHarness {
   }
 
   void emit(RobotFaceState state) => states.add(state);
+
+  void emitInitialInputs() {
+    _settingsController.add(_settings);
+    _roleController.add(role);
+  }
 
   void updateSettings(RobotFaceSettings settings) {
     _settings = settings;
