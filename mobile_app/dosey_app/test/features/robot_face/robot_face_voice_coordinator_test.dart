@@ -477,7 +477,7 @@ void main() {
         DoseyVoicePhrase.missedWarning,
         DoseyVoicePhrase.controllerOffline,
         DoseyVoicePhrase.needsCheckingBeforeContinue,
-        DoseyVoicePhrase.checkRightDose,
+        DoseyVoicePhrase.controllerReadyAgain,
       ]);
     },
   );
@@ -536,6 +536,7 @@ void main() {
       DoseyVoicePhrase.missedWarning,
       DoseyVoicePhrase.controllerOffline,
       DoseyVoicePhrase.controllerOffline,
+      DoseyVoicePhrase.controllerReadyAgain,
     ]);
   });
 
@@ -638,6 +639,49 @@ void main() {
 
     expect(harness.voiceGateway.playedPhrases, isEmpty);
   });
+
+  test(
+    'controller recovery speaks once after offline hardware comes back',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: true),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.offline));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.controllerOffline,
+        DoseyVoicePhrase.controllerReadyAgain,
+      ]);
+    },
+  );
+
+  test(
+    'controller recovery does not repeat on later healthy state emissions',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: true),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.error));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      harness.emit(
+        _state(RobotFaceMode.doseReady, nextEventLabel: 'Still ready'),
+      );
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.needsCheckingBeforeContinue,
+        DoseyVoicePhrase.controllerReadyAgain,
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
 
   test('quiet-hour safety override still respects category toggles', () async {
     final harness = _VoiceCoordinatorHarness(

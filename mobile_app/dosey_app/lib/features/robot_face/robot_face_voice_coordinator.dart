@@ -142,7 +142,7 @@ class RobotFaceVoiceCoordinator {
     RobotFaceState state, {
     required RobotFaceState? previousState,
   }) {
-    final trigger = _triggerFor(state);
+    final trigger = _triggerFor(state, previousState: previousState);
     if (trigger != null) {
       final allowQuietSafetyOverride =
           _isInsideQuietHours && _settings.voiceSafetyDuringQuietHoursEnabled;
@@ -262,7 +262,14 @@ class RobotFaceVoiceCoordinator {
     return state.actionDoseId ?? state.nextEventLabel;
   }
 
-  _VoiceTrigger? _triggerFor(RobotFaceState state) {
+  _VoiceTrigger? _triggerFor(
+    RobotFaceState state, {
+    required RobotFaceState? previousState,
+  }) {
+    if (_isControllerRecovered(state, previousState: previousState)) {
+      return _VoiceTrigger.controllerRecovered;
+    }
+
     return switch (state.mode) {
       RobotFaceMode.doseApproaching => _VoiceTrigger.reminderApproaching,
       RobotFaceMode.doseReady => _VoiceTrigger.doseReady,
@@ -277,10 +284,29 @@ class RobotFaceVoiceCoordinator {
     };
   }
 
+  bool _isControllerRecovered(
+    RobotFaceState state, {
+    required RobotFaceState? previousState,
+  }) {
+    if (previousState == null) {
+      return false;
+    }
+    return _isControllerProblemMode(previousState.mode) &&
+        !_isControllerProblemMode(state.mode);
+  }
+
+  bool _isControllerProblemMode(RobotFaceMode mode) {
+    return mode == RobotFaceMode.offline || mode == RobotFaceMode.error;
+  }
+
   DoseyVoicePhrase _phraseForTrigger(
     _VoiceTrigger trigger, {
     required bool allowQuietSafetyOverride,
   }) {
+    if (trigger == _VoiceTrigger.controllerRecovered) {
+      return DoseyVoicePhrase.controllerReadyAgain;
+    }
+
     if (allowQuietSafetyOverride && trigger == _VoiceTrigger.doseReady) {
       return _settings.voiceVarietyEnabled
           ? _phraseForCategory(DoseyVoicePhraseCategory.quietHoursReadySafety)
@@ -297,6 +323,8 @@ class RobotFaceVoiceCoordinator {
         _VoiceTrigger.controllerOffline => DoseyVoicePhrase.controllerOffline,
         _VoiceTrigger.controllerError =>
           DoseyVoicePhrase.needsCheckingBeforeContinue,
+        _VoiceTrigger.controllerRecovered =>
+          DoseyVoicePhrase.controllerReadyAgain,
       };
     }
 
@@ -370,6 +398,10 @@ enum _VoiceTrigger {
     _VoiceEffectKind.controllerHardware,
   ),
   controllerError(
+    DoseyVoicePhraseCategory.controllerHardware,
+    _VoiceEffectKind.controllerHardware,
+  ),
+  controllerRecovered(
     DoseyVoicePhraseCategory.controllerHardware,
     _VoiceEffectKind.controllerHardware,
   );
