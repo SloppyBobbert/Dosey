@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -70,6 +72,16 @@ void main() {
     ]);
   });
 
+  test('every phrase category stays non-empty', () {
+    for (final category in DoseyVoicePhraseCategory.values) {
+      expect(
+        FixedPhraseCatalog.phrasesForCategory(category),
+        isNotEmpty,
+        reason: 'Expected $category to keep at least one fixed phrase.',
+      );
+    }
+  });
+
   test(
     'fixed phrase assets stay unique and under the voice asset directory',
     () {
@@ -77,7 +89,7 @@ void main() {
           .map((phrase) => phrase.assetPath)
           .toList();
 
-      expect(assets.toSet(), hasLength(60));
+      expect(assets.toSet(), hasLength(assets.length));
       expect(
         assets.every(
           (asset) => asset.startsWith(FixedPhraseCatalog.assetDirectory),
@@ -86,6 +98,17 @@ void main() {
       );
     },
   );
+
+  test('every fixed phrase asset path resolves to a bundled voice file', () {
+    for (final phrase in FixedPhraseCatalog.phrases) {
+      expect(
+        File(phrase.assetPath).existsSync(),
+        isTrue,
+        reason:
+            'Missing bundled voice asset for ${phrase.phrase}: ${phrase.assetPath}',
+      );
+    }
+  });
 
   test('phrase categories expose safe grouped choices', () {
     expect(
