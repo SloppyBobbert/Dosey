@@ -149,6 +149,9 @@ class RobotFaceController {
     final role = _role;
     final now = _current();
     final activeMissedDose = _activeMissedAlertDose(now);
+    // Missed-dose alerts intentionally pin the display to the unresolved dose
+    // so recognition and follow-up actions stay attached to the event the user
+    // is actually seeing.
     final displaySchedule = activeMissedDose?.schedule ?? _displaySchedule(now);
     final displayDoseId =
         activeMissedDose?.doseId ??

@@ -4,7 +4,7 @@ import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
-import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/active_profile_schedules_stream.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
@@ -25,15 +25,20 @@ class TodayScreen extends StatelessWidget {
     return StreamBuilder<List<Prescription>>(
       stream: dependencies.prescriptions.watchPrescriptions(),
       builder: (context, prescriptionSnapshot) {
-        final prescriptionsById = _prescriptionsById(
-          prescriptionSnapshot.data ?? const <Prescription>[],
-        );
+        final prescriptionsById = <String, Prescription>{
+          for (final prescription
+              in prescriptionSnapshot.data ?? const <Prescription>[])
+            prescription.id: prescription,
+        };
 
         return StreamBuilder<ScheduleProfile?>(
           stream: dependencies.scheduleProfiles.watchActiveProfile(),
           builder: (context, profileSnapshot) {
             return StreamBuilder<List<ReminderSchedule>>(
-              stream: _activeSchedulesStream(reminders, profileSnapshot.data),
+              stream: watchActiveProfileSchedules(
+                reminders,
+                profileSnapshot.data,
+              ),
               builder: (context, reminderSnapshot) {
                 final schedules =
                     reminderSnapshot.data ?? const <ReminderSchedule>[];
@@ -68,27 +73,6 @@ class TodayScreen extends StatelessWidget {
         );
       },
     );
-  }
-
-  /// Uses only the active schedule profile for the robot-facing Today view.
-  static Stream<List<ReminderSchedule>> _activeSchedulesStream(
-    ReminderRepository reminders,
-    ScheduleProfile? activeProfile,
-  ) {
-    if (activeProfile == null) {
-      return Stream<List<ReminderSchedule>>.value(const <ReminderSchedule>[]);
-    }
-    return reminders.watchSchedules(profileId: activeProfile.id);
-  }
-
-  /// Joins schedules to the user's saved prescription metadata for display
-  /// only; this does not verify medications, identify pills, or advise dosing.
-  static Map<String, Prescription> _prescriptionsById(
-    List<Prescription> prescriptions,
-  ) {
-    return {
-      for (final prescription in prescriptions) prescription.id: prescription,
-    };
   }
 
   static bool _hasEventKindForDose(

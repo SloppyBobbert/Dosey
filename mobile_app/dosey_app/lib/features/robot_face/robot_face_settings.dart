@@ -1,5 +1,3 @@
-// ignore_for_file: prefer_initializing_formals
-
 enum RobotVoiceVolumePreset {
   quiet(0.45),
   normal(1.0),

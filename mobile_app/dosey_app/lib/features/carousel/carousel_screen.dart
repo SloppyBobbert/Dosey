@@ -3,7 +3,7 @@ import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
-import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/active_profile_schedules_stream.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
@@ -46,7 +46,7 @@ class _CarouselScreenState extends State<CarouselScreen> {
           builder: (context, profileSnapshot) {
             final activeProfile = profileSnapshot.data;
             return StreamBuilder<List<ReminderSchedule>>(
-              stream: _activeSchedulesStream(
+              stream: watchActiveProfileSchedules(
                 dependencies.reminders,
                 activeProfile,
               ),
@@ -140,16 +140,6 @@ class _CarouselScreenState extends State<CarouselScreen> {
         );
       },
     );
-  }
-
-  static Stream<List<ReminderSchedule>> _activeSchedulesStream(
-    ReminderRepository reminders,
-    ScheduleProfile? activeProfile,
-  ) {
-    if (activeProfile == null) {
-      return Stream<List<ReminderSchedule>>.value(const <ReminderSchedule>[]);
-    }
-    return reminders.watchSchedules(profileId: activeProfile.id);
   }
 
   static bool _canRequestDispense(
