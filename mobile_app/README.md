@@ -37,7 +37,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 
 ## Target app direction
 
-Robot Mode on the mounted Android phone should handle the face screen, reminders, dispense UI, missed-dose recognition, hardware test screen, Bluetooth connection, refill status, dose history, prerecorded voice or text-to-speech, quiet-hours behavior, and full-screen behavior when practical.
+Robot Mode on the mounted Android phone should handle the face screen, reminders, dispense UI, missed-dose recognition, hardware test screen, Bluetooth connection, refill status, dose history, fixed prerecorded voice prompts, quiet-hours behavior, and full-screen behavior when practical.
 
 Personal Mode should handle patient or caregiver notifications, missed dose/refill alerts, dose history, and medication schedule editing when permissions allow.
 
