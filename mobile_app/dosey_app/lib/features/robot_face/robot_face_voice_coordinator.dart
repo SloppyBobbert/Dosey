@@ -266,6 +266,12 @@ class RobotFaceVoiceCoordinator {
     _VoiceTrigger trigger, {
     required bool allowQuietSafetyOverride,
   }) {
+    if (allowQuietSafetyOverride && trigger == _VoiceTrigger.doseReady) {
+      return _settings.voiceVarietyEnabled
+          ? _phraseForCategory(DoseyVoicePhraseCategory.quietHoursReadySafety)
+          : DoseyVoicePhrase.checkRightDose;
+    }
+
     if (!_settings.voiceVarietyEnabled) {
       return switch (trigger) {
         _VoiceTrigger.reminderApproaching => DoseyVoicePhrase.doseSoon,
@@ -277,10 +283,6 @@ class RobotFaceVoiceCoordinator {
         _VoiceTrigger.controllerError =>
           DoseyVoicePhrase.needsCheckingBeforeContinue,
       };
-    }
-
-    if (allowQuietSafetyOverride && trigger == _VoiceTrigger.doseReady) {
-      return _phraseForCategory(DoseyVoicePhraseCategory.quietHoursReadySafety);
     }
 
     return _phraseForCategory(trigger.category);

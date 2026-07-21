@@ -472,6 +472,30 @@ void main() {
     ]);
   });
 
+  test(
+    'quiet hours safety override uses check-cup ready phrase without variety',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          voiceQuietHoursEnabled: true,
+          voiceSafetyDuringQuietHoursEnabled: true,
+        ),
+        now: DateTime(2026, 7, 20, 23),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      harness.emit(_state(RobotFaceMode.dispensing));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.checkRightDose,
+      ]);
+    },
+  );
+
   test('blocked reminder category suppresses reminder speech', () async {
     final harness = _VoiceCoordinatorHarness(
       settings: const RobotFaceSettings(
