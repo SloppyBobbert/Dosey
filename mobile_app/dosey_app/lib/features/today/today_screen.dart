@@ -295,6 +295,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
         if (requiresPin && !await authorizeActionPin(context)) {
           return;
         }
+        if (!context.mounted) return;
         await action();
       };
     }

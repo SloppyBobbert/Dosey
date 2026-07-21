@@ -60,7 +60,9 @@ Future<String?> showActionPinPromptDialog(BuildContext context) {
         },
       );
     },
-  );
+  ).whenComplete(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) => controller.dispose());
+  });
 }
 
 Future<String?> showActionPinSetupDialog(
@@ -87,6 +89,7 @@ Future<String?> showActionPinSetupDialog(
                   autofocus: true,
                   obscureText: true,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   decoration: InputDecoration(
                     labelText: 'New PIN',
                     errorText: errorText,
@@ -133,7 +136,12 @@ Future<String?> showActionPinSetupDialog(
         },
       );
     },
-  );
+  ).whenComplete(() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      pinController.dispose();
+      confirmController.dispose();
+    });
+  });
 }
 
 bool _isDigitsOnly(String pin) {

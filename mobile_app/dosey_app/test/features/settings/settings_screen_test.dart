@@ -254,7 +254,7 @@ void main() {
     await tester.pump();
   });
 
-  testWidgets('action PIN section rejects non-digit new PIN values', (
+  testWidgets('action PIN section filters non-digit new PIN values', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -276,11 +276,15 @@ void main() {
       find.byKey(const Key('confirm-action-pin-field')),
       '12a4',
     );
+    final newPinField = tester.widget<TextField>(
+      find.byKey(const Key('new-action-pin-field')),
+    );
+    expect(newPinField.controller?.text, '124');
     await tester.tap(find.text('Save PIN'));
     await tester.pump();
 
     expect(await settings.verifyActionPin('12a4'), isFalse);
-    expect(find.text('Use digits only.'), findsOneWidget);
+    expect(find.text('Use at least 4 digits.'), findsOneWidget);
 
     Navigator.of(tester.element(find.byType(AlertDialog))).pop();
     await tester.pump();
