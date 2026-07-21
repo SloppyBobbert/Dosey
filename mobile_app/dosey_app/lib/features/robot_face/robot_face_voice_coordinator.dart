@@ -25,7 +25,7 @@ class RobotFaceVoiceCoordinator {
        _now = now ?? DateTime.now,
        _randomIndex = randomIndex ?? ((max) => Random().nextInt(max)) {
     _subscriptions = <StreamSubscription<Object?>>[
-      settingsStream.listen((value) => _settings = value),
+      settingsStream.listen(_handleSettings),
       roleStream.listen((value) => _role = value),
       stateStream.listen(_handleState),
     ];
@@ -49,6 +49,34 @@ class RobotFaceVoiceCoordinator {
   Future<void> close() async {
     for (final subscription in _subscriptions) {
       await subscription.cancel();
+    }
+  }
+
+  void _handleSettings(RobotFaceSettings settings) {
+    if (_settings.reminderRepeatPolicy != settings.reminderRepeatPolicy) {
+      _invalidateRepeatRestrictionsForPolicyChange(
+        _settings.reminderRepeatPolicy,
+        settings.reminderRepeatPolicy,
+      );
+    }
+    _settings = settings;
+  }
+
+  void _invalidateRepeatRestrictionsForPolicyChange(
+    RobotReminderRepeatPolicy oldPolicy,
+    RobotReminderRepeatPolicy newPolicy,
+  ) {
+    for (final kind in <_VoiceEffectKind>[
+      _VoiceEffectKind.reminder,
+      _VoiceEffectKind.ready,
+    ]) {
+      if (_isRepeatableAfterCooldownForPolicy(kind, oldPolicy) ||
+          !_isRepeatableAfterCooldownForPolicy(kind, newPolicy)) {
+        continue;
+      }
+      _repeatRestrictedEffectiveKeys.removeWhere(
+        (key) => key.startsWith('${_triggerKeyForKind(kind)}:'),
+      );
     }
   }
 
@@ -230,7 +258,17 @@ class RobotFaceVoiceCoordinator {
   }
 
   bool _isRepeatableAfterCooldown(_VoiceEffectKind kind) {
-    return switch (_settings.reminderRepeatPolicy) {
+    return _isRepeatableAfterCooldownForPolicy(
+      kind,
+      _settings.reminderRepeatPolicy,
+    );
+  }
+
+  bool _isRepeatableAfterCooldownForPolicy(
+    _VoiceEffectKind kind,
+    RobotReminderRepeatPolicy policy,
+  ) {
+    return switch (policy) {
       RobotReminderRepeatPolicy.noRepeats => false,
       RobotReminderRepeatPolicy.repeatRemindersOnly =>
         kind == _VoiceEffectKind.reminder,
@@ -245,6 +283,14 @@ class RobotFaceVoiceCoordinator {
     }
 
     return !_isRepeatableAfterCooldown(kind);
+  }
+
+  String _triggerKeyForKind(_VoiceEffectKind kind) {
+    return switch (kind) {
+      _VoiceEffectKind.reminder => _VoiceTrigger.reminderApproaching.name,
+      _VoiceEffectKind.ready => _VoiceTrigger.doseReady.name,
+      _ => '',
+    };
   }
 
   String _effectiveKeyFor(_VoiceEffect effect, RobotFaceState state) {

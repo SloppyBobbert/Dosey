@@ -557,6 +557,147 @@ void main() {
   );
 
   test(
+    'changing policy from no-repeats to reminders-only unblocks reminder after cooldown',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      final reminderState = _state(
+        RobotFaceMode.doseApproaching,
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      );
+      harness.emit(reminderState);
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      harness.updateSettings(
+        harness.settings.copyWith(
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
+        ),
+      );
+      harness.now = harness.now.add(const Duration(minutes: 6));
+      harness.emit(reminderState);
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.doseSoon,
+        DoseyVoicePhrase.doseSoon,
+      ]);
+    },
+  );
+
+  test(
+    'changing policy from no-repeats to full repeats unblocks ready after cooldown',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      final readyState = _state(
+        RobotFaceMode.doseReady,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      );
+      harness.emit(readyState);
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      harness.updateSettings(
+        harness.settings.copyWith(
+          reminderRepeatPolicy:
+              RobotReminderRepeatPolicy.repeatRemindersAndReady,
+        ),
+      );
+      harness.now = harness.now.add(const Duration(minutes: 6));
+      harness.emit(readyState);
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.scheduledDoseReady,
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
+    'changing policy from no-repeats to reminders-only keeps ready blocked',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      final readyState = _state(
+        RobotFaceMode.doseReady,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      );
+      harness.emit(readyState);
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      harness.updateSettings(
+        harness.settings.copyWith(
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
+        ),
+      );
+      harness.now = harness.now.add(const Duration(minutes: 6));
+      harness.emit(readyState);
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test('policy changes do not affect non-reminder category playback', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        reminderRepeatCooldownMinutes: 5,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+      ),
+    );
+    addTearDown(harness.dispose);
+
+    harness.emit(_state(RobotFaceMode.missed));
+    harness.emit(_state(RobotFaceMode.idle));
+    await pumpEventQueue();
+
+    harness.updateSettings(
+      harness.settings.copyWith(
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersAndReady,
+      ),
+    );
+    harness.emit(_state(RobotFaceMode.missed, statusLabel: 'Still missed'));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, [
+      DoseyVoicePhrase.missedWarning,
+      DoseyVoicePhrase.missedWarning,
+    ]);
+  });
+
+  test(
     'urgent categories are not suppressed by reminder repeat cooldown',
     () async {
       final harness = _VoiceCoordinatorHarness(
@@ -912,6 +1053,7 @@ RobotFaceState _state(
   String nextEventLabel = '9:00 · Morning meds',
   String? actionDoseId,
   String? voiceOccurrenceKey,
+  String? statusLabel,
 }) {
   return RobotFaceState(
     mode: mode,
@@ -920,6 +1062,7 @@ RobotFaceState _state(
     isLandscapeOnly: true,
     rampProgress: mode == RobotFaceMode.doseApproaching ? 0.5 : 1,
     isInAwakeWindow: true,
+    statusLabel: statusLabel,
     actionDoseId: actionDoseId,
     voiceOccurrenceKey: voiceOccurrenceKey,
     isAwaitingControllerConfirmation: isAwaitingControllerConfirmation,
@@ -929,7 +1072,7 @@ RobotFaceState _state(
 class _VoiceCoordinatorHarness {
   _VoiceCoordinatorHarness({
     this.role = AppDeviceRole.androidRobot,
-    this.settings = const RobotFaceSettings(),
+    RobotFaceSettings settings = const RobotFaceSettings(),
     this.platform = AppDevicePlatform.android,
     DateTime? now,
     List<int> randomIndexes = const <int>[0],
@@ -938,26 +1081,33 @@ class _VoiceCoordinatorHarness {
        now = now ?? DateTime(2026, 7, 20, 9) {
     final gateway = voiceGateway ?? _FakeVoicePlaybackGateway();
     this.voiceGateway = gateway;
+    _settings = settings;
     coordinator = RobotFaceVoiceCoordinator(
       stateStream: states.stream,
-      settingsStream: Stream<RobotFaceSettings>.value(settings),
-      roleStream: Stream<AppDeviceRole>.value(role),
+      settingsStream: _settingsController.stream,
+      roleStream: _roleController.stream,
       voicePlayer: DoseyVoicePlayer(playbackGateway: gateway),
       platform: () => platform,
       now: () => this.now,
       randomIndex: _nextRandomIndex,
     );
+    _settingsController.add(_settings);
+    _roleController.add(role);
   }
 
   final AppDeviceRole role;
-  final RobotFaceSettings settings;
   final AppDevicePlatform platform;
   final List<int> _randomIndexes;
   final states = StreamController<RobotFaceState>.broadcast();
+  final _settingsController = StreamController<RobotFaceSettings>.broadcast();
+  final _roleController = StreamController<AppDeviceRole>.broadcast();
   late final _InspectableVoicePlaybackGateway voiceGateway;
   late final RobotFaceVoiceCoordinator coordinator;
   DateTime now;
   int _randomCallCount = 0;
+  late RobotFaceSettings _settings;
+
+  RobotFaceSettings get settings => _settings;
 
   int _nextRandomIndex(int max) {
     final value = _randomIndexes[_randomCallCount % _randomIndexes.length];
@@ -967,8 +1117,15 @@ class _VoiceCoordinatorHarness {
 
   void emit(RobotFaceState state) => states.add(state);
 
+  void updateSettings(RobotFaceSettings settings) {
+    _settings = settings;
+    _settingsController.add(settings);
+  }
+
   Future<void> dispose() async {
     await coordinator.close();
+    await _settingsController.close();
+    await _roleController.close();
     await states.close();
   }
 }
