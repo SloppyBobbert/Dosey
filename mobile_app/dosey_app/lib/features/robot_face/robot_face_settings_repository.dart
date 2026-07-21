@@ -17,6 +17,17 @@ class RobotFaceSettingsRepository {
       'robot_face_voice_quiet_hours_end_minutes';
   static const _voiceSafetyDuringQuietHoursEnabledKey =
       'robot_face_voice_safety_during_quiet_hours_enabled';
+  static const _reminderVoiceEnabledKey = 'robot_face_reminder_voice_enabled';
+  static const _dispenseNarrationEnabledKey =
+      'robot_face_dispense_narration_enabled';
+  static const _safetyConfirmationVoiceEnabledKey =
+      'robot_face_safety_confirmation_voice_enabled';
+  static const _missedDoseVoiceEnabledKey =
+      'robot_face_missed_dose_voice_enabled';
+  static const _controllerAlertVoiceEnabledKey =
+      'robot_face_controller_alert_voice_enabled';
+  static const _idleChatterVoiceEnabledKey =
+      'robot_face_idle_chatter_voice_enabled';
   static const _wakeBeforeDoseMinutesKey =
       'robot_face_wake_before_dose_minutes';
   static const _stayAwakeAfterDoseMinutesKey =
@@ -36,6 +47,12 @@ class RobotFaceSettingsRepository {
           _voiceQuietHoursStartMinutesKey,
           _voiceQuietHoursEndMinutesKey,
           _voiceSafetyDuringQuietHoursEnabledKey,
+          _reminderVoiceEnabledKey,
+          _dispenseNarrationEnabledKey,
+          _safetyConfirmationVoiceEnabledKey,
+          _missedDoseVoiceEnabledKey,
+          _controllerAlertVoiceEnabledKey,
+          _idleChatterVoiceEnabledKey,
           _wakeBeforeDoseMinutesKey,
           _stayAwakeAfterDoseMinutesKey,
         })
@@ -53,6 +70,12 @@ class RobotFaceSettingsRepository {
       _voiceQuietHoursStartMinutesKey,
       _voiceQuietHoursEndMinutesKey,
       _voiceSafetyDuringQuietHoursEnabledKey,
+      _reminderVoiceEnabledKey,
+      _dispenseNarrationEnabledKey,
+      _safetyConfirmationVoiceEnabledKey,
+      _missedDoseVoiceEnabledKey,
+      _controllerAlertVoiceEnabledKey,
+      _idleChatterVoiceEnabledKey,
       _wakeBeforeDoseMinutesKey,
       _stayAwakeAfterDoseMinutesKey,
     });
@@ -99,6 +122,30 @@ class RobotFaceSettingsRepository {
         settings.voiceSafetyDuringQuietHoursEnabled.toString(),
       );
       await _database.setAppSetting(
+        _reminderVoiceEnabledKey,
+        settings.reminderVoiceEnabled.toString(),
+      );
+      await _database.setAppSetting(
+        _dispenseNarrationEnabledKey,
+        settings.dispenseNarrationEnabled.toString(),
+      );
+      await _database.setAppSetting(
+        _safetyConfirmationVoiceEnabledKey,
+        settings.safetyConfirmationVoiceEnabled.toString(),
+      );
+      await _database.setAppSetting(
+        _missedDoseVoiceEnabledKey,
+        settings.missedDoseVoiceEnabled.toString(),
+      );
+      await _database.setAppSetting(
+        _controllerAlertVoiceEnabledKey,
+        settings.controllerAlertVoiceEnabled.toString(),
+      );
+      await _database.setAppSetting(
+        _idleChatterVoiceEnabledKey,
+        settings.idleChatterVoiceEnabled.toString(),
+      );
+      await _database.setAppSetting(
         _wakeBeforeDoseMinutesKey,
         settings.wakeBeforeDoseMinutes.toString(),
       );
@@ -141,6 +188,26 @@ class RobotFaceSettingsRepository {
           values.containsKey(_voiceSafetyDuringQuietHoursEnabledKey)
           ? values[_voiceSafetyDuringQuietHoursEnabledKey] == 'true'
           : defaultSettings.voiceSafetyDuringQuietHoursEnabled,
+      reminderVoiceEnabled: values.containsKey(_reminderVoiceEnabledKey)
+          ? values[_reminderVoiceEnabledKey] == 'true'
+          : defaultSettings.reminderVoiceEnabled,
+      dispenseNarrationEnabled: values.containsKey(_dispenseNarrationEnabledKey)
+          ? values[_dispenseNarrationEnabledKey] == 'true'
+          : defaultSettings.dispenseNarrationEnabled,
+      safetyConfirmationVoiceEnabled:
+          values.containsKey(_safetyConfirmationVoiceEnabledKey)
+          ? values[_safetyConfirmationVoiceEnabledKey] == 'true'
+          : defaultSettings.safetyConfirmationVoiceEnabled,
+      missedDoseVoiceEnabled: values.containsKey(_missedDoseVoiceEnabledKey)
+          ? values[_missedDoseVoiceEnabledKey] == 'true'
+          : defaultSettings.missedDoseVoiceEnabled,
+      controllerAlertVoiceEnabled:
+          values.containsKey(_controllerAlertVoiceEnabledKey)
+          ? values[_controllerAlertVoiceEnabledKey] == 'true'
+          : defaultSettings.controllerAlertVoiceEnabled,
+      idleChatterVoiceEnabled: values.containsKey(_idleChatterVoiceEnabledKey)
+          ? values[_idleChatterVoiceEnabledKey] == 'true'
+          : defaultSettings.idleChatterVoiceEnabled,
       wakeBeforeDoseMinutes:
           int.tryParse(values[_wakeBeforeDoseMinutesKey] ?? '') ??
           RobotFaceSettings.defaultWakeBeforeDoseMinutes,

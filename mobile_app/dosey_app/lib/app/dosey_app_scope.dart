@@ -44,6 +44,7 @@ class DoseyAppScope extends StatefulWidget {
     this.missedDoseReconciliationService,
     this.bleGateway,
     this.connectivityGateway,
+    this.voicePlayer,
   });
 
   final Widget child;
@@ -54,6 +55,7 @@ class DoseyAppScope extends StatefulWidget {
   final MissedDoseReconciliationService? missedDoseReconciliationService;
   final BleGateway? bleGateway;
   final ConnectivityGateway? connectivityGateway;
+  final DoseyVoicePlayer? voicePlayer;
 
   static DoseyAppDependencies of(BuildContext context) {
     final dependencies = maybeOf(context);
@@ -175,9 +177,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       ble: widget.bleGateway ?? FlutterBluePlusBleGateway(),
       connectivity: widget.connectivityGateway ?? ConnectivityPlusGateway(),
       reminderScheduler: reminderScheduler,
-      voicePlayer: DoseyVoicePlayer(
-        playbackGateway: JustAudioVoicePlaybackGateway(),
-      ),
+      voicePlayer:
+          widget.voicePlayer ??
+          DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway()),
       notificationTaps: notificationTaps,
       permissions: widget.permissionGateway ?? PermissionHandlerGateway(),
     );

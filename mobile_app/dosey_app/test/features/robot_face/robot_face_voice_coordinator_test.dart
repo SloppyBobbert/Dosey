@@ -279,6 +279,112 @@ void main() {
     ]);
   });
 
+  test('blocked reminder category suppresses reminder speech', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        reminderVoiceEnabled: false,
+      ),
+    );
+    addTearDown(harness.dispose);
+
+    harness.emit(_state(RobotFaceMode.doseApproaching));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, isEmpty);
+  });
+
+  test('blocked dispense category suppresses dispense narration', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        dispenseNarrationEnabled: false,
+      ),
+    );
+    addTearDown(harness.dispose);
+
+    harness.emit(_state(RobotFaceMode.dispensing));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, isEmpty);
+  });
+
+  test('blocked idle category suppresses idle chatter', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceVarietyEnabled: true,
+        idleChatterVoiceEnabled: false,
+      ),
+    );
+    addTearDown(harness.dispose);
+
+    harness.emit(_state(RobotFaceMode.idle));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, isEmpty);
+  });
+
+  test('blocked missed category suppresses missed speech', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        missedDoseVoiceEnabled: false,
+      ),
+    );
+    addTearDown(harness.dispose);
+
+    harness.emit(_state(RobotFaceMode.missed));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, isEmpty);
+  });
+
+  test('blocked controller category suppresses controller speech', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        controllerAlertVoiceEnabled: false,
+      ),
+    );
+    addTearDown(harness.dispose);
+
+    harness.emit(_state(RobotFaceMode.offline));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, isEmpty);
+  });
+
+  test('quiet-hour safety override still respects category toggles', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceQuietHoursEnabled: true,
+        voiceSafetyDuringQuietHoursEnabled: true,
+        safetyConfirmationVoiceEnabled: false,
+        missedDoseVoiceEnabled: true,
+        controllerAlertVoiceEnabled: true,
+      ),
+      now: DateTime(2026, 7, 20, 23),
+    );
+    addTearDown(harness.dispose);
+
+    harness.emit(
+      _state(
+        RobotFaceMode.waitingForConfirmation,
+        isAwaitingControllerConfirmation: true,
+      ),
+    );
+    harness.emit(_state(RobotFaceMode.missed));
+    harness.emit(_state(RobotFaceMode.offline));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, [
+      DoseyVoicePhrase.missedWarning,
+      DoseyVoicePhrase.controllerOffline,
+    ]);
+  });
+
   test(
     'idle chatter never starts directly from missed or dispensing states',
     () async {

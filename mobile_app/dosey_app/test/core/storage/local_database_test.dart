@@ -38,6 +38,19 @@ void main() {
       expect(
         await repository.getSettings(),
         const RobotFaceSettings(
+          voiceVolumePreset: RobotVoiceVolumePreset.normal,
+          voiceQuietHoursEnabled: false,
+          voiceQuietHoursStartMinutes:
+              RobotFaceSettings.defaultVoiceQuietHoursStartMinutes,
+          voiceQuietHoursEndMinutes:
+              RobotFaceSettings.defaultVoiceQuietHoursEndMinutes,
+          voiceSafetyDuringQuietHoursEnabled: false,
+          reminderVoiceEnabled: true,
+          dispenseNarrationEnabled: true,
+          safetyConfirmationVoiceEnabled: true,
+          missedDoseVoiceEnabled: true,
+          controllerAlertVoiceEnabled: true,
+          idleChatterVoiceEnabled: true,
           wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
           stayAwakeAfterDoseMinutes:
               RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -62,6 +75,19 @@ void main() {
       expect(
         await repository.getSettings(),
         const RobotFaceSettings(
+          voiceVolumePreset: RobotVoiceVolumePreset.normal,
+          voiceQuietHoursEnabled: false,
+          voiceQuietHoursStartMinutes:
+              RobotFaceSettings.defaultVoiceQuietHoursStartMinutes,
+          voiceQuietHoursEndMinutes:
+              RobotFaceSettings.defaultVoiceQuietHoursEndMinutes,
+          voiceSafetyDuringQuietHoursEnabled: false,
+          reminderVoiceEnabled: true,
+          dispenseNarrationEnabled: true,
+          safetyConfirmationVoiceEnabled: true,
+          missedDoseVoiceEnabled: true,
+          controllerAlertVoiceEnabled: true,
+          idleChatterVoiceEnabled: true,
           wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
           stayAwakeAfterDoseMinutes:
               RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -90,6 +116,12 @@ void main() {
         voiceQuietHoursStartMinutes: 21 * 60,
         voiceQuietHoursEndMinutes: 6 * 60,
         voiceSafetyDuringQuietHoursEnabled: true,
+        reminderVoiceEnabled: false,
+        dispenseNarrationEnabled: false,
+        safetyConfirmationVoiceEnabled: false,
+        missedDoseVoiceEnabled: false,
+        controllerAlertVoiceEnabled: false,
+        idleChatterVoiceEnabled: false,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),
@@ -98,6 +130,19 @@ void main() {
 
     expect(states, [
       const RobotFaceSettings(
+        voiceVolumePreset: RobotVoiceVolumePreset.normal,
+        voiceQuietHoursEnabled: false,
+        voiceQuietHoursStartMinutes:
+            RobotFaceSettings.defaultVoiceQuietHoursStartMinutes,
+        voiceQuietHoursEndMinutes:
+            RobotFaceSettings.defaultVoiceQuietHoursEndMinutes,
+        voiceSafetyDuringQuietHoursEnabled: false,
+        reminderVoiceEnabled: true,
+        dispenseNarrationEnabled: true,
+        safetyConfirmationVoiceEnabled: true,
+        missedDoseVoiceEnabled: true,
+        controllerAlertVoiceEnabled: true,
+        idleChatterVoiceEnabled: true,
         wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
         stayAwakeAfterDoseMinutes:
             RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -112,6 +157,12 @@ void main() {
         voiceQuietHoursStartMinutes: 21 * 60,
         voiceQuietHoursEndMinutes: 6 * 60,
         voiceSafetyDuringQuietHoursEnabled: true,
+        reminderVoiceEnabled: false,
+        dispenseNarrationEnabled: false,
+        safetyConfirmationVoiceEnabled: false,
+        missedDoseVoiceEnabled: false,
+        controllerAlertVoiceEnabled: false,
+        idleChatterVoiceEnabled: false,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),

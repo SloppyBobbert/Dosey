@@ -24,7 +24,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 - Local prescription and schedule editing with remaining-dose counts, refill thresholds, refill-add history, schedule profiles, enabled/disabled state, and duplicate-time checks.
 - Today dose actions only spend inventory for taken-style confirmations, while duplicate terminal actions for the same dose are ignored.
 - Daviky carousel loading workflow that assigns schedules to slots, marks slots loaded, shows loaded/ready counts, disables dispense buttons while the controller is offline, and logs dispense movement separately from taken confirmation.
-- Android Robot Mode opens Robot Face first, with tap-to-wake interaction, clearer mounted-phone sleepy/awake visuals, and local wake-before-dose, stay-awake, flip, dimming, prerecorded robot voice, voice variety, volume, and quiet-hours settings.
+- Android Robot Mode opens Robot Face first, with tap-to-wake interaction, clearer mounted-phone sleepy/awake visuals, and local wake-before-dose, stay-awake, flip, dimming, prerecorded robot voice, per-category voice toggles, a test-voice button, voice variety, volume, and quiet-hours settings.
 - Robot Face has simulator-backed dose states, a dominant red missed-dose alert, and a non-terminal missed-dose recognition action. Recognition records that the warning was seen; it does not mark the dose taken, skipped, or inventory-changing.
 - Device roles: Android robot phone, Android personal phone, and iOS personal phone only.
 - `flutter_blue_plus` BLE foundation behind an app-owned interface; protocol still incomplete.

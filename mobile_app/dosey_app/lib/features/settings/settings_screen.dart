@@ -4,6 +4,7 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:flutter/material.dart';
 
@@ -725,6 +726,79 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                Text(
+                  'Voice types',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.reminderVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Reminder voice',
+                  subtitle: 'Upcoming, ready, and normal cup-check reminders.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(reminderVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.dispenseNarrationEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Dispense narration',
+                  subtitle: 'Preparing, dispensing, and movement phrases.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(dispenseNarrationEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.safetyConfirmationVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Safety/confirmation voice',
+                  subtitle: 'Check-cup and confirm-only-after-taken prompts.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(safetyConfirmationVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.missedDoseVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Missed dose voice',
+                  subtitle: 'Missed-dose and review phrases.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(missedDoseVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.controllerAlertVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Controller alert voice',
+                  subtitle: 'Offline, error, attention, and recovery prompts.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(controllerAlertVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.idleChatterVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Idle chatter voice',
+                  subtitle: 'Optional idle chatter when voice variety is on.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(idleChatterVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: !_isSaving && settings.voiceEnabled
+                      ? () => _testVoice(settings)
+                      : null,
+                  icon: const Icon(Icons.volume_up_outlined),
+                  label: const Text('Test voice'),
+                ),
+                const SizedBox(height: 12),
                 Row(
                   children: [
                     Expanded(
@@ -779,6 +853,20 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
       if (mounted) {
         setState(() => _isSaving = false);
       }
+    }
+  }
+
+  Future<void> _testVoice(RobotFaceSettings settings) async {
+    try {
+      await DoseyAppScope.of(context).voicePlayer.speak(
+        DoseyVoicePhrase.ready,
+        volume: settings.voiceVolumePreset.volume,
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Robot voice test failed: $error')),
+      );
     }
   }
 }

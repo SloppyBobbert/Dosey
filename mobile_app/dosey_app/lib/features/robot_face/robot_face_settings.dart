@@ -21,6 +21,12 @@ class RobotFaceSettings {
     int voiceQuietHoursStartMinutes = defaultVoiceQuietHoursStartMinutes,
     int voiceQuietHoursEndMinutes = defaultVoiceQuietHoursEndMinutes,
     this.voiceSafetyDuringQuietHoursEnabled = false,
+    this.reminderVoiceEnabled = true,
+    this.dispenseNarrationEnabled = true,
+    this.safetyConfirmationVoiceEnabled = true,
+    this.missedDoseVoiceEnabled = true,
+    this.controllerAlertVoiceEnabled = true,
+    this.idleChatterVoiceEnabled = true,
     int wakeBeforeDoseMinutes = defaultWakeBeforeDoseMinutes,
     int stayAwakeAfterDoseMinutes = defaultStayAwakeAfterDoseMinutes,
   }) : wakeBeforeDoseMinutes = wakeBeforeDoseMinutes < 0
@@ -46,6 +52,12 @@ class RobotFaceSettings {
   final int voiceQuietHoursStartMinutes;
   final int voiceQuietHoursEndMinutes;
   final bool voiceSafetyDuringQuietHoursEnabled;
+  final bool reminderVoiceEnabled;
+  final bool dispenseNarrationEnabled;
+  final bool safetyConfirmationVoiceEnabled;
+  final bool missedDoseVoiceEnabled;
+  final bool controllerAlertVoiceEnabled;
+  final bool idleChatterVoiceEnabled;
   final int wakeBeforeDoseMinutes;
   final int stayAwakeAfterDoseMinutes;
 
@@ -59,6 +71,12 @@ class RobotFaceSettings {
     int? voiceQuietHoursStartMinutes,
     int? voiceQuietHoursEndMinutes,
     bool? voiceSafetyDuringQuietHoursEnabled,
+    bool? reminderVoiceEnabled,
+    bool? dispenseNarrationEnabled,
+    bool? safetyConfirmationVoiceEnabled,
+    bool? missedDoseVoiceEnabled,
+    bool? controllerAlertVoiceEnabled,
+    bool? idleChatterVoiceEnabled,
     int? wakeBeforeDoseMinutes,
     int? stayAwakeAfterDoseMinutes,
   }) {
@@ -77,6 +95,17 @@ class RobotFaceSettings {
       voiceSafetyDuringQuietHoursEnabled:
           voiceSafetyDuringQuietHoursEnabled ??
           this.voiceSafetyDuringQuietHoursEnabled,
+      reminderVoiceEnabled: reminderVoiceEnabled ?? this.reminderVoiceEnabled,
+      dispenseNarrationEnabled:
+          dispenseNarrationEnabled ?? this.dispenseNarrationEnabled,
+      safetyConfirmationVoiceEnabled:
+          safetyConfirmationVoiceEnabled ?? this.safetyConfirmationVoiceEnabled,
+      missedDoseVoiceEnabled:
+          missedDoseVoiceEnabled ?? this.missedDoseVoiceEnabled,
+      controllerAlertVoiceEnabled:
+          controllerAlertVoiceEnabled ?? this.controllerAlertVoiceEnabled,
+      idleChatterVoiceEnabled:
+          idleChatterVoiceEnabled ?? this.idleChatterVoiceEnabled,
       wakeBeforeDoseMinutes:
           wakeBeforeDoseMinutes ?? this.wakeBeforeDoseMinutes,
       stayAwakeAfterDoseMinutes:
@@ -101,6 +130,13 @@ class RobotFaceSettings {
         other.voiceQuietHoursEndMinutes == voiceQuietHoursEndMinutes &&
         other.voiceSafetyDuringQuietHoursEnabled ==
             voiceSafetyDuringQuietHoursEnabled &&
+        other.reminderVoiceEnabled == reminderVoiceEnabled &&
+        other.dispenseNarrationEnabled == dispenseNarrationEnabled &&
+        other.safetyConfirmationVoiceEnabled ==
+            safetyConfirmationVoiceEnabled &&
+        other.missedDoseVoiceEnabled == missedDoseVoiceEnabled &&
+        other.controllerAlertVoiceEnabled == controllerAlertVoiceEnabled &&
+        other.idleChatterVoiceEnabled == idleChatterVoiceEnabled &&
         other.wakeBeforeDoseMinutes == wakeBeforeDoseMinutes &&
         other.stayAwakeAfterDoseMinutes == stayAwakeAfterDoseMinutes;
   }
@@ -116,6 +152,12 @@ class RobotFaceSettings {
     voiceQuietHoursStartMinutes,
     voiceQuietHoursEndMinutes,
     voiceSafetyDuringQuietHoursEnabled,
+    reminderVoiceEnabled,
+    dispenseNarrationEnabled,
+    safetyConfirmationVoiceEnabled,
+    missedDoseVoiceEnabled,
+    controllerAlertVoiceEnabled,
+    idleChatterVoiceEnabled,
     wakeBeforeDoseMinutes,
     stayAwakeAfterDoseMinutes,
   );

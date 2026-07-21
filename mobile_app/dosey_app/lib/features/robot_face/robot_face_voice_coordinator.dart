@@ -61,6 +61,9 @@ class RobotFaceVoiceCoordinator {
     if (_isInsideQuietHours && !_canSpeakDuringQuietHours(effect)) {
       return;
     }
+    if (!_isCategoryEnabled(effect.kind)) {
+      return;
+    }
 
     final effectiveKey = '${effect.triggerKey}:${effect.phrase.name}';
     if (effect.dedupe && effectiveKey == _lastEffectiveKey) {
@@ -158,6 +161,9 @@ class RobotFaceVoiceCoordinator {
     if (!_settings.voiceVarietyEnabled) {
       return false;
     }
+    if (!_settings.idleChatterVoiceEnabled) {
+      return false;
+    }
     if (state.mode != RobotFaceMode.idle &&
         state.mode != RobotFaceMode.sleepy) {
       return false;
@@ -241,6 +247,20 @@ class RobotFaceVoiceCoordinator {
       _VoiceEffectKind.missedReview ||
       _VoiceEffectKind.controllerHardware => true,
       _ => false,
+    };
+  }
+
+  bool _isCategoryEnabled(_VoiceEffectKind kind) {
+    return switch (kind) {
+      _VoiceEffectKind.idle => _settings.idleChatterVoiceEnabled,
+      _VoiceEffectKind.reminder ||
+      _VoiceEffectKind.ready => _settings.reminderVoiceEnabled,
+      _VoiceEffectKind.dispensing => _settings.dispenseNarrationEnabled,
+      _VoiceEffectKind.confirmationSafety =>
+        _settings.safetyConfirmationVoiceEnabled,
+      _VoiceEffectKind.missedReview => _settings.missedDoseVoiceEnabled,
+      _VoiceEffectKind.controllerHardware =>
+        _settings.controllerAlertVoiceEnabled,
     };
   }
 
