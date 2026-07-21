@@ -83,7 +83,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('10 minutes'), findsNWidgets(2));
+    expect(find.text('10 minutes'), findsWidgets);
   });
 
   testWidgets('personal role does not show robot face settings controls', (
@@ -178,6 +178,16 @@ void main() {
       key: const ValueKey<String>('Voice volume:RobotVoiceVolumePreset.normal'),
       value: RobotVoiceVolumePreset.loud,
     );
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Idle chatter cooldown:10'),
+      value: 15,
+    );
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Reminder repeat cooldown:5'),
+      value: 10,
+    );
     await tester.tap(find.text('Quiet hours'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
@@ -216,6 +226,8 @@ void main() {
         missedDoseVoiceEnabled: true,
         controllerAlertVoiceEnabled: true,
         idleChatterVoiceEnabled: true,
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
       ),
     );
 
@@ -272,6 +284,8 @@ void main() {
     expect(updatedSettings.missedDoseVoiceEnabled, isFalse);
     expect(updatedSettings.controllerAlertVoiceEnabled, isFalse);
     expect(updatedSettings.idleChatterVoiceEnabled, isFalse);
+    expect(updatedSettings.idleChatterCooldownMinutes, 15);
+    expect(updatedSettings.reminderRepeatCooldownMinutes, 10);
     expect(updatedSettings.wakeBeforeDoseMinutes, 15);
     expect(updatedSettings.stayAwakeAfterDoseMinutes, 30);
 
@@ -291,9 +305,10 @@ void main() {
     expect(switches.elementAt(10).value, isFalse);
     expect(switches.elementAt(11).value, isFalse);
     expect(find.text('Loud'), findsOneWidget);
+    expect(find.text('15 minutes'), findsWidgets);
+    expect(find.text('10 minutes'), findsWidgets);
     expect(find.text('9:00 PM'), findsOneWidget);
     expect(find.text('6:00 AM'), findsOneWidget);
-    expect(find.text('15 minutes'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
   });
 
@@ -306,6 +321,8 @@ void main() {
 
     await RobotFaceSettingsRepository(database).saveSettings(
       const RobotFaceSettings(
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 30,
       ),
@@ -316,7 +333,8 @@ void main() {
 
     await _scrollToRobotFace(tester);
 
-    expect(find.text('15 minutes'), findsOneWidget);
+    expect(find.text('15 minutes'), findsWidgets);
+    expect(find.text('10 minutes'), findsWidgets);
     expect(find.text('30 minutes'), findsOneWidget);
   });
 
@@ -600,18 +618,20 @@ void main() {
 
     await _scrollToRobotFace(tester);
 
-    expect(find.text('10 minutes'), findsNWidgets(2));
+    expect(find.text('10 minutes'), findsWidgets);
 
     await repository.saveSettings(
       const RobotFaceSettings(
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 30,
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('10 minutes'), findsNothing);
-    expect(find.text('15 minutes'), findsOneWidget);
+    expect(find.text('10 minutes'), findsWidgets);
+    expect(find.text('15 minutes'), findsWidgets);
     expect(find.text('30 minutes'), findsOneWidget);
   });
 

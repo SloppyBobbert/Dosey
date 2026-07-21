@@ -51,6 +51,10 @@ void main() {
           missedDoseVoiceEnabled: true,
           controllerAlertVoiceEnabled: true,
           idleChatterVoiceEnabled: true,
+          idleChatterCooldownMinutes:
+              RobotFaceSettings.defaultIdleChatterCooldownMinutes,
+          reminderRepeatCooldownMinutes:
+              RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
           wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
           stayAwakeAfterDoseMinutes:
               RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -71,6 +75,14 @@ void main() {
         'robot_face_stay_awake_after_dose_minutes',
         'not-a-number',
       );
+      await database.setAppSetting(
+        'robot_face_idle_chatter_cooldown_minutes',
+        '-1',
+      );
+      await database.setAppSetting(
+        'robot_face_reminder_repeat_cooldown_minutes',
+        'oops',
+      );
 
       expect(
         await repository.getSettings(),
@@ -88,6 +100,10 @@ void main() {
           missedDoseVoiceEnabled: true,
           controllerAlertVoiceEnabled: true,
           idleChatterVoiceEnabled: true,
+          idleChatterCooldownMinutes:
+              RobotFaceSettings.defaultIdleChatterCooldownMinutes,
+          reminderRepeatCooldownMinutes:
+              RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
           wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
           stayAwakeAfterDoseMinutes:
               RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -122,6 +138,8 @@ void main() {
         missedDoseVoiceEnabled: false,
         controllerAlertVoiceEnabled: false,
         idleChatterVoiceEnabled: false,
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),
@@ -143,6 +161,10 @@ void main() {
         missedDoseVoiceEnabled: true,
         controllerAlertVoiceEnabled: true,
         idleChatterVoiceEnabled: true,
+        idleChatterCooldownMinutes:
+            RobotFaceSettings.defaultIdleChatterCooldownMinutes,
+        reminderRepeatCooldownMinutes:
+            RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
         wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
         stayAwakeAfterDoseMinutes:
             RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -163,6 +185,8 @@ void main() {
         missedDoseVoiceEnabled: false,
         controllerAlertVoiceEnabled: false,
         idleChatterVoiceEnabled: false,
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),

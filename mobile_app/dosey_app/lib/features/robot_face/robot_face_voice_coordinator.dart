@@ -20,7 +20,6 @@ class RobotFaceVoiceCoordinator {
     AppDevicePlatform Function()? platform,
     DateTime Function()? now,
     int Function(int max)? randomIndex,
-    this.idleChatterCooldown = const Duration(minutes: 10),
   }) : _voicePlayer = voicePlayer,
        _platform = platform ?? currentAppDevicePlatform,
        _now = now ?? DateTime.now,
@@ -36,7 +35,6 @@ class RobotFaceVoiceCoordinator {
   final AppDevicePlatform Function() _platform;
   final DateTime Function() _now;
   final int Function(int max) _randomIndex;
-  final Duration idleChatterCooldown;
   late final List<StreamSubscription<Object?>> _subscriptions;
 
   RobotFaceSettings _settings = const RobotFaceSettings();
@@ -44,6 +42,8 @@ class RobotFaceVoiceCoordinator {
   RobotFaceState? _lastState;
   String? _lastEffectiveKey;
   DateTime? _lastIdleChatterAt;
+  final Map<_VoiceEffectKind, DateTime> _lastCategorySpokenAt =
+      <_VoiceEffectKind, DateTime>{};
 
   Future<void> close() async {
     for (final subscription in _subscriptions) {
@@ -69,8 +69,14 @@ class RobotFaceVoiceCoordinator {
     if (effect.dedupe && effectiveKey == _lastEffectiveKey) {
       return;
     }
+    if (_isCooldownSuppressed(effect)) {
+      return;
+    }
     if (effect.dedupe) {
       _lastEffectiveKey = effectiveKey;
+    }
+    if (_usesReminderRepeatCooldown(effect.kind)) {
+      _lastCategorySpokenAt[effect.kind] = _now();
     }
     if (effect.isIdleChatter) {
       _lastIdleChatterAt = _now();
@@ -181,7 +187,33 @@ class RobotFaceVoiceCoordinator {
     if (lastIdleChatterAt == null) {
       return true;
     }
-    return _now().difference(lastIdleChatterAt) >= idleChatterCooldown;
+    final cooldown = Duration(minutes: _settings.idleChatterCooldownMinutes);
+    if (cooldown == Duration.zero) {
+      return true;
+    }
+    return _now().difference(lastIdleChatterAt) >= cooldown;
+  }
+
+  bool _isCooldownSuppressed(_VoiceEffect effect) {
+    if (!_usesReminderRepeatCooldown(effect.kind)) {
+      return false;
+    }
+
+    final cooldown = Duration(minutes: _settings.reminderRepeatCooldownMinutes);
+    if (cooldown == Duration.zero) {
+      return false;
+    }
+
+    final lastSpokenAt = _lastCategorySpokenAt[effect.kind];
+    if (lastSpokenAt == null) {
+      return false;
+    }
+
+    return _now().difference(lastSpokenAt) < cooldown;
+  }
+
+  bool _usesReminderRepeatCooldown(_VoiceEffectKind kind) {
+    return kind == _VoiceEffectKind.reminder || kind == _VoiceEffectKind.ready;
   }
 
   _VoiceTrigger? _triggerFor(RobotFaceState state) {

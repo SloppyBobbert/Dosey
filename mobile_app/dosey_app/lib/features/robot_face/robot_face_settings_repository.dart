@@ -28,6 +28,10 @@ class RobotFaceSettingsRepository {
       'robot_face_controller_alert_voice_enabled';
   static const _idleChatterVoiceEnabledKey =
       'robot_face_idle_chatter_voice_enabled';
+  static const _idleChatterCooldownMinutesKey =
+      'robot_face_idle_chatter_cooldown_minutes';
+  static const _reminderRepeatCooldownMinutesKey =
+      'robot_face_reminder_repeat_cooldown_minutes';
   static const _wakeBeforeDoseMinutesKey =
       'robot_face_wake_before_dose_minutes';
   static const _stayAwakeAfterDoseMinutesKey =
@@ -53,6 +57,8 @@ class RobotFaceSettingsRepository {
           _missedDoseVoiceEnabledKey,
           _controllerAlertVoiceEnabledKey,
           _idleChatterVoiceEnabledKey,
+          _idleChatterCooldownMinutesKey,
+          _reminderRepeatCooldownMinutesKey,
           _wakeBeforeDoseMinutesKey,
           _stayAwakeAfterDoseMinutesKey,
         })
@@ -76,6 +82,8 @@ class RobotFaceSettingsRepository {
       _missedDoseVoiceEnabledKey,
       _controllerAlertVoiceEnabledKey,
       _idleChatterVoiceEnabledKey,
+      _idleChatterCooldownMinutesKey,
+      _reminderRepeatCooldownMinutesKey,
       _wakeBeforeDoseMinutesKey,
       _stayAwakeAfterDoseMinutesKey,
     });
@@ -146,6 +154,14 @@ class RobotFaceSettingsRepository {
         settings.idleChatterVoiceEnabled.toString(),
       );
       await _database.setAppSetting(
+        _idleChatterCooldownMinutesKey,
+        settings.idleChatterCooldownMinutes.toString(),
+      );
+      await _database.setAppSetting(
+        _reminderRepeatCooldownMinutesKey,
+        settings.reminderRepeatCooldownMinutes.toString(),
+      );
+      await _database.setAppSetting(
         _wakeBeforeDoseMinutesKey,
         settings.wakeBeforeDoseMinutes.toString(),
       );
@@ -208,6 +224,12 @@ class RobotFaceSettingsRepository {
       idleChatterVoiceEnabled: values.containsKey(_idleChatterVoiceEnabledKey)
           ? values[_idleChatterVoiceEnabledKey] == 'true'
           : defaultSettings.idleChatterVoiceEnabled,
+      idleChatterCooldownMinutes:
+          int.tryParse(values[_idleChatterCooldownMinutesKey] ?? '') ??
+          RobotFaceSettings.defaultIdleChatterCooldownMinutes,
+      reminderRepeatCooldownMinutes:
+          int.tryParse(values[_reminderRepeatCooldownMinutesKey] ?? '') ??
+          RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
       wakeBeforeDoseMinutes:
           int.tryParse(values[_wakeBeforeDoseMinutesKey] ?? '') ??
           RobotFaceSettings.defaultWakeBeforeDoseMinutes,

@@ -577,6 +577,8 @@ class _RobotFaceSettingsSection extends StatelessWidget {
 
 class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
   static const List<int> _timingOptions = [0, 5, 10, 15, 30, 60];
+  static const List<int> _idleChatterCooldownOptions = [0, 5, 10, 15, 30];
+  static const List<int> _reminderRepeatCooldownOptions = [0, 2, 5, 10, 15];
   static final List<int> _quietHourOptions = <int>[
     for (var hour = 0; hour < 24; hour++) hour * 60,
   ];
@@ -593,6 +595,10 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
       RobotFaceSettings.defaultWakeBeforeDoseMinutes;
   static const int _defaultStayAwakeAfterDoseMinutes =
       RobotFaceSettings.defaultStayAwakeAfterDoseMinutes;
+  static const int _defaultIdleChatterCooldownMinutes =
+      RobotFaceSettings.defaultIdleChatterCooldownMinutes;
+  static const int _defaultReminderRepeatCooldownMinutes =
+      RobotFaceSettings.defaultReminderRepeatCooldownMinutes;
 
   bool _isSaving = false;
 
@@ -677,6 +683,42 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(voiceVolumePreset: value),
                   ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _RobotFaceTimingDropdown(
+                        label: 'Idle chatter cooldown',
+                        helperText:
+                            'Wait this long before optional idle chatter can repeat.',
+                        value: settings.idleChatterCooldownMinutes,
+                        fallbackValue: _defaultIdleChatterCooldownMinutes,
+                        enabled: !_isSaving,
+                        options: _idleChatterCooldownOptions,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(idleChatterCooldownMinutes: value),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _RobotFaceTimingDropdown(
+                        label: 'Reminder repeat cooldown',
+                        helperText:
+                            'Prevent repeated normal reminder voice when screens or state refresh quickly.',
+                        value: settings.reminderRepeatCooldownMinutes,
+                        fallbackValue: _defaultReminderRepeatCooldownMinutes,
+                        enabled: !_isSaving,
+                        options: _reminderRepeatCooldownOptions,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(
+                            reminderRepeatCooldownMinutes: value,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 8),
                 _SettingsSwitchTile(

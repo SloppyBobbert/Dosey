@@ -202,6 +202,7 @@ void main() {
       settings: const RobotFaceSettings(
         voiceEnabled: true,
         voiceVarietyEnabled: true,
+        idleChatterCooldownMinutes: 10,
       ),
       randomIndexes: <int>[0, 7],
       now: DateTime(2026, 7, 20, 9),
@@ -221,6 +222,103 @@ void main() {
       DoseyVoicePhrase.keepingWatch,
     ]);
   });
+
+  test(
+    'idle chatter cooldown off allows repeat after safe state changes',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          voiceVarietyEnabled: true,
+          idleChatterCooldownMinutes: 0,
+        ),
+        randomIndexes: <int>[0, 1],
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+      harness.emit(_state(RobotFaceMode.sleepy));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.awake,
+        DoseyVoicePhrase.helloHere,
+      ]);
+    },
+  );
+
+  test(
+    'reminder repeat cooldown throttles reminder and ready speech',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+
+      harness.now = harness.now.add(const Duration(minutes: 6));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.doseSoon,
+        DoseyVoicePhrase.scheduledDoseReady,
+        DoseyVoicePhrase.doseSoon,
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
+    'urgent categories are not suppressed by reminder repeat cooldown',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 15,
+        ),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      harness.emit(_state(RobotFaceMode.missed));
+      harness.emit(_state(RobotFaceMode.offline));
+      harness.emit(_state(RobotFaceMode.error));
+      harness.emit(
+        _state(
+          RobotFaceMode.waitingForConfirmation,
+          isAwaitingControllerConfirmation: true,
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.doseSoon,
+        DoseyVoicePhrase.scheduledDoseReady,
+        DoseyVoicePhrase.missedWarning,
+        DoseyVoicePhrase.controllerOffline,
+        DoseyVoicePhrase.needsCheckingBeforeContinue,
+        DoseyVoicePhrase.checkRightDose,
+      ]);
+    },
+  );
 
   test(
     'quiet hours without safety override mute event and idle speech',
