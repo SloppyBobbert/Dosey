@@ -24,7 +24,7 @@ This is a prototype and research build. It is not a medical-grade device.
 | Mechanism | Grove servo pusher with a ratchet or physical stop; basic servo movement is confirmed |
 | Shell | Fully LEGO body around the carousel, phone, electronics, cup opening, and service panels |
 | App data | Drift/SQLite on the phone only; no backend or cloud sync yet |
-| App shell | Today, Prescriptions, Schedule, Robot Face on Android Robot Mode, Carousel, Controller, Log, Settings, profile menu, and polished section headers |
+| App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus Robot Face in Android Robot Mode |
 | Safety status | Fake-pill testing only; not for real medication |
 
 ## Safety
@@ -58,7 +58,7 @@ Dosey is built around four main systems:
    - The mounted Android phone is the robot face, speaker, reminder system, and main computer.
    - Robot Mode runs only on Android.
    - Personal Mode runs on Android and iOS phones for patient or caregiver use.
-   - The phone handles schedules, medication data, refill logic, dose history, PIN rules, caregiver logic, UI, reminders, Bluetooth commands, and future cloud or voice features.
+   - The phone handles schedules, medication data, refill logic, dose history, PIN rules, caregiver logic, UI, reminders, Bluetooth commands, fixed prerecorded Robot Mode voice prompts, and future cloud, voice-command, or local AI features.
 
 3. **XIAO and Grove controller**
    - The controller handles direct hardware only: servo movement, PIR, LEDs, buzzer/vibration, buttons, sensor readings, status, and Bluetooth messages.
@@ -95,7 +95,7 @@ The project should now focus on the servo/carousel rig while app MVP work contin
 4. **Basic app MVP** — Continue Robot Mode with the face screen, schedule, loading guide, dispense, refill, history, hardware test, and local safety flows.
 5. **LEGO body integration** — Turn the working rig into a cute, stable, serviceable LEGO robot body.
 6. **Reliability features** — Add heartbeat/offline warnings, refill warnings, missed-dose logic, PIN, error recovery, and index correction.
-7. **Advanced interaction** — Future Piper voices, voice commands, local command recognition, AI experiments, caregiver summaries, video shortcut, and face recognition.
+7. **Advanced interaction** — Future voice commands, local command recognition, AI experiments, caregiver summaries, video shortcut, and face recognition.
 
 Log progress in [`docs/build_log.md`](docs/build_log.md) and criteria in [`docs/test_plan.md`](docs/test_plan.md).
 
@@ -134,7 +134,7 @@ No firmware build command exists yet.
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the practical platform for Robot Mode because the phone lives inside Dosey; iOS remains supported for Personal Mode.
 
-The current app shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices. Android Robot Mode also shows Robot Face. The shell has a top-right profile menu and active app-bar section titles. Its main surfaces now have clearer dashboard cards: a Today next-dose/timeline view that advances past locally completed, skipped, or missed doses; a Prescriptions medication-cabinet summary with local refill countdowns; a Schedule routine-builder summary; a Robot Face screen with local face-state timing settings; a Carousel loading-bay summary; a Controller hardware-bench summary; a Log dose-history summary; and a Settings profile/account hub. It includes safety acknowledgement storage, local prescription and schedule profile management, refill inventory tracking with refill thresholds and refill-add history, Daviky carousel loading assignments with offline dispense controls disabled until the controller is connected, local Drift/SQLite storage, a controller simulator, Google and Apple sign-in plumbing, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
+The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Google and Apple sign-in plumbing, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
 
 BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
 
@@ -187,7 +187,7 @@ The servo has already been tested as strong enough for the current mechanism, so
 
 ## Project status
 
-Early prototype. The repo has a safety-first Flutter app shell, polished setup/status surfaces, Android Robot Face scaffolding, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps dispense separate from taken confirmation, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no production firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
+Early prototype. The repo has a safety-first Flutter app shell, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no production firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
 
 Near-term work:
 

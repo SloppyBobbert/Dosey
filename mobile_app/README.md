@@ -4,11 +4,11 @@ Flutter app workspace for Dosey.
 
 The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phone support in scope. Robot Mode is Android-only because the embedded robot phone is mounted inside Dosey.
 
-## Quick status
+## Workspace summary
 
 | Item | Status |
 | --- | --- |
-| App shell | Today, Prescriptions, Schedule, Robot Face-first Android Robot Mode, Carousel, Controller, Log, Settings, plus profile menu and active section title |
+| App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus Robot Face in Android Robot Mode |
 | Local storage | Drift/SQLite on the phone app only |
 | Prescriptions and schedules | Local prescriptions, refill inventory tracking, schedule profiles, schedule editing, and enabled state |
 | Auth | Google + Apple wrappers, no backend yet |
@@ -17,31 +17,27 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 
 ## Current app
 
-- Flutter/Dart app shell with Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings tabs, plus a Robot Face tab when the device role can host the robot, a profile menu, and active section title in the top app bar.
-- Safety-first home/settings copy, profile/account settings, profile menu shortcuts, and safety acknowledgement storage.
-- Polished dashboard cards for the core local workflow: medication cabinet, routine builder, Today next-dose timeline that skips locally completed, skipped, or missed doses, Android Robot Face, Carousel loading bay, Controller hardware bench, and local dose-history audit trail.
-- Local Drift/SQLite database for app settings, prescriptions, schedule profiles, reminder schedules, carousel slots, cached auth state, and dose logs.
-- Local prescription and schedule editing with remaining-dose counts, refill thresholds, refill-add history, schedule profiles, enabled/disabled state, and duplicate-time checks.
-- Today dose actions only spend inventory for taken-style confirmations, while duplicate terminal actions for the same dose are ignored.
-- Daviky carousel loading workflow that assigns schedules to slots, marks slots loaded, shows loaded/ready counts, disables dispense buttons while the controller is offline, and logs dispense movement separately from taken confirmation.
-- Android Robot Mode opens Robot Face first, with tap-to-wake interaction, clearer mounted-phone sleepy/awake visuals, and local wake-before-dose, stay-awake, flip, dimming, prerecorded robot voice, per-category voice toggles with previews, a test-voice button, voice variety, volume, and quiet-hours settings.
-- Robot Face has simulator-backed dose states, a dominant red missed-dose alert, and a non-terminal missed-dose recognition action. Recognition records that the warning was seen; it does not mark the dose taken, skipped, or inventory-changing.
-- Device roles: Android robot phone, Android personal phone, and iOS personal phone only.
-- `flutter_blue_plus` BLE foundation behind an app-owned interface; protocol still incomplete.
-- `connectivity_plus` behind an app-owned interface for advisory connectivity/Wi-Fi status only, not provisioning.
-- `google_sign_in` plus a native iOS Apple sign-in bridge behind app-owned auth interfaces with no Firebase/Supabase backend yet.
-- `flutter_local_notifications` for local reminder notifications; channel/sound IDs are meant to stay stable, but custom sound assets may still need platform provisioning.
-- `permission_handler` behind an app-owned runtime permission interface.
-- No cloud sync or push notifications yet.
+This directory is the Flutter workspace. The app itself lives in `mobile_app/dosey_app/`, which is the canonical place for current app scope and commands.
+
+Current workspace-level status:
+
+- Android and iOS personal-phone support stay in scope. Robot Mode stays Android-only.
+- The app shell, local storage, refill tracking, reminder flows, Daviky carousel loading workflow, controller simulator, and fixed prerecorded Robot Mode voice prompts are in place.
+- BLE remains foundation-only. The real controller protocol is still incomplete.
+- Google sign-in and native iOS Apple sign-in are wired behind app-owned interfaces. No backend, cloud sync, or push notifications yet.
 - First physical test device: 2024 Moto G Play.
 
 ## Target app direction
 
 Robot Mode on the mounted Android phone should handle the face screen, reminders, dispense UI, missed-dose recognition, hardware test screen, Bluetooth connection, refill status, dose history, fixed prerecorded voice prompts, quiet-hours behavior, and full-screen behavior when practical.
 
+Voice commands and local AI remain future work.
+
 Personal Mode should handle patient or caregiver notifications, missed dose/refill alerts, dose history, and medication schedule editing when permissions allow.
 
 The phone owns medication schedules, medication data, refill logic, PIN rules, caregiver logic, and dose states. The XIAO should only execute and report hardware actions.
+
+For detailed feature coverage, local behavior, and app-specific commands, see [`dosey_app/README.md`](dosey_app/README.md).
 
 Run Flutter commands from `mobile_app/dosey_app/`.
 

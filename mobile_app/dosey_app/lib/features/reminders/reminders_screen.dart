@@ -1,7 +1,7 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
-import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/active_profile_schedules_stream.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
@@ -37,7 +37,7 @@ class RemindersScreen extends StatelessWidget {
                 );
 
                 return StreamBuilder<List<ReminderSchedule>>(
-                  stream: _activeSchedulesStream(
+                  stream: watchActiveProfileSchedules(
                     dependencies.reminders,
                     activeProfile,
                   ),
@@ -106,16 +106,6 @@ class RemindersScreen extends StatelessWidget {
       if (profile.isActive) return profile;
     }
     return profiles.isEmpty ? null : profiles.first;
-  }
-
-  static Stream<List<ReminderSchedule>> _activeSchedulesStream(
-    ReminderRepository reminders,
-    ScheduleProfile? activeProfile,
-  ) {
-    if (activeProfile == null) {
-      return Stream<List<ReminderSchedule>>.value(const <ReminderSchedule>[]);
-    }
-    return reminders.watchSchedules(profileId: activeProfile.id);
   }
 
   /// Counts schedules per profile so saved routines show their scope even when
@@ -995,8 +985,8 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     );
   }
 
-  /// Builds a reminder schedule from a saved prescription, preserving legacy
-  /// schedules by leaving their label-only display intact until edited.
+  /// Builds a reminder schedule from a saved prescription while leaving
+  /// older label-only schedules unchanged until the user edits them.
   Future<void> _save() async {
     if (_isSaving) return;
 
