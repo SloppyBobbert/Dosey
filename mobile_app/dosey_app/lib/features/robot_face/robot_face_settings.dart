@@ -2,7 +2,8 @@ class RobotFaceSettings {
   const RobotFaceSettings({
     this.isFlipped = false,
     this.dimAfterInactivity = true,
-    this.voiceEnabled = true,
+    this.voiceEnabled = false,
+    this.voiceVarietyEnabled = false,
     int wakeBeforeDoseMinutes = defaultWakeBeforeDoseMinutes,
     int stayAwakeAfterDoseMinutes = defaultStayAwakeAfterDoseMinutes,
   }) : wakeBeforeDoseMinutes = wakeBeforeDoseMinutes < 0
@@ -18,6 +19,7 @@ class RobotFaceSettings {
   final bool isFlipped;
   final bool dimAfterInactivity;
   final bool voiceEnabled;
+  final bool voiceVarietyEnabled;
   final int wakeBeforeDoseMinutes;
   final int stayAwakeAfterDoseMinutes;
 
@@ -25,6 +27,7 @@ class RobotFaceSettings {
     bool? isFlipped,
     bool? dimAfterInactivity,
     bool? voiceEnabled,
+    bool? voiceVarietyEnabled,
     int? wakeBeforeDoseMinutes,
     int? stayAwakeAfterDoseMinutes,
   }) {
@@ -32,6 +35,7 @@ class RobotFaceSettings {
       isFlipped: isFlipped ?? this.isFlipped,
       dimAfterInactivity: dimAfterInactivity ?? this.dimAfterInactivity,
       voiceEnabled: voiceEnabled ?? this.voiceEnabled,
+      voiceVarietyEnabled: voiceVarietyEnabled ?? this.voiceVarietyEnabled,
       wakeBeforeDoseMinutes:
           wakeBeforeDoseMinutes ?? this.wakeBeforeDoseMinutes,
       stayAwakeAfterDoseMinutes:
@@ -49,6 +53,7 @@ class RobotFaceSettings {
         other.isFlipped == isFlipped &&
         other.dimAfterInactivity == dimAfterInactivity &&
         other.voiceEnabled == voiceEnabled &&
+        other.voiceVarietyEnabled == voiceVarietyEnabled &&
         other.wakeBeforeDoseMinutes == wakeBeforeDoseMinutes &&
         other.stayAwakeAfterDoseMinutes == stayAwakeAfterDoseMinutes;
   }
@@ -58,6 +63,7 @@ class RobotFaceSettings {
     isFlipped,
     dimAfterInactivity,
     voiceEnabled,
+    voiceVarietyEnabled,
     wakeBeforeDoseMinutes,
     stayAwakeAfterDoseMinutes,
   );

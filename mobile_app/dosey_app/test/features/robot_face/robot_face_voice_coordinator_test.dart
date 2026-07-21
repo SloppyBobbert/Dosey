@@ -17,13 +17,17 @@ void main() {
     );
   });
 
-  test('disabled voice prevents speech', () async {
+  test('disabled voice prevents event and idle speech', () async {
     final harness = _VoiceCoordinatorHarness(
-      settings: const RobotFaceSettings(voiceEnabled: false),
+      settings: const RobotFaceSettings(
+        voiceEnabled: false,
+        voiceVarietyEnabled: true,
+      ),
     );
     addTearDown(harness.dispose);
 
     harness.emit(_state(RobotFaceMode.doseReady));
+    harness.emit(_state(RobotFaceMode.idle));
     await pumpEventQueue();
 
     expect(harness.voiceGateway.playedPhrases, isEmpty);
@@ -32,6 +36,7 @@ void main() {
   test('non-robot role suppresses playback', () async {
     final harness = _VoiceCoordinatorHarness(
       role: AppDeviceRole.androidPersonal,
+      settings: const RobotFaceSettings(voiceEnabled: true),
     );
     addTearDown(harness.dispose);
 
@@ -42,7 +47,10 @@ void main() {
   });
 
   test('non-android platform suppresses playback', () async {
-    final harness = _VoiceCoordinatorHarness(platform: AppDevicePlatform.ios);
+    final harness = _VoiceCoordinatorHarness(
+      platform: AppDevicePlatform.ios,
+      settings: const RobotFaceSettings(voiceEnabled: true),
+    );
     addTearDown(harness.dispose);
 
     harness.emit(_state(RobotFaceMode.doseReady));
@@ -54,7 +62,9 @@ void main() {
   test(
     'dedupe prevents repeated playback for the same effective state',
     () async {
-      final harness = _VoiceCoordinatorHarness();
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: true),
+      );
       addTearDown(harness.dispose);
 
       final state = _state(RobotFaceMode.doseReady);
@@ -68,58 +78,24 @@ void main() {
     },
   );
 
-  test(
-    'first eligible state still speaks after role/settings settle',
-    () async {
-      final states = StreamController<RobotFaceState>.broadcast();
-      final settings = StreamController<RobotFaceSettings>.broadcast();
-      final roles = StreamController<AppDeviceRole>.broadcast();
-      final gateway = _FakeVoicePlaybackGateway();
-      final coordinator = RobotFaceVoiceCoordinator(
-        stateStream: states.stream,
-        settingsStream: settings.stream,
-        roleStream: roles.stream,
-        voicePlayer: DoseyVoicePlayer(playbackGateway: gateway),
-        platform: () => AppDevicePlatform.android,
-      );
-      addTearDown(() async {
-        await coordinator.close();
-        await states.close();
-        await settings.close();
-        await roles.close();
-      });
-
-      states.add(_state(RobotFaceMode.doseReady));
-      roles.add(AppDeviceRole.androidRobot);
-      settings.add(const RobotFaceSettings());
-      states.add(_state(RobotFaceMode.doseReady));
-      await pumpEventQueue();
-
-      expect(gateway.playedPhrases, [DoseyVoicePhrase.scheduledDoseReady]);
-    },
-  );
-
-  test('playback triggers on required robot face state transitions', () async {
-    final harness = _VoiceCoordinatorHarness();
+  test('fixed mode uses deterministic primary phrases', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(voiceEnabled: true),
+    );
     addTearDown(harness.dispose);
 
     harness.emit(_state(RobotFaceMode.doseApproaching));
     harness.emit(_state(RobotFaceMode.doseReady));
-    harness.emit(
-      _state(RobotFaceMode.dispensing, statusLabel: 'Dispensing in progress'),
-    );
+    harness.emit(_state(RobotFaceMode.dispensing));
     harness.emit(
       _state(
         RobotFaceMode.waitingForConfirmation,
-        statusLabel: 'Awaiting dose confirmation',
         isAwaitingControllerConfirmation: true,
       ),
     );
-    harness.emit(_state(RobotFaceMode.missed, statusLabel: 'Dose missed'));
-    harness.emit(
-      _state(RobotFaceMode.offline, statusLabel: 'Controller offline'),
-    );
-    harness.emit(_state(RobotFaceMode.error, statusLabel: 'Dose error logged'));
+    harness.emit(_state(RobotFaceMode.missed));
+    harness.emit(_state(RobotFaceMode.offline));
+    harness.emit(_state(RobotFaceMode.error));
     await pumpEventQueue();
 
     expect(harness.voiceGateway.playedPhrases, [
@@ -133,14 +109,105 @@ void main() {
     ]);
   });
 
+  test(
+    'variety mode chooses from the safe category for each trigger',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          voiceVarietyEnabled: true,
+        ),
+        randomIndexes: <int>[1, 2, 3, 4, 1, 2, 3],
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.doseApproaching));
+      harness.emit(_state(RobotFaceMode.doseReady));
+      harness.emit(_state(RobotFaceMode.dispensing));
+      harness.emit(
+        _state(
+          RobotFaceMode.waitingForConfirmation,
+          isAwaitingControllerConfirmation: true,
+        ),
+      );
+      harness.emit(_state(RobotFaceMode.missed));
+      harness.emit(_state(RobotFaceMode.offline));
+      harness.emit(_state(RobotFaceMode.error));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.almostTime,
+        DoseyVoicePhrase.checkCupBeforeTaking,
+        DoseyVoicePhrase.waitWhileMove,
+        DoseyVoicePhrase.stopAskHelp,
+        DoseyVoicePhrase.missedNeedsReview,
+        DoseyVoicePhrase.controllerStillOffline,
+        DoseyVoicePhrase.controllerReconnect,
+      ]);
+    },
+  );
+
+  test('idle chatter only speaks in safe idle states after cooldown', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceVarietyEnabled: true,
+      ),
+      randomIndexes: <int>[0, 7],
+      now: DateTime(2026, 7, 20, 9),
+    );
+    addTearDown(harness.dispose);
+
+    harness.emit(_state(RobotFaceMode.idle));
+    await pumpEventQueue();
+    harness.emit(_state(RobotFaceMode.sleepy));
+    await pumpEventQueue();
+    harness.now = harness.now.add(const Duration(minutes: 11));
+    harness.emit(_state(RobotFaceMode.idle));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, [
+      DoseyVoicePhrase.awake,
+      DoseyVoicePhrase.keepingWatch,
+    ]);
+  });
+
+  test(
+    'idle chatter never starts directly from missed or dispensing states',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          voiceVarietyEnabled: true,
+        ),
+        randomIndexes: <int>[0, 1],
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(_state(RobotFaceMode.missed));
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.now = harness.now.add(const Duration(minutes: 11));
+      harness.emit(_state(RobotFaceMode.dispensing));
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.missedWarning,
+        DoseyVoicePhrase.dispensingNow,
+      ]);
+    },
+  );
+
   test('voice playback does not write dose-state side effects', () async {
-    final harness = _VoiceCoordinatorHarness();
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(voiceEnabled: true),
+    );
     addTearDown(harness.dispose);
 
     harness.emit(
       _state(
         RobotFaceMode.waitingForConfirmation,
-        statusLabel: 'Awaiting dose confirmation',
         isAwaitingControllerConfirmation: true,
       ),
     );
@@ -158,6 +225,7 @@ void main() {
     await runZonedGuarded(
       () async {
         final harness = _VoiceCoordinatorHarness(
+          settings: const RobotFaceSettings(voiceEnabled: true),
           voiceGateway: _ThrowingVoicePlaybackGateway(),
         );
         addTearDown(harness.dispose);
@@ -181,7 +249,6 @@ void main() {
 
 RobotFaceState _state(
   RobotFaceMode mode, {
-  String? statusLabel,
   bool isAwaitingControllerConfirmation = false,
 }) {
   return RobotFaceState(
@@ -191,7 +258,6 @@ RobotFaceState _state(
     isLandscapeOnly: true,
     rampProgress: mode == RobotFaceMode.doseApproaching ? 0.5 : 1,
     isInAwakeWindow: true,
-    statusLabel: statusLabel,
     isAwaitingControllerConfirmation: isAwaitingControllerConfirmation,
   );
 }
@@ -201,8 +267,11 @@ class _VoiceCoordinatorHarness {
     this.role = AppDeviceRole.androidRobot,
     this.settings = const RobotFaceSettings(),
     this.platform = AppDevicePlatform.android,
+    DateTime? now,
+    List<int> randomIndexes = const <int>[0],
     _InspectableVoicePlaybackGateway? voiceGateway,
-  }) {
+  }) : _randomIndexes = List<int>.from(randomIndexes),
+       now = now ?? DateTime(2026, 7, 20, 9) {
     final gateway = voiceGateway ?? _FakeVoicePlaybackGateway();
     this.voiceGateway = gateway;
     coordinator = RobotFaceVoiceCoordinator(
@@ -211,15 +280,26 @@ class _VoiceCoordinatorHarness {
       roleStream: Stream<AppDeviceRole>.value(role),
       voicePlayer: DoseyVoicePlayer(playbackGateway: gateway),
       platform: () => platform,
+      now: () => this.now,
+      randomIndex: _nextRandomIndex,
     );
   }
 
   final AppDeviceRole role;
   final RobotFaceSettings settings;
   final AppDevicePlatform platform;
+  final List<int> _randomIndexes;
   final states = StreamController<RobotFaceState>.broadcast();
   late final _InspectableVoicePlaybackGateway voiceGateway;
   late final RobotFaceVoiceCoordinator coordinator;
+  DateTime now;
+  int _randomCallCount = 0;
+
+  int _nextRandomIndex(int max) {
+    final value = _randomIndexes[_randomCallCount % _randomIndexes.length];
+    _randomCallCount += 1;
+    return value % max;
+  }
 
   void emit(RobotFaceState state) => states.add(state);
 
@@ -238,6 +318,7 @@ abstract interface class _InspectableVoicePlaybackGateway
 class _FakeVoicePlaybackGateway implements _InspectableVoicePlaybackGateway {
   @override
   final List<DoseyVoicePhrase> playedPhrases = <DoseyVoicePhrase>[];
+
   @override
   bool sideEffectsSeen = false;
 

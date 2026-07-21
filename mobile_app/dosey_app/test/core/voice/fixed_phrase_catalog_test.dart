@@ -2,8 +2,8 @@ import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('fixed phrase catalog matches the approved 30 phrases verbatim', () {
-    expect(FixedPhraseCatalog.phrases, hasLength(30));
+  test('fixed phrase catalog matches the approved 60 phrases verbatim', () {
+    expect(FixedPhraseCatalog.phrases, hasLength(60));
     expect(FixedPhraseCatalog.phrases.map((phrase) => phrase.text).toList(), <
       String
     >[
@@ -37,6 +37,36 @@ void main() {
       'This has not been marked taken.',
       'I cannot reach the controller right now.',
       'Something needs checking before I can continue.',
+      'I am still here.',
+      'Standing by.',
+      'I am keeping watch.',
+      'I will stay quiet, but I am ready.',
+      'Checking in.',
+      'A dose time is getting close.',
+      'I will remind you again when it is time.',
+      'The scheduled dose should be in the cup.',
+      'Please look in the cup before taking anything.',
+      'After taking it, confirm it in the app.',
+      'Starting the dispenser.',
+      'The dispenser is working.',
+      'Hold on while the carousel moves.',
+      'Please do not touch the carousel while it moves.',
+      'The movement is done. Please check the cup.',
+      'Please double check before taking anything.',
+      'If you are not sure, ask for help before taking it.',
+      'I do not confirm doses automatically.',
+      'Use what is in the cup only if it looks right.',
+      'Pause if anything looks wrong.',
+      'The missed dose still needs review.',
+      'My voice did not mark this taken.',
+      'Follow your prescription instructions before deciding what to do next.',
+      'Ask your caregiver, pharmacist, or doctor if you are unsure.',
+      'Please review this before taking any action.',
+      'The controller still looks offline.',
+      'Please check the controller connection.',
+      'The dispenser needs attention.',
+      'Stop and check the dispenser before continuing.',
+      'The controller is ready again.',
     ]);
   });
 
@@ -47,7 +77,7 @@ void main() {
           .map((phrase) => phrase.assetPath)
           .toList();
 
-      expect(assets.toSet(), hasLength(30));
+      expect(assets.toSet(), hasLength(60));
       expect(
         assets.every(
           (asset) => asset.startsWith(FixedPhraseCatalog.assetDirectory),
@@ -56,4 +86,38 @@ void main() {
       );
     },
   );
+
+  test('phrase categories expose safe grouped choices', () {
+    expect(
+      FixedPhraseCatalog.phrasesForCategory(
+        DoseyVoicePhraseCategory.wakeIdle,
+      ).map((phrase) => phrase.phrase),
+      containsAll(<DoseyVoicePhrase>[
+        DoseyVoicePhrase.awake,
+        DoseyVoicePhrase.stillHere,
+      ]),
+    );
+    expect(
+      FixedPhraseCatalog.phrasesForCategory(
+        DoseyVoicePhraseCategory.confirmationSafety,
+      ).map((phrase) => phrase.phrase),
+      containsAll(<DoseyVoicePhrase>[
+        DoseyVoicePhrase.checkRightDose,
+        DoseyVoicePhrase.safetyNoAutoConfirm,
+      ]),
+    );
+  });
+
+  test('missed category does not contain unsafe double-dose advice', () {
+    final missedTexts = FixedPhraseCatalog.phrasesForCategory(
+      DoseyVoicePhraseCategory.missedReview,
+    ).map((phrase) => phrase.text.toLowerCase());
+
+    expect(
+      missedTexts.any(
+        (text) => text.contains('double dose') || text.contains('double-dose'),
+      ),
+      isFalse,
+    );
+  });
 }

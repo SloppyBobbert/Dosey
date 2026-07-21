@@ -135,12 +135,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Robot voice'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Voice variety'));
+    await tester.pumpAndSettle();
     expect(
       await repository.getSettings(),
       const RobotFaceSettings(
         isFlipped: true,
         dimAfterInactivity: false,
-        voiceEnabled: false,
+        voiceEnabled: true,
+        voiceVarietyEnabled: true,
       ),
     );
 
@@ -159,7 +162,8 @@ void main() {
       const RobotFaceSettings(
         isFlipped: true,
         dimAfterInactivity: false,
-        voiceEnabled: false,
+        voiceEnabled: true,
+        voiceVarietyEnabled: true,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 30,
       ),
@@ -170,7 +174,8 @@ void main() {
     );
     expect(switches.elementAt(0).value, isTrue);
     expect(switches.elementAt(1).value, isFalse);
-    expect(switches.elementAt(2).value, isFalse);
+    expect(switches.elementAt(2).value, isTrue);
+    expect(switches.elementAt(3).value, isTrue);
     expect(find.text('15 minutes'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
   });

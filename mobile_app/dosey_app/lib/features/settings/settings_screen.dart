@@ -642,6 +642,17 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   onChanged: (value) =>
                       _saveSettings(settings.copyWith(voiceEnabled: value)),
                 ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.voiceVarietyEnabled,
+                  enabled: !_isSaving,
+                  title: 'Voice variety',
+                  subtitle:
+                      'Use alternate safe phrases when Robot voice is on.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(voiceVarietyEnabled: value),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 Row(
                   children: [

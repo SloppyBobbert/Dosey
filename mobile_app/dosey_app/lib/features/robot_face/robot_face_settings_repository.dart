@@ -7,6 +7,7 @@ class RobotFaceSettingsRepository {
   static const _isFlippedKey = 'robot_face_is_flipped';
   static const _dimAfterInactivityKey = 'robot_face_dim_after_inactivity';
   static const _voiceEnabledKey = 'robot_face_voice_enabled';
+  static const _voiceVarietyEnabledKey = 'robot_face_voice_variety_enabled';
   static const _wakeBeforeDoseMinutesKey =
       'robot_face_wake_before_dose_minutes';
   static const _stayAwakeAfterDoseMinutesKey =
@@ -20,6 +21,7 @@ class RobotFaceSettingsRepository {
           _isFlippedKey,
           _dimAfterInactivityKey,
           _voiceEnabledKey,
+          _voiceVarietyEnabledKey,
           _wakeBeforeDoseMinutesKey,
           _stayAwakeAfterDoseMinutesKey,
         })
@@ -31,6 +33,7 @@ class RobotFaceSettingsRepository {
       _isFlippedKey,
       _dimAfterInactivityKey,
       _voiceEnabledKey,
+      _voiceVarietyEnabledKey,
       _wakeBeforeDoseMinutesKey,
       _stayAwakeAfterDoseMinutesKey,
     });
@@ -51,6 +54,10 @@ class RobotFaceSettingsRepository {
       await _database.setAppSetting(
         _voiceEnabledKey,
         settings.voiceEnabled.toString(),
+      );
+      await _database.setAppSetting(
+        _voiceVarietyEnabledKey,
+        settings.voiceVarietyEnabled.toString(),
       );
       await _database.setAppSetting(
         _wakeBeforeDoseMinutesKey,
@@ -75,6 +82,9 @@ class RobotFaceSettingsRepository {
       voiceEnabled: values.containsKey(_voiceEnabledKey)
           ? values[_voiceEnabledKey] == 'true'
           : defaultSettings.voiceEnabled,
+      voiceVarietyEnabled: values.containsKey(_voiceVarietyEnabledKey)
+          ? values[_voiceVarietyEnabledKey] == 'true'
+          : defaultSettings.voiceVarietyEnabled,
       wakeBeforeDoseMinutes:
           int.tryParse(values[_wakeBeforeDoseMinutesKey] ?? '') ??
           RobotFaceSettings.defaultWakeBeforeDoseMinutes,
