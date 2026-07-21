@@ -118,6 +118,7 @@ class ControllerScreen extends StatelessWidget {
     if (requiresPin && !await authorizeActionPin(context)) {
       return;
     }
+    if (!context.mounted) return;
     try {
       await action();
     } on Object catch (error) {
