@@ -580,6 +580,15 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
   static final List<int> _quietHourOptions = <int>[
     for (var hour = 0; hour < 24; hour++) hour * 60,
   ];
+  static const Map<String, DoseyVoicePhrase> _voicePreviewPhrases =
+      <String, DoseyVoicePhrase>{
+        'Reminder voice': DoseyVoicePhrase.doseSoon,
+        'Dispense narration': DoseyVoicePhrase.movingCarousel,
+        'Safety/confirmation voice': DoseyVoicePhrase.confirmAfterTaken,
+        'Missed dose voice': DoseyVoicePhrase.missedWarning,
+        'Controller alert voice': DoseyVoicePhrase.controllerOffline,
+        'Idle chatter voice': DoseyVoicePhrase.standingBy,
+      };
   static const int _defaultWakeBeforeDoseMinutes =
       RobotFaceSettings.defaultWakeBeforeDoseMinutes;
   static const int _defaultStayAwakeAfterDoseMinutes =
@@ -736,6 +745,12 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   enabled: !_isSaving && settings.voiceEnabled,
                   title: 'Reminder voice',
                   subtitle: 'Upcoming, ready, and normal cup-check reminders.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Reminder voice',
+                    enabled:
+                        settings.voiceEnabled && settings.reminderVoiceEnabled,
+                  ),
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(reminderVoiceEnabled: value),
                   ),
@@ -746,6 +761,13 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   enabled: !_isSaving && settings.voiceEnabled,
                   title: 'Dispense narration',
                   subtitle: 'Preparing, dispensing, and movement phrases.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Dispense narration',
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.dispenseNarrationEnabled,
+                  ),
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(dispenseNarrationEnabled: value),
                   ),
@@ -756,6 +778,13 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   enabled: !_isSaving && settings.voiceEnabled,
                   title: 'Safety/confirmation voice',
                   subtitle: 'Check-cup and confirm-only-after-taken prompts.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Safety/confirmation voice',
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.safetyConfirmationVoiceEnabled,
+                  ),
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(safetyConfirmationVoiceEnabled: value),
                   ),
@@ -766,6 +795,13 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   enabled: !_isSaving && settings.voiceEnabled,
                   title: 'Missed dose voice',
                   subtitle: 'Missed-dose and review phrases.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Missed dose voice',
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.missedDoseVoiceEnabled,
+                  ),
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(missedDoseVoiceEnabled: value),
                   ),
@@ -776,6 +812,13 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   enabled: !_isSaving && settings.voiceEnabled,
                   title: 'Controller alert voice',
                   subtitle: 'Offline, error, attention, and recovery prompts.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Controller alert voice',
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.controllerAlertVoiceEnabled,
+                  ),
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(controllerAlertVoiceEnabled: value),
                   ),
@@ -786,6 +829,13 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   enabled: !_isSaving && settings.voiceEnabled,
                   title: 'Idle chatter voice',
                   subtitle: 'Optional idle chatter when voice variety is on.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Idle chatter voice',
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.idleChatterVoiceEnabled,
+                  ),
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(idleChatterVoiceEnabled: value),
                   ),
@@ -866,6 +916,37 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Robot voice test failed: $error')),
+      );
+    }
+  }
+
+  Widget _buildVoicePreviewButton({
+    required RobotFaceSettings settings,
+    required String title,
+    required bool enabled,
+  }) {
+    final phrase = _voicePreviewPhrases[title]!;
+    return IconButton(
+      key: ValueKey<String>('voice-preview:$title'),
+      tooltip: 'Preview $title',
+      onPressed: enabled ? () => _previewVoice(settings, phrase) : null,
+      icon: const Icon(Icons.play_arrow_rounded),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Future<void> _previewVoice(
+    RobotFaceSettings settings,
+    DoseyVoicePhrase phrase,
+  ) async {
+    try {
+      await DoseyAppScope.of(
+        context,
+      ).voicePlayer.speak(phrase, volume: settings.voiceVolumePreset.volume);
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Robot voice preview failed: $error')),
       );
     }
   }
@@ -1331,6 +1412,7 @@ class _SettingsSwitchTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onChanged,
+    this.action,
   });
 
   final bool value;
@@ -1338,6 +1420,7 @@ class _SettingsSwitchTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final ValueChanged<bool> onChanged;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -1349,6 +1432,7 @@ class _SettingsSwitchTile extends StatelessWidget {
         onChanged: enabled ? onChanged : null,
         title: Text(title),
         subtitle: Text(subtitle),
+        secondary: action,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
     );

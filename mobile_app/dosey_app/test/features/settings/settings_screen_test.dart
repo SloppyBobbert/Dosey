@@ -46,6 +46,34 @@ void main() {
     expect(find.text('Wake before dose'), findsOneWidget);
     expect(find.text('Stay awake after dose'), findsOneWidget);
     expect(
+      find.byKey(const ValueKey<String>('voice-preview:Reminder voice')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('voice-preview:Dispense narration')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('voice-preview:Safety/confirmation voice'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('voice-preview:Missed dose voice')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('voice-preview:Controller alert voice'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('voice-preview:Idle chatter voice')),
+      findsOneWidget,
+    );
+    expect(
       find.text('Brighten the face before a scheduled dose.'),
       findsOneWidget,
     );
@@ -327,6 +355,98 @@ void main() {
 
     expect(voiceGateway.playedPhrases, [DoseyVoicePhrase.ready]);
     expect(voiceGateway.lastVolume, RobotVoiceVolumePreset.loud.volume);
+  });
+
+  testWidgets('category preview uses expected phrase and current volume', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final voiceGateway = _FakeVoicePlaybackGateway();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await RobotFaceSettingsRepository(database).saveSettings(
+      const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.quiet,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        voicePlayer: DoseyVoicePlayer(playbackGateway: voiceGateway),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _scrollToRobotFace(tester);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('voice-preview:Reminder voice')),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('voice-preview:Reminder voice')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(voiceGateway.playedPhrases, [DoseyVoicePhrase.doseSoon]);
+    expect(voiceGateway.lastVolume, RobotVoiceVolumePreset.quiet.volume);
+    final scope = tester.element(find.byType(MaterialApp));
+    expect(
+      await DoseyAppScope.of(scope).robotFaceSettings.getSettings(),
+      const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.quiet,
+      ),
+    );
+  });
+
+  testWidgets('voice preview buttons disable with master or category toggle', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    await _scrollToRobotFace(tester);
+    await tester.scrollUntilVisible(
+      find.text('Reminder voice'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    IconButton reminderPreview() => tester.widget<IconButton>(
+      find.byKey(const ValueKey<String>('voice-preview:Reminder voice')),
+    );
+
+    expect(reminderPreview().onPressed, isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Robot voice'),
+      -120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot voice'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Reminder voice'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(reminderPreview().onPressed, isNotNull);
+
+    await tester.tap(find.text('Reminder voice'));
+    await tester.pumpAndSettle();
+    expect(reminderPreview().onPressed, isNull);
   });
 
   testWidgets('action PIN section enables PIN after matching entry', (
