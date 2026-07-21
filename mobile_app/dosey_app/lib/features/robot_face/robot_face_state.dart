@@ -64,6 +64,8 @@ class RobotFaceState {
     required this.isInAwakeWindow,
     this.statusLabel,
     this.actionDoseId,
+    this.voiceOccurrenceKey,
+    this.isAwaitingControllerConfirmation = false,
     this.availableActions = const <RobotFaceActionKind>{},
   });
 
@@ -75,6 +77,8 @@ class RobotFaceState {
   final bool isInAwakeWindow;
   final String? statusLabel;
   final String? actionDoseId;
+  final String? voiceOccurrenceKey;
+  final bool isAwaitingControllerConfirmation;
   // Non-empty only when the current dose should expose explicit human actions.
   final Set<RobotFaceActionKind> availableActions;
 
@@ -87,6 +91,8 @@ class RobotFaceState {
     bool? isInAwakeWindow,
     String? statusLabel,
     Object? actionDoseId = _unset,
+    Object? voiceOccurrenceKey = _unset,
+    bool? isAwaitingControllerConfirmation,
     Set<RobotFaceActionKind>? availableActions,
   }) {
     return RobotFaceState(
@@ -100,6 +106,12 @@ class RobotFaceState {
       actionDoseId: identical(actionDoseId, _unset)
           ? this.actionDoseId
           : actionDoseId as String?,
+      voiceOccurrenceKey: identical(voiceOccurrenceKey, _unset)
+          ? this.voiceOccurrenceKey
+          : voiceOccurrenceKey as String?,
+      isAwaitingControllerConfirmation:
+          isAwaitingControllerConfirmation ??
+          this.isAwaitingControllerConfirmation,
       availableActions: availableActions ?? this.availableActions,
     );
   }
@@ -119,6 +131,9 @@ class RobotFaceState {
         other.isInAwakeWindow == isInAwakeWindow &&
         other.statusLabel == statusLabel &&
         other.actionDoseId == actionDoseId &&
+        other.voiceOccurrenceKey == voiceOccurrenceKey &&
+        other.isAwaitingControllerConfirmation ==
+            isAwaitingControllerConfirmation &&
         _setEquals(other.availableActions, availableActions);
   }
 
@@ -132,6 +147,8 @@ class RobotFaceState {
     isInAwakeWindow,
     statusLabel,
     actionDoseId,
+    voiceOccurrenceKey,
+    isAwaitingControllerConfirmation,
     _unorderedSetHash(availableActions),
   );
 

@@ -4,6 +4,8 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
+import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:flutter/material.dart';
 
@@ -19,9 +21,14 @@ enum SettingsSection {
 }
 
 class SettingsScreen extends StatefulWidget {
-  const SettingsScreen({super.key, this.sectionTarget});
+  const SettingsScreen({
+    super.key,
+    this.sectionTarget,
+    this.previewVoicePlayer,
+  });
 
   final SettingsSection? sectionTarget;
+  final DoseyVoicePlayer? previewVoicePlayer;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -33,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   };
 
   late final ScrollController _scrollController;
+  late final DoseyVoicePlayer _previewVoicePlayer;
   bool _isSigningIn = false;
   String? _authMessage;
 
@@ -40,11 +48,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _scrollController = ScrollController();
+    _previewVoicePlayer =
+        widget.previewVoicePlayer ??
+        DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway());
     _scrollToTargetAfterBuild();
   }
 
   @override
   void dispose() {
+    if (widget.previewVoicePlayer == null) {
+      _previewVoicePlayer.dispose();
+    }
     _scrollController.dispose();
     super.dispose();
   }
@@ -158,6 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _ActionPinCard(key: _sectionKeys[SettingsSection.actionPin]),
             _RobotFaceSettingsSection(
               sectionKey: _sectionKeys[SettingsSection.robotFace],
+              previewVoicePlayer: _previewVoicePlayer,
             ),
             const SizedBox(height: 12),
             _ReminderNotificationCard(
@@ -536,16 +551,22 @@ class _ReminderNotificationCard extends StatefulWidget {
 }
 
 class _RobotFaceSettingsCard extends StatefulWidget {
-  const _RobotFaceSettingsCard({super.key});
+  const _RobotFaceSettingsCard({super.key, required this.previewVoicePlayer});
+
+  final DoseyVoicePlayer previewVoicePlayer;
 
   @override
   State<_RobotFaceSettingsCard> createState() => _RobotFaceSettingsCardState();
 }
 
 class _RobotFaceSettingsSection extends StatelessWidget {
-  const _RobotFaceSettingsSection({required this.sectionKey});
+  const _RobotFaceSettingsSection({
+    required this.sectionKey,
+    required this.previewVoicePlayer,
+  });
 
   final Key? sectionKey;
+  final DoseyVoicePlayer previewVoicePlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -566,7 +587,10 @@ class _RobotFaceSettingsSection extends StatelessWidget {
         return Column(
           children: [
             const SizedBox(height: 12),
-            _RobotFaceSettingsCard(key: sectionKey),
+            _RobotFaceSettingsCard(
+              key: sectionKey,
+              previewVoicePlayer: previewVoicePlayer,
+            ),
           ],
         );
       },
@@ -576,10 +600,19 @@ class _RobotFaceSettingsSection extends StatelessWidget {
 
 class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
   static const List<int> _timingOptions = [0, 5, 10, 15, 30, 60];
+  static const List<int> _idleChatterCooldownOptions = [0, 5, 10, 15, 30];
+  static const List<int> _reminderRepeatCooldownOptions = [0, 2, 5, 10, 15];
+  static final List<int> _quietHourOptions = <int>[
+    for (var hour = 0; hour < 24; hour++) hour * 60,
+  ];
   static const int _defaultWakeBeforeDoseMinutes =
       RobotFaceSettings.defaultWakeBeforeDoseMinutes;
   static const int _defaultStayAwakeAfterDoseMinutes =
       RobotFaceSettings.defaultStayAwakeAfterDoseMinutes;
+  static const int _defaultIdleChatterCooldownMinutes =
+      RobotFaceSettings.defaultIdleChatterCooldownMinutes;
+  static const int _defaultReminderRepeatCooldownMinutes =
+      RobotFaceSettings.defaultReminderRepeatCooldownMinutes;
 
   bool _isSaving = false;
 
@@ -631,6 +664,264 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(dimAfterInactivity: value),
                   ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.voiceEnabled,
+                  enabled: !_isSaving,
+                  title: 'Robot voice',
+                  subtitle:
+                      'Play short Robot Face voice prompts in Robot Mode.',
+                  onChanged: (value) =>
+                      _saveSettings(settings.copyWith(voiceEnabled: value)),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.voiceVarietyEnabled,
+                  enabled: !_isSaving,
+                  title: 'Voice variety',
+                  subtitle:
+                      'Use alternate safe phrases when Robot voice is on.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(voiceVarietyEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _RobotFaceEnumDropdown<RobotVoiceVolumePreset>(
+                  label: 'Voice volume',
+                  helperText: 'Choose how loud Robot voice should play.',
+                  value: settings.voiceVolumePreset,
+                  enabled: !_isSaving,
+                  options: RobotVoiceVolumePreset.values,
+                  labelBuilder: _robotVoiceVolumePresetLabel,
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(voiceVolumePreset: value),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _RobotFaceTimingDropdown(
+                        label: 'Idle chatter cooldown',
+                        helperText:
+                            'Wait this long before optional idle chatter can repeat.',
+                        value: settings.idleChatterCooldownMinutes,
+                        fallbackValue: _defaultIdleChatterCooldownMinutes,
+                        enabled: !_isSaving,
+                        options: _idleChatterCooldownOptions,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(idleChatterCooldownMinutes: value),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _RobotFaceTimingDropdown(
+                        label: 'Reminder repeat cooldown',
+                        helperText:
+                            'Wait this long before allowed reminder repeats can speak again.',
+                        value: settings.reminderRepeatCooldownMinutes,
+                        fallbackValue: _defaultReminderRepeatCooldownMinutes,
+                        enabled: !_isSaving,
+                        options: _reminderRepeatCooldownOptions,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(
+                            reminderRepeatCooldownMinutes: value,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _RobotFaceEnumDropdown<RobotReminderRepeatPolicy>(
+                  label: 'Reminder repeat policy',
+                  helperText:
+                      'Choose whether normal reminder voice can replay after the reminder cooldown.',
+                  value: settings.reminderRepeatPolicy,
+                  enabled: !_isSaving,
+                  options: RobotReminderRepeatPolicy.values,
+                  labelBuilder: _robotReminderRepeatPolicyLabel,
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(reminderRepeatPolicy: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.voiceQuietHoursEnabled,
+                  enabled: !_isSaving,
+                  title: 'Quiet hours',
+                  subtitle: 'Mute Robot voice during your chosen quiet window.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(voiceQuietHoursEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _RobotFaceEnumDropdown<int>(
+                        label: 'Quiet hours start',
+                        helperText:
+                            'When Robot voice should start staying quiet.',
+                        value: settings.voiceQuietHoursStartMinutes,
+                        enabled: !_isSaving,
+                        options: _quietHourOptions,
+                        labelBuilder: _clockTimeLabel,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(voiceQuietHoursStartMinutes: value),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _RobotFaceEnumDropdown<int>(
+                        label: 'Quiet hours end',
+                        helperText: 'When Robot voice can resume normally.',
+                        value: settings.voiceQuietHoursEndMinutes,
+                        enabled: !_isSaving,
+                        options: _quietHourOptions,
+                        labelBuilder: _clockTimeLabel,
+                        onChanged: (value) => _saveSettings(
+                          settings.copyWith(voiceQuietHoursEndMinutes: value),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.voiceSafetyDuringQuietHoursEnabled,
+                  enabled: !_isSaving,
+                  title: 'Allow safety voice during quiet hours',
+                  subtitle:
+                      'Let missed-dose, controller, and safety/check prompts still speak.',
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(
+                      voiceSafetyDuringQuietHoursEnabled: value,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Voice types',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.reminderVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Reminder voice',
+                  subtitle: 'Upcoming, ready, and normal cup-check reminders.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Reminder voice',
+                    phrase: DoseyVoicePhrase.doseSoon,
+                    enabled:
+                        settings.voiceEnabled && settings.reminderVoiceEnabled,
+                  ),
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(reminderVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.dispenseNarrationEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Dispense narration',
+                  subtitle: 'Preparing, dispensing, and movement phrases.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Dispense narration',
+                    phrase: DoseyVoicePhrase.movingCarousel,
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.dispenseNarrationEnabled,
+                  ),
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(dispenseNarrationEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.safetyConfirmationVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Safety/confirmation voice',
+                  subtitle: 'Check-cup and confirm-only-after-taken prompts.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Safety/confirmation voice',
+                    phrase: DoseyVoicePhrase.confirmAfterTaken,
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.safetyConfirmationVoiceEnabled,
+                  ),
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(safetyConfirmationVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.missedDoseVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Missed dose voice',
+                  subtitle: 'Missed-dose and review phrases.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Missed dose voice',
+                    phrase: DoseyVoicePhrase.missedWarning,
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.missedDoseVoiceEnabled,
+                  ),
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(missedDoseVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.controllerAlertVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Controller alert voice',
+                  subtitle: 'Offline, error, attention, and recovery prompts.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Controller alert voice',
+                    phrase: DoseyVoicePhrase.controllerOffline,
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.controllerAlertVoiceEnabled,
+                  ),
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(controllerAlertVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _SettingsSwitchTile(
+                  value: settings.idleChatterVoiceEnabled,
+                  enabled: !_isSaving && settings.voiceEnabled,
+                  title: 'Idle chatter voice',
+                  subtitle: 'Optional idle chatter when voice variety is on.',
+                  action: _buildVoicePreviewButton(
+                    settings: settings,
+                    title: 'Idle chatter voice',
+                    phrase: DoseyVoicePhrase.standingBy,
+                    enabled:
+                        settings.voiceEnabled &&
+                        settings.idleChatterVoiceEnabled,
+                  ),
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(idleChatterVoiceEnabled: value),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: !_isSaving && settings.voiceEnabled
+                      ? () => _testVoice(settings)
+                      : null,
+                  icon: const Icon(Icons.volume_up_outlined),
+                  label: const Text('Test voice'),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -687,6 +978,52 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
       if (mounted) {
         setState(() => _isSaving = false);
       }
+    }
+  }
+
+  Future<void> _testVoice(RobotFaceSettings settings) async {
+    try {
+      await widget.previewVoicePlayer.speak(
+        DoseyVoicePhrase.ready,
+        volume: settings.voiceVolumePreset.volume,
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Robot voice test failed: $error')),
+      );
+    }
+  }
+
+  Widget _buildVoicePreviewButton({
+    required RobotFaceSettings settings,
+    required String title,
+    required DoseyVoicePhrase phrase,
+    required bool enabled,
+  }) {
+    return IconButton(
+      key: ValueKey<String>('voice-preview:$title'),
+      tooltip: 'Preview $title',
+      onPressed: enabled ? () => _previewVoice(settings, phrase) : null,
+      icon: const Icon(Icons.play_arrow_rounded),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+
+  Future<void> _previewVoice(
+    RobotFaceSettings settings,
+    DoseyVoicePhrase phrase,
+  ) async {
+    try {
+      await widget.previewVoicePlayer.speak(
+        phrase,
+        volume: settings.voiceVolumePreset.volume,
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Robot voice preview failed: $error')),
+      );
     }
   }
 }
@@ -751,6 +1088,63 @@ class _RobotFaceTimingDropdown extends StatelessWidget {
   }
 }
 
+class _RobotFaceEnumDropdown<T> extends StatelessWidget {
+  const _RobotFaceEnumDropdown({
+    required this.label,
+    required this.helperText,
+    required this.value,
+    required this.enabled,
+    required this.options,
+    required this.labelBuilder,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String helperText;
+  final T value;
+  final bool enabled;
+  final List<T> options;
+  final String Function(T value) labelBuilder;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InputDecorator(
+      key: ValueKey('$label:$value'),
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: helperText,
+        filled: true,
+        fillColor: theme.colorScheme.surfaceContainerHighest,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          items: options
+              .map(
+                (option) => DropdownMenuItem<T>(
+                  value: option,
+                  child: Text(labelBuilder(option)),
+                ),
+              )
+              .toList(),
+          onChanged: enabled
+              ? (newValue) {
+                  if (newValue != null) {
+                    onChanged(newValue);
+                  }
+                }
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
 String _robotFaceTimingLabel(int minutes) {
   if (minutes == 0) {
     return 'Off';
@@ -761,6 +1155,33 @@ String _robotFaceTimingLabel(int minutes) {
   }
 
   return '$minutes minutes';
+}
+
+String _robotVoiceVolumePresetLabel(RobotVoiceVolumePreset preset) {
+  return switch (preset) {
+    RobotVoiceVolumePreset.quiet => 'Quiet',
+    RobotVoiceVolumePreset.normal => 'Normal',
+    RobotVoiceVolumePreset.loud => 'Loud',
+  };
+}
+
+String _robotReminderRepeatPolicyLabel(RobotReminderRepeatPolicy policy) {
+  return switch (policy) {
+    RobotReminderRepeatPolicy.noRepeats => 'No repeats',
+    RobotReminderRepeatPolicy.repeatRemindersOnly => 'Repeat reminders only',
+    RobotReminderRepeatPolicy.repeatRemindersAndReady =>
+      'Repeat reminders and dose ready',
+  };
+}
+
+String _clockTimeLabel(int minutes) {
+  final normalizedMinutes = ((minutes % (24 * 60)) + (24 * 60)) % (24 * 60);
+  final hour = normalizedMinutes ~/ 60;
+  final minute = normalizedMinutes % 60;
+  final suffix = hour >= 12 ? 'PM' : 'AM';
+  final displayHour = hour % 12 == 0 ? 12 : hour % 12;
+  final paddedMinute = minute.toString().padLeft(2, '0');
+  return '$displayHour:$paddedMinute $suffix';
 }
 
 class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
@@ -1076,6 +1497,7 @@ class _SettingsSwitchTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onChanged,
+    this.action,
   });
 
   final bool value;
@@ -1083,6 +1505,7 @@ class _SettingsSwitchTile extends StatelessWidget {
   final String title;
   final String subtitle;
   final ValueChanged<bool> onChanged;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -1094,6 +1517,7 @@ class _SettingsSwitchTile extends StatelessWidget {
         onChanged: enabled ? onChanged : null,
         title: Text(title),
         subtitle: Text(subtitle),
+        secondary: action,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       ),
     );

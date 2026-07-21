@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
@@ -7,6 +8,7 @@ import 'package:dosey_app/features/doses/dose_action_logger.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
+import 'package:dosey_app/features/robot_face/robot_face_voice_coordinator.dart';
 import 'package:flutter/material.dart';
 
 typedef RobotFaceDoseActionLogger =
@@ -75,6 +77,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   Stream<RobotFaceState>? _stateStream;
   RobotFaceState? _initialState;
   RobotFaceController? _interactionController;
+  RobotFaceVoiceCoordinator? _voiceCoordinator;
 
   @override
   void didChangeDependencies() {
@@ -102,11 +105,37 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
           widget.controllerResolver?.call(context) ??
           DoseyAppScope.maybeOf(context)?.robotFaceController;
     }
-    _stateStream = widget.stateStream ?? widget.controller?.watchState();
+    _stateStream = (widget.stateStream ?? widget.controller?.watchState())
+        ?.asBroadcastStream();
     if (_stateStream == null && widget.initialState == null) {
-      _stateStream = _interactionController?.watchState();
+      _stateStream = _interactionController?.watchState().asBroadcastStream();
     }
     _initialState = widget.initialState;
+    _bindVoiceCoordinator();
+  }
+
+  void _bindVoiceCoordinator() {
+    unawaited(_voiceCoordinator?.close());
+    _voiceCoordinator = null;
+
+    final dependencies = DoseyAppScope.maybeOf(context);
+    final stateStream = _stateStream;
+    if (dependencies == null || stateStream == null) {
+      return;
+    }
+
+    _voiceCoordinator = RobotFaceVoiceCoordinator(
+      stateStream: stateStream,
+      settingsStream: dependencies.robotFaceSettings.watchSettings(),
+      roleStream: dependencies.settings.watchDeviceRole(),
+      voicePlayer: dependencies.voicePlayer,
+    );
+  }
+
+  @override
+  void dispose() {
+    unawaited(_voiceCoordinator?.close());
+    super.dispose();
   }
 
   void _handleInteraction() {

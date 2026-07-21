@@ -29,7 +29,7 @@ void main() {
   });
 
   test(
-    'robot face settings default to not flipped and dim after inactivity',
+    'robot face settings default to not flipped, dim after inactivity, and keep voice features off',
     () async {
       final database = DoseyDatabase.inMemory();
       addTearDown(database.close);
@@ -38,6 +38,24 @@ void main() {
       expect(
         await repository.getSettings(),
         const RobotFaceSettings(
+          voiceVolumePreset: RobotVoiceVolumePreset.normal,
+          voiceQuietHoursEnabled: false,
+          voiceQuietHoursStartMinutes:
+              RobotFaceSettings.defaultVoiceQuietHoursStartMinutes,
+          voiceQuietHoursEndMinutes:
+              RobotFaceSettings.defaultVoiceQuietHoursEndMinutes,
+          voiceSafetyDuringQuietHoursEnabled: false,
+          reminderVoiceEnabled: true,
+          dispenseNarrationEnabled: true,
+          safetyConfirmationVoiceEnabled: true,
+          missedDoseVoiceEnabled: true,
+          controllerAlertVoiceEnabled: true,
+          idleChatterVoiceEnabled: true,
+          idleChatterCooldownMinutes:
+              RobotFaceSettings.defaultIdleChatterCooldownMinutes,
+          reminderRepeatCooldownMinutes:
+              RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
           wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
           stayAwakeAfterDoseMinutes:
               RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -58,15 +76,67 @@ void main() {
         'robot_face_stay_awake_after_dose_minutes',
         'not-a-number',
       );
+      await database.setAppSetting(
+        'robot_face_idle_chatter_cooldown_minutes',
+        '-1',
+      );
+      await database.setAppSetting(
+        'robot_face_reminder_repeat_cooldown_minutes',
+        'oops',
+      );
 
       expect(
         await repository.getSettings(),
         const RobotFaceSettings(
+          voiceVolumePreset: RobotVoiceVolumePreset.normal,
+          voiceQuietHoursEnabled: false,
+          voiceQuietHoursStartMinutes:
+              RobotFaceSettings.defaultVoiceQuietHoursStartMinutes,
+          voiceQuietHoursEndMinutes:
+              RobotFaceSettings.defaultVoiceQuietHoursEndMinutes,
+          voiceSafetyDuringQuietHoursEnabled: false,
+          reminderVoiceEnabled: true,
+          dispenseNarrationEnabled: true,
+          safetyConfirmationVoiceEnabled: true,
+          missedDoseVoiceEnabled: true,
+          controllerAlertVoiceEnabled: true,
+          idleChatterVoiceEnabled: true,
+          idleChatterCooldownMinutes:
+              RobotFaceSettings.defaultIdleChatterCooldownMinutes,
+          reminderRepeatCooldownMinutes:
+              RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
           wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
           stayAwakeAfterDoseMinutes:
               RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
         ),
       );
+    },
+  );
+
+  test(
+    'robot face settings constructor validates quiet-hours minute bounds',
+    () {
+      const settings = RobotFaceSettings(
+        voiceQuietHoursStartMinutes: -1,
+        voiceQuietHoursEndMinutes: 24 * 60,
+      );
+
+      expect(
+        settings.voiceQuietHoursStartMinutes,
+        RobotFaceSettings.defaultVoiceQuietHoursStartMinutes,
+      );
+      expect(
+        settings.voiceQuietHoursEndMinutes,
+        RobotFaceSettings.defaultVoiceQuietHoursEndMinutes,
+      );
+
+      const validSettings = RobotFaceSettings(
+        voiceQuietHoursStartMinutes: 21 * 60,
+        voiceQuietHoursEndMinutes: 6 * 60,
+      );
+      expect(validSettings.voiceQuietHoursStartMinutes, 21 * 60);
+      expect(validSettings.voiceQuietHoursEndMinutes, 6 * 60);
     },
   );
 
@@ -83,6 +153,22 @@ void main() {
       const RobotFaceSettings(
         isFlipped: true,
         dimAfterInactivity: false,
+        voiceEnabled: false,
+        voiceVarietyEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.loud,
+        voiceQuietHoursEnabled: true,
+        voiceQuietHoursStartMinutes: 21 * 60,
+        voiceQuietHoursEndMinutes: 6 * 60,
+        voiceSafetyDuringQuietHoursEnabled: true,
+        reminderVoiceEnabled: false,
+        dispenseNarrationEnabled: false,
+        safetyConfirmationVoiceEnabled: false,
+        missedDoseVoiceEnabled: false,
+        controllerAlertVoiceEnabled: false,
+        idleChatterVoiceEnabled: false,
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),
@@ -91,6 +177,24 @@ void main() {
 
     expect(states, [
       const RobotFaceSettings(
+        voiceVolumePreset: RobotVoiceVolumePreset.normal,
+        voiceQuietHoursEnabled: false,
+        voiceQuietHoursStartMinutes:
+            RobotFaceSettings.defaultVoiceQuietHoursStartMinutes,
+        voiceQuietHoursEndMinutes:
+            RobotFaceSettings.defaultVoiceQuietHoursEndMinutes,
+        voiceSafetyDuringQuietHoursEnabled: false,
+        reminderVoiceEnabled: true,
+        dispenseNarrationEnabled: true,
+        safetyConfirmationVoiceEnabled: true,
+        missedDoseVoiceEnabled: true,
+        controllerAlertVoiceEnabled: true,
+        idleChatterVoiceEnabled: true,
+        idleChatterCooldownMinutes:
+            RobotFaceSettings.defaultIdleChatterCooldownMinutes,
+        reminderRepeatCooldownMinutes:
+            RobotFaceSettings.defaultReminderRepeatCooldownMinutes,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
         wakeBeforeDoseMinutes: RobotFaceSettings.defaultWakeBeforeDoseMinutes,
         stayAwakeAfterDoseMinutes:
             RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
@@ -98,6 +202,22 @@ void main() {
       const RobotFaceSettings(
         isFlipped: true,
         dimAfterInactivity: false,
+        voiceEnabled: false,
+        voiceVarietyEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.loud,
+        voiceQuietHoursEnabled: true,
+        voiceQuietHoursStartMinutes: 21 * 60,
+        voiceQuietHoursEndMinutes: 6 * 60,
+        voiceSafetyDuringQuietHoursEnabled: true,
+        reminderVoiceEnabled: false,
+        dispenseNarrationEnabled: false,
+        safetyConfirmationVoiceEnabled: false,
+        missedDoseVoiceEnabled: false,
+        controllerAlertVoiceEnabled: false,
+        idleChatterVoiceEnabled: false,
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 20,
       ),

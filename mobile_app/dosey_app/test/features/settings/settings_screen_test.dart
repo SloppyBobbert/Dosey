@@ -4,6 +4,8 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
+import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
@@ -44,6 +46,34 @@ void main() {
     expect(find.text('Wake before dose'), findsOneWidget);
     expect(find.text('Stay awake after dose'), findsOneWidget);
     expect(
+      find.byKey(const ValueKey<String>('voice-preview:Reminder voice')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('voice-preview:Dispense narration')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('voice-preview:Safety/confirmation voice'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('voice-preview:Missed dose voice')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey<String>('voice-preview:Controller alert voice'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('voice-preview:Idle chatter voice')),
+      findsOneWidget,
+    );
+    expect(
       find.text('Brighten the face before a scheduled dose.'),
       findsOneWidget,
     );
@@ -53,7 +83,7 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.text('10 minutes'), findsNWidgets(2));
+    expect(find.text('10 minutes'), findsWidgets);
   });
 
   testWidgets('personal role does not show robot face settings controls', (
@@ -133,37 +163,164 @@ void main() {
 
     await tester.tap(find.text('Dim after inactivity'));
     await tester.pumpAndSettle();
-    expect(
-      await repository.getSettings(),
-      const RobotFaceSettings(isFlipped: true, dimAfterInactivity: false),
+    await tester.tap(find.text('Robot voice'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Voice variety'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Voice volume'),
+      120,
+      scrollable: find.byType(Scrollable).first,
     );
-
-    await tester.tap(find.text('10 minutes').first);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('15 minutes').last);
+    await _setDropdownValue<RobotVoiceVolumePreset>(
+      tester,
+      key: const ValueKey<String>('Voice volume:RobotVoiceVolumePreset.normal'),
+      value: RobotVoiceVolumePreset.loud,
+    );
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Idle chatter cooldown:10'),
+      value: 15,
+    );
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Reminder repeat cooldown:5'),
+      value: 10,
+    );
+    await _setDropdownValue<RobotReminderRepeatPolicy>(
+      tester,
+      key: const ValueKey<String>(
+        'Reminder repeat policy:RobotReminderRepeatPolicy.noRepeats',
+      ),
+      value: RobotReminderRepeatPolicy.repeatRemindersOnly,
+    );
+    await tester.tap(find.text('Quiet hours'));
     await tester.pumpAndSettle();
-
-    await tester.tap(find.text('10 minutes').first);
+    await tester.scrollUntilVisible(
+      find.text('Quiet hours end'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('30 minutes').last);
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Quiet hours start:1320'),
+      value: 21 * 60,
+    );
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Quiet hours end:420'),
+      value: 6 * 60,
+    );
+    await tester.tap(find.text('Allow safety voice during quiet hours'));
     await tester.pumpAndSettle();
-
     expect(
       await repository.getSettings(),
       const RobotFaceSettings(
         isFlipped: true,
         dimAfterInactivity: false,
-        wakeBeforeDoseMinutes: 15,
-        stayAwakeAfterDoseMinutes: 30,
+        voiceEnabled: true,
+        voiceVarietyEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.loud,
+        voiceQuietHoursEnabled: true,
+        voiceQuietHoursStartMinutes: 21 * 60,
+        voiceQuietHoursEndMinutes: 6 * 60,
+        voiceSafetyDuringQuietHoursEnabled: true,
+        reminderVoiceEnabled: true,
+        dispenseNarrationEnabled: true,
+        safetyConfirmationVoiceEnabled: true,
+        missedDoseVoiceEnabled: true,
+        controllerAlertVoiceEnabled: true,
+        idleChatterVoiceEnabled: true,
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersOnly,
       ),
     );
+
+    await tester.tap(find.text('Reminder voice'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dispense narration'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Safety/confirmation voice'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Missed dose voice'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Controller alert voice'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Controller alert voice'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Idle chatter voice'));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Wake before dose'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Wake before dose:10'),
+      value: 15,
+    );
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Stay awake after dose:10'),
+      value: 30,
+    );
+
+    final updatedSettings = await repository.getSettings();
+    expect(updatedSettings.isFlipped, isTrue);
+    expect(updatedSettings.dimAfterInactivity, isFalse);
+    expect(updatedSettings.voiceEnabled, isTrue);
+    expect(updatedSettings.voiceVarietyEnabled, isTrue);
+    expect(updatedSettings.voiceVolumePreset, RobotVoiceVolumePreset.loud);
+    expect(updatedSettings.voiceQuietHoursEnabled, isTrue);
+    expect(updatedSettings.voiceQuietHoursStartMinutes, 21 * 60);
+    expect(updatedSettings.voiceQuietHoursEndMinutes, 6 * 60);
+    expect(updatedSettings.voiceSafetyDuringQuietHoursEnabled, isTrue);
+    expect(updatedSettings.reminderVoiceEnabled, isFalse);
+    expect(updatedSettings.dispenseNarrationEnabled, isFalse);
+    expect(updatedSettings.safetyConfirmationVoiceEnabled, isFalse);
+    expect(updatedSettings.missedDoseVoiceEnabled, isFalse);
+    expect(updatedSettings.controllerAlertVoiceEnabled, isFalse);
+    expect(updatedSettings.idleChatterVoiceEnabled, isFalse);
+    expect(updatedSettings.idleChatterCooldownMinutes, 15);
+    expect(updatedSettings.reminderRepeatCooldownMinutes, 10);
+    expect(
+      updatedSettings.reminderRepeatPolicy,
+      RobotReminderRepeatPolicy.repeatRemindersOnly,
+    );
+    expect(updatedSettings.wakeBeforeDoseMinutes, 15);
+    expect(updatedSettings.stayAwakeAfterDoseMinutes, 30);
 
     final switches = tester.widgetList<SwitchListTile>(
       find.byType(SwitchListTile),
     );
-    expect(switches.first.value, isTrue);
-    expect(switches.last.value, isFalse);
-    expect(find.text('15 minutes'), findsOneWidget);
+    expect(switches.elementAt(0).value, isTrue);
+    expect(switches.elementAt(1).value, isFalse);
+    expect(switches.elementAt(2).value, isTrue);
+    expect(switches.elementAt(3).value, isTrue);
+    expect(switches.elementAt(4).value, isTrue);
+    expect(switches.elementAt(5).value, isTrue);
+    expect(switches.elementAt(6).value, isFalse);
+    expect(switches.elementAt(7).value, isFalse);
+    expect(switches.elementAt(8).value, isFalse);
+    expect(switches.elementAt(9).value, isFalse);
+    expect(switches.elementAt(10).value, isFalse);
+    expect(switches.elementAt(11).value, isFalse);
+    expect(find.text('Loud'), findsOneWidget);
+    expect(find.text('15 minutes'), findsWidgets);
+    expect(find.text('10 minutes'), findsWidgets);
+    expect(find.text('9:00 PM'), findsOneWidget);
+    expect(find.text('6:00 AM'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
   });
 
@@ -176,6 +333,9 @@ void main() {
 
     await RobotFaceSettingsRepository(database).saveSettings(
       const RobotFaceSettings(
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersAndReady,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 30,
       ),
@@ -186,8 +346,149 @@ void main() {
 
     await _scrollToRobotFace(tester);
 
-    expect(find.text('15 minutes'), findsOneWidget);
+    expect(find.text('15 minutes'), findsWidgets);
+    expect(find.text('10 minutes'), findsWidgets);
+    expect(find.text('Repeat reminders and dose ready'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
+  });
+
+  testWidgets('test voice button uses safe phrase and current volume', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final liveVoiceGateway = _FakeVoicePlaybackGateway();
+    final previewVoiceGateway = _FakeVoicePlaybackGateway();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await RobotFaceSettingsRepository(database).saveSettings(
+      const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.loud,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        voicePlayer: DoseyVoicePlayer(playbackGateway: liveVoiceGateway),
+        previewVoicePlayer: DoseyVoicePlayer(
+          playbackGateway: previewVoiceGateway,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _scrollToRobotFace(tester);
+    await tester.scrollUntilVisible(
+      find.text('Test voice'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Test voice'));
+    await tester.pumpAndSettle();
+
+    expect(previewVoiceGateway.playedPhrases, [DoseyVoicePhrase.ready]);
+    expect(previewVoiceGateway.lastVolume, RobotVoiceVolumePreset.loud.volume);
+    expect(liveVoiceGateway.playedPhrases, isEmpty);
+  });
+
+  testWidgets('category preview uses expected phrase and current volume', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final liveVoiceGateway = _FakeVoicePlaybackGateway();
+    final previewVoiceGateway = _FakeVoicePlaybackGateway();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await RobotFaceSettingsRepository(database).saveSettings(
+      const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.quiet,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        voicePlayer: DoseyVoicePlayer(playbackGateway: liveVoiceGateway),
+        previewVoicePlayer: DoseyVoicePlayer(
+          playbackGateway: previewVoiceGateway,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await _scrollToRobotFace(tester);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey<String>('voice-preview:Reminder voice')),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('voice-preview:Reminder voice')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(previewVoiceGateway.playedPhrases, [DoseyVoicePhrase.doseSoon]);
+    expect(previewVoiceGateway.lastVolume, RobotVoiceVolumePreset.quiet.volume);
+    expect(liveVoiceGateway.playedPhrases, isEmpty);
+    final scope = tester.element(find.byType(MaterialApp));
+    expect(
+      await DoseyAppScope.of(scope).robotFaceSettings.getSettings(),
+      const RobotFaceSettings(
+        voiceEnabled: true,
+        voiceVolumePreset: RobotVoiceVolumePreset.quiet,
+      ),
+    );
+  });
+
+  testWidgets('voice preview buttons disable with master or category toggle', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    await _scrollToRobotFace(tester);
+    await tester.scrollUntilVisible(
+      find.text('Reminder voice'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    IconButton reminderPreview() => tester.widget<IconButton>(
+      find.byKey(const ValueKey<String>('voice-preview:Reminder voice')),
+    );
+
+    expect(reminderPreview().onPressed, isNull);
+
+    await tester.scrollUntilVisible(
+      find.text('Robot voice'),
+      -120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot voice'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Reminder voice'),
+      120,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(reminderPreview().onPressed, isNotNull);
+
+    await tester.tap(find.text('Reminder voice'));
+    await tester.pumpAndSettle();
+    expect(reminderPreview().onPressed, isNull);
   });
 
   testWidgets('action PIN section enables PIN after matching entry', (
@@ -341,18 +642,22 @@ void main() {
 
     await _scrollToRobotFace(tester);
 
-    expect(find.text('10 minutes'), findsNWidgets(2));
+    expect(find.text('10 minutes'), findsWidgets);
 
     await repository.saveSettings(
       const RobotFaceSettings(
+        idleChatterCooldownMinutes: 15,
+        reminderRepeatCooldownMinutes: 10,
+        reminderRepeatPolicy: RobotReminderRepeatPolicy.repeatRemindersAndReady,
         wakeBeforeDoseMinutes: 15,
         stayAwakeAfterDoseMinutes: 30,
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('10 minutes'), findsNothing);
-    expect(find.text('15 minutes'), findsOneWidget);
+    expect(find.text('10 minutes'), findsWidgets);
+    expect(find.text('15 minutes'), findsWidgets);
+    expect(find.text('Repeat reminders and dose ready'), findsOneWidget);
     expect(find.text('30 minutes'), findsOneWidget);
   });
 
@@ -409,6 +714,21 @@ Future<void> _scrollToActionPin(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _setDropdownValue<T>(
+  WidgetTester tester, {
+  required Key key,
+  required T value,
+}) async {
+  final dropdown = tester.widget<DropdownButton<T>>(
+    find.descendant(
+      of: find.byKey(key),
+      matching: find.byType(DropdownButton<T>),
+    ),
+  );
+  dropdown.onChanged?.call(value);
+  await tester.pumpAndSettle();
+}
+
 Future<void> _markOnboardingComplete(
   DoseyDatabase database, {
   required AppDeviceRole role,
@@ -422,9 +742,15 @@ Future<void> _markOnboardingComplete(
 }
 
 class _TestSettingsApp extends StatelessWidget {
-  const _TestSettingsApp({required this.database});
+  const _TestSettingsApp({
+    required this.database,
+    this.voicePlayer,
+    this.previewVoicePlayer,
+  });
 
   final DoseyDatabase database;
+  final DoseyVoicePlayer? voicePlayer;
+  final DoseyVoicePlayer? previewVoicePlayer;
 
   @override
   Widget build(BuildContext context) {
@@ -435,12 +761,15 @@ class _TestSettingsApp extends StatelessWidget {
       permissionGateway: const _FakePermissionGateway(),
       reminderScheduler: const _NoopReminderScheduler(),
       missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
+      voicePlayer: voicePlayer,
       child: MaterialApp(
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2F6F5E)),
           useMaterial3: true,
         ),
-        home: const Scaffold(body: SettingsScreen()),
+        home: Scaffold(
+          body: SettingsScreen(previewVoicePlayer: previewVoicePlayer),
+        ),
       ),
     );
   }
@@ -476,4 +805,22 @@ class _NoopReminderScheduler implements ReminderScheduler {
     required String label,
     required bool repeatsDaily,
   }) async {}
+}
+
+class _FakeVoicePlaybackGateway implements VoicePlaybackGateway {
+  final List<DoseyVoicePhrase> playedPhrases = <DoseyVoicePhrase>[];
+  double? lastVolume;
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> playAsset(String assetPath, {required double volume}) async {
+    playedPhrases.add(
+      FixedPhraseCatalog.phrases
+          .singleWhere((phrase) => phrase.assetPath == assetPath)
+          .phrase,
+    );
+    lastVolume = volume;
+  }
 }

@@ -28,6 +28,7 @@ import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:flutter/widgets.dart';
@@ -43,6 +44,7 @@ class DoseyAppScope extends StatefulWidget {
     this.missedDoseReconciliationService,
     this.bleGateway,
     this.connectivityGateway,
+    this.voicePlayer,
   });
 
   final Widget child;
@@ -53,6 +55,7 @@ class DoseyAppScope extends StatefulWidget {
   final MissedDoseReconciliationService? missedDoseReconciliationService;
   final BleGateway? bleGateway;
   final ConnectivityGateway? connectivityGateway;
+  final DoseyVoicePlayer? voicePlayer;
 
   static DoseyAppDependencies of(BuildContext context) {
     final dependencies = maybeOf(context);
@@ -174,6 +177,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       ble: widget.bleGateway ?? FlutterBluePlusBleGateway(),
       connectivity: widget.connectivityGateway ?? ConnectivityPlusGateway(),
       reminderScheduler: reminderScheduler,
+      voicePlayer:
+          widget.voicePlayer ??
+          DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway()),
       notificationTaps: notificationTaps,
       permissions: widget.permissionGateway ?? PermissionHandlerGateway(),
     );
@@ -221,6 +227,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     unawaited(_dependencies.controller.close());
     unawaited(_dependencies.robotFaceController.close());
     unawaited(_dependencies.ble.close());
+    unawaited(_dependencies.voicePlayer.dispose());
     if (_ownsDatabase) {
       unawaited(_database.close());
     }
@@ -258,6 +265,7 @@ class DoseyAppDependencies {
     required this.ble,
     required this.connectivity,
     required this.reminderScheduler,
+    required this.voicePlayer,
     required this.notificationTaps,
     required this.permissions,
   });
@@ -279,6 +287,7 @@ class DoseyAppDependencies {
   final BleGateway ble;
   final ConnectivityGateway connectivity;
   final ReminderScheduler reminderScheduler;
+  final DoseyVoicePlayer voicePlayer;
   final ReminderNotificationTapController notificationTaps;
   final AppPermissionGateway permissions;
 }
