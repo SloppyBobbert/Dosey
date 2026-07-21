@@ -158,6 +158,107 @@ void main() {
   );
 
   test(
+    'quiet-hours suppression does not poison dedupe for dose-ready after quiet hours end',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          voiceQuietHoursEnabled: true,
+        ),
+        now: DateTime(2026, 7, 20, 23),
+      );
+      addTearDown(harness.dispose);
+
+      final state = _state(
+        RobotFaceMode.doseReady,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      );
+      harness.emit(state);
+      await pumpEventQueue();
+
+      harness.now = DateTime(2026, 7, 21, 12);
+      harness.emit(state.copyWith(statusLabel: 'Still ready'));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test(
+    'reminder category suppression does not poison dedupe when re-enabled',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderVoiceEnabled: false,
+        ),
+      );
+      addTearDown(harness.dispose);
+
+      final state = _state(
+        RobotFaceMode.doseApproaching,
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      );
+      harness.emit(state);
+      await pumpEventQueue();
+
+      harness.updateSettings(
+        harness.settings.copyWith(reminderVoiceEnabled: true),
+      );
+      harness.emit(state.copyWith(statusLabel: 'Still soon'));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [DoseyVoicePhrase.doseSoon]);
+    },
+  );
+
+  test(
+    'master voice suppression does not poison dedupe when re-enabled',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: false),
+      );
+      addTearDown(harness.dispose);
+
+      final state = _state(
+        RobotFaceMode.doseReady,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      );
+      harness.emit(state);
+      await pumpEventQueue();
+
+      harness.updateSettings(harness.settings.copyWith(voiceEnabled: true));
+      harness.emit(state.copyWith(statusLabel: 'Still ready'));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.scheduledDoseReady,
+      ]);
+    },
+  );
+
+  test('spoken duplicate still dedupes', () async {
+    final harness = _VoiceCoordinatorHarness(
+      settings: const RobotFaceSettings(voiceEnabled: true),
+    );
+    addTearDown(harness.dispose);
+
+    final state = _state(
+      RobotFaceMode.doseApproaching,
+      voiceOccurrenceKey: 'schedule-1:2026-07-20',
+    );
+    harness.emit(state);
+    harness.emit(state.copyWith(statusLabel: 'Still soon'));
+    await pumpEventQueue();
+
+    expect(harness.voiceGateway.playedPhrases, [DoseyVoicePhrase.doseSoon]);
+  });
+
+  test(
     'dedupe prevents repeated playback for the same effective state',
     () async {
       final harness = _VoiceCoordinatorHarness(

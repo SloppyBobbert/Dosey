@@ -108,7 +108,6 @@ class RobotFaceVoiceCoordinator {
     final effectiveKey = _effectiveKeyFor(effect, state);
     final isConsecutiveDuplicate =
         effect.dedupe && effectiveKey == _lastEffectiveKey;
-    _lastEffectiveKey = effect.dedupe ? effectiveKey : null;
 
     if (!_shouldSpeak) {
       return;
@@ -123,6 +122,7 @@ class RobotFaceVoiceCoordinator {
     if (isConsecutiveDuplicate) {
       return;
     }
+    _lastEffectiveKey = effect.dedupe ? effectiveKey : null;
     if (_repeatRestrictedEffectiveKeys.contains(effectiveKey)) {
       return;
     }
