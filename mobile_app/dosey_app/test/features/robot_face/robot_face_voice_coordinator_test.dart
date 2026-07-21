@@ -381,6 +381,117 @@ void main() {
   );
 
   test(
+    'no-repeats policy lets same-label dose-approaching speak again next day',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(
+        _state(
+          RobotFaceMode.doseApproaching,
+          nextEventLabel: '9:00 · Morning meds',
+          voiceOccurrenceKey: 'schedule-1:2026-07-20',
+        ),
+      );
+      harness.emit(_state(RobotFaceMode.idle));
+      await pumpEventQueue();
+
+      harness.now = harness.now.add(const Duration(days: 1));
+      harness.emit(
+        _state(
+          RobotFaceMode.doseApproaching,
+          nextEventLabel: '9:00 · Morning meds',
+          voiceOccurrenceKey: 'schedule-1:2026-07-21',
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.doseSoon,
+        DoseyVoicePhrase.doseSoon,
+      ]);
+    },
+  );
+
+  test(
+    'no-repeats policy still suppresses same-day duplicate dose-approaching occurrence',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(
+        _state(
+          RobotFaceMode.doseApproaching,
+          nextEventLabel: '9:00 · Morning meds',
+          voiceOccurrenceKey: 'schedule-1:2026-07-20',
+        ),
+      );
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(
+        _state(
+          RobotFaceMode.doseApproaching,
+          nextEventLabel: '9:00 · Morning meds',
+          voiceOccurrenceKey: 'schedule-1:2026-07-20',
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [DoseyVoicePhrase.doseSoon]);
+    },
+  );
+
+  test(
+    'no-repeats policy keeps similar dose-approaching labels distinct by occurrence key',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(
+          voiceEnabled: true,
+          reminderRepeatCooldownMinutes: 5,
+          reminderRepeatPolicy: RobotReminderRepeatPolicy.noRepeats,
+        ),
+        now: DateTime(2026, 7, 20, 9),
+      );
+      addTearDown(harness.dispose);
+
+      harness.emit(
+        _state(
+          RobotFaceMode.doseApproaching,
+          nextEventLabel: '9:00 · Morning meds',
+          voiceOccurrenceKey: 'schedule-1:2026-07-20',
+        ),
+      );
+      harness.emit(_state(RobotFaceMode.idle));
+      harness.emit(
+        _state(
+          RobotFaceMode.doseApproaching,
+          nextEventLabel: '9:00 · Morning meds',
+          voiceOccurrenceKey: 'schedule-2:2026-07-20',
+        ),
+      );
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.playedPhrases, [
+        DoseyVoicePhrase.doseSoon,
+        DoseyVoicePhrase.doseSoon,
+      ]);
+    },
+  );
+
+  test(
     'reminders-only policy keeps ready speech one-time per trigger key',
     () async {
       final harness = _VoiceCoordinatorHarness(
@@ -800,6 +911,7 @@ RobotFaceState _state(
   bool isAwaitingControllerConfirmation = false,
   String nextEventLabel = '9:00 · Morning meds',
   String? actionDoseId,
+  String? voiceOccurrenceKey,
 }) {
   return RobotFaceState(
     mode: mode,
@@ -809,6 +921,7 @@ RobotFaceState _state(
     rampProgress: mode == RobotFaceMode.doseApproaching ? 0.5 : 1,
     isInAwakeWindow: true,
     actionDoseId: actionDoseId,
+    voiceOccurrenceKey: voiceOccurrenceKey,
     isAwaitingControllerConfirmation: isAwaitingControllerConfirmation,
   );
 }

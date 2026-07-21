@@ -259,7 +259,9 @@ class RobotFaceVoiceCoordinator {
     if (!_usesReminderRepeatCooldown(kind)) {
       return null;
     }
-    return state.actionDoseId ?? state.nextEventLabel;
+    return state.voiceOccurrenceKey ??
+        state.actionDoseId ??
+        state.nextEventLabel;
   }
 
   _VoiceTrigger? _triggerFor(

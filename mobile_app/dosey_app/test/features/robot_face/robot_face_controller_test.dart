@@ -56,8 +56,34 @@ void main() {
       expect(state.mode, RobotFaceMode.doseApproaching);
       expect(state.rampProgress, closeTo(0.5, 0.001));
       expect(state.isInAwakeWindow, isTrue);
+      expect(state.voiceOccurrenceKey, 'schedule-1:2026-07-08');
     },
   );
+
+  test('dose-approaching voice occurrence key stays stable per day', () async {
+    final now = DateTime(2026, 7, 8, 8, 55);
+    final fixture = await _RobotFaceControllerFixture.create(
+      now: now,
+      scheduleHour: 9,
+      scheduleMinute: 0,
+      robotFaceSettings: const RobotFaceSettings(wakeBeforeDoseMinutes: 10),
+    );
+    addTearDown(fixture.close);
+
+    await fixture.settle();
+
+    final initialState = await fixture.controller.watchState().first;
+    expect(initialState.mode, RobotFaceMode.doseApproaching);
+    expect(initialState.voiceOccurrenceKey, 'schedule-1:2026-07-08');
+
+    fixture.now = DateTime(2026, 7, 9, 8, 55);
+    fixture.controller.recordInteraction();
+    final nextDayState = await fixture.controller.watchState().firstWhere(
+      (state) => state.voiceOccurrenceKey == 'schedule-1:2026-07-09',
+    );
+    expect(nextDayState.mode, RobotFaceMode.doseApproaching);
+    expect(nextDayState.nextEventLabel, '09:00 · Morning meds');
+  });
 
   test(
     'wake before off keeps the face idle until the scheduled time',
@@ -1103,6 +1129,7 @@ void main() {
       isInAwakeWindow: true,
       statusLabel: 'Dose ready',
       actionDoseId: 'dose-1',
+      voiceOccurrenceKey: 'schedule-1:2026-07-08',
     );
 
     const sameState = RobotFaceState(
@@ -1114,15 +1141,20 @@ void main() {
       isInAwakeWindow: true,
       statusLabel: 'Dose ready',
       actionDoseId: 'dose-1',
+      voiceOccurrenceKey: 'schedule-1:2026-07-08',
     );
 
     final differentActionDoseState = baseState.copyWith(actionDoseId: 'dose-2');
     final clearedActionDoseState = baseState.copyWith(actionDoseId: null);
+    final differentVoiceOccurrenceState = baseState.copyWith(
+      voiceOccurrenceKey: 'schedule-1:2026-07-09',
+    );
 
     expect(baseState, sameState);
     expect(baseState.hashCode, sameState.hashCode);
     expect(differentActionDoseState, isNot(baseState));
     expect(differentActionDoseState.hashCode, isNot(baseState.hashCode));
+    expect(differentVoiceOccurrenceState, isNot(baseState));
     expect(clearedActionDoseState.actionDoseId, isNull);
   });
 }

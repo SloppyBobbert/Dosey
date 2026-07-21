@@ -189,6 +189,12 @@ class RobotFaceController {
       hasActiveMissedAlert: hasActiveMissedAlert,
       displayDoseId: displayDoseId,
     );
+    final voiceOccurrenceKey = _voiceOccurrenceKeyFor(
+      nextSchedule,
+      now,
+      displayDoseId: displayDoseId,
+      dueDoseId: dueDoseId,
+    );
     final baseState = RobotFaceState(
       mode: mode,
       nextEventLabel: nextEventLabel,
@@ -198,6 +204,7 @@ class RobotFaceController {
       isInAwakeWindow: choreography.isInAwakeWindow,
       statusLabel: _statusFor(role, nextSchedule, dueDoseId, latestDoseEvent),
       actionDoseId: actionDoseId,
+      voiceOccurrenceKey: voiceOccurrenceKey,
       isAwaitingControllerConfirmation:
           latestDoseEvent?.kind == DoseLogEventKind.controllerDispenseSucceeded,
       availableActions: _availableActionsFor(
@@ -537,6 +544,20 @@ class RobotFaceController {
     // Action ids are only minted for the actual due schedule, not for future
     // reminders shown in the status card.
     return TodayNextDoseHelper.doseIdForDate(dueSchedule.id, now);
+  }
+
+  String? _voiceOccurrenceKeyFor(
+    ReminderSchedule? nextSchedule,
+    DateTime now, {
+    required String? displayDoseId,
+    required String? dueDoseId,
+  }) {
+    if (nextSchedule == null) {
+      return null;
+    }
+    return dueDoseId ??
+        displayDoseId ??
+        TodayNextDoseHelper.doseIdForDate(nextSchedule.id, now);
   }
 
   _RobotFaceChoreography _choreographyFor(
