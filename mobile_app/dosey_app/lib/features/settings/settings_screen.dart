@@ -841,10 +841,11 @@ class _HouseholdNamesSheetState extends State<_HouseholdNamesSheet> {
       _errorText = null;
     });
     try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           final currentState = await household.watchState().first;
           final newHouseholdName = _householdController.text.trim();
           final newRobotName = _hubController.text.trim();

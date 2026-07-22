@@ -36,113 +36,57 @@ class LocalAdminAuditRepository implements AdminAuditRepository {
     DoseyDatabase database,
     AdminAuditEvent event,
   ) {
-    return database.customStatement(
-      '''
-      INSERT INTO admin_audit_events (
-        id,
-        event_type,
-        target_type,
-        target_id,
-        actor_type,
-        actor_user_id,
-        actor_label,
-        source_device_role,
-        summary,
-        details_json,
-        cloud_event_id,
-        last_synced_at,
-        occurred_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ''',
-      [
-        _idFor(event),
-        event.eventType.name,
-        event.targetType.name,
-        event.targetId,
-        event.actorType.name,
-        event.actorUserId,
-        event.actorLabel,
-        event.sourceDeviceRole,
-        event.summary,
-        event.detailsJson,
-        event.cloudEventId,
-        event.lastSyncedAt?.toUtc().millisecondsSinceEpoch,
-        event.occurredAt.toUtc().millisecondsSinceEpoch,
-      ],
-    );
+    return database
+        .into(database.adminAuditEvents)
+        .insert(
+          AdminAuditEventsCompanion.insert(
+            id: event.id,
+            eventType: event.eventType.name,
+            targetType: event.targetType.name,
+            targetId: Value(event.targetId),
+            actorType: event.actorType.name,
+            actorUserId: Value(event.actorUserId),
+            actorLabel: event.actorLabel,
+            sourceDeviceRole: event.sourceDeviceRole,
+            summary: event.summary,
+            detailsJson: Value(event.detailsJson),
+            cloudEventId: Value(event.cloudEventId),
+            lastSyncedAt: Value(event.lastSyncedAt?.toUtc()),
+            occurredAt: event.occurredAt.toUtc(),
+          ),
+        );
   }
 
   Stream<List<AdminAuditEvent>> _watchEvents({int? limit}) {
-    final sql = StringBuffer('''
-      SELECT
-        id,
-        event_type,
-        target_type,
-        target_id,
-        actor_type,
-        actor_user_id,
-        actor_label,
-        source_device_role,
-        summary,
-        details_json,
-        cloud_event_id,
-        last_synced_at,
-        occurred_at
-      FROM admin_audit_events
-      ORDER BY occurred_at DESC, id DESC
-    ''');
-    final variables = <Variable<Object>>[];
+    final query = _database.select(_database.adminAuditEvents)
+      ..orderBy([
+        (event) => OrderingTerm.desc(event.occurredAt),
+        (event) => OrderingTerm.desc(event.id),
+      ]);
     if (limit != null) {
-      sql.write(' LIMIT ?');
-      variables.add(Variable<Object>(limit));
+      query.limit(limit);
     }
 
-    return _database
-        .customSelect(sql.toString(), variables: variables, readsFrom: const {})
-        .watch()
-        .map((rows) => rows.map(_fromRow).toList(growable: false));
+    return query.watch().map(
+      (rows) => rows.map(_fromRow).toList(growable: false),
+    );
   }
 
-  static String _idFor(AdminAuditEvent event) {
-    final targetSuffix = event.targetId == null ? '' : ':${event.targetId}';
-    return '${event.eventType.name}:${event.targetType.name}$targetSuffix:${event.occurredAt.toUtc().microsecondsSinceEpoch}';
-  }
-
-  static AdminAuditEvent _fromRow(QueryRow row) {
+  static AdminAuditEvent _fromRow(AdminAuditEventRow row) {
     return AdminAuditEvent(
-      eventType: AdminAuditEventType.values.byName(
-        row.read<String>('event_type'),
-      ),
-      targetType: AdminAuditTargetType.values.byName(
-        row.read<String>('target_type'),
-      ),
-      targetId: row.readNullable<String>('target_id'),
-      actorType: AdminAuditActorType.values.byName(
-        row.read<String>('actor_type'),
-      ),
-      actorUserId: row.readNullable<String>('actor_user_id'),
-      actorLabel: row.read<String>('actor_label'),
-      sourceDeviceRole: row.read<String>('source_device_role'),
-      summary: row.read<String>('summary'),
-      detailsJson: row.readNullable<String>('details_json'),
-      cloudEventId: row.readNullable<String>('cloud_event_id'),
-      lastSyncedAt: _readNullableDateTime(row, 'last_synced_at'),
-      occurredAt: _readDateTime(row, 'occurred_at'),
+      id: row.id,
+      eventType: AdminAuditEventType.values.byName(row.eventType),
+      targetType: AdminAuditTargetType.values.byName(row.targetType),
+      targetId: row.targetId,
+      actorType: AdminAuditActorType.values.byName(row.actorType),
+      actorUserId: row.actorUserId,
+      actorLabel: row.actorLabel,
+      sourceDeviceRole: row.sourceDeviceRole,
+      summary: row.summary,
+      detailsJson: row.detailsJson,
+      cloudEventId: row.cloudEventId,
+      lastSyncedAt: row.lastSyncedAt?.toUtc(),
+      occurredAt: row.occurredAt.toUtc(),
     );
-  }
-
-  static DateTime _readDateTime(QueryRow row, String column) {
-    return DateTime.fromMillisecondsSinceEpoch(
-      row.read<int>(column),
-      isUtc: true,
-    );
-  }
-
-  static DateTime? _readNullableDateTime(QueryRow row, String column) {
-    final value = row.readNullable<int>(column);
-    if (value == null) {
-      return null;
-    }
-    return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
   }
 }

@@ -153,8 +153,8 @@ void main() {
     expect(rows, hasLength(2));
     expect(rows.every((row) => !(row.summary.contains('1234'))), isTrue);
     expect(
-      rows.every((row) => (row.detailsJson ?? '').contains('1234')),
-      isFalse,
+      rows.every((row) => !(row.detailsJson ?? '').contains('1234')),
+      isTrue,
     );
   });
 }

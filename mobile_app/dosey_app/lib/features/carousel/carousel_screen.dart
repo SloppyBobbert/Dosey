@@ -685,10 +685,11 @@ class _AssignmentCard extends StatelessWidget {
         createdAt: now,
         updatedAt: now,
       );
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           await dependencies.carouselSlots.assignSlot(
             slot,
             auditEvent: const AdminAuditEventFactory().carouselSlotAssigned(
@@ -776,10 +777,11 @@ class _SlotCardState extends State<_SlotCard> {
   Future<void> _markNeedsReview(BuildContext context) async {
     final dependencies = DoseyAppScope.of(context);
     try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           await dependencies.carouselSlots.markNeedsReview(
             widget.slot.id,
             auditEvent: const AdminAuditEventFactory()
@@ -818,10 +820,11 @@ class _SlotCardState extends State<_SlotCard> {
   Future<void> _markLoaded(BuildContext context) async {
     final dependencies = DoseyAppScope.of(context);
     try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           await dependencies.carouselSlots.markLoaded(
             widget.slot.id,
             auditEvent: const AdminAuditEventFactory().carouselSlotLoaded(

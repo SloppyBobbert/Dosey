@@ -39,29 +39,32 @@ void main() {
     expect(details['created'], isFalse);
   });
 
-  test('active schedule profile audit includes previous and new profile data', () {
-    final event = factory.activeScheduleProfileChanged(
-      actor: actor,
-      sourceDeviceRole: 'androidRobot',
-      targetId: 'profile-school',
-      summary: 'Changed the active schedule profile from Weekend to School.',
-      details: const {
-        'previousActiveProfileId': 'profile-weekend',
-        'previousActiveProfileName': 'Weekend',
-        'newActiveProfileId': 'profile-school',
-        'newActiveProfileName': 'School',
-      },
-      occurredAt: DateTime.utc(2026, 7, 22, 13),
-    );
+  test(
+    'active schedule profile audit includes previous and new profile data',
+    () {
+      final event = factory.activeScheduleProfileChanged(
+        actor: actor,
+        sourceDeviceRole: 'androidRobot',
+        targetId: 'profile-school',
+        summary: 'Changed the active schedule profile from Weekend to School.',
+        details: const {
+          'previousActiveProfileId': 'profile-weekend',
+          'previousActiveProfileName': 'Weekend',
+          'newActiveProfileId': 'profile-school',
+          'newActiveProfileName': 'School',
+        },
+        occurredAt: DateTime.utc(2026, 7, 22, 13),
+      );
 
-    final details = jsonDecode(event.detailsJson!) as Map<String, Object?>;
+      final details = jsonDecode(event.detailsJson!) as Map<String, Object?>;
 
-    expect(event.eventType, AdminAuditEventType.activeScheduleProfileChanged);
-    expect(event.targetType, AdminAuditTargetType.scheduleProfile);
-    expect(event.targetId, 'profile-school');
-    expect(details['previousActiveProfileId'], 'profile-weekend');
-    expect(details['previousActiveProfileName'], 'Weekend');
-    expect(details['newActiveProfileId'], 'profile-school');
-    expect(details['newActiveProfileName'], 'School');
-  });
+      expect(event.eventType, AdminAuditEventType.activeScheduleProfileChanged);
+      expect(event.targetType, AdminAuditTargetType.scheduleProfile);
+      expect(event.targetId, 'profile-school');
+      expect(details['previousActiveProfileId'], 'profile-weekend');
+      expect(details['previousActiveProfileName'], 'Weekend');
+      expect(details['newActiveProfileId'], 'profile-school');
+      expect(details['newActiveProfileName'], 'School');
+    },
+  );
 }

@@ -27,7 +27,7 @@ enum AdminAuditTargetType {
 enum AdminAuditActorType { localAdmin, signedInUser, caregiver, system }
 
 class AdminAuditEvent {
-  const AdminAuditEvent({
+  AdminAuditEvent({
     required this.eventType,
     required this.targetType,
     required this.actorType,
@@ -35,13 +35,23 @@ class AdminAuditEvent {
     required this.sourceDeviceRole,
     required this.summary,
     required this.occurredAt,
+    String? id,
     this.targetId,
     this.actorUserId,
     this.detailsJson,
     this.cloudEventId,
     this.lastSyncedAt,
-  });
+  }) : id = id ?? _nextId();
 
+  static int _idSequence = 0;
+
+  static String _nextId() {
+    final sequence = _idSequence++;
+    final timestamp = DateTime.now().toUtc().microsecondsSinceEpoch;
+    return 'admin-audit-$timestamp-$sequence';
+  }
+
+  final String id;
   final AdminAuditEventType eventType;
   final AdminAuditTargetType targetType;
   final String? targetId;

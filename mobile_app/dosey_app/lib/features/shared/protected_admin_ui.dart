@@ -14,7 +14,10 @@ Future<ProtectedAdminActionResult<T>> runProtectedAdminAction<T>(
     localAuth: dependencies.localAuth,
   );
   final result = await runner.run<T>(
-    requestPin: () => showActionPinPromptDialog(context),
+    requestPin: () {
+      if (!context.mounted) return Future<String?>.value();
+      return showActionPinPromptDialog(context);
+    },
     action: action,
   );
   if (!context.mounted) {

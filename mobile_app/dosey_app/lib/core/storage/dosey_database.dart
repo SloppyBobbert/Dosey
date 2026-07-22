@@ -238,7 +238,6 @@ class DoseyDatabase extends _$DoseyDatabase {
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) async {
       await migrator.createAll();
-      await _createAdminAuditEventsIfMissing();
       await _seedOnboardingCompleted(completed: false);
       await _seedDefaultScheduleProfile();
     },
@@ -295,30 +294,10 @@ class DoseyDatabase extends _$DoseyDatabase {
         await migrator.createTable(controllerCommandEvents);
       }
       if (from < 12) {
-        await _createAdminAuditEventsIfMissing();
+        await migrator.createTable(adminAuditEvents);
       }
     },
   );
-
-  Future<void> _createAdminAuditEventsIfMissing() {
-    return customStatement('''
-      CREATE TABLE IF NOT EXISTS admin_audit_events (
-        id TEXT NOT NULL PRIMARY KEY,
-        event_type TEXT NOT NULL,
-        target_type TEXT NOT NULL,
-        target_id TEXT,
-        actor_type TEXT NOT NULL,
-        actor_user_id TEXT,
-        actor_label TEXT NOT NULL,
-        source_device_role TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        details_json TEXT,
-        cloud_event_id TEXT,
-        last_synced_at INTEGER,
-        occurred_at INTEGER NOT NULL
-      );
-    ''');
-  }
 
   Future<void> _createDoseLogEventsIfMissing() {
     return customStatement('''

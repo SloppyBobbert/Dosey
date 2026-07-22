@@ -308,6 +308,7 @@ void main() {
 
       await repository.addEvent(
         AdminAuditEvent(
+          id: 'audit-1',
           eventType: AdminAuditEventType.householdProfileUpdated,
           targetType: AdminAuditTargetType.household,
           actorType: AdminAuditActorType.signedInUser,
@@ -320,6 +321,7 @@ void main() {
       );
       await repository.addEvent(
         AdminAuditEvent(
+          id: 'audit-2',
           eventType: AdminAuditEventType.householdProfileUpdated,
           targetType: AdminAuditTargetType.household,
           actorType: AdminAuditActorType.signedInUser,
@@ -340,6 +342,37 @@ void main() {
       expect(events.first.actorUserId, 'apple:user-b');
     },
   );
+
+  test('admin audit recent history updates after new events', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAdminAuditRepository(database);
+
+    final states = <List<AdminAuditEvent>>[];
+    final subscription = repository
+        .watchRecentEvents(limit: 8)
+        .listen(states.add);
+    addTearDown(subscription.cancel);
+    await Future<void>.delayed(Duration.zero);
+
+    await repository.addEvent(
+      AdminAuditEvent(
+        id: 'audit-reactive',
+        eventType: AdminAuditEventType.householdProfileUpdated,
+        targetType: AdminAuditTargetType.household,
+        actorType: AdminAuditActorType.localAdmin,
+        actorLabel: 'local admin',
+        sourceDeviceRole: 'androidRobot',
+        summary: 'Updated household profile',
+        occurredAt: DateTime.utc(2026, 6, 9, 12),
+      ),
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(states, hasLength(2));
+    expect(states.first, isEmpty);
+    expect(states.last.single.summary, 'Updated household profile');
+  });
 
   test('migration marks existing installs as already onboarded', () async {
     final executor = NativeDatabase.memory(

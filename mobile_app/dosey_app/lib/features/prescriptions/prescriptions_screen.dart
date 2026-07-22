@@ -479,10 +479,11 @@ class _PrescriptionTile extends StatelessWidget {
   Future<void> _delete(BuildContext context) async {
     final dependencies = DoseyAppScope.of(context);
     try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           final db = dependencies.database;
           final scheduleCount =
               await (db.select(
@@ -865,10 +866,11 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
     );
 
     try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           await prescriptions.upsertPrescription(
             prescription,
             auditEvent: const AdminAuditEventFactory().prescriptionSaved(
@@ -1021,10 +1023,11 @@ class _RefillSheetState extends State<_RefillSheet> {
     final note = _noteController.text;
 
     try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           await prescriptions.addRefill(
             prescriptionId: prescription.id,
             doseCount: doseCount,

@@ -174,21 +174,23 @@ void main() {
         isEnabled: true,
       );
 
+      final auditEvent = AdminAuditEvent(
+        eventType: AdminAuditEventType.scheduleSaved,
+        targetType: AdminAuditTargetType.reminderSchedule,
+        targetId: schedule.id,
+        actorType: AdminAuditActorType.localAdmin,
+        actorLabel: 'local admin',
+        sourceDeviceRole: 'androidPersonal',
+        summary: 'saved schedule',
+        occurredAt: DateTime.utc(2026, 6, 29, 7, 15),
+      );
       final result = await service.saveSchedule(
         schedule,
-        auditEvent: AdminAuditEvent(
-          eventType: AdminAuditEventType.scheduleSaved,
-          targetType: AdminAuditTargetType.reminderSchedule,
-          targetId: schedule.id,
-          actorType: AdminAuditActorType.localAdmin,
-          actorLabel: 'local admin',
-          sourceDeviceRole: 'androidPersonal',
-          summary: 'saved schedule',
-          occurredAt: DateTime.utc(2026, 6, 29, 7, 15),
-        ),
+        auditEvent: auditEvent,
       );
 
       expect(repository.savedSchedules, [schedule]);
+      expect(repository.savedAuditEvents, [auditEvent]);
       expect(result.hasNotificationWarning, isTrue);
     },
   );
@@ -458,6 +460,7 @@ ReminderSchedule _schedule({
 
 class _FakeReminderRepository implements ReminderRepository {
   final savedSchedules = <ReminderSchedule>[];
+  final savedAuditEvents = <AdminAuditEvent?>[];
   final deletedScheduleIds = <String>[];
   final operations = <String>[];
   List<String>? sharedOperations;
@@ -473,6 +476,7 @@ class _FakeReminderRepository implements ReminderRepository {
     AdminAuditEvent? auditEvent,
   }) async {
     savedSchedules.add(schedule);
+    savedAuditEvents.add(auditEvent);
     operations.add('save:${schedule.id}');
     sharedOperations?.add('save:${schedule.id}');
   }

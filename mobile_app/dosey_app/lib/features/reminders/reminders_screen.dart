@@ -613,10 +613,11 @@ class _ScheduleProfileSection extends StatelessWidget {
           .where((profile) => profile.id == id)
           .firstOrNull;
       final previousActiveProfile = activeProfile;
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           await profilesRepository.setActiveProfile(
             id,
             auditEvent: const AdminAuditEventFactory().activeScheduleProfileChanged(
@@ -750,10 +751,11 @@ class _ScheduleProfileSheetState extends State<_ScheduleProfileSheet> {
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       );
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           final isRename = existing != null;
           await widget.profiles.upsertProfile(
             profile,
@@ -861,10 +863,11 @@ class _ScheduleTile extends StatelessWidget {
         isEnabled: value,
         updatedAt: DateTime.now().toUtc(),
       );
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
       final guarded = await runProtectedAdminAction<ReminderScheduleSaveResult>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           return reminderSchedules.saveSchedule(
             updatedSchedule,
             auditEvent: const AdminAuditEventFactory().scheduleSaved(
@@ -894,15 +897,14 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _delete(BuildContext context) async {
     try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
       // Delete can be retained if the OS notification cannot be canceled;
       // surface that warning instead of dropping the local schedule blindly.
       final guarded =
           await runProtectedAdminAction<ReminderScheduleDeleteResult>(
             context,
             action: (actor) async {
-              final sourceDeviceRole = await currentAdminSourceDeviceRole(
-                context,
-              );
               return reminderSchedules.deleteSchedule(
                 schedule.id,
                 auditEvent: const AdminAuditEventFactory().scheduleDeleted(
@@ -1125,10 +1127,11 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     );
 
     try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
       final guarded = await runProtectedAdminAction<ReminderScheduleSaveResult>(
         context,
         action: (actor) async {
-          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           return widget.reminderSchedules.saveSchedule(
             schedule,
             auditEvent: const AdminAuditEventFactory().scheduleSaved(
