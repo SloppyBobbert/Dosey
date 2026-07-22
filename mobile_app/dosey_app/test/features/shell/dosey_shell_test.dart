@@ -146,6 +146,8 @@ void main() {
 
     expect(find.text('Account'), findsWidgets);
     expect(find.text('Device mode'), findsWidgets);
+    expect(find.text('Household & robot profile'), findsOneWidget);
+    expect(find.text('Admin history'), findsOneWidget);
     expect(find.text('Robot Face'), findsWidgets);
     expect(find.text('Reminder notifications'), findsWidgets);
     expect(find.text('Prototype safety'), findsWidgets);
@@ -165,7 +167,10 @@ void main() {
       find.text('I understand prototype safety rules'),
     );
     expect(find.text('Prototype safety'), findsOneWidget);
-    expect(find.text('I understand prototype safety rules').hitTestable(), findsOneWidget);
+    expect(
+      find.text('I understand prototype safety rules').hitTestable(),
+      findsOneWidget,
+    );
 
     await _scrollSettingsUntilVisible(
       tester,
@@ -182,7 +187,10 @@ void main() {
       tester,
       find.text('I understand prototype safety rules'),
     );
-    expect(find.text('I understand prototype safety rules').hitTestable(), findsOneWidget);
+    expect(
+      find.text('I understand prototype safety rules').hitTestable(),
+      findsOneWidget,
+    );
   });
 
   testWidgets('settings gear menu opens Help and About', (
@@ -224,6 +232,55 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'settings gear menu opens Household & robot profile and Admin history',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+      await _pumpShell(tester, _TestShellApp(database: database));
+
+      await _openSettingsMenu(tester);
+      await tester.tap(find.text('Household & robot profile').hitTestable());
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<SettingsScreen>(find.byType(SettingsScreen))
+            .sectionTarget,
+        SettingsSection.householdAccount,
+      );
+      await _scrollSettingsUntilVisible(
+        tester,
+        find.text('Edit household & robot profile'),
+      );
+      expect(
+        find.text('Edit household & robot profile').hitTestable(),
+        findsOneWidget,
+      );
+
+      await _openSettingsMenu(tester);
+      await tester.tap(find.text('Admin history').hitTestable());
+      await tester.pumpAndSettle();
+
+      expect(
+        tester
+            .widget<SettingsScreen>(find.byType(SettingsScreen))
+            .sectionTarget,
+        SettingsSection.adminHistory,
+      );
+      await _scrollSettingsUntilVisible(
+        tester,
+        find.text('No local admin changes recorded yet.'),
+      );
+      expect(
+        find.text('No local admin changes recorded yet.').hitTestable(),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 Future<void> _setDeviceRole(DoseyDatabase database, AppDeviceRole role) async {
@@ -251,11 +308,9 @@ Future<void> _pumpShellFrame(WidgetTester tester) async {
 
 Future<void> _scrollSettingsUntilVisible(
   WidgetTester tester,
-  Finder finder,
-  {
+  Finder finder, {
   double delta = 200,
-}
-) async {
+}) async {
   await tester.scrollUntilVisible(
     finder,
     delta,

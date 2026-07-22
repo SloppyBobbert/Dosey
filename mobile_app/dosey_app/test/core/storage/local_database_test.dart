@@ -308,7 +308,7 @@ void main() {
 
       await repository.addEvent(
         AdminAuditEvent(
-          eventType: AdminAuditEventType.householdUpdated,
+          eventType: AdminAuditEventType.householdProfileUpdated,
           targetType: AdminAuditTargetType.household,
           actorType: AdminAuditActorType.signedInUser,
           actorUserId: 'google:user-a',
@@ -320,7 +320,7 @@ void main() {
       );
       await repository.addEvent(
         AdminAuditEvent(
-          eventType: AdminAuditEventType.householdUpdated,
+          eventType: AdminAuditEventType.householdProfileUpdated,
           targetType: AdminAuditTargetType.household,
           actorType: AdminAuditActorType.signedInUser,
           actorUserId: 'apple:user-b',

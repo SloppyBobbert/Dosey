@@ -8,6 +8,8 @@ class LocalHouseholdRepository {
 
   static const _householdDisplayNameKey = 'household_display_name';
   static const _robotHubDisplayNameKey = 'robot_hub_display_name';
+  static const _profileDisplayNameKey = 'profile_display_name';
+  static const _relationshipLabelKey = 'relationship_label';
   static const _defaultHouseholdDisplayName = 'Dosey household';
   static const _defaultRobotHubDisplayName = 'Dosey robot phone';
   static const _maxDisplayNameLength = 80;
@@ -16,13 +18,20 @@ class LocalHouseholdRepository {
 
   Stream<HouseholdAccountState> watchState() {
     return _database
-        .watchAppSettings({_householdDisplayNameKey, _robotHubDisplayNameKey})
+        .watchAppSettings({
+          _householdDisplayNameKey,
+          _robotHubDisplayNameKey,
+          _profileDisplayNameKey,
+          _relationshipLabelKey,
+        })
         .map(_mapState);
   }
 
   Future<void> saveLocalNames({
     String? householdDisplayName,
     String? robotHubDisplayName,
+    String? profileDisplayName,
+    String? relationshipLabel,
     List<AdminAuditEvent> auditEvents = const [],
   }) {
     return _database.transaction(() async {
@@ -39,6 +48,20 @@ class LocalHouseholdRepository {
           fieldName: 'robotHubDisplayName',
         );
         await _database.setAppSetting(_robotHubDisplayNameKey, normalizedName);
+      }
+      if (profileDisplayName != null) {
+        final normalizedName = _normalizeOptionalDisplayName(
+          profileDisplayName,
+          fieldName: 'profileDisplayName',
+        );
+        await _saveOptionalSetting(_profileDisplayNameKey, normalizedName);
+      }
+      if (relationshipLabel != null) {
+        final normalizedName = _normalizeOptionalDisplayName(
+          relationshipLabel,
+          fieldName: 'relationshipLabel',
+        );
+        await _saveOptionalSetting(_relationshipLabelKey, normalizedName);
       }
       for (final auditEvent in auditEvents) {
         await LocalAdminAuditRepository.insertEventIntoDatabase(
@@ -57,9 +80,23 @@ class LocalHouseholdRepository {
           values[_householdDisplayNameKey] ?? _defaultHouseholdDisplayName,
       robotHubDisplayName:
           values[_robotHubDisplayNameKey] ?? _defaultRobotHubDisplayName,
+      profileDisplayName: _normalizeStoredOptionalValue(
+        values[_profileDisplayNameKey],
+      ),
+      relationshipLabel: _normalizeStoredOptionalValue(
+        values[_relationshipLabelKey],
+      ),
       connectionState: HouseholdConnectionState.localOnly,
       cloudHouseholdId: null,
     );
+  }
+
+  Future<void> _saveOptionalSetting(String key, String? value) async {
+    if (value == null) {
+      await _database.deleteAppSettings({key});
+      return;
+    }
+    await _database.setAppSetting(key, value);
   }
 
   static String _normalizeDisplayName(
@@ -82,5 +119,29 @@ class LocalHouseholdRepository {
       );
     }
     return normalizedValue;
+  }
+
+  static String? _normalizeOptionalDisplayName(
+    String value, {
+    required String fieldName,
+  }) {
+    final normalizedValue = value.trim();
+    if (normalizedValue.isEmpty) {
+      return null;
+    }
+    if (normalizedValue.length > _maxDisplayNameLength) {
+      throw ArgumentError.value(
+        value,
+        fieldName,
+        'Display name must be $_maxDisplayNameLength characters or fewer.',
+      );
+    }
+    return normalizedValue;
+  }
+
+  static String? _normalizeStoredOptionalValue(String? value) {
+    if (value == null) return null;
+    final normalizedValue = value.trim();
+    return normalizedValue.isEmpty ? null : normalizedValue;
   }
 }

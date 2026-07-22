@@ -221,7 +221,7 @@ class AdminAuditEventFactory {
     occurredAt: occurredAt,
   );
 
-  AdminAuditEvent householdUpdated({
+  AdminAuditEvent householdProfileUpdated({
     required AdminAuditActorIdentity actor,
     required String sourceDeviceRole,
     required String summary,
@@ -229,7 +229,7 @@ class AdminAuditEventFactory {
     DateTime? occurredAt,
   }) {
     return _build(
-      eventType: AdminAuditEventType.householdUpdated,
+      eventType: AdminAuditEventType.householdProfileUpdated,
       targetType: AdminAuditTargetType.household,
       actor: actor,
       sourceDeviceRole: sourceDeviceRole,
@@ -238,22 +238,6 @@ class AdminAuditEventFactory {
       details: details,
     );
   }
-
-  AdminAuditEvent robotHubUpdated({
-    required AdminAuditActorIdentity actor,
-    required String sourceDeviceRole,
-    required String summary,
-    Map<String, Object?>? details,
-    DateTime? occurredAt,
-  }) => _build(
-    eventType: AdminAuditEventType.robotHubUpdated,
-    targetType: AdminAuditTargetType.robotHub,
-    actor: actor,
-    sourceDeviceRole: sourceDeviceRole,
-    summary: summary,
-    details: details,
-    occurredAt: occurredAt,
-  );
 
   AdminAuditEvent _build({
     required AdminAuditEventType eventType,

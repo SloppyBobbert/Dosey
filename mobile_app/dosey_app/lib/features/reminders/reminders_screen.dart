@@ -609,19 +609,30 @@ class _ScheduleProfileSection extends StatelessWidget {
   /// saved schedules in other profiles.
   Future<void> _setActive(BuildContext context, String id) async {
     try {
+      final nextProfile = profiles
+          .where((profile) => profile.id == id)
+          .firstOrNull;
+      final previousActiveProfile = activeProfile;
       final result = await runProtectedAdminAction<void>(
         context,
         action: (actor) async {
           final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
           await profilesRepository.setActiveProfile(
             id,
-            auditEvent: const AdminAuditEventFactory()
-                .activeScheduleProfileChanged(
-                  actor: actor,
-                  sourceDeviceRole: sourceDeviceRole,
-                  targetId: id,
-                  summary: 'Changed the active schedule profile.',
-                ),
+            auditEvent: const AdminAuditEventFactory().activeScheduleProfileChanged(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: id,
+              summary: previousActiveProfile == null
+                  ? 'Set ${nextProfile?.name ?? 'the selected profile'} as the active schedule profile.'
+                  : 'Changed the active schedule profile from ${previousActiveProfile.name} to ${nextProfile?.name ?? 'the selected profile'}.',
+              details: {
+                'previousActiveProfileId': previousActiveProfile?.id,
+                'previousActiveProfileName': previousActiveProfile?.name,
+                'newActiveProfileId': id,
+                'newActiveProfileName': nextProfile?.name,
+              },
+            ),
           );
         },
       );
@@ -743,15 +754,23 @@ class _ScheduleProfileSheetState extends State<_ScheduleProfileSheet> {
         context,
         action: (actor) async {
           final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+          final isRename = existing != null;
           await widget.profiles.upsertProfile(
             profile,
             auditEvent: const AdminAuditEventFactory().scheduleProfileSaved(
               actor: actor,
               sourceDeviceRole: sourceDeviceRole,
               targetId: profile.id,
-              summary:
-                  '${existing == null ? 'Added' : 'Updated'} schedule profile ${profile.name}.',
-              details: {'name': profile.name, 'isActive': profile.isActive},
+              summary: isRename
+                  ? 'Renamed schedule profile from ${existing.name} to ${profile.name}.'
+                  : 'Added schedule profile ${profile.name}.',
+              details: {
+                'name': profile.name,
+                'isActive': profile.isActive,
+                'previousName': existing?.name,
+                'newName': profile.name,
+                'created': existing == null,
+              },
             ),
           );
         },

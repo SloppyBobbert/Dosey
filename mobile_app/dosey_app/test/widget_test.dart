@@ -309,10 +309,13 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Settings'));
+    await _openSettingsMenu(tester);
+    await tester.tap(find.text('Reminder notifications').hitTestable());
     await _pumpAppFrame(tester);
-    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
-    await _pumpAppFrame(tester);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Reminder notifications'),
+    );
 
     expect(find.text('Reminder notifications'), findsOneWidget);
     expect(find.text('Notifications allowed'), findsOneWidget);
@@ -345,10 +348,13 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Settings'));
+    await _openSettingsMenu(tester);
+    await tester.tap(find.text('Reminder notifications').hitTestable());
     await _pumpAppFrame(tester);
-    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
-    await _pumpAppFrame(tester);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Reminder notifications'),
+    );
 
     expect(find.text('Notifications allowed'), findsOneWidget);
 
@@ -377,10 +383,13 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Settings'));
+    await _openSettingsMenu(tester);
+    await tester.tap(find.text('Reminder notifications').hitTestable());
     await _pumpAppFrame(tester);
-    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
-    await _pumpAppFrame(tester);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Reminder notifications'),
+    );
 
     expect(find.text('Notifications blocked'), findsOneWidget);
 
@@ -405,10 +414,13 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Settings'));
+    await _openSettingsMenu(tester);
+    await tester.tap(find.text('Reminder notifications').hitTestable());
     await _pumpAppFrame(tester);
-    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
-    await _pumpAppFrame(tester);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Reminder notifications'),
+    );
 
     expect(find.text('Notification status unknown'), findsOneWidget);
     expect(
@@ -438,10 +450,13 @@ void main() {
       ),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Settings'));
+    await _openSettingsMenu(tester);
+    await tester.tap(find.text('Reminder notifications').hitTestable());
     await _pumpAppFrame(tester);
-    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
-    await _pumpAppFrame(tester);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Reminder notifications'),
+    );
 
     await tester.tap(find.text('Send test notification'));
     await _pumpAppFrame(tester);
@@ -475,10 +490,13 @@ void main() {
       ),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Settings'));
+    await _openSettingsMenu(tester);
+    await tester.tap(find.text('Reminder notifications').hitTestable());
     await _pumpAppFrame(tester);
-    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
-    await _pumpAppFrame(tester);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Reminder notifications'),
+    );
 
     await tester.tap(find.text('Send test notification'));
     await _pumpAppFrame(tester);
@@ -515,10 +533,13 @@ void main() {
       ),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Settings'));
+    await _openSettingsMenu(tester);
+    await tester.tap(find.text('Reminder notifications').hitTestable());
     await _pumpAppFrame(tester);
-    await tester.scrollUntilVisible(find.text('Reminder notifications'), 200);
-    await _pumpAppFrame(tester);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Reminder notifications'),
+    );
 
     await tester.tap(find.text('Send test notification'));
     await _pumpAppFrame(tester);
@@ -3638,6 +3659,19 @@ Future<void> _acceptMedicalNotice(WidgetTester tester) async {
 
 Future<void> _openSettingsMenu(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Open settings menu'));
+  await _pumpAppFrame(tester);
+}
+
+Future<void> _scrollSettingsUntilVisible(
+  WidgetTester tester,
+  Finder finder, {
+  double delta = 200,
+}) async {
+  await tester.scrollUntilVisible(
+    finder,
+    delta,
+    scrollable: find.byType(Scrollable).first,
+  );
   await _pumpAppFrame(tester);
 }
 

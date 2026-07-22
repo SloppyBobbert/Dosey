@@ -13,11 +13,14 @@ import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 enum SettingsSection {
   account,
   deviceMode,
   actionPin,
+  householdAccount,
+  adminHistory,
   robotFace,
   notifications,
   safety,
@@ -105,11 +108,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection.account => 120,
       SettingsSection.deviceMode => 320,
       SettingsSection.actionPin => 500,
-      SettingsSection.robotFace => 700,
-      SettingsSection.notifications => 960,
-      SettingsSection.safety => 1140,
-      SettingsSection.helpAbout => 1320,
-      SettingsSection.setup => 1520,
+      SettingsSection.householdAccount => 700,
+      SettingsSection.adminHistory => 920,
+      SettingsSection.robotFace => 1140,
+      SettingsSection.notifications => 1400,
+      SettingsSection.safety => 1580,
+      SettingsSection.helpAbout => 1760,
+      SettingsSection.setup => 1960,
     };
   }
 
@@ -176,9 +181,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const SizedBox(height: 12),
             _ActionPinCard(key: _sectionKeys[SettingsSection.actionPin]),
             const SizedBox(height: 12),
-            _HouseholdAccountCard(platform: platform),
+            _HouseholdAccountCard(
+              key: _sectionKeys[SettingsSection.householdAccount],
+              platform: platform,
+            ),
             const SizedBox(height: 12),
-            const _AdminHistoryCard(),
+            _AdminHistoryCard(key: _sectionKeys[SettingsSection.adminHistory]),
             _RobotFaceSettingsSection(
               sectionKey: _sectionKeys[SettingsSection.robotFace],
               previewVoicePlayer: _previewVoicePlayer,
@@ -594,43 +602,82 @@ class _ReminderNotificationCard extends StatefulWidget {
 }
 
 class _HouseholdAccountCard extends StatelessWidget {
-  const _HouseholdAccountCard({required this.platform});
+  const _HouseholdAccountCard({super.key, required this.platform});
 
   final AppDevicePlatform platform;
 
   @override
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.of(context);
-    return StreamBuilder<HouseholdAccountState>(
-      stream: dependencies.household.watchState(),
-      builder: (context, snapshot) {
-        final state = snapshot.data ?? const HouseholdAccountState();
-        final roleLabel = platform == AppDevicePlatform.android
-            ? 'Local only on this device. No synced household account yet.'
-            : 'Personal phone local-only view. Household names are not synced.';
-        return _SettingsSectionCard(
-          icon: Icons.home_outlined,
-          title: 'Household account',
-          children: [
-            Text(state.householdDisplayName),
-            const SizedBox(height: 4),
-            Text('Robot hub: ${state.robotHubDisplayName}'),
-            const SizedBox(height: 8),
-            const _StatusChip(label: 'Local only'),
-            const SizedBox(height: 8),
-            Text(roleLabel),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () => _showHouseholdEditSheet(context, state),
-              icon: const Icon(Icons.edit_outlined),
-              label: const Text('Edit local names'),
-            ),
-            const SizedBox(height: 8),
-            const Text('Connect household account is not available yet.'),
-          ],
+    return StreamBuilder<AppDeviceRole>(
+      stream: dependencies.settings.watchDeviceRole(),
+      builder: (context, roleSnapshot) {
+        final allowedRoles = AppDeviceRole.allowedFor(platform);
+        final fallbackRole = AppDeviceRole.defaultFor(platform);
+        final storedRole = roleSnapshot.data;
+        final role = storedRole != null && allowedRoles.contains(storedRole)
+            ? storedRole
+            : fallbackRole;
+
+        return StreamBuilder<HouseholdAccountState>(
+          stream: dependencies.household.watchState(),
+          builder: (context, snapshot) {
+            final state = snapshot.data ?? const HouseholdAccountState();
+            return _SettingsSectionCard(
+              icon: Icons.home_outlined,
+              title: 'Household & robot profile',
+              children: [
+                _HouseholdMetadataRow(
+                  label: 'Household',
+                  value: state.householdDisplayName,
+                ),
+                _HouseholdMetadataRow(
+                  label: 'Robot',
+                  value: state.robotHubDisplayName,
+                ),
+                _HouseholdMetadataRow(
+                  label: 'This device',
+                  value: _deviceLabel(role),
+                ),
+                _HouseholdMetadataRow(
+                  label: 'Person',
+                  value: state.profileDisplayName ?? 'Not set',
+                ),
+                _HouseholdMetadataRow(
+                  label: 'Relationship',
+                  value: state.relationshipLabel ?? 'Not set',
+                ),
+                const _HouseholdMetadataRow(
+                  label: 'Cloud sync',
+                  value: 'Local only',
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'This profile stays local on this device only. Cloud household sync, invites, and roles are not active yet.',
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => _showHouseholdEditSheet(context, state),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit household & robot profile'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
+  }
+
+  String _deviceLabel(AppDeviceRole role) {
+    return switch (role) {
+      AppDeviceRole.androidRobot =>
+        'Android Robot Mode mounted robot phone / robot hub. This device can host the face and control the XIAO controller.',
+      AppDeviceRole.androidPersonal =>
+        'Android personal phone. This device does not control the XIAO controller.',
+      AppDeviceRole.iosPersonal =>
+        'iOS personal phone. This device does not control the XIAO controller.',
+    };
   }
 
   Future<void> _showHouseholdEditSheet(
@@ -656,8 +703,19 @@ class _HouseholdNamesSheet extends StatefulWidget {
 }
 
 class _HouseholdNamesSheetState extends State<_HouseholdNamesSheet> {
+  static const List<String> _relationshipOptions = <String>[
+    'Self',
+    'Parent',
+    'Grandparent',
+    'Child',
+    'Caregiver',
+    'Other',
+  ];
+
   late final TextEditingController _householdController;
   late final TextEditingController _hubController;
+  late final TextEditingController _profileController;
+  late final TextEditingController _relationshipController;
   bool _isSaving = false;
   String? _errorText;
 
@@ -670,12 +728,20 @@ class _HouseholdNamesSheetState extends State<_HouseholdNamesSheet> {
     _hubController = TextEditingController(
       text: widget.state.robotHubDisplayName,
     );
+    _profileController = TextEditingController(
+      text: widget.state.profileDisplayName ?? '',
+    );
+    _relationshipController = TextEditingController(
+      text: widget.state.relationshipLabel ?? '',
+    );
   }
 
   @override
   void dispose() {
     _householdController.dispose();
     _hubController.dispose();
+    _profileController.dispose();
+    _relationshipController.dispose();
     super.dispose();
   }
 
@@ -693,8 +759,12 @@ class _HouseholdNamesSheetState extends State<_HouseholdNamesSheet> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Edit local household names',
+            'Edit household & robot profile',
             style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Local-only metadata for this device. Saving stays behind the protected admin flow.',
           ),
           const SizedBox(height: 12),
           TextFormField(
@@ -708,7 +778,42 @@ class _HouseholdNamesSheetState extends State<_HouseholdNamesSheet> {
           TextFormField(
             controller: _hubController,
             decoration: const InputDecoration(
-              labelText: 'Robot hub name',
+              labelText: 'Robot name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _profileController,
+            inputFormatters: [LengthLimitingTextInputFormatter(80)],
+            decoration: const InputDecoration(
+              labelText: 'Person/profile name',
+              hintText: 'Optional',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue:
+                _relationshipOptions.contains(
+                  _relationshipController.text.trim(),
+                )
+                ? _relationshipController.text.trim()
+                : null,
+            items: _relationshipOptions
+                .map(
+                  (option) => DropdownMenuItem<String>(
+                    value: option,
+                    child: Text(option),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              _relationshipController.text = value ?? '';
+            },
+            decoration: const InputDecoration(
+              labelText: 'Relationship',
+              hintText: 'Optional',
               border: OutlineInputBorder(),
             ),
           ),
@@ -740,21 +845,43 @@ class _HouseholdNamesSheetState extends State<_HouseholdNamesSheet> {
         context,
         action: (actor) async {
           final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+          final currentState = await household.watchState().first;
+          final newHouseholdName = _householdController.text.trim();
+          final newRobotName = _hubController.text.trim();
+          final newProfileName = _normalizeOptionalField(
+            _profileController.text,
+          );
+          final newRelationship = _normalizeOptionalField(
+            _relationshipController.text,
+          );
           await household.saveLocalNames(
-            householdDisplayName: _householdController.text,
-            robotHubDisplayName: _hubController.text,
+            householdDisplayName: newHouseholdName,
+            robotHubDisplayName: newRobotName,
+            profileDisplayName: newProfileName,
+            relationshipLabel: newRelationship,
             auditEvents: [
-              const AdminAuditEventFactory().householdUpdated(
+              const AdminAuditEventFactory().householdProfileUpdated(
                 actor: actor,
                 sourceDeviceRole: sourceDeviceRole,
-                summary: 'Updated the local household name.',
-                details: {'field': 'householdDisplayName'},
-              ),
-              const AdminAuditEventFactory().robotHubUpdated(
-                actor: actor,
-                sourceDeviceRole: sourceDeviceRole,
-                summary: 'Updated the local robot hub name.',
-                details: {'field': 'robotHubDisplayName'},
+                summary: 'Updated local household and robot profile metadata.',
+                details: {
+                  'householdDisplayName': {
+                    'old': currentState.householdDisplayName,
+                    'new': newHouseholdName,
+                  },
+                  'robotHubDisplayName': {
+                    'old': currentState.robotHubDisplayName,
+                    'new': newRobotName,
+                  },
+                  'profileDisplayName': {
+                    'old': currentState.profileDisplayName,
+                    'new': newProfileName,
+                  },
+                  'relationshipLabel': {
+                    'old': currentState.relationshipLabel,
+                    'new': newRelationship,
+                  },
+                },
               ),
             ],
           );
@@ -773,10 +900,41 @@ class _HouseholdNamesSheetState extends State<_HouseholdNamesSheet> {
       });
     }
   }
+
+  String? _normalizeOptionalField(String value) {
+    final normalizedValue = value.trim();
+    return normalizedValue.isEmpty ? null : normalizedValue;
+  }
+}
+
+class _HouseholdMetadataRow extends StatelessWidget {
+  const _HouseholdMetadataRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: RichText(
+        text: TextSpan(
+          style: Theme.of(context).textTheme.bodyMedium,
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            TextSpan(text: value),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _AdminHistoryCard extends StatelessWidget {
-  const _AdminHistoryCard();
+  const _AdminHistoryCard({super.key});
 
   @override
   Widget build(BuildContext context) {

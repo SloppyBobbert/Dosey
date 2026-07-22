@@ -23,6 +23,16 @@ void main() {
             'Dosey robot phone',
           )
           .having(
+            (state) => state.profileDisplayName,
+            'profileDisplayName',
+            isNull,
+          )
+          .having(
+            (state) => state.relationshipLabel,
+            'relationshipLabel',
+            isNull,
+          )
+          .having(
             (state) => state.connectionState,
             'connectionState',
             HouseholdConnectionState.localOnly,
@@ -43,6 +53,8 @@ void main() {
     await repository.saveLocalNames(
       householdDisplayName: 'Tran family',
       robotHubDisplayName: 'Kitchen Dosey',
+      profileDisplayName: 'Brandon',
+      relationshipLabel: 'Self',
     );
 
     expect(
@@ -57,6 +69,16 @@ void main() {
             (state) => state.robotHubDisplayName,
             'robotHubDisplayName',
             'Kitchen Dosey',
+          )
+          .having(
+            (state) => state.profileDisplayName,
+            'profileDisplayName',
+            'Brandon',
+          )
+          .having(
+            (state) => state.relationshipLabel,
+            'relationshipLabel',
+            'Self',
           ),
     );
   });
@@ -69,11 +91,34 @@ void main() {
     await repository.saveLocalNames(
       householdDisplayName: '  Tran family  ',
       robotHubDisplayName: '  Kitchen Dosey ',
+      profileDisplayName: '  Brandon  ',
+      relationshipLabel: '  Caregiver ',
     );
 
     final state = await repository.watchState().first;
     expect(state.householdDisplayName, 'Tran family');
     expect(state.robotHubDisplayName, 'Kitchen Dosey');
+    expect(state.profileDisplayName, 'Brandon');
+    expect(state.relationshipLabel, 'Caregiver');
+  });
+
+  test('household repository clears blank optional labels', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalHouseholdRepository(database);
+
+    await repository.saveLocalNames(
+      profileDisplayName: 'Brandon',
+      relationshipLabel: 'Self',
+    );
+    await repository.saveLocalNames(
+      profileDisplayName: '   ',
+      relationshipLabel: ' ',
+    );
+
+    final state = await repository.watchState().first;
+    expect(state.profileDisplayName, isNull);
+    expect(state.relationshipLabel, isNull);
   });
 
   test('household repository rejects blank display names', () async {

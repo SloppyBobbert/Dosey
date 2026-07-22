@@ -12,8 +12,7 @@ enum AdminAuditEventType {
   pinEnabled,
   pinChanged,
   pinDisabled,
-  householdUpdated,
-  robotHubUpdated,
+  householdProfileUpdated,
 }
 
 enum AdminAuditTargetType {
@@ -22,7 +21,6 @@ enum AdminAuditTargetType {
   scheduleProfile,
   carouselSlot,
   household,
-  robotHub,
   pin,
 }
 
