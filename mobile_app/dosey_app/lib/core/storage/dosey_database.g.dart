@@ -4547,6 +4547,795 @@ class ControllerCommandEventsCompanion
   }
 }
 
+class $AdminAuditEventsTable extends AdminAuditEvents
+    with TableInfo<$AdminAuditEventsTable, AdminAuditEventRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AdminAuditEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventTypeMeta = const VerificationMeta(
+    'eventType',
+  );
+  @override
+  late final GeneratedColumn<String> eventType = GeneratedColumn<String>(
+    'event_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetTypeMeta = const VerificationMeta(
+    'targetType',
+  );
+  @override
+  late final GeneratedColumn<String> targetType = GeneratedColumn<String>(
+    'target_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _targetIdMeta = const VerificationMeta(
+    'targetId',
+  );
+  @override
+  late final GeneratedColumn<String> targetId = GeneratedColumn<String>(
+    'target_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _actorTypeMeta = const VerificationMeta(
+    'actorType',
+  );
+  @override
+  late final GeneratedColumn<String> actorType = GeneratedColumn<String>(
+    'actor_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _actorUserIdMeta = const VerificationMeta(
+    'actorUserId',
+  );
+  @override
+  late final GeneratedColumn<String> actorUserId = GeneratedColumn<String>(
+    'actor_user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _actorLabelMeta = const VerificationMeta(
+    'actorLabel',
+  );
+  @override
+  late final GeneratedColumn<String> actorLabel = GeneratedColumn<String>(
+    'actor_label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceDeviceRoleMeta = const VerificationMeta(
+    'sourceDeviceRole',
+  );
+  @override
+  late final GeneratedColumn<String> sourceDeviceRole = GeneratedColumn<String>(
+    'source_device_role',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _summaryMeta = const VerificationMeta(
+    'summary',
+  );
+  @override
+  late final GeneratedColumn<String> summary = GeneratedColumn<String>(
+    'summary',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _detailsJsonMeta = const VerificationMeta(
+    'detailsJson',
+  );
+  @override
+  late final GeneratedColumn<String> detailsJson = GeneratedColumn<String>(
+    'details_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _cloudEventIdMeta = const VerificationMeta(
+    'cloudEventId',
+  );
+  @override
+  late final GeneratedColumn<String> cloudEventId = GeneratedColumn<String>(
+    'cloud_event_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastSyncedAtMeta = const VerificationMeta(
+    'lastSyncedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastSyncedAt = GeneratedColumn<DateTime>(
+    'last_synced_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _occurredAtMeta = const VerificationMeta(
+    'occurredAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> occurredAt = GeneratedColumn<DateTime>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    eventType,
+    targetType,
+    targetId,
+    actorType,
+    actorUserId,
+    actorLabel,
+    sourceDeviceRole,
+    summary,
+    detailsJson,
+    cloudEventId,
+    lastSyncedAt,
+    occurredAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'admin_audit_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AdminAuditEventRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('event_type')) {
+      context.handle(
+        _eventTypeMeta,
+        eventType.isAcceptableOrUnknown(data['event_type']!, _eventTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventTypeMeta);
+    }
+    if (data.containsKey('target_type')) {
+      context.handle(
+        _targetTypeMeta,
+        targetType.isAcceptableOrUnknown(data['target_type']!, _targetTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_targetTypeMeta);
+    }
+    if (data.containsKey('target_id')) {
+      context.handle(
+        _targetIdMeta,
+        targetId.isAcceptableOrUnknown(data['target_id']!, _targetIdMeta),
+      );
+    }
+    if (data.containsKey('actor_type')) {
+      context.handle(
+        _actorTypeMeta,
+        actorType.isAcceptableOrUnknown(data['actor_type']!, _actorTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_actorTypeMeta);
+    }
+    if (data.containsKey('actor_user_id')) {
+      context.handle(
+        _actorUserIdMeta,
+        actorUserId.isAcceptableOrUnknown(
+          data['actor_user_id']!,
+          _actorUserIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('actor_label')) {
+      context.handle(
+        _actorLabelMeta,
+        actorLabel.isAcceptableOrUnknown(data['actor_label']!, _actorLabelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_actorLabelMeta);
+    }
+    if (data.containsKey('source_device_role')) {
+      context.handle(
+        _sourceDeviceRoleMeta,
+        sourceDeviceRole.isAcceptableOrUnknown(
+          data['source_device_role']!,
+          _sourceDeviceRoleMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceDeviceRoleMeta);
+    }
+    if (data.containsKey('summary')) {
+      context.handle(
+        _summaryMeta,
+        summary.isAcceptableOrUnknown(data['summary']!, _summaryMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_summaryMeta);
+    }
+    if (data.containsKey('details_json')) {
+      context.handle(
+        _detailsJsonMeta,
+        detailsJson.isAcceptableOrUnknown(
+          data['details_json']!,
+          _detailsJsonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('cloud_event_id')) {
+      context.handle(
+        _cloudEventIdMeta,
+        cloudEventId.isAcceptableOrUnknown(
+          data['cloud_event_id']!,
+          _cloudEventIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_synced_at')) {
+      context.handle(
+        _lastSyncedAtMeta,
+        lastSyncedAt.isAcceptableOrUnknown(
+          data['last_synced_at']!,
+          _lastSyncedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('occurred_at')) {
+      context.handle(
+        _occurredAtMeta,
+        occurredAt.isAcceptableOrUnknown(data['occurred_at']!, _occurredAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_occurredAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AdminAuditEventRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AdminAuditEventRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      eventType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_type'],
+      )!,
+      targetType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_type'],
+      )!,
+      targetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}target_id'],
+      ),
+      actorType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}actor_type'],
+      )!,
+      actorUserId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}actor_user_id'],
+      ),
+      actorLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}actor_label'],
+      )!,
+      sourceDeviceRole: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_device_role'],
+      )!,
+      summary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary'],
+      )!,
+      detailsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}details_json'],
+      ),
+      cloudEventId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cloud_event_id'],
+      ),
+      lastSyncedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_synced_at'],
+      ),
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+    );
+  }
+
+  @override
+  $AdminAuditEventsTable createAlias(String alias) {
+    return $AdminAuditEventsTable(attachedDatabase, alias);
+  }
+}
+
+class AdminAuditEventRow extends DataClass
+    implements Insertable<AdminAuditEventRow> {
+  final String id;
+  final String eventType;
+  final String targetType;
+  final String? targetId;
+  final String actorType;
+  final String? actorUserId;
+  final String actorLabel;
+  final String sourceDeviceRole;
+  final String summary;
+  final String? detailsJson;
+  final String? cloudEventId;
+  final DateTime? lastSyncedAt;
+  final DateTime occurredAt;
+  const AdminAuditEventRow({
+    required this.id,
+    required this.eventType,
+    required this.targetType,
+    this.targetId,
+    required this.actorType,
+    this.actorUserId,
+    required this.actorLabel,
+    required this.sourceDeviceRole,
+    required this.summary,
+    this.detailsJson,
+    this.cloudEventId,
+    this.lastSyncedAt,
+    required this.occurredAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['event_type'] = Variable<String>(eventType);
+    map['target_type'] = Variable<String>(targetType);
+    if (!nullToAbsent || targetId != null) {
+      map['target_id'] = Variable<String>(targetId);
+    }
+    map['actor_type'] = Variable<String>(actorType);
+    if (!nullToAbsent || actorUserId != null) {
+      map['actor_user_id'] = Variable<String>(actorUserId);
+    }
+    map['actor_label'] = Variable<String>(actorLabel);
+    map['source_device_role'] = Variable<String>(sourceDeviceRole);
+    map['summary'] = Variable<String>(summary);
+    if (!nullToAbsent || detailsJson != null) {
+      map['details_json'] = Variable<String>(detailsJson);
+    }
+    if (!nullToAbsent || cloudEventId != null) {
+      map['cloud_event_id'] = Variable<String>(cloudEventId);
+    }
+    if (!nullToAbsent || lastSyncedAt != null) {
+      map['last_synced_at'] = Variable<DateTime>(lastSyncedAt);
+    }
+    map['occurred_at'] = Variable<DateTime>(occurredAt);
+    return map;
+  }
+
+  AdminAuditEventsCompanion toCompanion(bool nullToAbsent) {
+    return AdminAuditEventsCompanion(
+      id: Value(id),
+      eventType: Value(eventType),
+      targetType: Value(targetType),
+      targetId: targetId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(targetId),
+      actorType: Value(actorType),
+      actorUserId: actorUserId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actorUserId),
+      actorLabel: Value(actorLabel),
+      sourceDeviceRole: Value(sourceDeviceRole),
+      summary: Value(summary),
+      detailsJson: detailsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(detailsJson),
+      cloudEventId: cloudEventId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(cloudEventId),
+      lastSyncedAt: lastSyncedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastSyncedAt),
+      occurredAt: Value(occurredAt),
+    );
+  }
+
+  factory AdminAuditEventRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AdminAuditEventRow(
+      id: serializer.fromJson<String>(json['id']),
+      eventType: serializer.fromJson<String>(json['eventType']),
+      targetType: serializer.fromJson<String>(json['targetType']),
+      targetId: serializer.fromJson<String?>(json['targetId']),
+      actorType: serializer.fromJson<String>(json['actorType']),
+      actorUserId: serializer.fromJson<String?>(json['actorUserId']),
+      actorLabel: serializer.fromJson<String>(json['actorLabel']),
+      sourceDeviceRole: serializer.fromJson<String>(json['sourceDeviceRole']),
+      summary: serializer.fromJson<String>(json['summary']),
+      detailsJson: serializer.fromJson<String?>(json['detailsJson']),
+      cloudEventId: serializer.fromJson<String?>(json['cloudEventId']),
+      lastSyncedAt: serializer.fromJson<DateTime?>(json['lastSyncedAt']),
+      occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'eventType': serializer.toJson<String>(eventType),
+      'targetType': serializer.toJson<String>(targetType),
+      'targetId': serializer.toJson<String?>(targetId),
+      'actorType': serializer.toJson<String>(actorType),
+      'actorUserId': serializer.toJson<String?>(actorUserId),
+      'actorLabel': serializer.toJson<String>(actorLabel),
+      'sourceDeviceRole': serializer.toJson<String>(sourceDeviceRole),
+      'summary': serializer.toJson<String>(summary),
+      'detailsJson': serializer.toJson<String?>(detailsJson),
+      'cloudEventId': serializer.toJson<String?>(cloudEventId),
+      'lastSyncedAt': serializer.toJson<DateTime?>(lastSyncedAt),
+      'occurredAt': serializer.toJson<DateTime>(occurredAt),
+    };
+  }
+
+  AdminAuditEventRow copyWith({
+    String? id,
+    String? eventType,
+    String? targetType,
+    Value<String?> targetId = const Value.absent(),
+    String? actorType,
+    Value<String?> actorUserId = const Value.absent(),
+    String? actorLabel,
+    String? sourceDeviceRole,
+    String? summary,
+    Value<String?> detailsJson = const Value.absent(),
+    Value<String?> cloudEventId = const Value.absent(),
+    Value<DateTime?> lastSyncedAt = const Value.absent(),
+    DateTime? occurredAt,
+  }) => AdminAuditEventRow(
+    id: id ?? this.id,
+    eventType: eventType ?? this.eventType,
+    targetType: targetType ?? this.targetType,
+    targetId: targetId.present ? targetId.value : this.targetId,
+    actorType: actorType ?? this.actorType,
+    actorUserId: actorUserId.present ? actorUserId.value : this.actorUserId,
+    actorLabel: actorLabel ?? this.actorLabel,
+    sourceDeviceRole: sourceDeviceRole ?? this.sourceDeviceRole,
+    summary: summary ?? this.summary,
+    detailsJson: detailsJson.present ? detailsJson.value : this.detailsJson,
+    cloudEventId: cloudEventId.present ? cloudEventId.value : this.cloudEventId,
+    lastSyncedAt: lastSyncedAt.present ? lastSyncedAt.value : this.lastSyncedAt,
+    occurredAt: occurredAt ?? this.occurredAt,
+  );
+  AdminAuditEventRow copyWithCompanion(AdminAuditEventsCompanion data) {
+    return AdminAuditEventRow(
+      id: data.id.present ? data.id.value : this.id,
+      eventType: data.eventType.present ? data.eventType.value : this.eventType,
+      targetType: data.targetType.present
+          ? data.targetType.value
+          : this.targetType,
+      targetId: data.targetId.present ? data.targetId.value : this.targetId,
+      actorType: data.actorType.present ? data.actorType.value : this.actorType,
+      actorUserId: data.actorUserId.present
+          ? data.actorUserId.value
+          : this.actorUserId,
+      actorLabel: data.actorLabel.present
+          ? data.actorLabel.value
+          : this.actorLabel,
+      sourceDeviceRole: data.sourceDeviceRole.present
+          ? data.sourceDeviceRole.value
+          : this.sourceDeviceRole,
+      summary: data.summary.present ? data.summary.value : this.summary,
+      detailsJson: data.detailsJson.present
+          ? data.detailsJson.value
+          : this.detailsJson,
+      cloudEventId: data.cloudEventId.present
+          ? data.cloudEventId.value
+          : this.cloudEventId,
+      lastSyncedAt: data.lastSyncedAt.present
+          ? data.lastSyncedAt.value
+          : this.lastSyncedAt,
+      occurredAt: data.occurredAt.present
+          ? data.occurredAt.value
+          : this.occurredAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AdminAuditEventRow(')
+          ..write('id: $id, ')
+          ..write('eventType: $eventType, ')
+          ..write('targetType: $targetType, ')
+          ..write('targetId: $targetId, ')
+          ..write('actorType: $actorType, ')
+          ..write('actorUserId: $actorUserId, ')
+          ..write('actorLabel: $actorLabel, ')
+          ..write('sourceDeviceRole: $sourceDeviceRole, ')
+          ..write('summary: $summary, ')
+          ..write('detailsJson: $detailsJson, ')
+          ..write('cloudEventId: $cloudEventId, ')
+          ..write('lastSyncedAt: $lastSyncedAt, ')
+          ..write('occurredAt: $occurredAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    eventType,
+    targetType,
+    targetId,
+    actorType,
+    actorUserId,
+    actorLabel,
+    sourceDeviceRole,
+    summary,
+    detailsJson,
+    cloudEventId,
+    lastSyncedAt,
+    occurredAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AdminAuditEventRow &&
+          other.id == this.id &&
+          other.eventType == this.eventType &&
+          other.targetType == this.targetType &&
+          other.targetId == this.targetId &&
+          other.actorType == this.actorType &&
+          other.actorUserId == this.actorUserId &&
+          other.actorLabel == this.actorLabel &&
+          other.sourceDeviceRole == this.sourceDeviceRole &&
+          other.summary == this.summary &&
+          other.detailsJson == this.detailsJson &&
+          other.cloudEventId == this.cloudEventId &&
+          other.lastSyncedAt == this.lastSyncedAt &&
+          other.occurredAt == this.occurredAt);
+}
+
+class AdminAuditEventsCompanion extends UpdateCompanion<AdminAuditEventRow> {
+  final Value<String> id;
+  final Value<String> eventType;
+  final Value<String> targetType;
+  final Value<String?> targetId;
+  final Value<String> actorType;
+  final Value<String?> actorUserId;
+  final Value<String> actorLabel;
+  final Value<String> sourceDeviceRole;
+  final Value<String> summary;
+  final Value<String?> detailsJson;
+  final Value<String?> cloudEventId;
+  final Value<DateTime?> lastSyncedAt;
+  final Value<DateTime> occurredAt;
+  final Value<int> rowid;
+  const AdminAuditEventsCompanion({
+    this.id = const Value.absent(),
+    this.eventType = const Value.absent(),
+    this.targetType = const Value.absent(),
+    this.targetId = const Value.absent(),
+    this.actorType = const Value.absent(),
+    this.actorUserId = const Value.absent(),
+    this.actorLabel = const Value.absent(),
+    this.sourceDeviceRole = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.detailsJson = const Value.absent(),
+    this.cloudEventId = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+    this.occurredAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AdminAuditEventsCompanion.insert({
+    required String id,
+    required String eventType,
+    required String targetType,
+    this.targetId = const Value.absent(),
+    required String actorType,
+    this.actorUserId = const Value.absent(),
+    required String actorLabel,
+    required String sourceDeviceRole,
+    required String summary,
+    this.detailsJson = const Value.absent(),
+    this.cloudEventId = const Value.absent(),
+    this.lastSyncedAt = const Value.absent(),
+    required DateTime occurredAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       eventType = Value(eventType),
+       targetType = Value(targetType),
+       actorType = Value(actorType),
+       actorLabel = Value(actorLabel),
+       sourceDeviceRole = Value(sourceDeviceRole),
+       summary = Value(summary),
+       occurredAt = Value(occurredAt);
+  static Insertable<AdminAuditEventRow> custom({
+    Expression<String>? id,
+    Expression<String>? eventType,
+    Expression<String>? targetType,
+    Expression<String>? targetId,
+    Expression<String>? actorType,
+    Expression<String>? actorUserId,
+    Expression<String>? actorLabel,
+    Expression<String>? sourceDeviceRole,
+    Expression<String>? summary,
+    Expression<String>? detailsJson,
+    Expression<String>? cloudEventId,
+    Expression<DateTime>? lastSyncedAt,
+    Expression<DateTime>? occurredAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (eventType != null) 'event_type': eventType,
+      if (targetType != null) 'target_type': targetType,
+      if (targetId != null) 'target_id': targetId,
+      if (actorType != null) 'actor_type': actorType,
+      if (actorUserId != null) 'actor_user_id': actorUserId,
+      if (actorLabel != null) 'actor_label': actorLabel,
+      if (sourceDeviceRole != null) 'source_device_role': sourceDeviceRole,
+      if (summary != null) 'summary': summary,
+      if (detailsJson != null) 'details_json': detailsJson,
+      if (cloudEventId != null) 'cloud_event_id': cloudEventId,
+      if (lastSyncedAt != null) 'last_synced_at': lastSyncedAt,
+      if (occurredAt != null) 'occurred_at': occurredAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AdminAuditEventsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? eventType,
+    Value<String>? targetType,
+    Value<String?>? targetId,
+    Value<String>? actorType,
+    Value<String?>? actorUserId,
+    Value<String>? actorLabel,
+    Value<String>? sourceDeviceRole,
+    Value<String>? summary,
+    Value<String?>? detailsJson,
+    Value<String?>? cloudEventId,
+    Value<DateTime?>? lastSyncedAt,
+    Value<DateTime>? occurredAt,
+    Value<int>? rowid,
+  }) {
+    return AdminAuditEventsCompanion(
+      id: id ?? this.id,
+      eventType: eventType ?? this.eventType,
+      targetType: targetType ?? this.targetType,
+      targetId: targetId ?? this.targetId,
+      actorType: actorType ?? this.actorType,
+      actorUserId: actorUserId ?? this.actorUserId,
+      actorLabel: actorLabel ?? this.actorLabel,
+      sourceDeviceRole: sourceDeviceRole ?? this.sourceDeviceRole,
+      summary: summary ?? this.summary,
+      detailsJson: detailsJson ?? this.detailsJson,
+      cloudEventId: cloudEventId ?? this.cloudEventId,
+      lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
+      occurredAt: occurredAt ?? this.occurredAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (eventType.present) {
+      map['event_type'] = Variable<String>(eventType.value);
+    }
+    if (targetType.present) {
+      map['target_type'] = Variable<String>(targetType.value);
+    }
+    if (targetId.present) {
+      map['target_id'] = Variable<String>(targetId.value);
+    }
+    if (actorType.present) {
+      map['actor_type'] = Variable<String>(actorType.value);
+    }
+    if (actorUserId.present) {
+      map['actor_user_id'] = Variable<String>(actorUserId.value);
+    }
+    if (actorLabel.present) {
+      map['actor_label'] = Variable<String>(actorLabel.value);
+    }
+    if (sourceDeviceRole.present) {
+      map['source_device_role'] = Variable<String>(sourceDeviceRole.value);
+    }
+    if (summary.present) {
+      map['summary'] = Variable<String>(summary.value);
+    }
+    if (detailsJson.present) {
+      map['details_json'] = Variable<String>(detailsJson.value);
+    }
+    if (cloudEventId.present) {
+      map['cloud_event_id'] = Variable<String>(cloudEventId.value);
+    }
+    if (lastSyncedAt.present) {
+      map['last_synced_at'] = Variable<DateTime>(lastSyncedAt.value);
+    }
+    if (occurredAt.present) {
+      map['occurred_at'] = Variable<DateTime>(occurredAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AdminAuditEventsCompanion(')
+          ..write('id: $id, ')
+          ..write('eventType: $eventType, ')
+          ..write('targetType: $targetType, ')
+          ..write('targetId: $targetId, ')
+          ..write('actorType: $actorType, ')
+          ..write('actorUserId: $actorUserId, ')
+          ..write('actorLabel: $actorLabel, ')
+          ..write('sourceDeviceRole: $sourceDeviceRole, ')
+          ..write('summary: $summary, ')
+          ..write('detailsJson: $detailsJson, ')
+          ..write('cloudEventId: $cloudEventId, ')
+          ..write('lastSyncedAt: $lastSyncedAt, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$DoseyDatabase extends GeneratedDatabase {
   _$DoseyDatabase(QueryExecutor e) : super(e);
   $DoseyDatabaseManager get managers => $DoseyDatabaseManager(this);
@@ -4566,6 +5355,9 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
       $ControllerCommandSessionsTable(this);
   late final $ControllerCommandEventsTable controllerCommandEvents =
       $ControllerCommandEventsTable(this);
+  late final $AdminAuditEventsTable adminAuditEvents = $AdminAuditEventsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -4581,6 +5373,7 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     doseLogEvents,
     controllerCommandSessions,
     controllerCommandEvents,
+    adminAuditEvents,
   ];
 }
 
@@ -7038,6 +7831,384 @@ typedef $$ControllerCommandEventsTableProcessedTableManager =
       ControllerCommandEventRow,
       PrefetchHooks Function()
     >;
+typedef $$AdminAuditEventsTableCreateCompanionBuilder =
+    AdminAuditEventsCompanion Function({
+      required String id,
+      required String eventType,
+      required String targetType,
+      Value<String?> targetId,
+      required String actorType,
+      Value<String?> actorUserId,
+      required String actorLabel,
+      required String sourceDeviceRole,
+      required String summary,
+      Value<String?> detailsJson,
+      Value<String?> cloudEventId,
+      Value<DateTime?> lastSyncedAt,
+      required DateTime occurredAt,
+      Value<int> rowid,
+    });
+typedef $$AdminAuditEventsTableUpdateCompanionBuilder =
+    AdminAuditEventsCompanion Function({
+      Value<String> id,
+      Value<String> eventType,
+      Value<String> targetType,
+      Value<String?> targetId,
+      Value<String> actorType,
+      Value<String?> actorUserId,
+      Value<String> actorLabel,
+      Value<String> sourceDeviceRole,
+      Value<String> summary,
+      Value<String?> detailsJson,
+      Value<String?> cloudEventId,
+      Value<DateTime?> lastSyncedAt,
+      Value<DateTime> occurredAt,
+      Value<int> rowid,
+    });
+
+class $$AdminAuditEventsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $AdminAuditEventsTable> {
+  $$AdminAuditEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetType => $composableBuilder(
+    column: $table.targetType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get targetId => $composableBuilder(
+    column: $table.targetId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get actorType => $composableBuilder(
+    column: $table.actorType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get actorUserId => $composableBuilder(
+    column: $table.actorUserId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get actorLabel => $composableBuilder(
+    column: $table.actorLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceDeviceRole => $composableBuilder(
+    column: $table.sourceDeviceRole,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get detailsJson => $composableBuilder(
+    column: $table.detailsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cloudEventId => $composableBuilder(
+    column: $table.cloudEventId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AdminAuditEventsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $AdminAuditEventsTable> {
+  $$AdminAuditEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetType => $composableBuilder(
+    column: $table.targetType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get targetId => $composableBuilder(
+    column: $table.targetId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get actorType => $composableBuilder(
+    column: $table.actorType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get actorUserId => $composableBuilder(
+    column: $table.actorUserId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get actorLabel => $composableBuilder(
+    column: $table.actorLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceDeviceRole => $composableBuilder(
+    column: $table.sourceDeviceRole,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get detailsJson => $composableBuilder(
+    column: $table.detailsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cloudEventId => $composableBuilder(
+    column: $table.cloudEventId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AdminAuditEventsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $AdminAuditEventsTable> {
+  $$AdminAuditEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get eventType =>
+      $composableBuilder(column: $table.eventType, builder: (column) => column);
+
+  GeneratedColumn<String> get targetType => $composableBuilder(
+    column: $table.targetType,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get targetId =>
+      $composableBuilder(column: $table.targetId, builder: (column) => column);
+
+  GeneratedColumn<String> get actorType =>
+      $composableBuilder(column: $table.actorType, builder: (column) => column);
+
+  GeneratedColumn<String> get actorUserId => $composableBuilder(
+    column: $table.actorUserId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get actorLabel => $composableBuilder(
+    column: $table.actorLabel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceDeviceRole => $composableBuilder(
+    column: $table.sourceDeviceRole,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get summary =>
+      $composableBuilder(column: $table.summary, builder: (column) => column);
+
+  GeneratedColumn<String> get detailsJson => $composableBuilder(
+    column: $table.detailsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get cloudEventId => $composableBuilder(
+    column: $table.cloudEventId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastSyncedAt => $composableBuilder(
+    column: $table.lastSyncedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => column,
+  );
+}
+
+class $$AdminAuditEventsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $AdminAuditEventsTable,
+          AdminAuditEventRow,
+          $$AdminAuditEventsTableFilterComposer,
+          $$AdminAuditEventsTableOrderingComposer,
+          $$AdminAuditEventsTableAnnotationComposer,
+          $$AdminAuditEventsTableCreateCompanionBuilder,
+          $$AdminAuditEventsTableUpdateCompanionBuilder,
+          (
+            AdminAuditEventRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $AdminAuditEventsTable,
+              AdminAuditEventRow
+            >,
+          ),
+          AdminAuditEventRow,
+          PrefetchHooks Function()
+        > {
+  $$AdminAuditEventsTableTableManager(
+    _$DoseyDatabase db,
+    $AdminAuditEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AdminAuditEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AdminAuditEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AdminAuditEventsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> eventType = const Value.absent(),
+                Value<String> targetType = const Value.absent(),
+                Value<String?> targetId = const Value.absent(),
+                Value<String> actorType = const Value.absent(),
+                Value<String?> actorUserId = const Value.absent(),
+                Value<String> actorLabel = const Value.absent(),
+                Value<String> sourceDeviceRole = const Value.absent(),
+                Value<String> summary = const Value.absent(),
+                Value<String?> detailsJson = const Value.absent(),
+                Value<String?> cloudEventId = const Value.absent(),
+                Value<DateTime?> lastSyncedAt = const Value.absent(),
+                Value<DateTime> occurredAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AdminAuditEventsCompanion(
+                id: id,
+                eventType: eventType,
+                targetType: targetType,
+                targetId: targetId,
+                actorType: actorType,
+                actorUserId: actorUserId,
+                actorLabel: actorLabel,
+                sourceDeviceRole: sourceDeviceRole,
+                summary: summary,
+                detailsJson: detailsJson,
+                cloudEventId: cloudEventId,
+                lastSyncedAt: lastSyncedAt,
+                occurredAt: occurredAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String eventType,
+                required String targetType,
+                Value<String?> targetId = const Value.absent(),
+                required String actorType,
+                Value<String?> actorUserId = const Value.absent(),
+                required String actorLabel,
+                required String sourceDeviceRole,
+                required String summary,
+                Value<String?> detailsJson = const Value.absent(),
+                Value<String?> cloudEventId = const Value.absent(),
+                Value<DateTime?> lastSyncedAt = const Value.absent(),
+                required DateTime occurredAt,
+                Value<int> rowid = const Value.absent(),
+              }) => AdminAuditEventsCompanion.insert(
+                id: id,
+                eventType: eventType,
+                targetType: targetType,
+                targetId: targetId,
+                actorType: actorType,
+                actorUserId: actorUserId,
+                actorLabel: actorLabel,
+                sourceDeviceRole: sourceDeviceRole,
+                summary: summary,
+                detailsJson: detailsJson,
+                cloudEventId: cloudEventId,
+                lastSyncedAt: lastSyncedAt,
+                occurredAt: occurredAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AdminAuditEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $AdminAuditEventsTable,
+      AdminAuditEventRow,
+      $$AdminAuditEventsTableFilterComposer,
+      $$AdminAuditEventsTableOrderingComposer,
+      $$AdminAuditEventsTableAnnotationComposer,
+      $$AdminAuditEventsTableCreateCompanionBuilder,
+      $$AdminAuditEventsTableUpdateCompanionBuilder,
+      (
+        AdminAuditEventRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $AdminAuditEventsTable,
+          AdminAuditEventRow
+        >,
+      ),
+      AdminAuditEventRow,
+      PrefetchHooks Function()
+    >;
 
 class $DoseyDatabaseManager {
   final _$DoseyDatabase _db;
@@ -7068,4 +8239,6 @@ class $DoseyDatabaseManager {
         _db,
         _db.controllerCommandEvents,
       );
+  $$AdminAuditEventsTableTableManager get adminAuditEvents =>
+      $$AdminAuditEventsTableTableManager(_db, _db.adminAuditEvents);
 }

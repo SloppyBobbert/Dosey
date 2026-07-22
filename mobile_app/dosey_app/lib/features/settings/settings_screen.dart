@@ -1,5 +1,9 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
+import 'package:dosey_app/core/admin/protected_admin_action.dart';
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/household/household_account_state.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
@@ -7,6 +11,7 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
+import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
 
 enum SettingsSection {
@@ -170,6 +175,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 12),
             _ActionPinCard(key: _sectionKeys[SettingsSection.actionPin]),
+            const SizedBox(height: 12),
+            _HouseholdAccountCard(platform: platform),
+            const SizedBox(height: 12),
+            const _AdminHistoryCard(),
             _RobotFaceSettingsSection(
               sectionKey: _sectionKeys[SettingsSection.robotFace],
               previewVoicePlayer: _previewVoicePlayer,
@@ -465,7 +474,7 @@ class _ActionPinCard extends StatelessWidget {
             Text(pinEnabled ? 'PIN is on' : 'PIN is off'),
             const SizedBox(height: 8),
             const Text(
-              'Require a local PIN before confirming or skipping doses and before running robot actions.',
+              'Require a local PIN before protected meds, schedules, carousel changes, dose actions, and other local admin changes.',
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -509,9 +518,22 @@ class _ActionPinCard extends StatelessWidget {
   }
 
   Future<void> _disablePin(BuildContext context) async {
+    final dependencies = DoseyAppScope.of(context);
     final currentPin = await _requestVerifiedCurrentPin(context);
     if (currentPin == null || !context.mounted) return;
-    await DoseyAppScope.of(context).settings.clearActionPin();
+    final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+    if (!context.mounted) return;
+    final actor = await ProtectedAdminActionRunner(
+      pinGate: dependencies.actionPinGate,
+      localAuth: dependencies.localAuth,
+    ).resolveActor();
+    await dependencies.settings.clearActionPin(
+      auditEvent: const AdminAuditEventFactory().pinDisabled(
+        actor: actor,
+        sourceDeviceRole: sourceDeviceRole,
+        summary: 'Disabled the local action PIN.',
+      ),
+    );
   }
 
   Future<String?> _requestVerifiedCurrentPin(BuildContext context) async {
@@ -532,7 +554,28 @@ class _ActionPinCard extends StatelessWidget {
 
   Future<void> _savePin(BuildContext context, String pin) async {
     try {
-      await DoseyAppScope.of(context).settings.setActionPin(pin);
+      final dependencies = DoseyAppScope.of(context);
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
+      final actor = await ProtectedAdminActionRunner(
+        pinGate: dependencies.actionPinGate,
+        localAuth: dependencies.localAuth,
+      ).resolveActor();
+      final pinEnabled = await dependencies.settings.isActionPinEnabled();
+      await dependencies.settings.setActionPin(
+        pin,
+        auditEvent: pinEnabled
+            ? const AdminAuditEventFactory().pinChanged(
+                actor: actor,
+                sourceDeviceRole: sourceDeviceRole,
+                summary: 'Changed the local action PIN.',
+              )
+            : const AdminAuditEventFactory().pinEnabled(
+                actor: actor,
+                sourceDeviceRole: sourceDeviceRole,
+                summary: 'Enabled the local action PIN.',
+              ),
+      );
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -548,6 +591,219 @@ class _ReminderNotificationCard extends StatefulWidget {
   @override
   State<_ReminderNotificationCard> createState() =>
       _ReminderNotificationCardState();
+}
+
+class _HouseholdAccountCard extends StatelessWidget {
+  const _HouseholdAccountCard({required this.platform});
+
+  final AppDevicePlatform platform;
+
+  @override
+  Widget build(BuildContext context) {
+    final dependencies = DoseyAppScope.of(context);
+    return StreamBuilder<HouseholdAccountState>(
+      stream: dependencies.household.watchState(),
+      builder: (context, snapshot) {
+        final state = snapshot.data ?? const HouseholdAccountState();
+        final roleLabel = platform == AppDevicePlatform.android
+            ? 'Local only on this device. No synced household account yet.'
+            : 'Personal phone local-only view. Household names are not synced.';
+        return _SettingsSectionCard(
+          icon: Icons.home_outlined,
+          title: 'Household account',
+          children: [
+            Text(state.householdDisplayName),
+            const SizedBox(height: 4),
+            Text('Robot hub: ${state.robotHubDisplayName}'),
+            const SizedBox(height: 8),
+            const _StatusChip(label: 'Local only'),
+            const SizedBox(height: 8),
+            Text(roleLabel),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () => _showHouseholdEditSheet(context, state),
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Edit local names'),
+            ),
+            const SizedBox(height: 8),
+            const Text('Connect household account is not available yet.'),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showHouseholdEditSheet(
+    BuildContext context,
+    HouseholdAccountState state,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _HouseholdNamesSheet(state: state),
+    );
+  }
+}
+
+class _HouseholdNamesSheet extends StatefulWidget {
+  const _HouseholdNamesSheet({required this.state});
+
+  final HouseholdAccountState state;
+
+  @override
+  State<_HouseholdNamesSheet> createState() => _HouseholdNamesSheetState();
+}
+
+class _HouseholdNamesSheetState extends State<_HouseholdNamesSheet> {
+  late final TextEditingController _householdController;
+  late final TextEditingController _hubController;
+  bool _isSaving = false;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _householdController = TextEditingController(
+      text: widget.state.householdDisplayName,
+    );
+    _hubController = TextEditingController(
+      text: widget.state.robotHubDisplayName,
+    );
+  }
+
+  @override
+  void dispose() {
+    _householdController.dispose();
+    _hubController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        MediaQuery.viewInsetsOf(context).bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Edit local household names',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _householdController,
+            decoration: const InputDecoration(
+              labelText: 'Household name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _hubController,
+            decoration: const InputDecoration(
+              labelText: 'Robot hub name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _errorText!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: _isSaving ? null : _save,
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    final household = DoseyAppScope.of(context).household;
+    setState(() {
+      _isSaving = true;
+      _errorText = null;
+    });
+    try {
+      final result = await runProtectedAdminAction<void>(
+        context,
+        action: (actor) async {
+          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+          await household.saveLocalNames(
+            householdDisplayName: _householdController.text,
+            robotHubDisplayName: _hubController.text,
+            auditEvents: [
+              const AdminAuditEventFactory().householdUpdated(
+                actor: actor,
+                sourceDeviceRole: sourceDeviceRole,
+                summary: 'Updated the local household name.',
+                details: {'field': 'householdDisplayName'},
+              ),
+              const AdminAuditEventFactory().robotHubUpdated(
+                actor: actor,
+                sourceDeviceRole: sourceDeviceRole,
+                summary: 'Updated the local robot hub name.',
+                details: {'field': 'robotHubDisplayName'},
+              ),
+            ],
+          );
+        },
+      );
+      if (!result.isSuccess) {
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
+      if (mounted) Navigator.of(context).pop();
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorText = 'Household update failed: $error';
+        _isSaving = false;
+      });
+    }
+  }
+}
+
+class _AdminHistoryCard extends StatelessWidget {
+  const _AdminHistoryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AdminAuditEvent>>(
+      stream: DoseyAppScope.of(context).adminAudit.watchRecentEvents(limit: 8),
+      builder: (context, snapshot) {
+        final events = snapshot.data ?? const <AdminAuditEvent>[];
+        return _SettingsSectionCard(
+          icon: Icons.history_outlined,
+          title: 'Admin history',
+          children: [
+            if (events.isEmpty)
+              const Text('No local admin changes recorded yet.')
+            else
+              for (final event in events)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(event.summary),
+                  subtitle: Text(
+                    '${event.actorLabel} · ${event.occurredAt.toLocal()}',
+                  ),
+                ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _RobotFaceSettingsCard extends StatefulWidget {

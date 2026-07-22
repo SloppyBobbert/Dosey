@@ -108,29 +108,43 @@ void main() {
     expect(find.text('Flip face 180°'), findsNothing);
     expect(find.text('Dim after inactivity'), findsNothing);
 
+    await tester.scrollUntilVisible(
+      find.text('Household account'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Household account').hitTestable(), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Admin history'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Admin history').hitTestable(), findsOneWidget);
+    expect(find.text('No local admin changes recorded yet.'), findsOneWidget);
+
     final listView = tester.widget<ListView>(find.byType(ListView));
     final children =
         (listView.childrenDelegate as SliverChildListDelegate).children;
-    final deviceModeIndex = children.indexWhere(
-      (child) => child.runtimeType.toString() == '_DeviceModeCard',
-    );
+    final childTypes = children.map((child) => child.runtimeType.toString()).toList();
+    final actionPinIndex = childTypes.indexOf('_ActionPinCard');
+    final householdIndex = childTypes.indexOf('_HouseholdAccountCard');
+    final adminHistoryIndex = childTypes.indexOf('_AdminHistoryCard');
+    final robotFaceIndex = childTypes.indexOf('_RobotFaceSettingsSection');
+    final reminderIndex = childTypes.indexOf('_ReminderNotificationCard');
 
-    expect(deviceModeIndex, isNonNegative);
-    expect(
-      children[deviceModeIndex + 2].runtimeType.toString(),
-      '_ActionPinCard',
-    );
-    expect(
-      children[deviceModeIndex + 3].runtimeType.toString(),
-      '_RobotFaceSettingsSection',
-    );
+    expect(actionPinIndex, isNonNegative);
+    expect(householdIndex, greaterThan(actionPinIndex));
+    expect(adminHistoryIndex, greaterThan(householdIndex));
+    expect(robotFaceIndex, greaterThan(adminHistoryIndex));
+    expect(reminderIndex, greaterThan(robotFaceIndex));
 
-    final spacer = children[deviceModeIndex + 4] as SizedBox;
-    expect(spacer.height, 12);
-    expect(
-      children[deviceModeIndex + 5].runtimeType.toString(),
-      '_ReminderNotificationCard',
-    );
+    expect(children[householdIndex - 1], isA<SizedBox>());
+    expect((children[householdIndex - 1] as SizedBox).height, 12);
+    expect(children[adminHistoryIndex - 1], isA<SizedBox>());
+    expect((children[adminHistoryIndex - 1] as SizedBox).height, 12);
   });
 
   testWidgets('robot face controls persist and update state', (

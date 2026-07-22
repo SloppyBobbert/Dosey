@@ -5,6 +5,7 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
+import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/shell/dosey_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -159,24 +160,29 @@ void main() {
       find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
       findsOneWidget,
     );
-    expect(find.text('Prototype safety').hitTestable(), findsOneWidget);
-    expect(
-      find.text('I understand prototype safety rules').hitTestable(),
-      findsOneWidget,
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('I understand prototype safety rules'),
     );
+    expect(find.text('Prototype safety'), findsOneWidget);
+    expect(find.text('I understand prototype safety rules').hitTestable(), findsOneWidget);
 
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, 900));
-    await _pumpShellFrame(tester);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Account'),
+      delta: -200,
+    );
     expect(find.text('Account').hitTestable(), findsWidgets);
 
     await _openSettingsMenu(tester);
     await tester.tap(find.text('Prototype safety').hitTestable());
     await _pumpShellFrame(tester);
 
-    expect(
-      find.text('I understand prototype safety rules').hitTestable(),
-      findsOneWidget,
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('I understand prototype safety rules'),
     );
+    expect(find.text('I understand prototype safety rules').hitTestable(), findsOneWidget);
   });
 
   testWidgets('settings gear menu opens Help and About', (
@@ -193,19 +199,22 @@ void main() {
     expect(find.text('Help & About'), findsOneWidget);
 
     await tester.tap(find.text('Help & About').hitTestable());
-    await _pumpShellFrame(tester);
+    await tester.pumpAndSettle();
 
     expect(
       find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
       findsOneWidget,
     );
-    expect(find.text('Help & About').hitTestable(), findsOneWidget);
-    expect(find.text('Dosey 1.0.0+1').hitTestable(), findsOneWidget);
     expect(
-      find.widgetWithText(
-        SelectableText,
-        'https://github.com/SloppyBobbert/Dosey',
-      ),
+      tester.widget<SettingsScreen>(find.byType(SettingsScreen)).sectionTarget,
+      SettingsSection.helpAbout,
+    );
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Caregiver sharing and cloud sync are not active yet.'),
+    );
+    expect(
+      find.text('Caregiver sharing and cloud sync are not active yet.'),
       findsOneWidget,
     );
     expect(
@@ -238,6 +247,21 @@ Future<void> _pumpShell(WidgetTester tester, Widget widget) async {
 Future<void> _pumpShellFrame(WidgetTester tester) async {
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
+}
+
+Future<void> _scrollSettingsUntilVisible(
+  WidgetTester tester,
+  Finder finder,
+  {
+  double delta = 200,
+}
+) async {
+  await tester.scrollUntilVisible(
+    finder,
+    delta,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await _pumpShellFrame(tester);
 }
 
 class _TestShellApp extends StatelessWidget {

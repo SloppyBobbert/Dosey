@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
@@ -9,6 +10,7 @@ import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
 
 class CarouselScreen extends StatefulWidget {
@@ -658,6 +660,7 @@ class _AssignmentCard extends StatelessWidget {
     BuildContext context,
     ReminderSchedule schedule,
   ) async {
+    final dependencies = DoseyAppScope.of(context);
     final slotNumber = int.tryParse(slotController.text.trim());
     if (slotNumber == null) {
       _showMessage(context, 'Enter a slot number.');
@@ -672,18 +675,36 @@ class _AssignmentCard extends StatelessWidget {
 
     final now = DateTime.now().toUtc();
     try {
-      await DoseyAppScope.of(context).carouselSlots.assignSlot(
-        CarouselSlot(
-          id: '${profile.id}-${schedule.id}',
-          slotNumber: slotNumber,
-          prescriptionId: prescriptionId,
-          scheduleId: schedule.id,
-          profileId: profile.id,
-          status: CarouselSlotStatus.assigned,
-          createdAt: now,
-          updatedAt: now,
-        ),
+      final slot = CarouselSlot(
+        id: '${profile.id}-${schedule.id}',
+        slotNumber: slotNumber,
+        prescriptionId: prescriptionId,
+        scheduleId: schedule.id,
+        profileId: profile.id,
+        status: CarouselSlotStatus.assigned,
+        createdAt: now,
+        updatedAt: now,
       );
+      final result = await runProtectedAdminAction<void>(
+        context,
+        action: (actor) async {
+          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+          await dependencies.carouselSlots.assignSlot(
+            slot,
+            auditEvent: const AdminAuditEventFactory().carouselSlotAssigned(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: slot.id,
+              summary: 'Assigned carousel slot ${slot.slotNumber}.',
+              details: {
+                'scheduleId': slot.scheduleId,
+                'prescriptionId': slot.prescriptionId,
+              },
+            ),
+          );
+        },
+      );
+      if (!result.isSuccess) return;
       slotController.clear();
       if (!context.mounted) return;
       _showMessage(context, 'Slot assigned.');
@@ -753,10 +774,26 @@ class _SlotCardState extends State<_SlotCard> {
   }
 
   Future<void> _markNeedsReview(BuildContext context) async {
+    final dependencies = DoseyAppScope.of(context);
     try {
-      await DoseyAppScope.of(
+      final result = await runProtectedAdminAction<void>(
         context,
-      ).carouselSlots.markNeedsReview(widget.slot.id);
+        action: (actor) async {
+          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+          await dependencies.carouselSlots.markNeedsReview(
+            widget.slot.id,
+            auditEvent: const AdminAuditEventFactory()
+                .carouselSlotNeedsReviewMarked(
+                  actor: actor,
+                  sourceDeviceRole: sourceDeviceRole,
+                  targetId: widget.slot.id,
+                  summary:
+                      'Marked slot ${widget.slot.slotNumber} for refill review.',
+                ),
+          );
+        },
+      );
+      if (!result.isSuccess) return;
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Slot marked for refill review.')),
@@ -779,8 +816,24 @@ class _SlotCardState extends State<_SlotCard> {
   }
 
   Future<void> _markLoaded(BuildContext context) async {
+    final dependencies = DoseyAppScope.of(context);
     try {
-      await DoseyAppScope.of(context).carouselSlots.markLoaded(widget.slot.id);
+      final result = await runProtectedAdminAction<void>(
+        context,
+        action: (actor) async {
+          final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+          await dependencies.carouselSlots.markLoaded(
+            widget.slot.id,
+            auditEvent: const AdminAuditEventFactory().carouselSlotLoaded(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: widget.slot.id,
+              summary: 'Marked slot ${widget.slot.slotNumber} loaded.',
+            ),
+          );
+        },
+      );
+      if (!result.isSuccess) return;
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,

@@ -1,4 +1,6 @@
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -293,6 +295,49 @@ void main() {
       expect(events.single.kind, DoseLogEventKind.doseMissedRecognized);
       expect(events.single.doseId, 'missed-dose');
       expect(events.single.marksDoseTaken, isFalse);
+    },
+  );
+
+  test(
+    'admin audit recent history uses deterministic descending order',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalAdminAuditRepository(database);
+      final occurredAt = DateTime.utc(2026, 6, 9, 12);
+
+      await repository.addEvent(
+        AdminAuditEvent(
+          eventType: AdminAuditEventType.householdUpdated,
+          targetType: AdminAuditTargetType.household,
+          actorType: AdminAuditActorType.signedInUser,
+          actorUserId: 'google:user-a',
+          actorLabel: 'Alpha (google)',
+          sourceDeviceRole: 'androidRobot',
+          summary: 'First',
+          occurredAt: occurredAt,
+        ),
+      );
+      await repository.addEvent(
+        AdminAuditEvent(
+          eventType: AdminAuditEventType.householdUpdated,
+          targetType: AdminAuditTargetType.household,
+          actorType: AdminAuditActorType.signedInUser,
+          actorUserId: 'apple:user-b',
+          actorLabel: 'Beta (apple)',
+          sourceDeviceRole: 'androidRobot',
+          summary: 'Second',
+          targetId: 'z-target',
+          occurredAt: occurredAt,
+        ),
+      );
+
+      final events = await repository.watchRecentEvents(limit: 2).first;
+      expect(events.map((event) => event.summary).toList(), [
+        'Second',
+        'First',
+      ]);
+      expect(events.first.actorUserId, 'apple:user-b');
     },
   );
 

@@ -1,3 +1,5 @@
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
@@ -5,13 +7,13 @@ import 'package:drift/drift.dart';
 abstract interface class CarouselSlotRepository {
   Stream<List<CarouselSlot>> watchSlots({String? profileId});
 
-  Future<void> assignSlot(CarouselSlot slot);
+  Future<void> assignSlot(CarouselSlot slot, {AdminAuditEvent? auditEvent});
 
-  Future<void> markLoaded(String id);
+  Future<void> markLoaded(String id, {AdminAuditEvent? auditEvent});
 
   Future<void> markDispensed(String id);
 
-  Future<void> markNeedsReview(String id);
+  Future<void> markNeedsReview(String id, {AdminAuditEvent? auditEvent});
 
   Future<void> clearSlot(String id);
 
@@ -35,7 +37,10 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
   }
 
   @override
-  Future<void> assignSlot(CarouselSlot slot) async {
+  Future<void> assignSlot(
+    CarouselSlot slot, {
+    AdminAuditEvent? auditEvent,
+  }) async {
     await _database.transaction(() async {
       await _validateSlot(slot);
       // Disabled schedules should not keep a loaded bay reserved; clean them
@@ -52,6 +57,12 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
           await _database
               .into(_database.carouselSlots)
               .insert(_companionFor(slot));
+          if (auditEvent != null) {
+            await LocalAdminAuditRepository.insertEventIntoDatabase(
+              _database,
+              auditEvent,
+            );
+          }
           return;
         }
 
@@ -73,6 +84,12 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
             'No carousel slot was updated for id "${slot.id}".',
           );
         }
+        if (auditEvent != null) {
+          await LocalAdminAuditRepository.insertEventIntoDatabase(
+            _database,
+            auditEvent,
+          );
+        }
       } on Object catch (error) {
         if (_isConstraintFailure(error)) {
           await _throwDuplicateConflict(slot);
@@ -83,8 +100,8 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
   }
 
   @override
-  Future<void> markLoaded(String id) {
-    return _updateStatus(id, CarouselSlotStatus.loaded);
+  Future<void> markLoaded(String id, {AdminAuditEvent? auditEvent}) {
+    return _updateStatus(id, CarouselSlotStatus.loaded, auditEvent: auditEvent);
   }
 
   @override
@@ -99,8 +116,12 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
   }
 
   @override
-  Future<void> markNeedsReview(String id) {
-    return _updateStatus(id, CarouselSlotStatus.needsReview);
+  Future<void> markNeedsReview(String id, {AdminAuditEvent? auditEvent}) {
+    return _updateStatus(
+      id,
+      CarouselSlotStatus.needsReview,
+      auditEvent: auditEvent,
+    );
   }
 
   @override
@@ -121,6 +142,7 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
     String id,
     CarouselSlotStatus status, {
     CarouselSlotStatus? fromStatus,
+    AdminAuditEvent? auditEvent,
   }) async {
     if (id.trim().isEmpty) {
       throw ArgumentError.value(id, 'id', 'Slot id is required.');
@@ -145,6 +167,12 @@ class LocalCarouselSlotRepository implements CarouselSlotRepository {
         );
       }
       throw ArgumentError('No carousel slot was updated for id "$id".');
+    }
+    if (auditEvent != null) {
+      await LocalAdminAuditRepository.insertEventIntoDatabase(
+        _database,
+        auditEvent,
+      );
     }
   }
 

@@ -5,10 +5,18 @@ class ActionPinGate {
 
   final LocalAppSettingsRepository _settings;
 
+  Future<bool> isPinEnabled() {
+    return _settings.isActionPinEnabled();
+  }
+
+  Future<bool> verifyPin(String pin) {
+    return _settings.verifyActionPin(pin);
+  }
+
   Future<bool> authorize({
     required Future<String?> Function() requestPin,
   }) async {
-    final pinEnabled = await _settings.isActionPinEnabled();
+    final pinEnabled = await isPinEnabled();
     if (!pinEnabled) {
       return true;
     }
@@ -18,6 +26,6 @@ class ActionPinGate {
       return false;
     }
 
-    return _settings.verifyActionPin(pin);
+    return verifyPin(pin);
   }
 }

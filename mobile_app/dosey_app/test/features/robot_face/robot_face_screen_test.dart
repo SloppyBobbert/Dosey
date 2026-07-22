@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
@@ -1522,10 +1523,16 @@ class _IdleControllerLifecycleService extends ControllerLifecycleService {
 
 class _IdleScheduleProfileRepository implements ScheduleProfileRepository {
   @override
-  Future<void> setActiveProfile(String id) async {}
+  Future<void> setActiveProfile(
+    String id, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 
   @override
-  Future<void> upsertProfile(ScheduleProfile profile) async {}
+  Future<void> upsertProfile(
+    ScheduleProfile profile, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 
   @override
   Stream<ScheduleProfile?> watchActiveProfile() {
@@ -1667,7 +1674,10 @@ class _UnusedControllerCommandRepository
 
 class _UnusedCarouselSlotRepository implements CarouselSlotRepository {
   @override
-  Future<void> assignSlot(CarouselSlot slot) async {}
+  Future<void> assignSlot(
+    CarouselSlot slot, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 
   @override
   Future<void> clearProfile(String profileId) async {}
@@ -1679,10 +1689,13 @@ class _UnusedCarouselSlotRepository implements CarouselSlotRepository {
   Future<void> markDispensed(String id) async {}
 
   @override
-  Future<void> markLoaded(String id) async {}
+  Future<void> markLoaded(String id, {AdminAuditEvent? auditEvent}) async {}
 
   @override
-  Future<void> markNeedsReview(String id) async {}
+  Future<void> markNeedsReview(
+    String id, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 
   @override
   Stream<List<CarouselSlot>> watchSlots({String? profileId}) {
@@ -1701,10 +1714,14 @@ class _FakeMissedDoseReconciliationService
 
 class _FakeReminderRepository implements ReminderRepository {
   @override
-  Future<void> deleteSchedule(String id) async {}
+  Future<int> deleteSchedule(String id, {AdminAuditEvent? auditEvent}) async =>
+      1;
 
   @override
-  Future<void> upsertSchedule(ReminderSchedule schedule) async {}
+  Future<void> upsertSchedule(
+    ReminderSchedule schedule, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 
   @override
   Stream<List<ReminderSchedule>> watchSchedules({String? profileId}) {

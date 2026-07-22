@@ -183,6 +183,26 @@ class ControllerCommandEvents extends Table {
   ];
 }
 
+@DataClassName('AdminAuditEventRow')
+class AdminAuditEvents extends Table {
+  TextColumn get id => text()();
+  TextColumn get eventType => text()();
+  TextColumn get targetType => text()();
+  TextColumn get targetId => text().nullable()();
+  TextColumn get actorType => text()();
+  TextColumn get actorUserId => text().nullable()();
+  TextColumn get actorLabel => text()();
+  TextColumn get sourceDeviceRole => text()();
+  TextColumn get summary => text()();
+  TextColumn get detailsJson => text().nullable()();
+  TextColumn get cloudEventId => text().nullable()();
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+  DateTimeColumn get occurredAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     AppSettings,
@@ -195,6 +215,7 @@ class ControllerCommandEvents extends Table {
     DoseLogEvents,
     ControllerCommandSessions,
     ControllerCommandEvents,
+    AdminAuditEvents,
   ],
 )
 class DoseyDatabase extends _$DoseyDatabase {
@@ -211,12 +232,13 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) async {
       await migrator.createAll();
+      await _createAdminAuditEventsIfMissing();
       await _seedOnboardingCompleted(completed: false);
       await _seedDefaultScheduleProfile();
     },
@@ -272,8 +294,31 @@ class DoseyDatabase extends _$DoseyDatabase {
         await migrator.createTable(controllerCommandSessions);
         await migrator.createTable(controllerCommandEvents);
       }
+      if (from < 12) {
+        await _createAdminAuditEventsIfMissing();
+      }
     },
   );
+
+  Future<void> _createAdminAuditEventsIfMissing() {
+    return customStatement('''
+      CREATE TABLE IF NOT EXISTS admin_audit_events (
+        id TEXT NOT NULL PRIMARY KEY,
+        event_type TEXT NOT NULL,
+        target_type TEXT NOT NULL,
+        target_id TEXT,
+        actor_type TEXT NOT NULL,
+        actor_user_id TEXT,
+        actor_label TEXT NOT NULL,
+        source_device_role TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        details_json TEXT,
+        cloud_event_id TEXT,
+        last_synced_at INTEGER,
+        occurred_at INTEGER NOT NULL
+      );
+    ''');
+  }
 
   Future<void> _createDoseLogEventsIfMissing() {
     return customStatement('''
