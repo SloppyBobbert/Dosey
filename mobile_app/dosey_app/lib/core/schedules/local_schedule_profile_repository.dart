@@ -1,3 +1,5 @@
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
@@ -7,9 +9,12 @@ abstract interface class ScheduleProfileRepository {
 
   Stream<ScheduleProfile?> watchActiveProfile();
 
-  Future<void> upsertProfile(ScheduleProfile profile);
+  Future<void> upsertProfile(
+    ScheduleProfile profile, {
+    AdminAuditEvent? auditEvent,
+  });
 
-  Future<void> setActiveProfile(String id);
+  Future<void> setActiveProfile(String id, {AdminAuditEvent? auditEvent});
 }
 
 class LocalScheduleProfileRepository implements ScheduleProfileRepository {
@@ -38,24 +43,38 @@ class LocalScheduleProfileRepository implements ScheduleProfileRepository {
   }
 
   @override
-  Future<void> upsertProfile(ScheduleProfile profile) {
+  Future<void> upsertProfile(
+    ScheduleProfile profile, {
+    AdminAuditEvent? auditEvent,
+  }) {
     _validateProfile(profile);
-    return _database
-        .into(_database.scheduleProfiles)
-        .insertOnConflictUpdate(
-          ScheduleProfilesCompanion.insert(
-            id: profile.id,
-            name: profile.name.trim(),
-            isActive: profile.isActive,
-            createdAt: profile.createdAt.toUtc(),
-            updatedAt: profile.updatedAt.toUtc(),
-          ),
+    return _database.transaction(() async {
+      await _database
+          .into(_database.scheduleProfiles)
+          .insertOnConflictUpdate(
+            ScheduleProfilesCompanion.insert(
+              id: profile.id,
+              name: profile.name.trim(),
+              isActive: profile.isActive,
+              createdAt: profile.createdAt.toUtc(),
+              updatedAt: profile.updatedAt.toUtc(),
+            ),
+          );
+      if (auditEvent != null) {
+        await LocalAdminAuditRepository.insertEventIntoDatabase(
+          _database,
+          auditEvent,
         );
+      }
+    });
   }
 
   /// Activates one profile at a time so only one robot routine can drive Today.
   @override
-  Future<void> setActiveProfile(String id) async {
+  Future<void> setActiveProfile(
+    String id, {
+    AdminAuditEvent? auditEvent,
+  }) async {
     final existing =
         await (_database.select(_database.scheduleProfiles)
               ..where((profile) => profile.id.equals(id))
@@ -85,6 +104,12 @@ class LocalScheduleProfileRepository implements ScheduleProfileRepository {
           updatedAt: Value(now),
         ),
       );
+      if (auditEvent != null) {
+        await LocalAdminAuditRepository.insertEventIntoDatabase(
+          _database,
+          auditEvent,
+        );
+      }
     });
   }
 

@@ -1,3 +1,4 @@
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -113,5 +114,47 @@ void main() {
 
     expect(await repository.watchActionPinEnabled().first, isFalse);
     expect(await repository.verifyActionPin('1234'), isFalse);
+  });
+
+  test('action PIN lifecycle audits without storing secrets', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    const actorType = AdminAuditActorType.localAdmin;
+
+    await repository.setActionPin(
+      '1234',
+      auditEvent: AdminAuditEvent(
+        eventType: AdminAuditEventType.pinEnabled,
+        targetType: AdminAuditTargetType.pin,
+        actorType: actorType,
+        actorLabel: 'local admin',
+        sourceDeviceRole: 'androidPersonal',
+        summary: 'enabled pin',
+        occurredAt: DateTime.utc(2026, 7, 21),
+      ),
+    );
+    await repository.clearActionPin(
+      auditEvent: AdminAuditEvent(
+        eventType: AdminAuditEventType.pinDisabled,
+        targetType: AdminAuditTargetType.pin,
+        actorType: actorType,
+        actorLabel: 'local admin',
+        sourceDeviceRole: 'androidPersonal',
+        summary: 'disabled pin',
+        occurredAt: DateTime.utc(2026, 7, 21, 0, 0, 1),
+      ),
+    );
+
+    final rows = await database.select(database.adminAuditEvents).get();
+    expect(rows, hasLength(2));
+    expect(rows.every((row) => !(row.summary.contains('1234'))), isTrue);
+    expect(
+      rows.every((row) => !(row.detailsJson ?? '').contains('1234')),
+      isTrue,
+    );
   });
 }

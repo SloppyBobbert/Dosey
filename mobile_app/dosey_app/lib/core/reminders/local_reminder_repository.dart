@@ -1,3 +1,5 @@
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
@@ -5,9 +7,12 @@ import 'package:drift/drift.dart';
 abstract interface class ReminderRepository {
   Stream<List<ReminderSchedule>> watchSchedules({String? profileId});
 
-  Future<void> upsertSchedule(ReminderSchedule schedule);
+  Future<void> upsertSchedule(
+    ReminderSchedule schedule, {
+    AdminAuditEvent? auditEvent,
+  });
 
-  Future<void> deleteSchedule(String id);
+  Future<int> deleteSchedule(String id, {AdminAuditEvent? auditEvent});
 }
 
 class LocalReminderRepository implements ReminderRepository {
@@ -32,7 +37,10 @@ class LocalReminderRepository implements ReminderRepository {
 
   /// Saves schedule timing plus its optional prescription link for newer flows.
   @override
-  Future<void> upsertSchedule(ReminderSchedule schedule) async {
+  Future<void> upsertSchedule(
+    ReminderSchedule schedule, {
+    AdminAuditEvent? auditEvent,
+  }) async {
     _validateSchedule(schedule);
     await _rejectDuplicatePrescriptionTime(schedule);
 
@@ -68,18 +76,31 @@ class LocalReminderRepository implements ReminderRepository {
               updatedAt: schedule.updatedAt.toUtc(),
             ),
           );
+      if (auditEvent != null) {
+        await LocalAdminAuditRepository.insertEventIntoDatabase(
+          _database,
+          auditEvent,
+        );
+      }
     });
   }
 
   @override
-  Future<void> deleteSchedule(String id) {
+  Future<int> deleteSchedule(String id, {AdminAuditEvent? auditEvent}) {
     return _database.transaction(() async {
       await (_database.delete(
         _database.carouselSlots,
       )..where((slot) => slot.scheduleId.equals(id))).go();
-      await (_database.delete(
+      final deleted = await (_database.delete(
         _database.reminderSchedules,
       )..where((schedule) => schedule.id.equals(id))).go();
+      if (deleted > 0 && auditEvent != null) {
+        await LocalAdminAuditRepository.insertEventIntoDatabase(
+          _database,
+          auditEvent,
+        );
+      }
+      return deleted;
     });
   }
 

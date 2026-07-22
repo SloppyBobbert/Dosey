@@ -1,3 +1,4 @@
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
@@ -153,6 +154,46 @@ void main() {
     expect(repository.savedSchedules, [schedule]);
     expect(result.notificationError, isA<Exception>());
   });
+
+  test(
+    'save still persists local audit when notification scheduling warns',
+    () async {
+      final repository = _FakeReminderRepository();
+      final scheduler = _FakeReminderScheduler()
+        ..scheduleError = Exception('notifications unavailable');
+      final service = ReminderScheduleService(
+        repository: repository,
+        scheduler: scheduler,
+        now: () => DateTime(2026, 6, 29, 7, 15),
+      );
+      final schedule = _schedule(
+        id: 'warning-dose',
+        label: 'Warning dose',
+        hour: 9,
+        minute: 0,
+        isEnabled: true,
+      );
+
+      final auditEvent = AdminAuditEvent(
+        eventType: AdminAuditEventType.scheduleSaved,
+        targetType: AdminAuditTargetType.reminderSchedule,
+        targetId: schedule.id,
+        actorType: AdminAuditActorType.localAdmin,
+        actorLabel: 'local admin',
+        sourceDeviceRole: 'androidPersonal',
+        summary: 'saved schedule',
+        occurredAt: DateTime.utc(2026, 6, 29, 7, 15),
+      );
+      final result = await service.saveSchedule(
+        schedule,
+        auditEvent: auditEvent,
+      );
+
+      expect(repository.savedSchedules, [schedule]);
+      expect(repository.savedAuditEvents, [auditEvent]);
+      expect(result.hasNotificationWarning, isTrue);
+    },
+  );
 
   test(
     'unexpected scheduler errors still surface after saving schedule',
@@ -419,6 +460,7 @@ ReminderSchedule _schedule({
 
 class _FakeReminderRepository implements ReminderRepository {
   final savedSchedules = <ReminderSchedule>[];
+  final savedAuditEvents = <AdminAuditEvent?>[];
   final deletedScheduleIds = <String>[];
   final operations = <String>[];
   List<String>? sharedOperations;
@@ -429,17 +471,22 @@ class _FakeReminderRepository implements ReminderRepository {
   }
 
   @override
-  Future<void> upsertSchedule(ReminderSchedule schedule) async {
+  Future<void> upsertSchedule(
+    ReminderSchedule schedule, {
+    AdminAuditEvent? auditEvent,
+  }) async {
     savedSchedules.add(schedule);
+    savedAuditEvents.add(auditEvent);
     operations.add('save:${schedule.id}');
     sharedOperations?.add('save:${schedule.id}');
   }
 
   @override
-  Future<void> deleteSchedule(String id) async {
+  Future<int> deleteSchedule(String id, {AdminAuditEvent? auditEvent}) async {
     deletedScheduleIds.add(id);
     operations.add('delete:$id');
     sharedOperations?.add('delete:$id');
+    return 1;
   }
 }
 

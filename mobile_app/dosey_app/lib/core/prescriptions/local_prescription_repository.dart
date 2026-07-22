@@ -1,3 +1,5 @@
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
@@ -7,13 +9,17 @@ abstract interface class PrescriptionRepository {
 
   Stream<List<PrescriptionRefill>> watchRefillHistory(String prescriptionId);
 
-  Future<void> upsertPrescription(Prescription prescription);
+  Future<void> upsertPrescription(
+    Prescription prescription, {
+    AdminAuditEvent? auditEvent,
+  });
 
   Future<void> addRefill({
     required String prescriptionId,
     required int doseCount,
     required DateTime occurredAt,
     String? note,
+    AdminAuditEvent? auditEvent,
   });
 
   Future<void> recordTakenDose(
@@ -21,7 +27,7 @@ abstract interface class PrescriptionRepository {
     required DateTime occurredAt,
   });
 
-  Future<void> deletePrescription(String id);
+  Future<void> deletePrescription(String id, {AdminAuditEvent? auditEvent});
 }
 
 class LocalPrescriptionRepository implements PrescriptionRepository {
@@ -49,22 +55,33 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
 
   /// Saves the user-entered medication name and selected pill graphic type.
   @override
-  Future<void> upsertPrescription(Prescription prescription) {
+  Future<void> upsertPrescription(
+    Prescription prescription, {
+    AdminAuditEvent? auditEvent,
+  }) {
     _validatePrescription(prescription);
 
-    return _database
-        .into(_database.prescriptions)
-        .insertOnConflictUpdate(
-          PrescriptionsCompanion.insert(
-            id: prescription.id,
-            name: prescription.name.trim(),
-            pillType: prescription.pillType.storageValue,
-            remainingDoses: Value(prescription.remainingDoses),
-            refillThreshold: Value(prescription.refillThreshold),
-            createdAt: prescription.createdAt.toUtc(),
-            updatedAt: prescription.updatedAt.toUtc(),
-          ),
+    return _database.transaction(() async {
+      await _database
+          .into(_database.prescriptions)
+          .insertOnConflictUpdate(
+            PrescriptionsCompanion.insert(
+              id: prescription.id,
+              name: prescription.name.trim(),
+              pillType: prescription.pillType.storageValue,
+              remainingDoses: Value(prescription.remainingDoses),
+              refillThreshold: Value(prescription.refillThreshold),
+              createdAt: prescription.createdAt.toUtc(),
+              updatedAt: prescription.updatedAt.toUtc(),
+            ),
+          );
+      if (auditEvent != null) {
+        await LocalAdminAuditRepository.insertEventIntoDatabase(
+          _database,
+          auditEvent,
         );
+      }
+    });
   }
 
   @override
@@ -73,6 +90,7 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
     required int doseCount,
     required DateTime occurredAt,
     String? note,
+    AdminAuditEvent? auditEvent,
   }) async {
     if (doseCount <= 0) {
       throw ArgumentError.value(
@@ -114,6 +132,12 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
                   : Value(trimmedNote),
             ),
           );
+      if (auditEvent != null) {
+        await LocalAdminAuditRepository.insertEventIntoDatabase(
+          _database,
+          auditEvent,
+        );
+      }
     });
   }
 
@@ -142,7 +166,7 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
   }
 
   @override
-  Future<void> deletePrescription(String id) {
+  Future<void> deletePrescription(String id, {AdminAuditEvent? auditEvent}) {
     return _database.transaction(() async {
       // Remove dependent local data first so deleted prescriptions do not leave
       // orphaned schedules, carousel slots, or refill history.
@@ -158,6 +182,12 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
       await (_database.delete(
         _database.prescriptions,
       )..where((prescription) => prescription.id.equals(id))).go();
+      if (auditEvent != null) {
+        await LocalAdminAuditRepository.insertEventIntoDatabase(
+          _database,
+          auditEvent,
+        );
+      }
     });
   }
 

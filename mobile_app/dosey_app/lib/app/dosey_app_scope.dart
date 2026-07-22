@@ -4,6 +4,7 @@ import 'dart:developer' as developer;
 import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/audit/admin_audit_repository.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/bluetooth/flutter_blue_plus_ble_gateway.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
@@ -13,6 +14,8 @@ import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
+import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
+import 'package:dosey_app/core/household/local_household_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
@@ -25,6 +28,7 @@ import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart
 import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
+import 'package:dosey_app/core/settings/action_pin_gate.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -102,7 +106,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       }
     });
     final doseLog = DriftDoseLogRepository(_database);
+    final adminAudit = LocalAdminAuditRepository(_database);
     final localAuth = LocalAuthRepository(_database);
+    final household = LocalHouseholdRepository(_database);
     final reminders = LocalReminderRepository(_database);
     final notificationTaps =
         widget.notificationTapController ?? ReminderNotificationTapController();
@@ -116,6 +122,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       _database,
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
     );
+    final actionPinGate = ActionPinGate(settings);
     final robotFaceSettings = RobotFaceSettingsRepository(_database);
     final scheduleProfiles = LocalScheduleProfileRepository(_database);
     final carouselSlots = LocalCarouselSlotRepository(_database);
@@ -150,6 +157,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     _dependencies = DoseyAppDependencies(
       database: _database,
       settings: settings,
+      actionPinGate: actionPinGate,
       prescriptions: LocalPrescriptionRepository(_database),
       scheduleProfiles: scheduleProfiles,
       reminders: reminders,
@@ -159,6 +167,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       ),
       carouselSlots: carouselSlots,
       doseLog: doseLog,
+      adminAudit: adminAudit,
+      household: household,
       localAuth: localAuth,
       auth: AppAuthService(localAuth: localAuth),
       controller: controller,
@@ -250,12 +260,15 @@ class DoseyAppDependencies {
   const DoseyAppDependencies({
     required this.database,
     required this.settings,
+    required this.actionPinGate,
     required this.prescriptions,
     required this.scheduleProfiles,
     required this.reminders,
     required this.reminderSchedules,
     required this.carouselSlots,
     required this.doseLog,
+    required this.adminAudit,
+    required this.household,
     required this.localAuth,
     required this.auth,
     required this.controller,
@@ -272,12 +285,15 @@ class DoseyAppDependencies {
 
   final DoseyDatabase database;
   final LocalAppSettingsRepository settings;
+  final ActionPinGate actionPinGate;
   final LocalPrescriptionRepository prescriptions;
   final LocalScheduleProfileRepository scheduleProfiles;
   final LocalReminderRepository reminders;
   final ReminderScheduleService reminderSchedules;
   final LocalCarouselSlotRepository carouselSlots;
   final DriftDoseLogRepository doseLog;
+  final AdminAuditRepository adminAudit;
+  final LocalHouseholdRepository household;
   final LocalAuthRepository localAuth;
   final AuthService auth;
   final ControllerGateway controller;

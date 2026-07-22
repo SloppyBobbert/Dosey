@@ -1,9 +1,11 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
+import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -475,10 +477,50 @@ class _PrescriptionTile extends StatelessWidget {
   }
 
   Future<void> _delete(BuildContext context) async {
+    final dependencies = DoseyAppScope.of(context);
     try {
-      // Repository deletion also clears local schedules, carousel slots, and
-      // refill rows that depend on this prescription.
-      await prescriptions.deletePrescription(prescription.id);
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
+      final result = await runProtectedAdminAction<void>(
+        context,
+        action: (actor) async {
+          final db = dependencies.database;
+          final scheduleCount =
+              await (db.select(
+                    db.reminderSchedules,
+                  )..where((row) => row.prescriptionId.equals(prescription.id)))
+                  .get()
+                  .then((rows) => rows.length);
+          final slotCount =
+              await (db.select(
+                    db.carouselSlots,
+                  )..where((row) => row.prescriptionId.equals(prescription.id)))
+                  .get()
+                  .then((rows) => rows.length);
+          final refillCount =
+              await (db.select(
+                    db.prescriptionRefills,
+                  )..where((row) => row.prescriptionId.equals(prescription.id)))
+                  .get()
+                  .then((rows) => rows.length);
+          await prescriptions.deletePrescription(
+            prescription.id,
+            auditEvent: const AdminAuditEventFactory().prescriptionDeleted(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: prescription.id,
+              summary: 'Deleted prescription ${prescription.name}.',
+              details: {
+                'name': prescription.name,
+                'deletedSchedules': scheduleCount,
+                'deletedSlots': slotCount,
+                'deletedRefills': refillCount,
+              },
+            ),
+          );
+        },
+      );
+      if (!result.isSuccess) return;
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -812,6 +854,7 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
 
     final now = DateTime.now().toUtc();
     final existing = widget.prescription;
+    final prescriptions = widget.prescriptions;
     final prescription = Prescription(
       id: existing?.id ?? 'prescription-${now.microsecondsSinceEpoch}',
       name: name,
@@ -823,7 +866,33 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
     );
 
     try {
-      await widget.prescriptions.upsertPrescription(prescription);
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
+      final result = await runProtectedAdminAction<void>(
+        context,
+        action: (actor) async {
+          await prescriptions.upsertPrescription(
+            prescription,
+            auditEvent: const AdminAuditEventFactory().prescriptionSaved(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: prescription.id,
+              summary:
+                  '${existing == null ? 'Added' : 'Updated'} prescription ${prescription.name}.',
+              details: {
+                'name': prescription.name,
+                'pillType': prescription.pillType.storageValue,
+                'remainingDoses': prescription.remainingDoses,
+                'refillThreshold': prescription.refillThreshold,
+              },
+            ),
+          );
+        },
+      );
+      if (!result.isSuccess) {
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -949,14 +1018,38 @@ class _RefillSheetState extends State<_RefillSheet> {
       _isSaving = true;
     });
 
+    final prescriptions = widget.prescriptions;
+    final prescription = widget.prescription;
+    final note = _noteController.text;
+
     try {
-      // Refill rows preserve an audit trail while updating the current count.
-      await widget.prescriptions.addRefill(
-        prescriptionId: widget.prescription.id,
-        doseCount: doseCount,
-        occurredAt: DateTime.now().toUtc(),
-        note: _noteController.text,
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
+      final result = await runProtectedAdminAction<void>(
+        context,
+        action: (actor) async {
+          await prescriptions.addRefill(
+            prescriptionId: prescription.id,
+            doseCount: doseCount,
+            occurredAt: DateTime.now().toUtc(),
+            note: note,
+            auditEvent: const AdminAuditEventFactory().prescriptionRefillAdded(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: prescription.id,
+              summary: 'Added refill doses for ${prescription.name}.',
+              details: {
+                'doseCount': doseCount,
+                'hasNote': note.trim().isNotEmpty,
+              },
+            ),
+          );
+        },
       );
+      if (!result.isSuccess) {
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {

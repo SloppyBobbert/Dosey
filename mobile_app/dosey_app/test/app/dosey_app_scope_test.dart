@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
@@ -91,10 +92,14 @@ class _FakeMissedDoseReconciliationService
 
 class _FakeReminderRepository implements ReminderRepository {
   @override
-  Future<void> deleteSchedule(String id) async {}
+  Future<int> deleteSchedule(String id, {AdminAuditEvent? auditEvent}) async =>
+      1;
 
   @override
-  Future<void> upsertSchedule(ReminderSchedule schedule) async {}
+  Future<void> upsertSchedule(
+    ReminderSchedule schedule, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 
   @override
   Stream<List<ReminderSchedule>> watchSchedules({String? profileId}) {

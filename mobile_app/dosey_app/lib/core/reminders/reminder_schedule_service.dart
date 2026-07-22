@@ -1,3 +1,4 @@
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
@@ -14,11 +15,12 @@ class ReminderScheduleService {
   final DateTime Function() _now;
 
   Future<ReminderScheduleSaveResult> saveSchedule(
-    ReminderSchedule schedule,
-  ) async {
+    ReminderSchedule schedule, {
+    AdminAuditEvent? auditEvent,
+  }) async {
     // Persist first. Notification failures should warn the user, not discard
     // the reminder they just configured.
-    await repository.upsertSchedule(schedule);
+    await repository.upsertSchedule(schedule, auditEvent: auditEvent);
     try {
       if (!schedule.isEnabled) {
         await scheduler.cancelDoseReminder(schedule.id);
@@ -65,7 +67,10 @@ class ReminderScheduleService {
     }
   }
 
-  Future<ReminderScheduleDeleteResult> deleteSchedule(String id) async {
+  Future<ReminderScheduleDeleteResult> deleteSchedule(
+    String id, {
+    AdminAuditEvent? auditEvent,
+  }) async {
     try {
       await scheduler.cancelDoseReminder(id);
     } on Exception catch (error) {
@@ -73,7 +78,10 @@ class ReminderScheduleService {
       // the user would lose the only local handle to cancel it later.
       return ReminderScheduleDeleteResult.retained(notificationError: error);
     }
-    await repository.deleteSchedule(id);
+    final deleted = await repository.deleteSchedule(id, auditEvent: auditEvent);
+    if (deleted == 0) {
+      return const ReminderScheduleDeleteResult.retainedWithoutWarning();
+    }
     return const ReminderScheduleDeleteResult.deleted();
   }
 
@@ -123,6 +131,9 @@ class ReminderScheduleDeleteResult {
   const ReminderScheduleDeleteResult.retained({
     required Object notificationError,
   }) : this._(deleted: false, notificationError: notificationError);
+
+  const ReminderScheduleDeleteResult.retainedWithoutWarning()
+    : this._(deleted: false);
 
   final bool deleted;
   final Object? notificationError;

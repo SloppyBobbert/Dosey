@@ -1,5 +1,9 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
+import 'package:dosey_app/core/admin/protected_admin_action.dart';
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/household/household_account_state.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
@@ -7,12 +11,16 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
+import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 enum SettingsSection {
   account,
   deviceMode,
   actionPin,
+  householdAccount,
+  adminHistory,
   robotFace,
   notifications,
   safety,
@@ -100,11 +108,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection.account => 120,
       SettingsSection.deviceMode => 320,
       SettingsSection.actionPin => 500,
-      SettingsSection.robotFace => 700,
-      SettingsSection.notifications => 960,
-      SettingsSection.safety => 1140,
-      SettingsSection.helpAbout => 1320,
-      SettingsSection.setup => 1520,
+      SettingsSection.householdAccount => 700,
+      SettingsSection.adminHistory => 920,
+      SettingsSection.robotFace => 1140,
+      SettingsSection.notifications => 1400,
+      SettingsSection.safety => 1580,
+      SettingsSection.helpAbout => 1760,
+      SettingsSection.setup => 1960,
     };
   }
 
@@ -170,6 +180,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 12),
             _ActionPinCard(key: _sectionKeys[SettingsSection.actionPin]),
+            const SizedBox(height: 12),
+            _HouseholdAccountCard(
+              key: _sectionKeys[SettingsSection.householdAccount],
+              platform: platform,
+            ),
+            const SizedBox(height: 12),
+            _AdminHistoryCard(key: _sectionKeys[SettingsSection.adminHistory]),
             _RobotFaceSettingsSection(
               sectionKey: _sectionKeys[SettingsSection.robotFace],
               previewVoicePlayer: _previewVoicePlayer,
@@ -465,7 +482,7 @@ class _ActionPinCard extends StatelessWidget {
             Text(pinEnabled ? 'PIN is on' : 'PIN is off'),
             const SizedBox(height: 8),
             const Text(
-              'Require a local PIN before confirming or skipping doses and before running robot actions.',
+              'Require a local PIN before protected meds, schedules, carousel changes, dose actions, and other local admin changes.',
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -509,9 +526,22 @@ class _ActionPinCard extends StatelessWidget {
   }
 
   Future<void> _disablePin(BuildContext context) async {
+    final dependencies = DoseyAppScope.of(context);
     final currentPin = await _requestVerifiedCurrentPin(context);
     if (currentPin == null || !context.mounted) return;
-    await DoseyAppScope.of(context).settings.clearActionPin();
+    final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+    if (!context.mounted) return;
+    final actor = await ProtectedAdminActionRunner(
+      pinGate: dependencies.actionPinGate,
+      localAuth: dependencies.localAuth,
+    ).resolveActor();
+    await dependencies.settings.clearActionPin(
+      auditEvent: const AdminAuditEventFactory().pinDisabled(
+        actor: actor,
+        sourceDeviceRole: sourceDeviceRole,
+        summary: 'Disabled the local action PIN.',
+      ),
+    );
   }
 
   Future<String?> _requestVerifiedCurrentPin(BuildContext context) async {
@@ -532,7 +562,28 @@ class _ActionPinCard extends StatelessWidget {
 
   Future<void> _savePin(BuildContext context, String pin) async {
     try {
-      await DoseyAppScope.of(context).settings.setActionPin(pin);
+      final dependencies = DoseyAppScope.of(context);
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
+      final actor = await ProtectedAdminActionRunner(
+        pinGate: dependencies.actionPinGate,
+        localAuth: dependencies.localAuth,
+      ).resolveActor();
+      final pinEnabled = await dependencies.settings.isActionPinEnabled();
+      await dependencies.settings.setActionPin(
+        pin,
+        auditEvent: pinEnabled
+            ? const AdminAuditEventFactory().pinChanged(
+                actor: actor,
+                sourceDeviceRole: sourceDeviceRole,
+                summary: 'Changed the local action PIN.',
+              )
+            : const AdminAuditEventFactory().pinEnabled(
+                actor: actor,
+                sourceDeviceRole: sourceDeviceRole,
+                summary: 'Enabled the local action PIN.',
+              ),
+      );
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -548,6 +599,370 @@ class _ReminderNotificationCard extends StatefulWidget {
   @override
   State<_ReminderNotificationCard> createState() =>
       _ReminderNotificationCardState();
+}
+
+class _HouseholdAccountCard extends StatelessWidget {
+  const _HouseholdAccountCard({super.key, required this.platform});
+
+  final AppDevicePlatform platform;
+
+  @override
+  Widget build(BuildContext context) {
+    final dependencies = DoseyAppScope.of(context);
+    return StreamBuilder<AppDeviceRole>(
+      stream: dependencies.settings.watchDeviceRole(),
+      builder: (context, roleSnapshot) {
+        final allowedRoles = AppDeviceRole.allowedFor(platform);
+        final fallbackRole = AppDeviceRole.defaultFor(platform);
+        final storedRole = roleSnapshot.data;
+        final role = storedRole != null && allowedRoles.contains(storedRole)
+            ? storedRole
+            : fallbackRole;
+
+        return StreamBuilder<HouseholdAccountState>(
+          stream: dependencies.household.watchState(),
+          builder: (context, snapshot) {
+            final state = snapshot.data ?? const HouseholdAccountState();
+            return _SettingsSectionCard(
+              icon: Icons.home_outlined,
+              title: 'Household & robot profile',
+              children: [
+                _HouseholdMetadataRow(
+                  label: 'Household',
+                  value: state.householdDisplayName,
+                ),
+                _HouseholdMetadataRow(
+                  label: 'Robot',
+                  value: state.robotHubDisplayName,
+                ),
+                _HouseholdMetadataRow(
+                  label: 'This device',
+                  value: _deviceLabel(role),
+                ),
+                _HouseholdMetadataRow(
+                  label: 'Person',
+                  value: state.profileDisplayName ?? 'Not set',
+                ),
+                _HouseholdMetadataRow(
+                  label: 'Relationship',
+                  value: state.relationshipLabel ?? 'Not set',
+                ),
+                const _HouseholdMetadataRow(
+                  label: 'Cloud sync',
+                  value: 'Local only',
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'This profile stays local on this device only. Cloud household sync, invites, and roles are not active yet.',
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => _showHouseholdEditSheet(context, state),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: const Text('Edit household & robot profile'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _deviceLabel(AppDeviceRole role) {
+    return switch (role) {
+      AppDeviceRole.androidRobot =>
+        'Android Robot Mode mounted robot phone / robot hub. This device can host the face and control the XIAO controller.',
+      AppDeviceRole.androidPersonal =>
+        'Android personal phone. This device does not control the XIAO controller.',
+      AppDeviceRole.iosPersonal =>
+        'iOS personal phone. This device does not control the XIAO controller.',
+    };
+  }
+
+  Future<void> _showHouseholdEditSheet(
+    BuildContext context,
+    HouseholdAccountState state,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => _HouseholdNamesSheet(state: state),
+    );
+  }
+}
+
+class _HouseholdNamesSheet extends StatefulWidget {
+  const _HouseholdNamesSheet({required this.state});
+
+  final HouseholdAccountState state;
+
+  @override
+  State<_HouseholdNamesSheet> createState() => _HouseholdNamesSheetState();
+}
+
+class _HouseholdNamesSheetState extends State<_HouseholdNamesSheet> {
+  static const List<String> _relationshipOptions = <String>[
+    'Self',
+    'Parent',
+    'Grandparent',
+    'Child',
+    'Caregiver',
+    'Other',
+  ];
+
+  late final TextEditingController _householdController;
+  late final TextEditingController _hubController;
+  late final TextEditingController _profileController;
+  late final TextEditingController _relationshipController;
+  bool _isSaving = false;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _householdController = TextEditingController(
+      text: widget.state.householdDisplayName,
+    );
+    _hubController = TextEditingController(
+      text: widget.state.robotHubDisplayName,
+    );
+    _profileController = TextEditingController(
+      text: widget.state.profileDisplayName ?? '',
+    );
+    _relationshipController = TextEditingController(
+      text: widget.state.relationshipLabel ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _householdController.dispose();
+    _hubController.dispose();
+    _profileController.dispose();
+    _relationshipController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        MediaQuery.viewInsetsOf(context).bottom + 16,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Edit household & robot profile',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Local-only metadata for this device. Saving stays behind the protected admin flow.',
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _householdController,
+            decoration: const InputDecoration(
+              labelText: 'Household name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _hubController,
+            decoration: const InputDecoration(
+              labelText: 'Robot name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _profileController,
+            inputFormatters: [LengthLimitingTextInputFormatter(80)],
+            decoration: const InputDecoration(
+              labelText: 'Person/profile name',
+              hintText: 'Optional',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue:
+                _relationshipOptions.contains(
+                  _relationshipController.text.trim(),
+                )
+                ? _relationshipController.text.trim()
+                : null,
+            items: _relationshipOptions
+                .map(
+                  (option) => DropdownMenuItem<String>(
+                    value: option,
+                    child: Text(option),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) {
+              _relationshipController.text = value ?? '';
+            },
+            decoration: const InputDecoration(
+              labelText: 'Relationship',
+              hintText: 'Optional',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _errorText!,
+              style: TextStyle(color: Theme.of(context).colorScheme.error),
+            ),
+          ],
+          const SizedBox(height: 12),
+          FilledButton(
+            onPressed: _isSaving ? null : _save,
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    final household = DoseyAppScope.of(context).household;
+    setState(() {
+      _isSaving = true;
+      _errorText = null;
+    });
+    try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
+      final result = await runProtectedAdminAction<void>(
+        context,
+        action: (actor) async {
+          final currentState = await household.watchState().first;
+          final newHouseholdName = _householdController.text.trim();
+          final newRobotName = _hubController.text.trim();
+          final newProfileName = _normalizeOptionalField(
+            _profileController.text,
+          );
+          final newRelationship = _normalizeOptionalField(
+            _relationshipController.text,
+          );
+          await household.saveLocalNames(
+            householdDisplayName: newHouseholdName,
+            robotHubDisplayName: newRobotName,
+            profileDisplayName: newProfileName,
+            relationshipLabel: newRelationship,
+            auditEvents: [
+              const AdminAuditEventFactory().householdProfileUpdated(
+                actor: actor,
+                sourceDeviceRole: sourceDeviceRole,
+                summary: 'Updated local household and robot profile metadata.',
+                details: {
+                  'householdDisplayName': {
+                    'old': currentState.householdDisplayName,
+                    'new': newHouseholdName,
+                  },
+                  'robotHubDisplayName': {
+                    'old': currentState.robotHubDisplayName,
+                    'new': newRobotName,
+                  },
+                  'profileDisplayName': {
+                    'old': currentState.profileDisplayName,
+                    'new': newProfileName,
+                  },
+                  'relationshipLabel': {
+                    'old': currentState.relationshipLabel,
+                    'new': newRelationship,
+                  },
+                },
+              ),
+            ],
+          );
+        },
+      );
+      if (!result.isSuccess) {
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
+      if (mounted) Navigator.of(context).pop();
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _errorText = 'Household update failed: $error';
+        _isSaving = false;
+      });
+    }
+  }
+
+  String? _normalizeOptionalField(String value) {
+    final normalizedValue = value.trim();
+    return normalizedValue.isEmpty ? null : normalizedValue;
+  }
+}
+
+class _HouseholdMetadataRow extends StatelessWidget {
+  const _HouseholdMetadataRow({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: RichText(
+        text: TextSpan(
+          style: Theme.of(context).textTheme.bodyMedium,
+          children: [
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            TextSpan(text: value),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminHistoryCard extends StatelessWidget {
+  const _AdminHistoryCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<AdminAuditEvent>>(
+      stream: DoseyAppScope.of(context).adminAudit.watchRecentEvents(limit: 8),
+      builder: (context, snapshot) {
+        final events = snapshot.data ?? const <AdminAuditEvent>[];
+        return _SettingsSectionCard(
+          icon: Icons.history_outlined,
+          title: 'Admin history',
+          children: [
+            if (events.isEmpty)
+              const Text('No local admin changes recorded yet.')
+            else
+              for (final event in events)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(event.summary),
+                  subtitle: Text(
+                    '${event.actorLabel} · ${event.occurredAt.toLocal()}',
+                  ),
+                ),
+          ],
+        );
+      },
+    );
+  }
 }
 
 class _RobotFaceSettingsCard extends StatefulWidget {

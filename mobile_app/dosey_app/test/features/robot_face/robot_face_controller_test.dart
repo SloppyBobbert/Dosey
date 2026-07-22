@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -1387,10 +1388,14 @@ class _FakeReminderRepository implements ReminderRepository {
   }
 
   @override
-  Future<void> deleteSchedule(String id) async {}
+  Future<int> deleteSchedule(String id, {AdminAuditEvent? auditEvent}) async =>
+      1;
 
   @override
-  Future<void> upsertSchedule(ReminderSchedule schedule) async {}
+  Future<void> upsertSchedule(
+    ReminderSchedule schedule, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 
   @override
   Stream<List<ReminderSchedule>> watchSchedules({String? profileId}) async* {
@@ -1417,10 +1422,16 @@ class _FakeScheduleProfileRepository implements ScheduleProfileRepository {
   }
 
   @override
-  Future<void> setActiveProfile(String id) async {}
+  Future<void> setActiveProfile(
+    String id, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 
   @override
-  Future<void> upsertProfile(ScheduleProfile profile) async {}
+  Future<void> upsertProfile(
+    ScheduleProfile profile, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 
   @override
   Stream<ScheduleProfile?> watchActiveProfile() async* {

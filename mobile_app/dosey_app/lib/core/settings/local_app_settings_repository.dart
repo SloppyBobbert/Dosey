@@ -1,5 +1,7 @@
 import 'dart:math';
 
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 
@@ -92,7 +94,7 @@ class LocalAppSettingsRepository {
     return _hasCompleteActionPinSettings(settings);
   }
 
-  Future<void> setActionPin(String pin) async {
+  Future<void> setActionPin(String pin, {AdminAuditEvent? auditEvent}) async {
     final normalizedPin = _normalizePin(pin);
     if (normalizedPin.length < 4) {
       throw ArgumentError.value(pin, 'pin', 'PIN must be at least 4 digits.');
@@ -106,6 +108,12 @@ class LocalAppSettingsRepository {
     await _database.transaction(() async {
       await _setValue(_actionPinSaltKey, salt);
       await _setValue(_actionPinHashKey, hash);
+      if (auditEvent != null) {
+        await LocalAdminAuditRepository.insertEventIntoDatabase(
+          _database,
+          auditEvent,
+        );
+      }
     });
   }
 
@@ -126,8 +134,16 @@ class LocalAppSettingsRepository {
     return _hashActionPin(_normalizePin(pin), salt) == expectedHash;
   }
 
-  Future<void> clearActionPin() {
-    return _database.deleteAppSettings({_actionPinHashKey, _actionPinSaltKey});
+  Future<void> clearActionPin({AdminAuditEvent? auditEvent}) {
+    return _database.transaction(() async {
+      await _database.deleteAppSettings({_actionPinHashKey, _actionPinSaltKey});
+      if (auditEvent != null) {
+        await LocalAdminAuditRepository.insertEventIntoDatabase(
+          _database,
+          auditEvent,
+        );
+      }
+    });
   }
 
   Future<void> _setValue(String key, String value) {

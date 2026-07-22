@@ -108,29 +108,48 @@ void main() {
     expect(find.text('Flip face 180°'), findsNothing);
     expect(find.text('Dim after inactivity'), findsNothing);
 
+    await tester.scrollUntilVisible(
+      find.text('Household & robot profile'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Household & robot profile').hitTestable(),
+      findsOneWidget,
+    );
+
+    await tester.scrollUntilVisible(
+      find.text('Admin history'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Admin history').hitTestable(), findsOneWidget);
+    expect(find.text('No local admin changes recorded yet.'), findsOneWidget);
+
     final listView = tester.widget<ListView>(find.byType(ListView));
     final children =
         (listView.childrenDelegate as SliverChildListDelegate).children;
-    final deviceModeIndex = children.indexWhere(
-      (child) => child.runtimeType.toString() == '_DeviceModeCard',
-    );
+    final childTypes = children
+        .map((child) => child.runtimeType.toString())
+        .toList();
+    final actionPinIndex = childTypes.indexOf('_ActionPinCard');
+    final householdIndex = childTypes.indexOf('_HouseholdAccountCard');
+    final adminHistoryIndex = childTypes.indexOf('_AdminHistoryCard');
+    final robotFaceIndex = childTypes.indexOf('_RobotFaceSettingsSection');
+    final reminderIndex = childTypes.indexOf('_ReminderNotificationCard');
 
-    expect(deviceModeIndex, isNonNegative);
-    expect(
-      children[deviceModeIndex + 2].runtimeType.toString(),
-      '_ActionPinCard',
-    );
-    expect(
-      children[deviceModeIndex + 3].runtimeType.toString(),
-      '_RobotFaceSettingsSection',
-    );
+    expect(actionPinIndex, isNonNegative);
+    expect(householdIndex, greaterThan(actionPinIndex));
+    expect(adminHistoryIndex, greaterThan(householdIndex));
+    expect(robotFaceIndex, greaterThan(adminHistoryIndex));
+    expect(reminderIndex, greaterThan(robotFaceIndex));
 
-    final spacer = children[deviceModeIndex + 4] as SizedBox;
-    expect(spacer.height, 12);
-    expect(
-      children[deviceModeIndex + 5].runtimeType.toString(),
-      '_ReminderNotificationCard',
-    );
+    expect(children[householdIndex - 1], isA<SizedBox>());
+    expect((children[householdIndex - 1] as SizedBox).height, 12);
+    expect(children[adminHistoryIndex - 1], isA<SizedBox>());
+    expect((children[adminHistoryIndex - 1] as SizedBox).height, 12);
   });
 
   testWidgets('robot face controls persist and update state', (
@@ -689,11 +708,135 @@ void main() {
       expect(find.text('Wake before dose'), findsNothing);
       expect(find.text('Stay awake after dose'), findsNothing);
       expect(find.text('iOS can only be a personal phone.'), findsOneWidget);
-      expect(find.text('iOS personal phone'), findsOneWidget);
+      expect(find.textContaining('iOS personal phone'), findsOneWidget);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
   });
+
+  testWidgets(
+    'section targets scroll to Household & robot profile and Admin history',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+
+      await tester.pumpWidget(
+        _TestSettingsApp(
+          database: database,
+          sectionTarget: SettingsSection.householdAccount,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Household & robot profile').hitTestable(),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Edit household & robot profile').hitTestable(),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(
+        _TestSettingsApp(
+          database: database,
+          sectionTarget: SettingsSection.adminHistory,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Admin history').hitTestable(), findsOneWidget);
+      expect(
+        find.text('No local admin changes recorded yet.').hitTestable(),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('household card shows device/person metadata and not-set labels', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Household & robot profile'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _findRichTextContaining('Household: Dosey household'),
+      findsOneWidget,
+    );
+    expect(_findRichTextContaining('Robot: Dosey robot phone'), findsOneWidget);
+    expect(
+      _findRichTextContaining(
+        'This device: Android personal phone. This device does not control the XIAO controller.',
+      ),
+      findsOneWidget,
+    );
+    expect(_findRichTextContaining('Person: Not set'), findsOneWidget);
+    expect(_findRichTextContaining('Relationship: Not set'), findsOneWidget);
+    expect(_findRichTextContaining('Cloud sync: Local only'), findsOneWidget);
+  });
+
+  testWidgets('household edit sheet shows optional metadata fields', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Household & robot profile'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit household & robot profile'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.widgetWithText(TextFormField, 'Household name'),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(TextFormField, 'Robot name'), findsOneWidget);
+    expect(
+      find.widgetWithText(TextFormField, 'Person/profile name'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+
+    for (final option in const [
+      'Self',
+      'Parent',
+      'Grandparent',
+      'Child',
+      'Caregiver',
+      'Other',
+    ]) {
+      expect(find.text(option), findsWidgets);
+    }
+  });
+}
+
+Finder _findRichTextContaining(String text) {
+  return find.byWidgetPredicate(
+    (widget) => widget is RichText && widget.text.toPlainText().contains(text),
+  );
 }
 
 Future<void> _scrollToRobotFace(WidgetTester tester) async {
@@ -746,11 +889,13 @@ class _TestSettingsApp extends StatelessWidget {
     required this.database,
     this.voicePlayer,
     this.previewVoicePlayer,
+    this.sectionTarget,
   });
 
   final DoseyDatabase database;
   final DoseyVoicePlayer? voicePlayer;
   final DoseyVoicePlayer? previewVoicePlayer;
+  final SettingsSection? sectionTarget;
 
   @override
   Widget build(BuildContext context) {
@@ -768,7 +913,10 @@ class _TestSettingsApp extends StatelessWidget {
           useMaterial3: true,
         ),
         home: Scaffold(
-          body: SettingsScreen(previewVoicePlayer: previewVoicePlayer),
+          body: SettingsScreen(
+            sectionTarget: sectionTarget,
+            previewVoicePlayer: previewVoicePlayer,
+          ),
         ),
       ),
     );

@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/active_profile_schedules_stream.dart';
@@ -6,6 +7,7 @@ import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
+import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
 
 class RemindersScreen extends StatelessWidget {
@@ -607,7 +609,35 @@ class _ScheduleProfileSection extends StatelessWidget {
   /// saved schedules in other profiles.
   Future<void> _setActive(BuildContext context, String id) async {
     try {
-      await profilesRepository.setActiveProfile(id);
+      final nextProfile = profiles
+          .where((profile) => profile.id == id)
+          .firstOrNull;
+      final previousActiveProfile = activeProfile;
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
+      final result = await runProtectedAdminAction<void>(
+        context,
+        action: (actor) async {
+          await profilesRepository.setActiveProfile(
+            id,
+            auditEvent: const AdminAuditEventFactory().activeScheduleProfileChanged(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: id,
+              summary: previousActiveProfile == null
+                  ? 'Set ${nextProfile?.name ?? 'the selected profile'} as the active schedule profile.'
+                  : 'Changed the active schedule profile from ${previousActiveProfile.name} to ${nextProfile?.name ?? 'the selected profile'}.',
+              details: {
+                'previousActiveProfileId': previousActiveProfile?.id,
+                'previousActiveProfileName': previousActiveProfile?.name,
+                'newActiveProfileId': id,
+                'newActiveProfileName': nextProfile?.name,
+              },
+            ),
+          );
+        },
+      );
+      if (!result.isSuccess) return;
     } on Object catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -714,15 +744,43 @@ class _ScheduleProfileSheetState extends State<_ScheduleProfileSheet> {
     final now = DateTime.now().toUtc();
     final existing = widget.profile;
     try {
-      await widget.profiles.upsertProfile(
-        ScheduleProfile(
-          id: existing?.id ?? 'schedule-profile-${now.microsecondsSinceEpoch}',
-          name: name,
-          isActive: existing?.isActive ?? false,
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now,
-        ),
+      final profile = ScheduleProfile(
+        id: existing?.id ?? 'schedule-profile-${now.microsecondsSinceEpoch}',
+        name: name,
+        isActive: existing?.isActive ?? false,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
       );
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
+      final result = await runProtectedAdminAction<void>(
+        context,
+        action: (actor) async {
+          final isRename = existing != null;
+          await widget.profiles.upsertProfile(
+            profile,
+            auditEvent: const AdminAuditEventFactory().scheduleProfileSaved(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: profile.id,
+              summary: isRename
+                  ? 'Renamed schedule profile from ${existing.name} to ${profile.name}.'
+                  : 'Added schedule profile ${profile.name}.',
+              details: {
+                'name': profile.name,
+                'isActive': profile.isActive,
+                'previousName': existing?.name,
+                'newName': profile.name,
+                'created': existing == null,
+              },
+            ),
+          );
+        },
+      );
+      if (!result.isSuccess) {
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -801,9 +859,30 @@ class _ScheduleTile extends StatelessWidget {
     try {
       // Reuse the service path so toggles update local storage and platform
       // notifications with the same warning behavior as the edit sheet.
-      final result = await reminderSchedules.saveSchedule(
-        schedule.copyWith(isEnabled: value, updatedAt: DateTime.now().toUtc()),
+      final updatedSchedule = schedule.copyWith(
+        isEnabled: value,
+        updatedAt: DateTime.now().toUtc(),
       );
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
+      final guarded = await runProtectedAdminAction<ReminderScheduleSaveResult>(
+        context,
+        action: (actor) async {
+          return reminderSchedules.saveSchedule(
+            updatedSchedule,
+            auditEvent: const AdminAuditEventFactory().scheduleSaved(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: updatedSchedule.id,
+              summary:
+                  '${value ? 'Enabled' : 'Disabled'} schedule ${updatedSchedule.label}.',
+              details: {'isEnabled': value},
+            ),
+          );
+        },
+      );
+      if (!guarded.isSuccess || guarded.value == null) return;
+      final result = guarded.value!;
       final notificationError = result.notificationError;
       if (notificationError != null && context.mounted) {
         _showScheduleNotificationWarning(context, notificationError);
@@ -818,9 +897,28 @@ class _ScheduleTile extends StatelessWidget {
 
   Future<void> _delete(BuildContext context) async {
     try {
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!context.mounted) return;
       // Delete can be retained if the OS notification cannot be canceled;
       // surface that warning instead of dropping the local schedule blindly.
-      final result = await reminderSchedules.deleteSchedule(schedule.id);
+      final guarded =
+          await runProtectedAdminAction<ReminderScheduleDeleteResult>(
+            context,
+            action: (actor) async {
+              return reminderSchedules.deleteSchedule(
+                schedule.id,
+                auditEvent: const AdminAuditEventFactory().scheduleDeleted(
+                  actor: actor,
+                  sourceDeviceRole: sourceDeviceRole,
+                  targetId: schedule.id,
+                  summary: 'Deleted schedule ${schedule.label}.',
+                  details: {'time': schedule.timeLabel},
+                ),
+              );
+            },
+          );
+      if (!guarded.isSuccess || guarded.value == null) return;
+      final result = guarded.value!;
       final notificationError = result.notificationError;
       if (notificationError != null && context.mounted) {
         _showScheduleDeleteNotificationWarning(context, notificationError);
@@ -1029,7 +1127,33 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     );
 
     try {
-      final result = await widget.reminderSchedules.saveSchedule(schedule);
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
+      final guarded = await runProtectedAdminAction<ReminderScheduleSaveResult>(
+        context,
+        action: (actor) async {
+          return widget.reminderSchedules.saveSchedule(
+            schedule,
+            auditEvent: const AdminAuditEventFactory().scheduleSaved(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: schedule.id,
+              summary:
+                  '${existing == null ? 'Added' : 'Updated'} schedule ${schedule.label}.',
+              details: {
+                'time': schedule.timeLabel,
+                'isEnabled': schedule.isEnabled,
+                'profileId': schedule.profileId,
+              },
+            ),
+          );
+        },
+      );
+      if (!guarded.isSuccess || guarded.value == null) {
+        if (mounted) setState(() => _isSaving = false);
+        return;
+      }
+      final result = guarded.value!;
       if (!mounted) return;
       Navigator.of(context).pop();
       final notificationError = result.notificationError;

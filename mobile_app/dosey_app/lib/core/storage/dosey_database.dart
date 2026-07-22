@@ -183,6 +183,26 @@ class ControllerCommandEvents extends Table {
   ];
 }
 
+@DataClassName('AdminAuditEventRow')
+class AdminAuditEvents extends Table {
+  TextColumn get id => text()();
+  TextColumn get eventType => text()();
+  TextColumn get targetType => text()();
+  TextColumn get targetId => text().nullable()();
+  TextColumn get actorType => text()();
+  TextColumn get actorUserId => text().nullable()();
+  TextColumn get actorLabel => text()();
+  TextColumn get sourceDeviceRole => text()();
+  TextColumn get summary => text()();
+  TextColumn get detailsJson => text().nullable()();
+  TextColumn get cloudEventId => text().nullable()();
+  DateTimeColumn get lastSyncedAt => dateTime().nullable()();
+  DateTimeColumn get occurredAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(
   tables: [
     AppSettings,
@@ -195,6 +215,7 @@ class ControllerCommandEvents extends Table {
     DoseLogEvents,
     ControllerCommandSessions,
     ControllerCommandEvents,
+    AdminAuditEvents,
   ],
 )
 class DoseyDatabase extends _$DoseyDatabase {
@@ -211,7 +232,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -271,6 +292,9 @@ class DoseyDatabase extends _$DoseyDatabase {
       if (from < 11) {
         await migrator.createTable(controllerCommandSessions);
         await migrator.createTable(controllerCommandEvents);
+      }
+      if (from < 12) {
+        await migrator.createTable(adminAuditEvents);
       }
     },
   );

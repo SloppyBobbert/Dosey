@@ -245,6 +245,24 @@ class _DoseyShellState extends State<DoseyShell> {
           contentPadding: EdgeInsets.zero,
         ),
       ),
+      const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(
+          SettingsSection.householdAccount,
+        ),
+        child: ListTile(
+          leading: Icon(Icons.home_outlined),
+          title: Text('Household & robot profile'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(SettingsSection.adminHistory),
+        child: ListTile(
+          leading: Icon(Icons.history_outlined),
+          title: Text('Admin history'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
       if (role.canHostRobot)
         const PopupMenuItem(
           value: _SettingsMenuAction.openSection(SettingsSection.robotFace),

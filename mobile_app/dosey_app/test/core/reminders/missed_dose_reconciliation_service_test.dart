@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -242,10 +243,14 @@ class _FakeReminderRepository implements ReminderRepository {
   }
 
   @override
-  Future<void> deleteSchedule(String id) async {}
+  Future<int> deleteSchedule(String id, {AdminAuditEvent? auditEvent}) async =>
+      1;
 
   @override
-  Future<void> upsertSchedule(ReminderSchedule schedule) async {}
+  Future<void> upsertSchedule(
+    ReminderSchedule schedule, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
 }
 
 class _FakeDoseLogRepository implements DoseLogRepository {
