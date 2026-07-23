@@ -38,7 +38,7 @@ class LocalGuidedCarouselLoadRepository {
   }) async {
     _validatePlan(plan, expectedMode: GuidedCarouselLoadMode.fullReload);
 
-    return _database.transaction(() async {
+    final pendingNotifications = await _database.transaction(() async {
       await _rejectSecondActiveConfirmedSession(
         sessionId: sessionId,
         profileId: profileId,
@@ -66,7 +66,7 @@ class LocalGuidedCarouselLoadRepository {
         currentPosition: CarouselPosition.start,
         updatedAt: confirmedAtUtc,
       );
-      await _persistShortageAlerts(
+      final pendingNotifications = await _persistShortageAlerts(
         profileId: profileId,
         sessionId: sessionId,
         plan: plan,
@@ -84,7 +84,12 @@ class LocalGuidedCarouselLoadRepository {
           occurredAt: confirmedAtUtc,
         ),
       );
+      return pendingNotifications;
     });
+    await _deliverUrgentShortageNotifications(
+      pendingNotifications,
+      occurredAt: confirmedAt.toUtc(),
+    );
   }
 
   Future<void> confirmTopOff({
@@ -96,13 +101,13 @@ class LocalGuidedCarouselLoadRepository {
     required DateTime confirmedAt,
   }) async {
     _validatePlan(plan, expectedMode: GuidedCarouselLoadMode.topOff);
-    await _rejectLateShortageContinuation(
-      profileId: profileId,
-      sessionId: predecessorSessionId,
-      attemptedAt: confirmedAt.toUtc(),
-    );
 
-    return _database.transaction(() async {
+    final pendingNotifications = await _database.transaction(() async {
+      await _rejectLateShortageContinuation(
+        profileId: profileId,
+        sessionId: predecessorSessionId,
+        attemptedAt: confirmedAt.toUtc(),
+      );
       final activeSession = await _requireActiveSession(profileId);
       if (activeSession.status == CarouselLoadSessionStatus.stale) {
         throw StateError(
@@ -161,7 +166,7 @@ class LocalGuidedCarouselLoadRepository {
         resolvedAt: confirmedAtUtc,
         resolution: 'top_off_replaced',
       );
-      await _persistShortageAlerts(
+      final pendingNotifications = await _persistShortageAlerts(
         profileId: profileId,
         sessionId: sessionId,
         plan: plan,
@@ -182,7 +187,12 @@ class LocalGuidedCarouselLoadRepository {
           occurredAt: confirmedAtUtc,
         ),
       );
+      return pendingNotifications;
     });
+    await _deliverUrgentShortageNotifications(
+      pendingNotifications,
+      occurredAt: confirmedAt.toUtc(),
+    );
   }
 
   Future<void> confirmPhysicalUnload({
@@ -212,10 +222,14 @@ class LocalGuidedCarouselLoadRepository {
       for (final snapshot in snapshotRows) {
         final isDispensedResolved =
             snapshot.status == 'dispensed' && snapshot.resolvedAt != null;
+        final isNeedsReviewInventoryAlreadyMoved =
+            snapshot.status == 'needs_review' && snapshot.movedAt != null;
         if (isDispensedResolved ||
+            isNeedsReviewInventoryAlreadyMoved ||
             (snapshot.status != 'loaded' &&
                 snapshot.status != 'retained' &&
-                snapshot.status != 'dispensed')) {
+                snapshot.status != 'dispensed' &&
+                snapshot.status != 'needs_review')) {
           continue;
         }
         final scheduleIds =
@@ -586,28 +600,30 @@ class LocalGuidedCarouselLoadRepository {
     required DateTime recognizedAt,
   }) async {
     final recognizedAtUtc = recognizedAt.toUtc();
-    final alert = await (_database.select(
-      _database.medicationShortageAlerts,
-    )..where((row) => row.id.equals(alertId))).getSingle();
-    final groupIds = await _alertGroupIds(alert);
-    await (_database.update(
-      _database.medicationShortageAlerts,
-    )..where((row) => row.id.isIn(groupIds))).write(
-      MedicationShortageAlertsCompanion(
-        recognizedAt: Value(recognizedAtUtc),
-        updatedAt: Value(recognizedAtUtc),
-      ),
-    );
-    await LocalAdminAuditRepository.insertEventIntoDatabase(
-      _database,
-      _auditFactory.guidedLoadShortageRecognized(
-        actor: _systemActor,
-        sourceDeviceRole: _sourceDeviceRole,
-        targetId: alertId,
-        summary: 'Recognized guided shortage $alertId.',
-        occurredAt: recognizedAtUtc,
-      ),
-    );
+    await _database.transaction(() async {
+      final alert = await (_database.select(
+        _database.medicationShortageAlerts,
+      )..where((row) => row.id.equals(alertId))).getSingle();
+      final groupIds = await _alertGroupIds(alert);
+      await (_database.update(
+        _database.medicationShortageAlerts,
+      )..where((row) => row.id.isIn(groupIds))).write(
+        MedicationShortageAlertsCompanion(
+          recognizedAt: Value(recognizedAtUtc),
+          updatedAt: Value(recognizedAtUtc),
+        ),
+      );
+      await LocalAdminAuditRepository.insertEventIntoDatabase(
+        _database,
+        _auditFactory.guidedLoadShortageRecognized(
+          actor: _systemActor,
+          sourceDeviceRole: _sourceDeviceRole,
+          targetId: alertId,
+          summary: 'Recognized guided shortage $alertId.',
+          occurredAt: recognizedAtUtc,
+        ),
+      );
+    });
   }
 
   Future<void> resolveShortageAlert(
@@ -753,12 +769,13 @@ class LocalGuidedCarouselLoadRepository {
         .getSingle();
   }
 
-  Future<void> _persistShortageAlerts({
+  Future<List<_PendingUrgentShortageNotification>> _persistShortageAlerts({
     required String profileId,
     required String sessionId,
     required GuidedCarouselLoadPlan plan,
     required DateTime occurredAt,
   }) async {
+    final pendingNotifications = <_PendingUrgentShortageNotification>[];
     for (final shortage in plan.shortages) {
       final scheduleIds = shortage.scheduleIds;
       final schedules = await (_database.select(
@@ -786,23 +803,16 @@ class LocalGuidedCarouselLoadRepository {
         slotNumber += 1
       ) {
         final alertId = 'shortage:$sessionId:$slotNumber';
-        var localDeliveryState = 'pending';
-        DateTime? localNotificationSentAt;
-        if (slotNumber == shortage.slotNumber) {
-          try {
-            await urgentShortageNotifier?.showUrgentShortageNotification(
+        if (slotNumber == shortage.slotNumber &&
+            urgentShortageNotifier != null) {
+          pendingNotifications.add(
+            _PendingUrgentShortageNotification(
               alertId: alertId,
               medicationLabel: medicationLabel,
               scheduledAt: shortage.scheduledAt,
               slotNumber: slotNumber,
-            );
-            if (urgentShortageNotifier != null) {
-              localDeliveryState = 'sent';
-              localNotificationSentAt = occurredAt;
-            }
-          } catch (_) {
-            localDeliveryState = 'failed';
-          }
+            ),
+          );
         }
 
         await _database
@@ -819,8 +829,8 @@ class LocalGuidedCarouselLoadRepository {
                 prescriptionNamesJson: jsonEncode(effectivePrescriptionNames),
                 status: 'active',
                 intendedAudience: const Value('household'),
-                localDeliveryState: localDeliveryState,
-                localNotificationSentAt: Value(localNotificationSentAt),
+                localDeliveryState: 'pending',
+                localNotificationSentAt: const Value.absent(),
                 remoteDeliveryState: const Value('not_configured'),
                 createdAt: occurredAt,
                 updatedAt: occurredAt,
@@ -841,13 +851,44 @@ class LocalGuidedCarouselLoadRepository {
               'prescriptionIds': prescriptionIds,
               'prescriptionNames': effectivePrescriptionNames,
               'intendedAudience': 'household',
-              'localDeliveryState': localDeliveryState,
+              'localDeliveryState': 'pending',
               'remoteDeliveryState': 'not_configured',
             },
             occurredAt: occurredAt,
           ),
         );
       }
+    }
+    return pendingNotifications;
+  }
+
+  Future<void> _deliverUrgentShortageNotifications(
+    List<_PendingUrgentShortageNotification> notifications, {
+    required DateTime occurredAt,
+  }) async {
+    for (final notification in notifications) {
+      var localDeliveryState = 'sent';
+      DateTime? localNotificationSentAt = occurredAt;
+      try {
+        await urgentShortageNotifier!.showUrgentShortageNotification(
+          alertId: notification.alertId,
+          medicationLabel: notification.medicationLabel,
+          scheduledAt: notification.scheduledAt,
+          slotNumber: notification.slotNumber,
+        );
+      } catch (_) {
+        localDeliveryState = 'failed';
+        localNotificationSentAt = null;
+      }
+      await (_database.update(
+        _database.medicationShortageAlerts,
+      )..where((row) => row.id.equals(notification.alertId))).write(
+        MedicationShortageAlertsCompanion(
+          localDeliveryState: Value(localDeliveryState),
+          localNotificationSentAt: Value(localNotificationSentAt),
+          updatedAt: Value(occurredAt),
+        ),
+      );
     }
   }
 
@@ -1219,6 +1260,20 @@ class LocalGuidedCarouselLoadRepository {
 class _InventoryDelta {
   int availableDecrease = 0;
   int loadedIncrease = 0;
+}
+
+class _PendingUrgentShortageNotification {
+  const _PendingUrgentShortageNotification({
+    required this.alertId,
+    required this.medicationLabel,
+    required this.scheduledAt,
+    required this.slotNumber,
+  });
+
+  final String alertId;
+  final String medicationLabel;
+  final DateTime scheduledAt;
+  final int slotNumber;
 }
 
 class _UnloadInventoryDelta {

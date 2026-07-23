@@ -102,21 +102,25 @@ class Prescription {
     int? refillThreshold,
     DateTime? updatedAt,
   }) {
+    final nextAvailableDoses = availableDoses ?? this.availableDoses;
+    final nextLoadedDoses = loadedDoses ?? this.loadedDoses;
+    final nextUsedDoses = usedDoses ?? this.usedDoses;
+    final nextReviewDoses = reviewDoses ?? this.reviewDoses;
     return Prescription(
       id: id,
       name: name ?? this.name,
       pillType: pillType ?? this.pillType,
       guidedPillIcon: guidedPillIcon ?? this.guidedPillIcon,
-      availableDoses: availableDoses ?? this.availableDoses,
-      loadedDoses: loadedDoses ?? this.loadedDoses,
-      usedDoses: usedDoses ?? this.usedDoses,
-      reviewDoses: reviewDoses ?? this.reviewDoses,
+      availableDoses: nextAvailableDoses,
+      loadedDoses: nextLoadedDoses,
+      usedDoses: nextUsedDoses,
+      reviewDoses: nextReviewDoses,
       defaultRefillQuantity:
           defaultRefillQuantity ?? this.defaultRefillQuantity,
       defaultDoseCountPerDose:
           defaultDoseCountPerDose ?? this.defaultDoseCountPerDose,
       doseInstructions: doseInstructions ?? this.doseInstructions,
-      remainingDoses: remainingDoses ?? this.remainingDoses,
+      remainingDoses: remainingDoses,
       refillThreshold: refillThreshold ?? this.refillThreshold,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

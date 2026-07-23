@@ -1,5 +1,5 @@
+import 'package:dosey_app/core/carousel/guided_dispense_target_resolver.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
-import 'package:dosey_app/core/carousel/carousel_load_session.dart';
 import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
@@ -87,12 +87,21 @@ class ControllerLifecycleService {
     var controllerMoved = false;
     DateTime? acceptedAt;
     final sentAt = _current();
-    final guidedTarget = await _guidedDispenseTarget(
-      slotId,
-      scheduleId,
-      doseId,
-    );
+    GuidedDispenseTarget? guidedTarget;
     try {
+      if (guidedCarouselLoads != null &&
+          database != null &&
+          scheduleId != null) {
+        guidedTarget = await resolveGuidedDispenseTarget(
+          database: database!,
+          guidedCarouselLoads: guidedCarouselLoads!,
+          scheduleId: scheduleId,
+          doseId: doseId,
+        );
+        if (guidedTarget != null && !guidedTarget.isReadyToDispense) {
+          throw StateError('Guided load slot is not ready to dispense.');
+        }
+      }
       final session = await _commandRepository.createSession(
         commandType: commandType,
         now: sentAt,
@@ -335,7 +344,7 @@ class ControllerLifecycleService {
 
   Future<void> _restoreReadyStateForFailedGuidedOrLegacySlot({
     required String? slotId,
-    required _GuidedDispenseTarget? guidedTarget,
+    required GuidedDispenseTarget? guidedTarget,
   }) async {
     if (guidedTarget != null) {
       return;
@@ -347,7 +356,7 @@ class ControllerLifecycleService {
 
   Future<void> _quarantineGuidedOrLegacySlotForReview({
     required String? slotId,
-    required _GuidedDispenseTarget? guidedTarget,
+    required GuidedDispenseTarget? guidedTarget,
     required DateTime occurredAt,
     required String reason,
   }) async {
@@ -377,77 +386,4 @@ class ControllerLifecycleService {
       // slot still must not be reopened as loaded automatically.
     }
   }
-
-  Future<_GuidedDispenseTarget?> _guidedDispenseTarget(
-    String? slotId,
-    String? scheduleId,
-    String doseId,
-  ) async {
-    if (guidedCarouselLoads == null || database == null) {
-      return null;
-    }
-    if (scheduleId == null) {
-      return null;
-    }
-    final schedule =
-        await ((database!.select(database!.reminderSchedules)
-              ..where((row) => row.id.equals(scheduleId))
-              ..limit(1))
-            .getSingleOrNull());
-    if (schedule == null) {
-      return null;
-    }
-    final activeLoad = await guidedCarouselLoads!.readActiveLoad(
-      schedule.profileId,
-    );
-    if (activeLoad == null) {
-      return null;
-    }
-    if (activeLoad.status.name == 'stale') {
-      throw StateError('Active guided load is stale and cannot dispense.');
-    }
-    final matchingSlot = activeLoad.slots.where(
-      (slot) =>
-          slot.scheduleIds.contains(scheduleId) &&
-          _matchesDoseOccurrence(slot, doseId),
-    );
-    if (matchingSlot.isEmpty) {
-      return null;
-    }
-    final slot = matchingSlot.first;
-    if (slot.status.name != 'loaded' && slot.status.name != 'retained') {
-      throw StateError('Guided load slot is not ready to dispense.');
-    }
-    return _GuidedDispenseTarget(
-      profileId: schedule.profileId,
-      sessionId: activeLoad.id,
-      slotNumber: slot.slotNumber,
-    );
-  }
-
-  bool _matchesDoseOccurrence(CarouselLoadSlotSnapshot slot, String doseId) {
-    final scheduledAt = slot.scheduledAt;
-    if (scheduledAt == null) {
-      return true;
-    }
-    final separatorIndex = doseId.lastIndexOf(':');
-    if (separatorIndex <= 0 || separatorIndex >= doseId.length - 1) {
-      return true;
-    }
-    final occurrenceDate = doseId.substring(separatorIndex + 1);
-    final slotDate = scheduledAt.toLocal().toIso8601String().split('T').first;
-    return occurrenceDate == slotDate;
-  }
-}
-
-class _GuidedDispenseTarget {
-  const _GuidedDispenseTarget({
-    required this.profileId,
-    required this.sessionId,
-    required this.slotNumber,
-  });
-
-  final String profileId;
-  final String sessionId;
-  final int slotNumber;
 }

@@ -191,67 +191,6 @@ void main() {
   );
 
   test(
-    'robot face prioritizes unresolved past-due shortage over active shortage',
-    () async {
-      final shortageAlerts = Stream<List<MedicationShortageAlertRow>>.value([
-        MedicationShortageAlertRow(
-          id: 'shortage-active',
-          profileId: 'profile-1',
-          loadSessionId: 'session-1',
-          slotNumber: 2,
-          bundleKey: 'bundle-active',
-          scheduledAt: DateTime.utc(2026, 7, 8, 10),
-          prescriptionIdsJson: '["rx-1"]',
-          prescriptionNamesJson: '["Active Med"]',
-          status: 'active',
-          recognizedAt: null,
-          resolvedAt: null,
-          resolution: null,
-          intendedAudience: 'household',
-          localDeliveryState: 'sent',
-          localNotificationSentAt: DateTime.utc(2026, 7, 8, 9),
-          remoteDeliveryState: 'not_configured',
-          createdAt: DateTime.utc(2026, 7, 8, 9),
-          updatedAt: DateTime.utc(2026, 7, 8, 9),
-        ),
-        MedicationShortageAlertRow(
-          id: 'shortage-past-due',
-          profileId: 'profile-1',
-          loadSessionId: 'session-2',
-          slotNumber: 4,
-          bundleKey: 'bundle-past',
-          scheduledAt: DateTime.utc(2026, 7, 8, 11),
-          prescriptionIdsJson: '["rx-2"]',
-          prescriptionNamesJson: '["Past Due Med"]',
-          status: 'past_due',
-          recognizedAt: DateTime.utc(2026, 7, 8, 11, 5),
-          resolvedAt: null,
-          resolution: null,
-          intendedAudience: 'household',
-          localDeliveryState: 'sent',
-          localNotificationSentAt: DateTime.utc(2026, 7, 8, 11),
-          remoteDeliveryState: 'not_configured',
-          createdAt: DateTime.utc(2026, 7, 8, 10, 55),
-          updatedAt: DateTime.utc(2026, 7, 8, 11, 5),
-        ),
-      ]);
-      final fixture = await _RobotFaceControllerFixture.create(
-        now: DateTime(2026, 7, 8, 12),
-        scheduleHour: 13,
-        scheduleMinute: 0,
-        shortageAlerts: shortageAlerts,
-      );
-      addTearDown(fixture.close);
-
-      await fixture.settle();
-
-      final state = await fixture.controller.watchState().first;
-      expect(state.activeShortageLabel, 'Urgent shortage · slot 4');
-      expect(state.activeShortageMedicationLabel, 'Past Due Med');
-    },
-  );
-
-  test(
     'ramp progress rises inside the configured wake-before window',
     () async {
       final fixture = await _RobotFaceControllerFixture.create(

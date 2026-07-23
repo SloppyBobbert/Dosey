@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/carousel/carousel_load_session.dart';
+import 'package:dosey_app/core/carousel/guided_dispense_target_resolver.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
@@ -256,7 +257,6 @@ class DoseActionLogger {
           : await _resolveGuidedDispenseContext(
               dependencies,
               scheduleId,
-              schedule.profileId,
               event.doseId,
             ),
     );
@@ -265,28 +265,22 @@ class DoseActionLogger {
   static Future<_GuidedDispenseContext?> _resolveGuidedDispenseContext(
     DoseyAppDependencies dependencies,
     String scheduleId,
-    String profileId,
     String doseId,
   ) async {
-    final activeLoad = await dependencies.guidedCarouselLoads.readActiveLoad(
-      profileId,
+    final target = await resolveGuidedDispenseTarget(
+      database: dependencies.database,
+      guidedCarouselLoads: dependencies.guidedCarouselLoads,
+      scheduleId: scheduleId,
+      doseId: doseId,
     );
-    if (activeLoad == null) {
-      return null;
-    }
-    final slot = activeLoad.slots.where(
-      (entry) =>
-          entry.scheduleIds.contains(scheduleId) &&
-          _matchesDoseOccurrence(entry, scheduleId, doseId),
-    );
-    if (slot.isEmpty) {
+    if (target == null) {
       return null;
     }
     return _GuidedDispenseContext(
-      profileId: profileId,
-      sessionId: activeLoad.id,
-      slotNumber: slot.first.slotNumber,
-      slotStatus: slot.first.status,
+      profileId: target.profileId,
+      sessionId: target.sessionId,
+      slotNumber: target.slotNumber,
+      slotStatus: target.slotStatus,
     );
   }
 
@@ -296,27 +290,6 @@ class DoseActionLogger {
       return null;
     }
     return doseId.substring(0, separatorIndex);
-  }
-
-  static bool _matchesDoseOccurrence(
-    CarouselLoadSlotSnapshot slot,
-    String scheduleId,
-    String doseId,
-  ) {
-    if (!slot.scheduleIds.contains(scheduleId)) {
-      return false;
-    }
-    final scheduledAt = slot.scheduledAt;
-    if (scheduledAt == null) {
-      return true;
-    }
-    final separatorIndex = doseId.lastIndexOf(':');
-    if (separatorIndex <= 0 || separatorIndex >= doseId.length - 1) {
-      return true;
-    }
-    final occurrenceDate = doseId.substring(separatorIndex + 1);
-    final slotDate = scheduledAt.toLocal().toIso8601String().split('T').first;
-    return occurrenceDate == slotDate;
   }
 }
 

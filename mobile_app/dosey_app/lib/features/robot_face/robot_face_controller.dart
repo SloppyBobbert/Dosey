@@ -165,6 +165,7 @@ class RobotFaceController {
   RobotFaceState _computeState() {
     final role = _role;
     final now = _current();
+    final activeShortageAlert = _activeShortageAlert();
     final activeMissedDose = _activeMissedAlertDose(now);
     // Missed-dose alerts intentionally pin the display to the unresolved dose
     // so recognition and follow-up actions stay attached to the event the user
@@ -232,11 +233,15 @@ class RobotFaceController {
         mode: mode,
         hasActiveMissedAlert: hasActiveMissedAlert,
       ),
-      hasPinnedShortageAlert: _activeShortageAlert() != null,
-      activeShortageLabel: _activeShortageAlertLabel(),
-      activeShortageMedicationLabel: _activeShortageMedicationLabel(),
-      activeShortageScheduledLabel: _activeShortageScheduledLabel(),
-      activeShortageSlotNumber: _activeShortageAlert()?.slotNumber,
+      hasPinnedShortageAlert: activeShortageAlert != null,
+      activeShortageLabel: _activeShortageAlertLabel(activeShortageAlert),
+      activeShortageMedicationLabel: _activeShortageMedicationLabel(
+        activeShortageAlert,
+      ),
+      activeShortageScheduledLabel: _activeShortageScheduledLabel(
+        activeShortageAlert,
+      ),
+      activeShortageSlotNumber: activeShortageAlert?.slotNumber,
     );
     if (baseState.mode == RobotFaceMode.idle &&
         !baseState.isInAwakeWindow &&
@@ -267,24 +272,21 @@ class RobotFaceController {
     return activeAlert;
   }
 
-  String? _activeShortageAlertLabel() {
-    final alert = _activeShortageAlert();
+  String? _activeShortageAlertLabel(MedicationShortageAlertRow? alert) {
     if (alert == null) {
       return null;
     }
     return 'Urgent shortage · slot ${alert.slotNumber}';
   }
 
-  String? _activeShortageMedicationLabel() {
-    final alert = _activeShortageAlert();
+  String? _activeShortageMedicationLabel(MedicationShortageAlertRow? alert) {
     if (alert == null) {
       return null;
     }
     return _joinedPrescriptionNames(alert.prescriptionNamesJson);
   }
 
-  String? _activeShortageScheduledLabel() {
-    final alert = _activeShortageAlert();
+  String? _activeShortageScheduledLabel(MedicationShortageAlertRow? alert) {
     if (alert == null) {
       return null;
     }

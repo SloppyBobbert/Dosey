@@ -84,12 +84,18 @@ class LocalScheduleProfileRepository implements ScheduleProfileRepository {
     if (existing == null) {
       throw ArgumentError('Schedule profile not found.');
     }
-    if (existing.isActive) {
-      return;
-    }
 
     final now = DateTime.now().toUtc();
     await _database.transaction(() async {
+      if (existing.isActive) {
+        if (auditEvent != null) {
+          await LocalAdminAuditRepository.insertEventIntoDatabase(
+            _database,
+            auditEvent,
+          );
+        }
+        return;
+      }
       final previousActive =
           await (_database.select(_database.scheduleProfiles)
                 ..where((profile) => profile.isActive.equals(true))

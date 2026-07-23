@@ -119,6 +119,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         FlutterLocalNotificationScheduler(
           notificationTapHandler: notificationTaps.handleTap,
         );
+    final urgentShortageNotifier = reminderScheduler is UrgentShortageNotifier
+        ? reminderScheduler as UrgentShortageNotifier
+        : null;
     final settings = LocalAppSettingsRepository(
       _database,
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
@@ -127,7 +130,10 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     final robotFaceSettings = RobotFaceSettingsRepository(_database);
     final scheduleProfiles = LocalScheduleProfileRepository(_database);
     final carouselSlots = LocalCarouselSlotRepository(_database);
-    final guidedCarouselLoads = LocalGuidedCarouselLoadRepository(_database);
+    final guidedCarouselLoads = LocalGuidedCarouselLoadRepository(
+      _database,
+      urgentShortageNotifier: urgentShortageNotifier,
+    );
     final controller = SimulatedControllerGateway(
       canHostRobot: () async {
         final platform = currentAppDevicePlatform();

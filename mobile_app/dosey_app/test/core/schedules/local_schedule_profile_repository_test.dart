@@ -1,3 +1,5 @@
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -76,5 +78,32 @@ void main() {
         );
 
     expect(await repository.watchActiveProfile().first, isNull);
+  });
+
+  test('already-active profile still persists the audit event', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalScheduleProfileRepository(database);
+    final auditEvent = AdminAuditEvent(
+      id: 'audit-active-noop',
+      eventType: AdminAuditEventType.activeScheduleProfileChanged,
+      targetType: AdminAuditTargetType.scheduleProfile,
+      targetId: ScheduleProfile.defaultProfileId,
+      summary: 'Activated schedule profile.',
+      actorType: AdminAuditActorType.localAdmin,
+      actorLabel: 'Tester',
+      sourceDeviceRole: 'androidRobot',
+      occurredAt: DateTime.utc(2026, 6, 9, 10),
+    );
+
+    await repository.setActiveProfile(
+      ScheduleProfile.defaultProfileId,
+      auditEvent: auditEvent,
+    );
+
+    final auditEvents = await LocalAdminAuditRepository(
+      database,
+    ).watchRecentEvents(limit: 5).first;
+    expect(auditEvents.map((event) => event.id), contains(auditEvent.id));
   });
 }

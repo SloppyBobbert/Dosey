@@ -330,7 +330,7 @@ void main() {
                 (row) => row.loadSessionId.equals('session-shortage-block'),
               ))
               .get();
-      expect(alerts.every((alert) => alert.status == 'past_due'), isTrue);
+      expect(alerts.every((alert) => alert.status == 'active'), isTrue);
 
       final doseLogEvents = await database.select(database.doseLogEvents).get();
       expect(
@@ -339,7 +339,7 @@ void main() {
               event.kind == DoseLogEventKind.doseMissed.name &&
               event.doseId == 'vitamin-d-evening:2026-07-23',
         ),
-        isTrue,
+        isFalse,
       );
     },
   );
@@ -1173,6 +1173,64 @@ void main() {
             .having((p) => p.availableDoses, 'available', 4)
             .having((p) => p.loadedDoses, 'loaded', 0)
             .having((p) => p.reviewDoses, 'review', 0),
+      );
+    },
+  );
+
+  test(
+    'physical unload reconciles pre-dispense needs-review inventory without stranding loaded doses',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _seedPrescriptionSchedule(
+        database,
+        prescriptionId: 'vitamin-d',
+        scheduleId: 'vitamin-d-morning',
+        availableDoses: 1,
+      );
+      final repository = LocalGuidedCarouselLoadRepository(database);
+      final now = DateTime.utc(2026, 7, 23, 8);
+
+      await repository.confirmFullLoad(
+        sessionId: 'session-quarantine-unload',
+        profileId: 'schedule-1',
+        plan: _plan(
+          now,
+          loadedSlots: [
+            _loadedSlot(1, 'bundle-1', now, [
+              _medication('vitamin-d', 'vitamin-d-morning'),
+            ]),
+          ],
+        ),
+        startedAt: now,
+        confirmedAt: now,
+      );
+
+      await repository.quarantineSlotForReview(
+        profileId: 'schedule-1',
+        activeSessionId: 'session-quarantine-unload',
+        slotNumber: 1,
+        occurredAt: now.add(const Duration(minutes: 1)),
+        reason: 'timeout',
+      );
+
+      await repository.confirmPhysicalUnload(
+        profileId: 'schedule-1',
+        activeSessionId: 'session-quarantine-unload',
+        recoveredScheduleIds: const [],
+        recoveredSlotNumbers: const [],
+        occurredAt: now.add(const Duration(minutes: 2)),
+      );
+
+      final prescriptions = await LocalPrescriptionRepository(
+        database,
+      ).watchPrescriptions().first;
+      expect(
+        prescriptions.single,
+        isA<Prescription>()
+            .having((p) => p.availableDoses, 'available', 0)
+            .having((p) => p.loadedDoses, 'loaded', 0)
+            .having((p) => p.reviewDoses, 'review', 1),
       );
     },
   );
