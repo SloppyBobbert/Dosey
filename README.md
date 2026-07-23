@@ -50,15 +50,11 @@ The project is intended to explore whether an inexpensive, expressive, and repai
 
 ## Safety
 
-Do not test Dosey with real prescription medication. Early tests must use candy, beads, dry beans, vitamins, or fake pills.
-
-Dosey must not mark a dose as taken because the servo moved. The app should separately track command sent, servo completed, dose visible, dose confirmed taken, skipped, missed, and error states. For missed doses, Dosey must not tell the user to double dose; it should tell the user to follow prescription instructions or ask a caregiver, pharmacist, or doctor.
-
 Known prototype risks:
 
 - The carousel can jam, skip, roll backward, or misalign with the chute.
-- The cup can be missing or placed wrong.
-- The app and XIAO controller can disconnect.
+- Phone loses power/bluetooth/WIFI connection. 
+- The app and XIAO controller can disconnect. 
 - The XIAO, Grove board, or servo power can reset or fail.
 - A user or caregiver can load the carousel incorrectly.
 - Dispensed does not mean visible, and visible does not mean taken.
