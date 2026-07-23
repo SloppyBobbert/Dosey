@@ -188,6 +188,45 @@ void main() {
     expect(find.text('Need help'), findsNothing);
   });
 
+  testWidgets('pins shortage details inside the robot face status card', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: '10:00 · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+          hasPinnedShortageAlert: true,
+          activeShortageLabel: 'Urgent shortage · slot 2',
+          activeShortageMedicationLabel: 'Vitamin D',
+          activeShortageScheduledLabel: '10:00',
+          activeShortageSlotNumber: 2,
+        ),
+      ),
+    );
+
+    await tester.pump();
+
+    expect(find.text('Urgent shortage'), findsOneWidget);
+    expect(find.text('Vitamin D'), findsOneWidget);
+    expect(find.text('Scheduled 10:00'), findsOneWidget);
+    expect(find.text('Slot 2'), findsOneWidget);
+    expect(
+      find.text(
+        'Local-only alert on this phone. Open Carousel to review loading before the next dispense.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Pinned until loading is handled on this phone.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('passes activity state through to the canvas', (
     WidgetTester tester,
   ) async {

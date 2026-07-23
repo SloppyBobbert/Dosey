@@ -1,16 +1,107 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/carousel/carousel_load_session.dart';
+import 'package:dosey_app/core/carousel/carousel_position.dart';
+import 'package:dosey_app/core/carousel/guided_carousel_load_plan.dart';
+import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test(
+    'guided dispense success updates active guided load position and slot state',
+    () async {
+      final fixture = await _LifecycleFixture.create(seedGuidedLoad: true);
+      addTearDown(fixture.close);
+
+      await fixture.service.requestDoseDispense(
+        doseId: 'dose-1',
+        scheduleId: 'schedule-1',
+        slotId: 'slot-1',
+      );
+
+      final activeLoad = await fixture.guidedLoads.readActiveLoad('schedule-1');
+      expect(activeLoad, isNotNull);
+      expect(activeLoad!.currentPosition.value, 1);
+      expect(activeLoad.slots.first.status, CarouselLoadSlotStatus.dispensed);
+    },
+  );
+
+  test(
+    'guided dispense resolves the correct repeated occurrence for the current dose date',
+    () async {
+      final fixture = await _LifecycleFixture.create(
+        seedGuidedLoad: true,
+        guidedSlots: [
+          _LifecycleFixture._guidedSlot(
+            1,
+            DateTime(2026, 7, 11, 9),
+            scheduleId: 'schedule-1',
+          ),
+          _LifecycleFixture._guidedSlot(
+            2,
+            DateTime(2026, 7, 10, 9),
+            scheduleId: 'schedule-1',
+          ),
+        ],
+      );
+      addTearDown(fixture.close);
+
+      await fixture.service.requestDoseDispense(
+        doseId: 'schedule-1:2026-07-10',
+        scheduleId: 'schedule-1',
+        slotId: 'slot-1',
+      );
+
+      final activeLoad = await fixture.guidedLoads.readActiveLoad('schedule-1');
+      expect(activeLoad, isNotNull);
+      expect(activeLoad!.currentPosition.value, 2);
+      expect(activeLoad.slots[0].status, CarouselLoadSlotStatus.loaded);
+      expect(activeLoad.slots[1].status, CarouselLoadSlotStatus.dispensed);
+    },
+  );
+
+  test(
+    'guided stale loads block live dispense before movement starts',
+    () async {
+      final fixture = await _LifecycleFixture.create(seedGuidedLoad: true);
+      addTearDown(fixture.close);
+      await LocalGuidedCarouselLoadRepository.markActiveLoadStaleInDatabase(
+        fixture.database,
+        profileId: 'schedule-1',
+        reason: 'test',
+        occurredAt: DateTime(2026, 7, 10, 12, 1),
+        details: const <String, Object?>{},
+      );
+
+      await expectLater(
+        fixture.service.requestDoseDispense(
+          doseId: 'dose-1',
+          scheduleId: 'schedule-1',
+          slotId: 'slot-1',
+        ),
+        throwsA(isA<StateError>()),
+      );
+
+      expect(
+        await fixture.database.select(fixture.database.doseLogEvents).get(),
+        isEmpty,
+      );
+      expect(
+        (await fixture.slotRow('slot-1')).status,
+        CarouselSlotStatus.loaded.storageValue,
+      );
+    },
+  );
+
   test(
     'successful dispense with slot persists session/events, marks slot dispensed, and logs movement only',
     () async {
@@ -247,6 +338,33 @@ void main() {
       expect(
         await fixture.database.select(fixture.database.doseLogEvents).get(),
         isEmpty,
+      );
+    },
+  );
+
+  test(
+    'guided timeout after acceptance quarantines the guided snapshot even without a legacy slot row',
+    () async {
+      final fixture = await _LifecycleFixture.create(
+        gateway: _TimeoutAfterAcceptanceControllerGateway(),
+        seedGuidedLoad: true,
+      );
+      addTearDown(fixture.close);
+
+      await expectLater(
+        fixture.service.requestDoseDispense(
+          doseId: 'schedule-1:2026-07-10',
+          scheduleId: 'schedule-1',
+          slotId: 'guided:session-1:1',
+        ),
+        throwsA(isA<ControllerCommandTimeoutException>()),
+      );
+
+      final activeLoad = await fixture.guidedLoads.readActiveLoad('schedule-1');
+      expect(activeLoad, isNotNull);
+      expect(
+        activeLoad!.slots.first.status,
+        CarouselLoadSlotStatus.needsReview,
       );
     },
   );
@@ -594,26 +712,142 @@ void main() {
 }
 
 class _LifecycleFixture {
-  _LifecycleFixture({required this.database, required this.service});
+  _LifecycleFixture({
+    required this.database,
+    required this.service,
+    required this.guidedLoads,
+  });
 
   final DoseyDatabase database;
   final ControllerLifecycleService service;
+  final LocalGuidedCarouselLoadRepository guidedLoads;
 
   static Future<_LifecycleFixture> create({
     ControllerGateway? gateway,
     DoseLogRepository? doseLog,
+    bool seedGuidedLoad = false,
+    List<CarouselLoadPlanSlotPreview>? guidedSlots,
   }) async {
     final database = DoseyDatabase.inMemory();
     final now = DateTime(2026, 7, 10, 12);
     await _seedLoadedSlot(database, now: now);
+    final guidedLoads = LocalGuidedCarouselLoadRepository(database);
+    if (seedGuidedLoad) {
+      final planSlots = _fullPlanSlots(guidedSlots);
+      await _seedPrescriptionInventoryForGuidedSlots(
+        database,
+        planSlots,
+        now: now,
+      );
+      await guidedLoads.confirmFullLoad(
+        sessionId: 'session-1',
+        profileId: 'schedule-1',
+        plan: GuidedCarouselLoadPlan(
+          createdAt: now,
+          mode: GuidedCarouselLoadMode.fullReload,
+          priorPosition: CarouselPosition.start,
+          slots: planSlots,
+          shortages: const [],
+        ),
+        startedAt: now,
+        confirmedAt: now,
+      );
+    }
     final service = ControllerLifecycleService(
       controller: gateway ?? _AcceptingControllerGateway(),
       commandRepository: LocalControllerCommandRepository(database),
       doseLog: doseLog ?? DriftDoseLogRepository(database),
       carouselSlots: LocalCarouselSlotRepository(database),
+      guidedCarouselLoads: guidedLoads,
+      database: database,
       now: () => now,
     );
-    return _LifecycleFixture(database: database, service: service);
+    return _LifecycleFixture(
+      database: database,
+      service: service,
+      guidedLoads: guidedLoads,
+    );
+  }
+
+  static CarouselLoadPlanSlotPreview _guidedSlot(
+    int slotNumber,
+    DateTime scheduledAt, {
+    String scheduleId = 'schedule-1',
+  }) {
+    return CarouselLoadPlanSlotPreview.loaded(
+      position: CarouselPosition(slotNumber),
+      bundle: CarouselDoseBundle(
+        bundleKey: 'bundle-$slotNumber',
+        scheduledAt: scheduledAt,
+        scheduleIds: [scheduleId],
+        medications: [
+          CarouselDoseBundleMedication(
+            prescriptionId: 'prescription-1',
+            prescriptionName: 'Test med',
+            scheduleId: scheduleId,
+            scheduledAt: scheduledAt,
+            availableDoses: 1,
+            guidedPillIcon: GuidedPillIcon.roundPill,
+            doseCount: 1,
+            createdAt: DateTime(2026, 7, 10, 12),
+            updatedAt: DateTime(2026, 7, 10, 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static List<CarouselLoadPlanSlotPreview> _fullPlanSlots(
+    List<CarouselLoadPlanSlotPreview>? guidedSlots,
+  ) {
+    final slots = <CarouselLoadPlanSlotPreview>[...?guidedSlots];
+    if (slots.isEmpty) {
+      slots.add(_guidedSlot(1, DateTime(2026, 7, 10, 9)));
+    }
+    final usedPositions = slots.map((slot) => slot.position.value).toSet();
+    for (var position = 1; position <= 14; position++) {
+      if (usedPositions.contains(position)) {
+        continue;
+      }
+      slots.add(
+        CarouselLoadPlanSlotPreview.empty(position: CarouselPosition(position)),
+      );
+    }
+    slots.sort(
+      (left, right) => left.position.value.compareTo(right.position.value),
+    );
+    return slots;
+  }
+
+  static Future<void> _seedPrescriptionInventoryForGuidedSlots(
+    DoseyDatabase database,
+    List<CarouselLoadPlanSlotPreview> planSlots, {
+    required DateTime now,
+  }) async {
+    final requiredAvailableByPrescription = <String, int>{};
+    for (final slot in planSlots) {
+      if (slot.bundle == null ||
+          slot.status != GuidedCarouselLoadPlanSlotStatus.loaded) {
+        continue;
+      }
+      for (final medication in slot.bundle!.medications) {
+        requiredAvailableByPrescription.update(
+          medication.prescriptionId,
+          (count) => count + medication.availableDoses,
+          ifAbsent: () => medication.availableDoses,
+        );
+      }
+    }
+    for (final entry in requiredAvailableByPrescription.entries) {
+      await (database.update(
+        database.prescriptions,
+      )..where((row) => row.id.equals(entry.key))).write(
+        PrescriptionsCompanion(
+          availableDoses: Value(entry.value),
+          updatedAt: Value(now),
+        ),
+      );
+    }
   }
 
   Future<CarouselSlotRow> slotRow(String id) {
@@ -635,6 +869,7 @@ class _LifecycleFixture {
             id: 'prescription-1',
             name: 'Test med',
             pillType: 'tablet',
+            availableDoses: const Value(1),
             createdAt: now,
             updatedAt: now,
           ),

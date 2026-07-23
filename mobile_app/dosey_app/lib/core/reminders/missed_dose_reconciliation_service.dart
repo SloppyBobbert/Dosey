@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 
+import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -28,6 +31,12 @@ class MissedDoseReconciliationService {
   final Duration gracePeriod;
   Future<void>? _reconcileInFlight;
   static const _logName = 'dosey.missed_dose_reconciliation';
+  static const _auditFactory = AdminAuditEventFactory();
+  static const _systemActor = AdminAuditActorIdentity(
+    actorType: AdminAuditActorType.system,
+    actorLabel: 'Dosey System',
+    actorProviderLabel: 'system',
+  );
 
   Future<void> reconcile() async {
     final existingRun = _reconcileInFlight;
@@ -99,7 +108,46 @@ class MissedDoseReconciliationService {
       }
       await _retireLoadedSlot(candidate);
       await doseLog.addEvent(candidate.event);
+      await _markShortagesPastDue(candidate);
     });
+  }
+
+  Future<void> _markShortagesPastDue(MissedDoseCandidate candidate) async {
+    final currentDatabase = database;
+    if (currentDatabase == null) {
+      return;
+    }
+    final scheduleId = _scheduleIdFromDoseId(candidate.doseId);
+    final activeAlerts =
+        (await (currentDatabase.select(currentDatabase.medicationShortageAlerts)
+                  ..where(
+                    (row) =>
+                        row.status.equals('active') &
+                        row.scheduledAt.equals(candidate.scheduledAt),
+                  ))
+                .get())
+            .where((alert) => _alertTargetsScheduleId(alert, scheduleId))
+            .toList(growable: false);
+    for (final alert in activeAlerts) {
+      await (currentDatabase.update(
+        currentDatabase.medicationShortageAlerts,
+      )..where((row) => row.id.equals(alert.id))).write(
+        MedicationShortageAlertsCompanion(
+          status: const Value('past_due'),
+          updatedAt: Value(candidate.event.occurredAt),
+        ),
+      );
+      await LocalAdminAuditRepository.insertEventIntoDatabase(
+        currentDatabase,
+        _auditFactory.guidedLoadShortagePastDue(
+          actor: _systemActor,
+          sourceDeviceRole: 'androidRobot',
+          targetId: alert.id,
+          summary: 'Marked shortage alert ${alert.id} past due.',
+          occurredAt: candidate.event.occurredAt,
+        ),
+      );
+    }
   }
 
   Future<void> _retireLoadedSlot(MissedDoseCandidate candidate) async {
@@ -149,5 +197,20 @@ class MissedDoseReconciliationService {
   static String _scheduleIdFromDoseId(String doseId) {
     final separatorIndex = doseId.lastIndexOf(':');
     return separatorIndex > 0 ? doseId.substring(0, separatorIndex) : doseId;
+  }
+
+  static bool _alertTargetsScheduleId(
+    MedicationShortageAlertRow alert,
+    String scheduleId,
+  ) {
+    final separatorIndex = alert.bundleKey.indexOf('|');
+    if (separatorIndex < 0 || separatorIndex == alert.bundleKey.length - 1) {
+      return false;
+    }
+    final encodedScheduleIds = alert.bundleKey.substring(separatorIndex + 1);
+    return encodedScheduleIds
+        .split(',')
+        .map((value) => value.trim())
+        .contains(scheduleId);
   }
 }

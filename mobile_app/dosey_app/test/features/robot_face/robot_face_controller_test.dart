@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
+import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -36,6 +39,215 @@ void main() {
       expect(state.nextEventLabel, '10:00 · Morning meds');
       expect(state.rampProgress, 0);
       expect(state.isInAwakeWindow, isFalse);
+    },
+  );
+
+  test(
+    'robot face state exposes a pinned active shortage foundation',
+    () async {
+      final shortageAlerts = Stream<List<MedicationShortageAlertRow>>.value([
+        MedicationShortageAlertRow(
+          id: 'shortage-1',
+          profileId: 'profile-1',
+          loadSessionId: 'session-1',
+          slotNumber: 2,
+          bundleKey: 'bundle-1',
+          scheduledAt: DateTime.utc(2026, 7, 8, 10),
+          prescriptionIdsJson: '["rx-1"]',
+          prescriptionNamesJson: '["Vitamin D"]',
+          status: 'active',
+          recognizedAt: null,
+          resolvedAt: null,
+          resolution: null,
+          intendedAudience: 'household',
+          localDeliveryState: 'sent',
+          localNotificationSentAt: DateTime.utc(2026, 7, 8, 9),
+          remoteDeliveryState: 'not_configured',
+          createdAt: DateTime.utc(2026, 7, 8, 9),
+          updatedAt: DateTime.utc(2026, 7, 8, 9),
+        ),
+      ]);
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9),
+        scheduleHour: 10,
+        scheduleMinute: 0,
+        shortageAlerts: shortageAlerts,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final state = await fixture.controller.watchState().first;
+      final scheduledLabel = _localTimeLabel(DateTime.utc(2026, 7, 8, 10));
+      expect(state.hasPinnedShortageAlert, isTrue);
+      expect(state.activeShortageLabel, 'Urgent shortage · slot 2');
+      expect(state.activeShortageMedicationLabel, 'Vitamin D');
+      expect(state.activeShortageScheduledLabel, scheduledLabel);
+      expect(state.activeShortageSlotNumber, 2);
+    },
+  );
+
+  test('robot face keeps unresolved past-due shortages pinned', () async {
+    final shortageAlerts = Stream<List<MedicationShortageAlertRow>>.value([
+      MedicationShortageAlertRow(
+        id: 'shortage-past-due',
+        profileId: 'profile-1',
+        loadSessionId: 'session-1',
+        slotNumber: 3,
+        bundleKey: 'bundle-2',
+        scheduledAt: DateTime.utc(2026, 7, 8, 11),
+        prescriptionIdsJson: '["rx-1"]',
+        prescriptionNamesJson: '["Vitamin D"]',
+        status: 'past_due',
+        recognizedAt: DateTime.utc(2026, 7, 8, 11, 5),
+        resolvedAt: null,
+        resolution: null,
+        intendedAudience: 'household',
+        localDeliveryState: 'sent',
+        localNotificationSentAt: DateTime.utc(2026, 7, 8, 11),
+        remoteDeliveryState: 'not_configured',
+        createdAt: DateTime.utc(2026, 7, 8, 10, 55),
+        updatedAt: DateTime.utc(2026, 7, 8, 11, 5),
+      ),
+    ]);
+    final fixture = await _RobotFaceControllerFixture.create(
+      now: DateTime(2026, 7, 8, 12),
+      scheduleHour: 13,
+      scheduleMinute: 0,
+      shortageAlerts: shortageAlerts,
+    );
+    addTearDown(fixture.close);
+
+    await fixture.settle();
+
+    final state = await fixture.controller.watchState().first;
+    final scheduledLabel = _localTimeLabel(DateTime.utc(2026, 7, 8, 11));
+    expect(state.hasPinnedShortageAlert, isTrue);
+    expect(state.activeShortageLabel, 'Urgent shortage · slot 3');
+    expect(state.activeShortageMedicationLabel, 'Vitamin D');
+    expect(state.activeShortageScheduledLabel, scheduledLabel);
+    expect(state.activeShortageSlotNumber, 3);
+  });
+
+  test(
+    'robot face prioritizes unresolved past-due shortage over active shortage',
+    () async {
+      final shortageAlerts = Stream<List<MedicationShortageAlertRow>>.value([
+        MedicationShortageAlertRow(
+          id: 'shortage-active',
+          profileId: 'profile-1',
+          loadSessionId: 'session-1',
+          slotNumber: 2,
+          bundleKey: 'bundle-active',
+          scheduledAt: DateTime.utc(2026, 7, 8, 10),
+          prescriptionIdsJson: '["rx-1"]',
+          prescriptionNamesJson: '["Active Med"]',
+          status: 'active',
+          recognizedAt: null,
+          resolvedAt: null,
+          resolution: null,
+          intendedAudience: 'household',
+          localDeliveryState: 'sent',
+          localNotificationSentAt: DateTime.utc(2026, 7, 8, 9),
+          remoteDeliveryState: 'not_configured',
+          createdAt: DateTime.utc(2026, 7, 8, 9),
+          updatedAt: DateTime.utc(2026, 7, 8, 9),
+        ),
+        MedicationShortageAlertRow(
+          id: 'shortage-past-due',
+          profileId: 'profile-1',
+          loadSessionId: 'session-2',
+          slotNumber: 4,
+          bundleKey: 'bundle-past',
+          scheduledAt: DateTime.utc(2026, 7, 8, 11),
+          prescriptionIdsJson: '["rx-2"]',
+          prescriptionNamesJson: '["Past Due Med"]',
+          status: 'past_due',
+          recognizedAt: DateTime.utc(2026, 7, 8, 11, 5),
+          resolvedAt: null,
+          resolution: null,
+          intendedAudience: 'household',
+          localDeliveryState: 'sent',
+          localNotificationSentAt: DateTime.utc(2026, 7, 8, 11),
+          remoteDeliveryState: 'not_configured',
+          createdAt: DateTime.utc(2026, 7, 8, 10, 55),
+          updatedAt: DateTime.utc(2026, 7, 8, 11, 5),
+        ),
+      ]);
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 12),
+        scheduleHour: 13,
+        scheduleMinute: 0,
+        shortageAlerts: shortageAlerts,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final state = await fixture.controller.watchState().first;
+      expect(state.activeShortageLabel, 'Urgent shortage · slot 4');
+      expect(state.activeShortageMedicationLabel, 'Past Due Med');
+    },
+  );
+
+  test(
+    'robot face prioritizes unresolved past-due shortage over active shortage',
+    () async {
+      final shortageAlerts = Stream<List<MedicationShortageAlertRow>>.value([
+        MedicationShortageAlertRow(
+          id: 'shortage-active',
+          profileId: 'profile-1',
+          loadSessionId: 'session-1',
+          slotNumber: 2,
+          bundleKey: 'bundle-active',
+          scheduledAt: DateTime.utc(2026, 7, 8, 10),
+          prescriptionIdsJson: '["rx-1"]',
+          prescriptionNamesJson: '["Active Med"]',
+          status: 'active',
+          recognizedAt: null,
+          resolvedAt: null,
+          resolution: null,
+          intendedAudience: 'household',
+          localDeliveryState: 'sent',
+          localNotificationSentAt: DateTime.utc(2026, 7, 8, 9),
+          remoteDeliveryState: 'not_configured',
+          createdAt: DateTime.utc(2026, 7, 8, 9),
+          updatedAt: DateTime.utc(2026, 7, 8, 9),
+        ),
+        MedicationShortageAlertRow(
+          id: 'shortage-past-due',
+          profileId: 'profile-1',
+          loadSessionId: 'session-2',
+          slotNumber: 4,
+          bundleKey: 'bundle-past',
+          scheduledAt: DateTime.utc(2026, 7, 8, 11),
+          prescriptionIdsJson: '["rx-2"]',
+          prescriptionNamesJson: '["Past Due Med"]',
+          status: 'past_due',
+          recognizedAt: DateTime.utc(2026, 7, 8, 11, 5),
+          resolvedAt: null,
+          resolution: null,
+          intendedAudience: 'household',
+          localDeliveryState: 'sent',
+          localNotificationSentAt: DateTime.utc(2026, 7, 8, 11),
+          remoteDeliveryState: 'not_configured',
+          createdAt: DateTime.utc(2026, 7, 8, 10, 55),
+          updatedAt: DateTime.utc(2026, 7, 8, 11, 5),
+        ),
+      ]);
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 12),
+        scheduleHour: 13,
+        scheduleMinute: 0,
+        shortageAlerts: shortageAlerts,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final state = await fixture.controller.watchState().first;
+      expect(state.activeShortageLabel, 'Urgent shortage · slot 4');
+      expect(state.activeShortageMedicationLabel, 'Past Due Med');
     },
   );
 
@@ -776,6 +988,42 @@ void main() {
   );
 
   test(
+    'robot face dispense does not depend on legacy slot id for guided routing',
+    () async {
+      final carouselSlots = _FakeCarouselSlotRepository(
+        slots: [
+          CarouselSlot(
+            id: 'slot-1',
+            slotNumber: 1,
+            prescriptionId: 'prescription-1',
+            scheduleId: 'schedule-1',
+            profileId: 'profile-1',
+            status: CarouselSlotStatus.loaded,
+            createdAt: DateTime.utc(2026, 7, 8, 9),
+            updatedAt: DateTime.utc(2026, 7, 8, 9),
+          ),
+        ],
+      );
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9, 5),
+        scheduleHour: 9,
+        scheduleMinute: 0,
+        carouselSlots: carouselSlots,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+      final request = fixture.controller.requestDispenseForCurrentDose();
+      await fixture.controllerGateway.requestStarted.future;
+
+      expect(fixture.controllerLifecycle.lastSlotId, isNull);
+
+      fixture.controllerGateway.completeDispense();
+      await request;
+    },
+  );
+
+  test(
     'dispense request rejects a completed current due dose when the next dose is still in the future',
     () async {
       final now = DateTime(2026, 7, 8, 9, 5);
@@ -1186,6 +1434,7 @@ class _RobotFaceControllerFixture {
     required this.doseLog,
     required this.controller,
     required this.controllerGateway,
+    required this.controllerLifecycle,
     required this.currentDoseId,
     required this.nowGetter,
     required this._setNow,
@@ -1195,6 +1444,7 @@ class _RobotFaceControllerFixture {
   final _FakeDoseLogRepository doseLog;
   final RobotFaceController controller;
   final _FakeControllerGateway controllerGateway;
+  final _FakeControllerLifecycleService controllerLifecycle;
   final String currentDoseId;
   final DateTime Function() nowGetter;
   final void Function(DateTime value) _setNow;
@@ -1210,6 +1460,8 @@ class _RobotFaceControllerFixture {
     ScheduleProfile? activeProfile,
     bool emitDefaultActiveProfile = true,
     Stream<DateTime>? clock,
+    Stream<List<MedicationShortageAlertRow>>? shortageAlerts,
+    CarouselSlotRepository? carouselSlots,
     ControllerSnapshot controllerSnapshot =
         const ControllerSnapshot.connected(),
   }) async {
@@ -1222,6 +1474,7 @@ class _RobotFaceControllerFixture {
     final profiles = _FakeScheduleProfileRepository();
     final reminders = _FakeReminderRepository();
     final doseLog = _FakeDoseLogRepository();
+    final slotRepository = carouselSlots ?? _FakeCarouselSlotRepository();
     final controllerGateway = _FakeControllerGateway(controllerSnapshot);
     final controllerLifecycle = _FakeControllerLifecycleService(
       controllerGateway: controllerGateway,
@@ -1263,6 +1516,8 @@ class _RobotFaceControllerFixture {
       scheduleProfiles: profiles,
       reminders: reminders,
       doseLog: doseLog,
+      carouselSlots: slotRepository,
+      shortageAlerts: shortageAlerts,
       clock: clock,
       now: () => currentNow,
     );
@@ -1272,6 +1527,7 @@ class _RobotFaceControllerFixture {
       doseLog: doseLog,
       controller: robotFaceController,
       controllerGateway: controllerGateway,
+      controllerLifecycle: controllerLifecycle,
       currentDoseId: 'schedule-1:2026-07-08',
       nowGetter: () => currentNow,
       setNow: (value) {
@@ -1346,6 +1602,13 @@ class _FakeControllerLifecycleService implements ControllerLifecycleService {
   _FakeControllerLifecycleService({required this.controllerGateway});
 
   final _FakeControllerGateway controllerGateway;
+  String? lastSlotId;
+
+  @override
+  DoseyDatabase? get database => null;
+
+  @override
+  LocalGuidedCarouselLoadRepository? get guidedCarouselLoads => null;
 
   @override
   Future<void> requestDoseDispense({
@@ -1353,11 +1616,49 @@ class _FakeControllerLifecycleService implements ControllerLifecycleService {
     String? slotId,
     String? scheduleId,
   }) {
+    lastSlotId = slotId;
     return controllerGateway.requestDispense(doseId: doseId);
   }
 
   @override
   Future<void> requestManualDispenseTest() async {}
+}
+
+class _FakeCarouselSlotRepository implements CarouselSlotRepository {
+  _FakeCarouselSlotRepository({this.slots = const <CarouselSlot>[]});
+
+  final List<CarouselSlot> slots;
+
+  @override
+  Future<void> assignSlot(
+    CarouselSlot slot, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
+
+  @override
+  Future<void> clearProfile(String profileId) async {}
+
+  @override
+  Future<void> clearSlot(String id) async {}
+
+  @override
+  Future<void> markDispensed(String id) async {}
+
+  @override
+  Future<void> markLoaded(String id, {AdminAuditEvent? auditEvent}) async {}
+
+  @override
+  Future<void> markNeedsReview(
+    String id, {
+    AdminAuditEvent? auditEvent,
+  }) async {}
+
+  @override
+  Stream<List<CarouselSlot>> watchSlots({String? profileId}) async* {
+    yield profileId == null
+        ? slots
+        : slots.where((slot) => slot.profileId == profileId).toList();
+  }
 }
 
 class _FakeDoseLogRepository implements DoseLogRepository {
@@ -1445,4 +1746,11 @@ class _FakeScheduleProfileRepository implements ScheduleProfileRepository {
         ? const <ScheduleProfile>[]
         : <ScheduleProfile>[_profile!];
   }
+}
+
+String _localTimeLabel(DateTime value) {
+  final local = value.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
 }

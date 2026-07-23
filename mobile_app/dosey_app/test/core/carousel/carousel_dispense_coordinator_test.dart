@@ -1,5 +1,7 @@
 import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
+import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
+import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -30,6 +32,12 @@ void main() {
 
 class _FakeControllerLifecycleService implements ControllerLifecycleService {
   final List<_DoseDispenseRequest> requests = <_DoseDispenseRequest>[];
+
+  @override
+  DoseyDatabase? get database => null;
+
+  @override
+  LocalGuidedCarouselLoadRepository? get guidedCarouselLoads => null;
 
   @override
   Future<void> requestDoseDispense({

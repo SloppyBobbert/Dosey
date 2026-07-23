@@ -16,30 +16,88 @@ enum PillType {
   }
 }
 
+enum GuidedPillIcon {
+  tablet(storageValue: 'tablet'),
+  roundPill(storageValue: 'roundPill'),
+  ovalTablet(storageValue: 'ovalTablet'),
+  capsule(storageValue: 'capsule'),
+  softgel(storageValue: 'softgel'),
+  splitPill(storageValue: 'splitPill'),
+  multiplePills(storageValue: 'multiplePills');
+
+  const GuidedPillIcon({required this.storageValue});
+
+  final String storageValue;
+
+  static GuidedPillIcon fromStorageValue(String value) {
+    return values.firstWhere(
+      (icon) => icon.storageValue == value,
+      orElse: () => GuidedPillIcon.roundPill,
+    );
+  }
+}
+
 class Prescription {
-  const Prescription({
+  Prescription({
     required this.id,
     required this.name,
     required this.pillType,
-    this.remainingDoses = 0,
+    this.guidedPillIcon = GuidedPillIcon.roundPill,
+    int availableDoses = 0,
+    @Deprecated('Use availableDoses instead') int? remainingDoses,
+    this.loadedDoses = 0,
+    this.usedDoses = 0,
+    this.reviewDoses = 0,
+    this.defaultRefillQuantity = 30,
+    this.defaultDoseCountPerDose = 1,
+    this.doseInstructions = '',
     this.refillThreshold = 3,
     required this.createdAt,
     required this.updatedAt,
-  });
+  }) : _remainingDoses =
+           remainingDoses ?? availableDoses + loadedDoses + reviewDoses,
+       _usedLegacyRemainingDosesInput = remainingDoses != null,
+       availableDoses = remainingDoses == null
+           ? availableDoses
+           : (remainingDoses - loadedDoses - reviewDoses).clamp(
+               0,
+               remainingDoses,
+             );
 
   final String id;
   final String name;
   final PillType pillType;
-  final int remainingDoses;
+  final GuidedPillIcon guidedPillIcon;
+  final int _remainingDoses;
+  final bool _usedLegacyRemainingDosesInput;
+  final int availableDoses;
+  final int loadedDoses;
+  final int usedDoses;
+  final int reviewDoses;
+  final int defaultRefillQuantity;
+  final int defaultDoseCountPerDose;
+  final String doseInstructions;
   final int refillThreshold;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  int get remainingDoses => _remainingDoses;
+
+  bool get usedLegacyRemainingDosesInput => _usedLegacyRemainingDosesInput;
 
   bool get needsRefill => remainingDoses <= refillThreshold;
 
   Prescription copyWith({
     String? name,
     PillType? pillType,
+    GuidedPillIcon? guidedPillIcon,
+    int? availableDoses,
+    int? loadedDoses,
+    int? usedDoses,
+    int? reviewDoses,
+    int? defaultRefillQuantity,
+    int? defaultDoseCountPerDose,
+    String? doseInstructions,
     int? remainingDoses,
     int? refillThreshold,
     DateTime? updatedAt,
@@ -48,6 +106,16 @@ class Prescription {
       id: id,
       name: name ?? this.name,
       pillType: pillType ?? this.pillType,
+      guidedPillIcon: guidedPillIcon ?? this.guidedPillIcon,
+      availableDoses: availableDoses ?? this.availableDoses,
+      loadedDoses: loadedDoses ?? this.loadedDoses,
+      usedDoses: usedDoses ?? this.usedDoses,
+      reviewDoses: reviewDoses ?? this.reviewDoses,
+      defaultRefillQuantity:
+          defaultRefillQuantity ?? this.defaultRefillQuantity,
+      defaultDoseCountPerDose:
+          defaultDoseCountPerDose ?? this.defaultDoseCountPerDose,
+      doseInstructions: doseInstructions ?? this.doseInstructions,
       remainingDoses: remainingDoses ?? this.remainingDoses,
       refillThreshold: refillThreshold ?? this.refillThreshold,
       createdAt: createdAt,

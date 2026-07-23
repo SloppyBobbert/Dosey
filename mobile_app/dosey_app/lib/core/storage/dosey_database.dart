@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:dosey_app/core/prescriptions/prescription.dart';
 
 part 'dosey_database.g.dart';
 
@@ -54,6 +55,17 @@ class Prescriptions extends Table {
   TextColumn get name => text()();
   TextColumn get pillType => text()();
   IntColumn get remainingDoses => integer().withDefault(const Constant(0))();
+  TextColumn get guidedPillIcon =>
+      text().withDefault(Constant(GuidedPillIcon.roundPill.storageValue))();
+  IntColumn get availableDoses => integer().withDefault(const Constant(0))();
+  IntColumn get loadedDoses => integer().withDefault(const Constant(0))();
+  IntColumn get usedDoses => integer().withDefault(const Constant(0))();
+  IntColumn get reviewDoses => integer().withDefault(const Constant(0))();
+  IntColumn get defaultRefillQuantity =>
+      integer().withDefault(const Constant(30))();
+  IntColumn get defaultDoseCountPerDose =>
+      integer().withDefault(const Constant(1))();
+  TextColumn get doseInstructions => text().withDefault(const Constant(''))();
   IntColumn get refillThreshold => integer().withDefault(const Constant(3))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -61,6 +73,12 @@ class Prescriptions extends Table {
   @override
   List<String> get customConstraints => const [
     'CHECK (remaining_doses >= 0)',
+    'CHECK (available_doses >= 0)',
+    'CHECK (loaded_doses >= 0)',
+    'CHECK (used_doses >= 0)',
+    'CHECK (review_doses >= 0)',
+    'CHECK (default_refill_quantity >= 0)',
+    'CHECK (default_dose_count_per_dose > 0)',
     'CHECK (refill_threshold >= 0)',
   ];
 
@@ -104,6 +122,119 @@ class CarouselSlots extends Table {
     "CHECK (status IN ('assigned', 'loaded', 'dispensed', 'needs_review'))",
     'UNIQUE (profile_id, slot_number)',
     'UNIQUE (profile_id, schedule_id)',
+  ];
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('CarouselLoadSessionRow')
+class CarouselLoadSessions extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text()();
+  TextColumn get mode => text()();
+  TextColumn get status => text()();
+  TextColumn get predecessorSessionId => text().nullable()();
+  DateTimeColumn get planCreatedAt => dateTime().nullable()();
+  DateTimeColumn get startedAt => dateTime().nullable()();
+  DateTimeColumn get confirmedAt => dateTime().nullable()();
+  DateTimeColumn get staleAt => dateTime().nullable()();
+  TextColumn get staleReason => text().nullable()();
+  DateTimeColumn get supersededAt => dateTime().nullable()();
+  TextColumn get supersededReason => text().nullable()();
+  IntColumn get positionBefore => integer()();
+  IntColumn get positionAfter => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => const [
+    "CHECK (mode IN ('full_load', 'top_off'))",
+    "CHECK (status IN ('draft', 'confirmed', 'stale', 'superseded', 'cancelled'))",
+    'CHECK (position_before >= 0 AND position_before <= 14)',
+    'CHECK (position_after >= 0 AND position_after <= 14)',
+  ];
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('CarouselLoadSlotSnapshotRow')
+class CarouselLoadSlotSnapshots extends Table {
+  TextColumn get id => text()();
+  TextColumn get sessionId => text()();
+  IntColumn get slotNumber => integer()();
+  TextColumn get status => text()();
+  DateTimeColumn get scheduledAt => dateTime().nullable()();
+  TextColumn get bundleKey => text().nullable()();
+  TextColumn get scheduleIdsJson => text()();
+  TextColumn get prescriptionIdsJson => text()();
+  TextColumn get prescriptionNamesJson => text()();
+  TextColumn get pillIconsJson => text()();
+  TextColumn get doseInstructionsJson => text()();
+  DateTimeColumn get loadedAt => dateTime().nullable()();
+  DateTimeColumn get movedAt => dateTime().nullable()();
+  DateTimeColumn get resolvedAt => dateTime().nullable()();
+  TextColumn get reviewReason => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (slot_number >= 1 AND slot_number <= 14)',
+    "CHECK (status IN ('loaded', 'retained', 'dispensed', 'needs_review', 'empty', 'shortage'))",
+    'UNIQUE (session_id, slot_number)',
+  ];
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('CarouselStateRow')
+class CarouselStates extends Table {
+  TextColumn get profileId => text()();
+  TextColumn get activeLoadSessionId => text().nullable()();
+  IntColumn get currentPosition => integer().withDefault(const Constant(0))();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (current_position >= 0 AND current_position <= 14)',
+  ];
+
+  @override
+  Set<Column> get primaryKey => {profileId};
+}
+
+@DataClassName('MedicationShortageAlertRow')
+class MedicationShortageAlerts extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileId => text()();
+  TextColumn get loadSessionId => text().nullable()();
+  IntColumn get slotNumber => integer()();
+  TextColumn get bundleKey => text()();
+  DateTimeColumn get scheduledAt => dateTime()();
+  TextColumn get prescriptionIdsJson => text()();
+  TextColumn get prescriptionNamesJson => text()();
+  TextColumn get status => text()();
+  DateTimeColumn get recognizedAt => dateTime().nullable()();
+  DateTimeColumn get resolvedAt => dateTime().nullable()();
+  TextColumn get resolution => text().nullable()();
+  TextColumn get intendedAudience =>
+      text().withDefault(const Constant('household'))();
+  TextColumn get localDeliveryState => text()();
+  DateTimeColumn get localNotificationSentAt => dateTime().nullable()();
+  TextColumn get remoteDeliveryState =>
+      text().withDefault(const Constant('not_configured'))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (slot_number >= 1 AND slot_number <= 14)',
+    "CHECK (status IN ('active', 'resolved', 'past_due'))",
+    "CHECK (intended_audience IN ('household'))",
+    "CHECK (local_delivery_state IN ('pending', 'sent', 'failed'))",
+    "CHECK (remote_delivery_state IN ('not_configured'))",
   ];
 
   @override
@@ -211,6 +342,10 @@ class AdminAuditEvents extends Table {
     PrescriptionRefills,
     ScheduleProfiles,
     CarouselSlots,
+    CarouselLoadSessions,
+    CarouselLoadSlotSnapshots,
+    CarouselStates,
+    MedicationShortageAlerts,
     AuthSessions,
     DoseLogEvents,
     ControllerCommandSessions,
@@ -232,7 +367,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -240,6 +375,7 @@ class DoseyDatabase extends _$DoseyDatabase {
       await migrator.createAll();
       await _seedOnboardingCompleted(completed: false);
       await _seedDefaultScheduleProfile();
+      await _seedCarouselStates();
     },
     onUpgrade: (migrator, from, to) async {
       if (from < 2) {
@@ -296,8 +432,90 @@ class DoseyDatabase extends _$DoseyDatabase {
       if (from < 12) {
         await migrator.createTable(adminAuditEvents);
       }
+      if (from < 13) {
+        if (from >= 6) {
+          await _rebuildPrescriptionsTableWithGuidedLoadingFields();
+        }
+        await migrator.createTable(carouselLoadSessions);
+        await migrator.createTable(carouselLoadSlotSnapshots);
+        await migrator.createTable(carouselStates);
+        await migrator.createTable(medicationShortageAlerts);
+        await _seedCarouselStates();
+      }
+      if (from >= 13 && from < 14) {
+        await _rebuildCarouselLoadSlotSnapshotsTableWithRetainedStatus();
+      }
     },
   );
+
+  Future<void>
+  _rebuildCarouselLoadSlotSnapshotsTableWithRetainedStatus() async {
+    await transaction(() async {
+      await customStatement(
+        'ALTER TABLE carousel_load_slot_snapshots RENAME TO carousel_load_slot_snapshots_old;',
+      );
+      await customStatement('''
+        CREATE TABLE carousel_load_slot_snapshots (
+          id TEXT NOT NULL PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          slot_number INTEGER NOT NULL CHECK (slot_number >= 1 AND slot_number <= 14),
+          status TEXT NOT NULL CHECK (status IN ('loaded', 'retained', 'dispensed', 'needs_review', 'empty', 'shortage')),
+          scheduled_at INTEGER NULL,
+          bundle_key TEXT NULL,
+          schedule_ids_json TEXT NOT NULL,
+          prescription_ids_json TEXT NOT NULL,
+          prescription_names_json TEXT NOT NULL,
+          pill_icons_json TEXT NOT NULL,
+          dose_instructions_json TEXT NOT NULL,
+          loaded_at INTEGER NULL,
+          moved_at INTEGER NULL,
+          resolved_at INTEGER NULL,
+          review_reason TEXT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE (session_id, slot_number)
+        );
+      ''');
+      await customStatement('''
+        INSERT INTO carousel_load_slot_snapshots (
+          id,
+          session_id,
+          slot_number,
+          status,
+          scheduled_at,
+          bundle_key,
+          schedule_ids_json,
+          prescription_ids_json,
+          prescription_names_json,
+          pill_icons_json,
+          dose_instructions_json,
+          loaded_at,
+          moved_at,
+          resolved_at,
+          review_reason,
+          created_at
+        )
+        SELECT
+          id,
+          session_id,
+          slot_number,
+          status,
+          scheduled_at,
+          bundle_key,
+          schedule_ids_json,
+          prescription_ids_json,
+          prescription_names_json,
+          pill_icons_json,
+          dose_instructions_json,
+          loaded_at,
+          moved_at,
+          resolved_at,
+          review_reason,
+          created_at
+        FROM carousel_load_slot_snapshots_old;
+      ''');
+      await customStatement('DROP TABLE carousel_load_slot_snapshots_old;');
+    });
+  }
 
   Future<void> _createDoseLogEventsIfMissing() {
     return customStatement('''
@@ -359,6 +577,70 @@ class DoseyDatabase extends _$DoseyDatabase {
     });
   }
 
+  Future<void> _rebuildPrescriptionsTableWithGuidedLoadingFields() async {
+    await transaction(() async {
+      await customStatement(
+        'ALTER TABLE prescriptions RENAME TO prescriptions_old;',
+      );
+      await customStatement('''
+        CREATE TABLE prescriptions (
+          id TEXT NOT NULL PRIMARY KEY,
+          name TEXT NOT NULL,
+          pill_type TEXT NOT NULL,
+          remaining_doses INTEGER NOT NULL DEFAULT 0 CHECK (remaining_doses >= 0),
+          guided_pill_icon TEXT NOT NULL DEFAULT '${GuidedPillIcon.roundPill.storageValue}',
+          available_doses INTEGER NOT NULL DEFAULT 0 CHECK (available_doses >= 0),
+          loaded_doses INTEGER NOT NULL DEFAULT 0 CHECK (loaded_doses >= 0),
+          used_doses INTEGER NOT NULL DEFAULT 0 CHECK (used_doses >= 0),
+          review_doses INTEGER NOT NULL DEFAULT 0 CHECK (review_doses >= 0),
+          default_refill_quantity INTEGER NOT NULL DEFAULT 30 CHECK (default_refill_quantity >= 0),
+          default_dose_count_per_dose INTEGER NOT NULL DEFAULT 1 CHECK (default_dose_count_per_dose > 0),
+          dose_instructions TEXT NOT NULL DEFAULT '',
+          refill_threshold INTEGER NOT NULL DEFAULT 3 CHECK (refill_threshold >= 0),
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      ''');
+      await customStatement('''
+        INSERT INTO prescriptions (
+          id,
+          name,
+          pill_type,
+          remaining_doses,
+          guided_pill_icon,
+          available_doses,
+          loaded_doses,
+          used_doses,
+          review_doses,
+          default_refill_quantity,
+          default_dose_count_per_dose,
+          dose_instructions,
+          refill_threshold,
+          created_at,
+          updated_at
+        )
+        SELECT
+          id,
+          name,
+          pill_type,
+          remaining_doses,
+          '${GuidedPillIcon.roundPill.storageValue}',
+          remaining_doses,
+          0,
+          0,
+          0,
+          30,
+          1,
+          '',
+          refill_threshold,
+          created_at,
+          updated_at
+        FROM prescriptions_old;
+      ''');
+      await customStatement('DROP TABLE prescriptions_old;');
+    });
+  }
+
   Future<void> _seedOnboardingCompleted({required bool completed}) async {
     await into(appSettings).insert(
       AppSettingsCompanion.insert(
@@ -382,6 +664,20 @@ class DoseyDatabase extends _$DoseyDatabase {
       ),
       mode: InsertMode.insertOrIgnore,
     );
+  }
+
+  Future<void> _seedCarouselStates() async {
+    final now = DateTime.now().toUtc();
+    final profiles = await select(scheduleProfiles).get();
+    await batch((batch) {
+      for (final profile in profiles) {
+        batch.insert(
+          carouselStates,
+          CarouselStatesCompanion.insert(profileId: profile.id, updatedAt: now),
+          mode: InsertMode.insertOrIgnore,
+        );
+      }
+    });
   }
 
   Stream<List<AppSetting>> watchAppSettings(Set<String> keys) {

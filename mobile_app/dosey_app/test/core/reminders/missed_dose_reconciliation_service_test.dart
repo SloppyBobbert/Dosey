@@ -9,6 +9,7 @@ import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/today/today_next_dose_helper.dart';
+import 'package:drift/drift.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -227,6 +228,198 @@ void main() {
             DateTime(2026, 7, 9),
           ),
         ]);
+      },
+    );
+
+    test(
+      'missed-dose reconciliation marks active shortage alerts past due',
+      () async {
+        final database = DoseyDatabase.inMemory();
+        addTearDown(database.close);
+        final now = DateTime(2026, 7, 9, 12);
+        final reminders = _FakeReminderRepository([
+          _schedule(id: 'dose-a', hour: 8, minute: 0),
+        ]);
+        final doseLog = DriftDoseLogRepository(database);
+        final service = MissedDoseReconciliationService(
+          reminders: reminders,
+          doseLog: doseLog,
+          database: database,
+          now: () => now,
+        );
+
+        await database
+            .into(database.medicationShortageAlerts)
+            .insert(
+              MedicationShortageAlertsCompanion.insert(
+                id: 'shortage-1',
+                profileId: 'schedule-1',
+                loadSessionId: const Value('session-1'),
+                slotNumber: 1,
+                bundleKey: '2026-07-09T08:00:00.000|dose-a',
+                scheduledAt: DateTime(2026, 7, 9, 8),
+                prescriptionIdsJson: '["rx-1"]',
+                prescriptionNamesJson: '["Vitamin D"]',
+                status: 'active',
+                localDeliveryState: 'sent',
+                createdAt: DateTime(2026, 7, 9, 8),
+                updatedAt: DateTime(2026, 7, 9, 8),
+              ),
+            );
+        await database
+            .into(database.medicationShortageAlerts)
+            .insert(
+              MedicationShortageAlertsCompanion.insert(
+                id: 'shortage-false-positive',
+                profileId: 'schedule-1',
+                loadSessionId: const Value('session-3'),
+                slotNumber: 2,
+                bundleKey: '2026-07-09T08:00:00.000|dose-a-extra',
+                scheduledAt: DateTime(2026, 7, 9, 8),
+                prescriptionIdsJson: '["rx-3"]',
+                prescriptionNamesJson: '["Other Extra"]',
+                status: 'active',
+                localDeliveryState: 'sent',
+                createdAt: DateTime(2026, 7, 9, 8),
+                updatedAt: DateTime(2026, 7, 9, 8),
+              ),
+            );
+
+        await service.reconcile();
+
+        final alerts = await database
+            .select(database.medicationShortageAlerts)
+            .get();
+        expect(
+          alerts.firstWhere((alert) => alert.id == 'shortage-1').status,
+          'past_due',
+        );
+        expect(
+          alerts
+              .firstWhere((alert) => alert.id == 'shortage-false-positive')
+              .status,
+          'active',
+        );
+      },
+    );
+
+    test(
+      'missed-dose reconciliation only retires matching shortage occurrence groups',
+      () async {
+        final database = DoseyDatabase.inMemory();
+        addTearDown(database.close);
+        final now = DateTime(2026, 7, 9, 12);
+        final reminders = _FakeReminderRepository([
+          _schedule(id: 'dose-a', hour: 8, minute: 0),
+        ]);
+        final doseLog = DriftDoseLogRepository(database);
+        final service = MissedDoseReconciliationService(
+          reminders: reminders,
+          doseLog: doseLog,
+          database: database,
+          now: () => now,
+        );
+
+        await database
+            .into(database.medicationShortageAlerts)
+            .insert(
+              MedicationShortageAlertsCompanion.insert(
+                id: 'shortage-match',
+                profileId: 'schedule-1',
+                loadSessionId: const Value('session-1'),
+                slotNumber: 1,
+                bundleKey: '2026-07-09T08:00:00.000|dose-a',
+                scheduledAt: DateTime(2026, 7, 9, 8),
+                prescriptionIdsJson: '["rx-1"]',
+                prescriptionNamesJson: '["Vitamin D"]',
+                status: 'active',
+                localDeliveryState: 'sent',
+                createdAt: DateTime(2026, 7, 9, 8),
+                updatedAt: DateTime(2026, 7, 9, 8),
+              ),
+            );
+        await database
+            .into(database.medicationShortageAlerts)
+            .insert(
+              MedicationShortageAlertsCompanion.insert(
+                id: 'shortage-false-positive',
+                profileId: 'schedule-1',
+                loadSessionId: const Value('session-3'),
+                slotNumber: 2,
+                bundleKey: '2026-07-09T08:00:00.000|dose-a-extra',
+                scheduledAt: DateTime(2026, 7, 9, 8),
+                prescriptionIdsJson: '["rx-3"]',
+                prescriptionNamesJson: '["Other Extra"]',
+                status: 'active',
+                localDeliveryState: 'sent',
+                createdAt: DateTime(2026, 7, 9, 8),
+                updatedAt: DateTime(2026, 7, 9, 8),
+              ),
+            );
+        await database
+            .into(database.medicationShortageAlerts)
+            .insert(
+              MedicationShortageAlertsCompanion.insert(
+                id: 'shortage-multi-match',
+                profileId: 'schedule-1',
+                loadSessionId: const Value('session-4'),
+                slotNumber: 3,
+                bundleKey: '2026-07-09T08:00:00.000|dose-a,dose-b',
+                scheduledAt: DateTime(2026, 7, 9, 8),
+                prescriptionIdsJson: '["rx-4"]',
+                prescriptionNamesJson: '["Combo"]',
+                status: 'active',
+                localDeliveryState: 'sent',
+                createdAt: DateTime(2026, 7, 9, 8),
+                updatedAt: DateTime(2026, 7, 9, 8),
+              ),
+            );
+        await database
+            .into(database.medicationShortageAlerts)
+            .insert(
+              MedicationShortageAlertsCompanion.insert(
+                id: 'shortage-other-profile',
+                profileId: 'schedule-2',
+                loadSessionId: const Value('session-2'),
+                slotNumber: 1,
+                bundleKey: '2026-07-09T08:00:00.000|dose-b',
+                scheduledAt: DateTime(2026, 7, 9, 8),
+                prescriptionIdsJson: '["rx-2"]',
+                prescriptionNamesJson: '["Other"]',
+                status: 'active',
+                localDeliveryState: 'sent',
+                createdAt: DateTime(2026, 7, 9, 8),
+                updatedAt: DateTime(2026, 7, 9, 8),
+              ),
+            );
+
+        await service.reconcile();
+
+        final alerts = await database
+            .select(database.medicationShortageAlerts)
+            .get();
+        expect(
+          alerts.firstWhere((alert) => alert.id == 'shortage-match').status,
+          'past_due',
+        );
+        expect(
+          alerts
+              .firstWhere((alert) => alert.id == 'shortage-multi-match')
+              .status,
+          'past_due',
+        );
+        expect(
+          alerts
+              .firstWhere((alert) => alert.id == 'shortage-other-profile')
+              .status,
+          'active',
+        );
+        expect(
+          alerts
+              .firstWhere((alert) => alert.id == 'shortage-false-positive')
+              .status,
+          'active',
+        );
       },
     );
   });

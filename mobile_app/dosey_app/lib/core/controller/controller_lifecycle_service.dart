@@ -1,7 +1,10 @@
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
+import 'package:dosey_app/core/carousel/carousel_load_session.dart';
+import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/storage/dosey_database.dart';
 
 class DuplicateDispenseRequestException implements Exception {
   const DuplicateDispenseRequestException(this.message);
@@ -18,6 +21,8 @@ class ControllerLifecycleService {
     required this._commandRepository,
     required this._doseLog,
     required this._carouselSlots,
+    this.guidedCarouselLoads,
+    this.database,
     DateTime Function()? now,
   }) : _now = now ?? DateTime.now;
 
@@ -27,6 +32,8 @@ class ControllerLifecycleService {
   final ControllerCommandRepository _commandRepository;
   final DoseLogRepository _doseLog;
   final CarouselSlotRepository _carouselSlots;
+  final LocalGuidedCarouselLoadRepository? guidedCarouselLoads;
+  final DoseyDatabase? database;
   final DateTime Function() _now;
   final Set<String> _activeDispenseKeys = <String>{};
 
@@ -80,6 +87,11 @@ class ControllerLifecycleService {
     var controllerMoved = false;
     DateTime? acceptedAt;
     final sentAt = _current();
+    final guidedTarget = await _guidedDispenseTarget(
+      slotId,
+      scheduleId,
+      doseId,
+    );
     try {
       final session = await _commandRepository.createSession(
         commandType: commandType,
@@ -118,7 +130,21 @@ class ControllerLifecycleService {
           ControllerCommandEventType.servoDone,
           occurredAt: resolvedAt,
         );
-        if (slotId != null) {
+        if (guidedTarget != null) {
+          await guidedCarouselLoads!.recordDispenseMovementSucceeded(
+            profileId: guidedTarget.profileId,
+            activeSessionId: guidedTarget.sessionId,
+            slotNumber: guidedTarget.slotNumber,
+            occurredAt: resolvedAt,
+          );
+          if (slotId != null) {
+            try {
+              await _carouselSlots.markDispensed(slotId);
+            } on Object {
+              // Guided snapshot/session state is authoritative for guided paths.
+            }
+          }
+        } else if (slotId != null) {
           await _carouselSlots.markDispensed(slotId);
         }
         if (commandType == ControllerCommandType.dispenseNext) {
@@ -151,9 +177,10 @@ class ControllerLifecycleService {
             failureReason: ControllerCommandFailureReason.nack,
             updatedAt: failedAt,
           );
-          if (slotId != null) {
-            await _carouselSlots.markLoaded(slotId);
-          }
+          await _restoreReadyStateForFailedGuidedOrLegacySlot(
+            slotId: slotId,
+            guidedTarget: guidedTarget,
+          );
         } else if (error is ControllerCommandPreconditionException) {
           await _commandRepository.appendEvent(
             session.id,
@@ -166,9 +193,10 @@ class ControllerLifecycleService {
             ControllerCommandSessionState.failed,
             updatedAt: failedAt,
           );
-          if (slotId != null) {
-            await _carouselSlots.markLoaded(slotId);
-          }
+          await _restoreReadyStateForFailedGuidedOrLegacySlot(
+            slotId: slotId,
+            guidedTarget: guidedTarget,
+          );
         } else if (error is ControllerTransportOfflineException) {
           await _commandRepository.appendEvent(
             session.id,
@@ -182,9 +210,10 @@ class ControllerLifecycleService {
             failureReason: ControllerCommandFailureReason.offline,
             updatedAt: failedAt,
           );
-          if (slotId != null) {
-            await _carouselSlots.markLoaded(slotId);
-          }
+          await _restoreReadyStateForFailedGuidedOrLegacySlot(
+            slotId: slotId,
+            guidedTarget: guidedTarget,
+          );
         } else if (error is ControllerCommandTimeoutException) {
           // From here down, the command may have reached hardware even when the
           // app did not observe a clean completion path. Treat those cases as
@@ -198,9 +227,12 @@ class ControllerLifecycleService {
             occurredAt: failedAt,
             details: error.toString(),
           );
-          if (slotId != null) {
-            await _moveSlotToNeedsReview(slotId);
-          }
+          await _quarantineGuidedOrLegacySlotForReview(
+            slotId: slotId,
+            guidedTarget: guidedTarget,
+            occurredAt: failedAt,
+            reason: 'timeout',
+          );
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.timedOut,
@@ -215,9 +247,12 @@ class ControllerLifecycleService {
             occurredAt: failedAt,
             details: error.toString(),
           );
-          if (slotId != null) {
-            await _moveSlotToNeedsReview(slotId);
-          }
+          await _quarantineGuidedOrLegacySlotForReview(
+            slotId: slotId,
+            guidedTarget: guidedTarget,
+            occurredAt: failedAt,
+            reason: ControllerCommandFailureReason.jam.name,
+          );
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.failed,
@@ -233,9 +268,12 @@ class ControllerLifecycleService {
             occurredAt: failedAt,
             details: error.toString(),
           );
-          if (slotId != null) {
-            await _moveSlotToNeedsReview(slotId);
-          }
+          await _quarantineGuidedOrLegacySlotForReview(
+            slotId: slotId,
+            guidedTarget: guidedTarget,
+            occurredAt: failedAt,
+            reason: ControllerCommandFailureReason.disconnect.name,
+          );
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.interrupted,
@@ -251,9 +289,12 @@ class ControllerLifecycleService {
             occurredAt: failedAt,
             details: error.toString(),
           );
-          if (slotId != null) {
-            await _moveSlotToNeedsReview(slotId);
-          }
+          await _quarantineGuidedOrLegacySlotForReview(
+            slotId: slotId,
+            guidedTarget: guidedTarget,
+            occurredAt: failedAt,
+            reason: 'post_send_local_failure',
+          );
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.interrupted,
@@ -269,9 +310,12 @@ class ControllerLifecycleService {
             occurredAt: failedAt,
             details: error.toString(),
           );
-          if (slotId != null) {
-            await _moveSlotToNeedsReview(slotId);
-          }
+          await _quarantineGuidedOrLegacySlotForReview(
+            slotId: slotId,
+            guidedTarget: guidedTarget,
+            occurredAt: failedAt,
+            reason: 'unknown_transport_error',
+          );
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.interrupted,
@@ -289,6 +333,42 @@ class ControllerLifecycleService {
 
   DateTime _current() => _now().toUtc();
 
+  Future<void> _restoreReadyStateForFailedGuidedOrLegacySlot({
+    required String? slotId,
+    required _GuidedDispenseTarget? guidedTarget,
+  }) async {
+    if (guidedTarget != null) {
+      return;
+    }
+    if (slotId != null) {
+      await _carouselSlots.markLoaded(slotId);
+    }
+  }
+
+  Future<void> _quarantineGuidedOrLegacySlotForReview({
+    required String? slotId,
+    required _GuidedDispenseTarget? guidedTarget,
+    required DateTime occurredAt,
+    required String reason,
+  }) async {
+    if (guidedTarget != null) {
+      await guidedCarouselLoads!.quarantineSlotForReview(
+        profileId: guidedTarget.profileId,
+        activeSessionId: guidedTarget.sessionId,
+        slotNumber: guidedTarget.slotNumber,
+        occurredAt: occurredAt,
+        reason: reason,
+      );
+      if (slotId != null) {
+        await _moveSlotToNeedsReview(slotId);
+      }
+      return;
+    }
+    if (slotId != null) {
+      await _moveSlotToNeedsReview(slotId);
+    }
+  }
+
   Future<void> _moveSlotToNeedsReview(String slotId) async {
     try {
       await _carouselSlots.markNeedsReview(slotId);
@@ -297,4 +377,77 @@ class ControllerLifecycleService {
       // slot still must not be reopened as loaded automatically.
     }
   }
+
+  Future<_GuidedDispenseTarget?> _guidedDispenseTarget(
+    String? slotId,
+    String? scheduleId,
+    String doseId,
+  ) async {
+    if (guidedCarouselLoads == null || database == null) {
+      return null;
+    }
+    if (scheduleId == null) {
+      return null;
+    }
+    final schedule =
+        await ((database!.select(database!.reminderSchedules)
+              ..where((row) => row.id.equals(scheduleId))
+              ..limit(1))
+            .getSingleOrNull());
+    if (schedule == null) {
+      return null;
+    }
+    final activeLoad = await guidedCarouselLoads!.readActiveLoad(
+      schedule.profileId,
+    );
+    if (activeLoad == null) {
+      return null;
+    }
+    if (activeLoad.status.name == 'stale') {
+      throw StateError('Active guided load is stale and cannot dispense.');
+    }
+    final matchingSlot = activeLoad.slots.where(
+      (slot) =>
+          slot.scheduleIds.contains(scheduleId) &&
+          _matchesDoseOccurrence(slot, doseId),
+    );
+    if (matchingSlot.isEmpty) {
+      return null;
+    }
+    final slot = matchingSlot.first;
+    if (slot.status.name != 'loaded' && slot.status.name != 'retained') {
+      throw StateError('Guided load slot is not ready to dispense.');
+    }
+    return _GuidedDispenseTarget(
+      profileId: schedule.profileId,
+      sessionId: activeLoad.id,
+      slotNumber: slot.slotNumber,
+    );
+  }
+
+  bool _matchesDoseOccurrence(CarouselLoadSlotSnapshot slot, String doseId) {
+    final scheduledAt = slot.scheduledAt;
+    if (scheduledAt == null) {
+      return true;
+    }
+    final separatorIndex = doseId.lastIndexOf(':');
+    if (separatorIndex <= 0 || separatorIndex >= doseId.length - 1) {
+      return true;
+    }
+    final occurrenceDate = doseId.substring(separatorIndex + 1);
+    final slotDate = scheduledAt.toLocal().toIso8601String().split('T').first;
+    return occurrenceDate == slotDate;
+  }
+}
+
+class _GuidedDispenseTarget {
+  const _GuidedDispenseTarget({
+    required this.profileId,
+    required this.sessionId,
+    required this.slotNumber,
+  });
+
+  final String profileId;
+  final String sessionId;
+  final int slotNumber;
 }

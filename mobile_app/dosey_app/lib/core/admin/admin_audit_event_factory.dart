@@ -239,6 +239,132 @@ class AdminAuditEventFactory {
     );
   }
 
+  AdminAuditEvent guidedLoadConfirmed({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    Map<String, Object?>? details,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.guidedLoadConfirmed,
+    targetType: AdminAuditTargetType.carouselLoadSession,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    summary: summary,
+    details: details,
+    occurredAt: occurredAt,
+    targetId: targetId,
+  );
+
+  AdminAuditEvent guidedLoadPhysicallyUnloaded({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    Map<String, Object?>? details,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.guidedLoadPhysicallyUnloaded,
+    targetType: AdminAuditTargetType.carouselLoadSession,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    summary: summary,
+    details: details,
+    occurredAt: occurredAt,
+    targetId: targetId,
+  );
+
+  AdminAuditEvent guidedLoadMarkedStale({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    Map<String, Object?>? details,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.guidedLoadMarkedStale,
+    targetType: AdminAuditTargetType.carouselLoadSession,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    summary: summary,
+    details: details,
+    occurredAt: occurredAt,
+    targetId: targetId,
+  );
+
+  AdminAuditEvent guidedLoadShortageCreated({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    Map<String, Object?>? details,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.guidedLoadShortageCreated,
+    targetType: AdminAuditTargetType.medicationShortageAlert,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    summary: summary,
+    details: details,
+    occurredAt: occurredAt,
+    targetId: targetId,
+  );
+
+  AdminAuditEvent guidedLoadShortageRecognized({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    Map<String, Object?>? details,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.guidedLoadShortageRecognized,
+    targetType: AdminAuditTargetType.medicationShortageAlert,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    summary: summary,
+    details: details,
+    occurredAt: occurredAt,
+    targetId: targetId,
+  );
+
+  AdminAuditEvent guidedLoadShortageResolved({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    Map<String, Object?>? details,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.guidedLoadShortageResolved,
+    targetType: AdminAuditTargetType.medicationShortageAlert,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    summary: summary,
+    details: details,
+    occurredAt: occurredAt,
+    targetId: targetId,
+  );
+
+  AdminAuditEvent guidedLoadShortagePastDue({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    Map<String, Object?>? details,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.guidedLoadShortagePastDue,
+    targetType: AdminAuditTargetType.medicationShortageAlert,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    summary: summary,
+    details: details,
+    occurredAt: occurredAt,
+    targetId: targetId,
+  );
+
   AdminAuditEvent _build({
     required AdminAuditEventType eventType,
     required AdminAuditTargetType targetType,

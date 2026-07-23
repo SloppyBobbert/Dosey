@@ -80,6 +80,43 @@ void main() {
   });
 
   test(
+    'scheduler can deliver an immediate urgent shortage notification',
+    () async {
+      final plugin = _FakeLocalNotificationsPlugin();
+      final scheduler = FlutterLocalNotificationScheduler(
+        plugin: plugin,
+        localTimeConverter: (dateTime) =>
+            dateTime.subtract(const Duration(hours: 7)),
+      );
+      final scheduledFor = DateTime.utc(2026, 6, 15, 8, 30);
+
+      await scheduler.showUrgentShortageNotification(
+        alertId: 'shortage-1',
+        medicationLabel: 'Vitamin D',
+        scheduledAt: scheduledFor,
+        slotNumber: 2,
+      );
+
+      expect(
+        plugin.createdChannels,
+        contains(doseyUrgentShortageNotificationChannel),
+      );
+      expect(
+        plugin.scheduledNotifications.single.title,
+        'Dosey urgent shortage',
+      );
+      expect(plugin.scheduledNotifications.single.body, contains('Vitamin D'));
+      expect(plugin.scheduledNotifications.single.body, contains('slot 2'));
+      expect(plugin.scheduledNotifications.single.body, contains('01:30'));
+      expect(plugin.scheduledNotifications.single.body, contains('local only'));
+      expect(
+        plugin.scheduledNotifications.single.payload,
+        'shortage:shortage-1|slot:2|scheduledAt:2026-06-15T08:30:00.000Z|audience:household|delivery:local_only',
+      );
+    },
+  );
+
+  test(
     'scheduler forwards launch reminder payloads after initialization',
     () async {
       final plugin = _FakeLocalNotificationsPlugin(launchPayload: 'dose-42');

@@ -1,5 +1,6 @@
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
+import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
@@ -83,9 +84,17 @@ class LocalScheduleProfileRepository implements ScheduleProfileRepository {
     if (existing == null) {
       throw ArgumentError('Schedule profile not found.');
     }
+    if (existing.isActive) {
+      return;
+    }
 
     final now = DateTime.now().toUtc();
     await _database.transaction(() async {
+      final previousActive =
+          await (_database.select(_database.scheduleProfiles)
+                ..where((profile) => profile.isActive.equals(true))
+                ..limit(1))
+              .getSingleOrNull();
       // Clear every profile first, then activate the selected one inside the
       // same transaction so Today never sees two active routines.
       await _database
@@ -104,6 +113,22 @@ class LocalScheduleProfileRepository implements ScheduleProfileRepository {
           updatedAt: Value(now),
         ),
       );
+      final affectedProfiles = <String>{id};
+      if (previousActive != null) {
+        affectedProfiles.add(previousActive.id);
+      }
+      for (final profileId in affectedProfiles) {
+        await LocalGuidedCarouselLoadRepository.markActiveLoadStaleInDatabase(
+          _database,
+          profileId: profileId,
+          reason: 'active_profile_changed',
+          occurredAt: now,
+          details: {
+            'newActiveProfileId': id,
+            'previousActiveProfileId': previousActive?.id,
+          },
+        );
+      }
       if (auditEvent != null) {
         await LocalAdminAuditRepository.insertEventIntoDatabase(
           _database,

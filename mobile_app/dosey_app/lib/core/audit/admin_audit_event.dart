@@ -13,6 +13,13 @@ enum AdminAuditEventType {
   pinChanged,
   pinDisabled,
   householdProfileUpdated,
+  guidedLoadConfirmed,
+  guidedLoadPhysicallyUnloaded,
+  guidedLoadMarkedStale,
+  guidedLoadShortageCreated,
+  guidedLoadShortageRecognized,
+  guidedLoadShortageResolved,
+  guidedLoadShortagePastDue,
 }
 
 enum AdminAuditTargetType {
@@ -22,6 +29,8 @@ enum AdminAuditTargetType {
   carouselSlot,
   household,
   pin,
+  carouselLoadSession,
+  medicationShortageAlert,
 }
 
 enum AdminAuditActorType { localAdmin, signedInUser, caregiver, system }

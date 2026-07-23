@@ -876,6 +876,101 @@ class $PrescriptionsTable extends Prescriptions
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _guidedPillIconMeta = const VerificationMeta(
+    'guidedPillIcon',
+  );
+  @override
+  late final GeneratedColumn<String> guidedPillIcon = GeneratedColumn<String>(
+    'guided_pill_icon',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: Constant(GuidedPillIcon.roundPill.storageValue),
+  );
+  static const VerificationMeta _availableDosesMeta = const VerificationMeta(
+    'availableDoses',
+  );
+  @override
+  late final GeneratedColumn<int> availableDoses = GeneratedColumn<int>(
+    'available_doses',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _loadedDosesMeta = const VerificationMeta(
+    'loadedDoses',
+  );
+  @override
+  late final GeneratedColumn<int> loadedDoses = GeneratedColumn<int>(
+    'loaded_doses',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _usedDosesMeta = const VerificationMeta(
+    'usedDoses',
+  );
+  @override
+  late final GeneratedColumn<int> usedDoses = GeneratedColumn<int>(
+    'used_doses',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _reviewDosesMeta = const VerificationMeta(
+    'reviewDoses',
+  );
+  @override
+  late final GeneratedColumn<int> reviewDoses = GeneratedColumn<int>(
+    'review_doses',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _defaultRefillQuantityMeta =
+      const VerificationMeta('defaultRefillQuantity');
+  @override
+  late final GeneratedColumn<int> defaultRefillQuantity = GeneratedColumn<int>(
+    'default_refill_quantity',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(30),
+  );
+  static const VerificationMeta _defaultDoseCountPerDoseMeta =
+      const VerificationMeta('defaultDoseCountPerDose');
+  @override
+  late final GeneratedColumn<int> defaultDoseCountPerDose =
+      GeneratedColumn<int>(
+        'default_dose_count_per_dose',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: const Constant(1),
+      );
+  static const VerificationMeta _doseInstructionsMeta = const VerificationMeta(
+    'doseInstructions',
+  );
+  @override
+  late final GeneratedColumn<String> doseInstructions = GeneratedColumn<String>(
+    'dose_instructions',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _refillThresholdMeta = const VerificationMeta(
     'refillThreshold',
   );
@@ -916,6 +1011,14 @@ class $PrescriptionsTable extends Prescriptions
     name,
     pillType,
     remainingDoses,
+    guidedPillIcon,
+    availableDoses,
+    loadedDoses,
+    usedDoses,
+    reviewDoses,
+    defaultRefillQuantity,
+    defaultDoseCountPerDose,
+    doseInstructions,
     refillThreshold,
     createdAt,
     updatedAt,
@@ -959,6 +1062,75 @@ class $PrescriptionsTable extends Prescriptions
         remainingDoses.isAcceptableOrUnknown(
           data['remaining_doses']!,
           _remainingDosesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('guided_pill_icon')) {
+      context.handle(
+        _guidedPillIconMeta,
+        guidedPillIcon.isAcceptableOrUnknown(
+          data['guided_pill_icon']!,
+          _guidedPillIconMeta,
+        ),
+      );
+    }
+    if (data.containsKey('available_doses')) {
+      context.handle(
+        _availableDosesMeta,
+        availableDoses.isAcceptableOrUnknown(
+          data['available_doses']!,
+          _availableDosesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('loaded_doses')) {
+      context.handle(
+        _loadedDosesMeta,
+        loadedDoses.isAcceptableOrUnknown(
+          data['loaded_doses']!,
+          _loadedDosesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('used_doses')) {
+      context.handle(
+        _usedDosesMeta,
+        usedDoses.isAcceptableOrUnknown(data['used_doses']!, _usedDosesMeta),
+      );
+    }
+    if (data.containsKey('review_doses')) {
+      context.handle(
+        _reviewDosesMeta,
+        reviewDoses.isAcceptableOrUnknown(
+          data['review_doses']!,
+          _reviewDosesMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_refill_quantity')) {
+      context.handle(
+        _defaultRefillQuantityMeta,
+        defaultRefillQuantity.isAcceptableOrUnknown(
+          data['default_refill_quantity']!,
+          _defaultRefillQuantityMeta,
+        ),
+      );
+    }
+    if (data.containsKey('default_dose_count_per_dose')) {
+      context.handle(
+        _defaultDoseCountPerDoseMeta,
+        defaultDoseCountPerDose.isAcceptableOrUnknown(
+          data['default_dose_count_per_dose']!,
+          _defaultDoseCountPerDoseMeta,
+        ),
+      );
+    }
+    if (data.containsKey('dose_instructions')) {
+      context.handle(
+        _doseInstructionsMeta,
+        doseInstructions.isAcceptableOrUnknown(
+          data['dose_instructions']!,
+          _doseInstructionsMeta,
         ),
       );
     }
@@ -1012,6 +1184,38 @@ class $PrescriptionsTable extends Prescriptions
         DriftSqlType.int,
         data['${effectivePrefix}remaining_doses'],
       )!,
+      guidedPillIcon: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}guided_pill_icon'],
+      )!,
+      availableDoses: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}available_doses'],
+      )!,
+      loadedDoses: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}loaded_doses'],
+      )!,
+      usedDoses: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}used_doses'],
+      )!,
+      reviewDoses: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}review_doses'],
+      )!,
+      defaultRefillQuantity: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}default_refill_quantity'],
+      )!,
+      defaultDoseCountPerDose: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}default_dose_count_per_dose'],
+      )!,
+      doseInstructions: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dose_instructions'],
+      )!,
       refillThreshold: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}refill_threshold'],
@@ -1038,6 +1242,14 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
   final String name;
   final String pillType;
   final int remainingDoses;
+  final String guidedPillIcon;
+  final int availableDoses;
+  final int loadedDoses;
+  final int usedDoses;
+  final int reviewDoses;
+  final int defaultRefillQuantity;
+  final int defaultDoseCountPerDose;
+  final String doseInstructions;
   final int refillThreshold;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -1046,6 +1258,14 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
     required this.name,
     required this.pillType,
     required this.remainingDoses,
+    required this.guidedPillIcon,
+    required this.availableDoses,
+    required this.loadedDoses,
+    required this.usedDoses,
+    required this.reviewDoses,
+    required this.defaultRefillQuantity,
+    required this.defaultDoseCountPerDose,
+    required this.doseInstructions,
     required this.refillThreshold,
     required this.createdAt,
     required this.updatedAt,
@@ -1057,6 +1277,14 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
     map['name'] = Variable<String>(name);
     map['pill_type'] = Variable<String>(pillType);
     map['remaining_doses'] = Variable<int>(remainingDoses);
+    map['guided_pill_icon'] = Variable<String>(guidedPillIcon);
+    map['available_doses'] = Variable<int>(availableDoses);
+    map['loaded_doses'] = Variable<int>(loadedDoses);
+    map['used_doses'] = Variable<int>(usedDoses);
+    map['review_doses'] = Variable<int>(reviewDoses);
+    map['default_refill_quantity'] = Variable<int>(defaultRefillQuantity);
+    map['default_dose_count_per_dose'] = Variable<int>(defaultDoseCountPerDose);
+    map['dose_instructions'] = Variable<String>(doseInstructions);
     map['refill_threshold'] = Variable<int>(refillThreshold);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -1069,6 +1297,14 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
       name: Value(name),
       pillType: Value(pillType),
       remainingDoses: Value(remainingDoses),
+      guidedPillIcon: Value(guidedPillIcon),
+      availableDoses: Value(availableDoses),
+      loadedDoses: Value(loadedDoses),
+      usedDoses: Value(usedDoses),
+      reviewDoses: Value(reviewDoses),
+      defaultRefillQuantity: Value(defaultRefillQuantity),
+      defaultDoseCountPerDose: Value(defaultDoseCountPerDose),
+      doseInstructions: Value(doseInstructions),
       refillThreshold: Value(refillThreshold),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -1085,6 +1321,18 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
       name: serializer.fromJson<String>(json['name']),
       pillType: serializer.fromJson<String>(json['pillType']),
       remainingDoses: serializer.fromJson<int>(json['remainingDoses']),
+      guidedPillIcon: serializer.fromJson<String>(json['guidedPillIcon']),
+      availableDoses: serializer.fromJson<int>(json['availableDoses']),
+      loadedDoses: serializer.fromJson<int>(json['loadedDoses']),
+      usedDoses: serializer.fromJson<int>(json['usedDoses']),
+      reviewDoses: serializer.fromJson<int>(json['reviewDoses']),
+      defaultRefillQuantity: serializer.fromJson<int>(
+        json['defaultRefillQuantity'],
+      ),
+      defaultDoseCountPerDose: serializer.fromJson<int>(
+        json['defaultDoseCountPerDose'],
+      ),
+      doseInstructions: serializer.fromJson<String>(json['doseInstructions']),
       refillThreshold: serializer.fromJson<int>(json['refillThreshold']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -1098,6 +1346,16 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
       'name': serializer.toJson<String>(name),
       'pillType': serializer.toJson<String>(pillType),
       'remainingDoses': serializer.toJson<int>(remainingDoses),
+      'guidedPillIcon': serializer.toJson<String>(guidedPillIcon),
+      'availableDoses': serializer.toJson<int>(availableDoses),
+      'loadedDoses': serializer.toJson<int>(loadedDoses),
+      'usedDoses': serializer.toJson<int>(usedDoses),
+      'reviewDoses': serializer.toJson<int>(reviewDoses),
+      'defaultRefillQuantity': serializer.toJson<int>(defaultRefillQuantity),
+      'defaultDoseCountPerDose': serializer.toJson<int>(
+        defaultDoseCountPerDose,
+      ),
+      'doseInstructions': serializer.toJson<String>(doseInstructions),
       'refillThreshold': serializer.toJson<int>(refillThreshold),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -1109,6 +1367,14 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
     String? name,
     String? pillType,
     int? remainingDoses,
+    String? guidedPillIcon,
+    int? availableDoses,
+    int? loadedDoses,
+    int? usedDoses,
+    int? reviewDoses,
+    int? defaultRefillQuantity,
+    int? defaultDoseCountPerDose,
+    String? doseInstructions,
     int? refillThreshold,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -1117,6 +1383,15 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
     name: name ?? this.name,
     pillType: pillType ?? this.pillType,
     remainingDoses: remainingDoses ?? this.remainingDoses,
+    guidedPillIcon: guidedPillIcon ?? this.guidedPillIcon,
+    availableDoses: availableDoses ?? this.availableDoses,
+    loadedDoses: loadedDoses ?? this.loadedDoses,
+    usedDoses: usedDoses ?? this.usedDoses,
+    reviewDoses: reviewDoses ?? this.reviewDoses,
+    defaultRefillQuantity: defaultRefillQuantity ?? this.defaultRefillQuantity,
+    defaultDoseCountPerDose:
+        defaultDoseCountPerDose ?? this.defaultDoseCountPerDose,
+    doseInstructions: doseInstructions ?? this.doseInstructions,
     refillThreshold: refillThreshold ?? this.refillThreshold,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -1129,6 +1404,28 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
       remainingDoses: data.remainingDoses.present
           ? data.remainingDoses.value
           : this.remainingDoses,
+      guidedPillIcon: data.guidedPillIcon.present
+          ? data.guidedPillIcon.value
+          : this.guidedPillIcon,
+      availableDoses: data.availableDoses.present
+          ? data.availableDoses.value
+          : this.availableDoses,
+      loadedDoses: data.loadedDoses.present
+          ? data.loadedDoses.value
+          : this.loadedDoses,
+      usedDoses: data.usedDoses.present ? data.usedDoses.value : this.usedDoses,
+      reviewDoses: data.reviewDoses.present
+          ? data.reviewDoses.value
+          : this.reviewDoses,
+      defaultRefillQuantity: data.defaultRefillQuantity.present
+          ? data.defaultRefillQuantity.value
+          : this.defaultRefillQuantity,
+      defaultDoseCountPerDose: data.defaultDoseCountPerDose.present
+          ? data.defaultDoseCountPerDose.value
+          : this.defaultDoseCountPerDose,
+      doseInstructions: data.doseInstructions.present
+          ? data.doseInstructions.value
+          : this.doseInstructions,
       refillThreshold: data.refillThreshold.present
           ? data.refillThreshold.value
           : this.refillThreshold,
@@ -1144,6 +1441,14 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
           ..write('name: $name, ')
           ..write('pillType: $pillType, ')
           ..write('remainingDoses: $remainingDoses, ')
+          ..write('guidedPillIcon: $guidedPillIcon, ')
+          ..write('availableDoses: $availableDoses, ')
+          ..write('loadedDoses: $loadedDoses, ')
+          ..write('usedDoses: $usedDoses, ')
+          ..write('reviewDoses: $reviewDoses, ')
+          ..write('defaultRefillQuantity: $defaultRefillQuantity, ')
+          ..write('defaultDoseCountPerDose: $defaultDoseCountPerDose, ')
+          ..write('doseInstructions: $doseInstructions, ')
           ..write('refillThreshold: $refillThreshold, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -1157,6 +1462,14 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
     name,
     pillType,
     remainingDoses,
+    guidedPillIcon,
+    availableDoses,
+    loadedDoses,
+    usedDoses,
+    reviewDoses,
+    defaultRefillQuantity,
+    defaultDoseCountPerDose,
+    doseInstructions,
     refillThreshold,
     createdAt,
     updatedAt,
@@ -1169,6 +1482,14 @@ class PrescriptionRow extends DataClass implements Insertable<PrescriptionRow> {
           other.name == this.name &&
           other.pillType == this.pillType &&
           other.remainingDoses == this.remainingDoses &&
+          other.guidedPillIcon == this.guidedPillIcon &&
+          other.availableDoses == this.availableDoses &&
+          other.loadedDoses == this.loadedDoses &&
+          other.usedDoses == this.usedDoses &&
+          other.reviewDoses == this.reviewDoses &&
+          other.defaultRefillQuantity == this.defaultRefillQuantity &&
+          other.defaultDoseCountPerDose == this.defaultDoseCountPerDose &&
+          other.doseInstructions == this.doseInstructions &&
           other.refillThreshold == this.refillThreshold &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -1179,6 +1500,14 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
   final Value<String> name;
   final Value<String> pillType;
   final Value<int> remainingDoses;
+  final Value<String> guidedPillIcon;
+  final Value<int> availableDoses;
+  final Value<int> loadedDoses;
+  final Value<int> usedDoses;
+  final Value<int> reviewDoses;
+  final Value<int> defaultRefillQuantity;
+  final Value<int> defaultDoseCountPerDose;
+  final Value<String> doseInstructions;
   final Value<int> refillThreshold;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -1188,6 +1517,14 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     this.name = const Value.absent(),
     this.pillType = const Value.absent(),
     this.remainingDoses = const Value.absent(),
+    this.guidedPillIcon = const Value.absent(),
+    this.availableDoses = const Value.absent(),
+    this.loadedDoses = const Value.absent(),
+    this.usedDoses = const Value.absent(),
+    this.reviewDoses = const Value.absent(),
+    this.defaultRefillQuantity = const Value.absent(),
+    this.defaultDoseCountPerDose = const Value.absent(),
+    this.doseInstructions = const Value.absent(),
     this.refillThreshold = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1198,6 +1535,14 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     required String name,
     required String pillType,
     this.remainingDoses = const Value.absent(),
+    this.guidedPillIcon = const Value.absent(),
+    this.availableDoses = const Value.absent(),
+    this.loadedDoses = const Value.absent(),
+    this.usedDoses = const Value.absent(),
+    this.reviewDoses = const Value.absent(),
+    this.defaultRefillQuantity = const Value.absent(),
+    this.defaultDoseCountPerDose = const Value.absent(),
+    this.doseInstructions = const Value.absent(),
     this.refillThreshold = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -1212,6 +1557,14 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     Expression<String>? name,
     Expression<String>? pillType,
     Expression<int>? remainingDoses,
+    Expression<String>? guidedPillIcon,
+    Expression<int>? availableDoses,
+    Expression<int>? loadedDoses,
+    Expression<int>? usedDoses,
+    Expression<int>? reviewDoses,
+    Expression<int>? defaultRefillQuantity,
+    Expression<int>? defaultDoseCountPerDose,
+    Expression<String>? doseInstructions,
     Expression<int>? refillThreshold,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -1222,6 +1575,16 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
       if (name != null) 'name': name,
       if (pillType != null) 'pill_type': pillType,
       if (remainingDoses != null) 'remaining_doses': remainingDoses,
+      if (guidedPillIcon != null) 'guided_pill_icon': guidedPillIcon,
+      if (availableDoses != null) 'available_doses': availableDoses,
+      if (loadedDoses != null) 'loaded_doses': loadedDoses,
+      if (usedDoses != null) 'used_doses': usedDoses,
+      if (reviewDoses != null) 'review_doses': reviewDoses,
+      if (defaultRefillQuantity != null)
+        'default_refill_quantity': defaultRefillQuantity,
+      if (defaultDoseCountPerDose != null)
+        'default_dose_count_per_dose': defaultDoseCountPerDose,
+      if (doseInstructions != null) 'dose_instructions': doseInstructions,
       if (refillThreshold != null) 'refill_threshold': refillThreshold,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1234,6 +1597,14 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     Value<String>? name,
     Value<String>? pillType,
     Value<int>? remainingDoses,
+    Value<String>? guidedPillIcon,
+    Value<int>? availableDoses,
+    Value<int>? loadedDoses,
+    Value<int>? usedDoses,
+    Value<int>? reviewDoses,
+    Value<int>? defaultRefillQuantity,
+    Value<int>? defaultDoseCountPerDose,
+    Value<String>? doseInstructions,
     Value<int>? refillThreshold,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -1244,6 +1615,16 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
       name: name ?? this.name,
       pillType: pillType ?? this.pillType,
       remainingDoses: remainingDoses ?? this.remainingDoses,
+      guidedPillIcon: guidedPillIcon ?? this.guidedPillIcon,
+      availableDoses: availableDoses ?? this.availableDoses,
+      loadedDoses: loadedDoses ?? this.loadedDoses,
+      usedDoses: usedDoses ?? this.usedDoses,
+      reviewDoses: reviewDoses ?? this.reviewDoses,
+      defaultRefillQuantity:
+          defaultRefillQuantity ?? this.defaultRefillQuantity,
+      defaultDoseCountPerDose:
+          defaultDoseCountPerDose ?? this.defaultDoseCountPerDose,
+      doseInstructions: doseInstructions ?? this.doseInstructions,
       refillThreshold: refillThreshold ?? this.refillThreshold,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1265,6 +1646,34 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
     }
     if (remainingDoses.present) {
       map['remaining_doses'] = Variable<int>(remainingDoses.value);
+    }
+    if (guidedPillIcon.present) {
+      map['guided_pill_icon'] = Variable<String>(guidedPillIcon.value);
+    }
+    if (availableDoses.present) {
+      map['available_doses'] = Variable<int>(availableDoses.value);
+    }
+    if (loadedDoses.present) {
+      map['loaded_doses'] = Variable<int>(loadedDoses.value);
+    }
+    if (usedDoses.present) {
+      map['used_doses'] = Variable<int>(usedDoses.value);
+    }
+    if (reviewDoses.present) {
+      map['review_doses'] = Variable<int>(reviewDoses.value);
+    }
+    if (defaultRefillQuantity.present) {
+      map['default_refill_quantity'] = Variable<int>(
+        defaultRefillQuantity.value,
+      );
+    }
+    if (defaultDoseCountPerDose.present) {
+      map['default_dose_count_per_dose'] = Variable<int>(
+        defaultDoseCountPerDose.value,
+      );
+    }
+    if (doseInstructions.present) {
+      map['dose_instructions'] = Variable<String>(doseInstructions.value);
     }
     if (refillThreshold.present) {
       map['refill_threshold'] = Variable<int>(refillThreshold.value);
@@ -1288,6 +1697,14 @@ class PrescriptionsCompanion extends UpdateCompanion<PrescriptionRow> {
           ..write('name: $name, ')
           ..write('pillType: $pillType, ')
           ..write('remainingDoses: $remainingDoses, ')
+          ..write('guidedPillIcon: $guidedPillIcon, ')
+          ..write('availableDoses: $availableDoses, ')
+          ..write('loadedDoses: $loadedDoses, ')
+          ..write('usedDoses: $usedDoses, ')
+          ..write('reviewDoses: $reviewDoses, ')
+          ..write('defaultRefillQuantity: $defaultRefillQuantity, ')
+          ..write('defaultDoseCountPerDose: $defaultDoseCountPerDose, ')
+          ..write('doseInstructions: $doseInstructions, ')
           ..write('refillThreshold: $refillThreshold, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -2599,6 +3016,3346 @@ class CarouselSlotsCompanion extends UpdateCompanion<CarouselSlotRow> {
           ..write('scheduleId: $scheduleId, ')
           ..write('profileId: $profileId, ')
           ..write('status: $status, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CarouselLoadSessionsTable extends CarouselLoadSessions
+    with TableInfo<$CarouselLoadSessionsTable, CarouselLoadSessionRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CarouselLoadSessionsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _profileIdMeta = const VerificationMeta(
+    'profileId',
+  );
+  @override
+  late final GeneratedColumn<String> profileId = GeneratedColumn<String>(
+    'profile_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _modeMeta = const VerificationMeta('mode');
+  @override
+  late final GeneratedColumn<String> mode = GeneratedColumn<String>(
+    'mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _predecessorSessionIdMeta =
+      const VerificationMeta('predecessorSessionId');
+  @override
+  late final GeneratedColumn<String> predecessorSessionId =
+      GeneratedColumn<String>(
+        'predecessor_session_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _planCreatedAtMeta = const VerificationMeta(
+    'planCreatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> planCreatedAt =
+      GeneratedColumn<DateTime>(
+        'plan_created_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+    'started_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _confirmedAtMeta = const VerificationMeta(
+    'confirmedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> confirmedAt = GeneratedColumn<DateTime>(
+    'confirmed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _staleAtMeta = const VerificationMeta(
+    'staleAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> staleAt = GeneratedColumn<DateTime>(
+    'stale_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _staleReasonMeta = const VerificationMeta(
+    'staleReason',
+  );
+  @override
+  late final GeneratedColumn<String> staleReason = GeneratedColumn<String>(
+    'stale_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _supersededAtMeta = const VerificationMeta(
+    'supersededAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> supersededAt = GeneratedColumn<DateTime>(
+    'superseded_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _supersededReasonMeta = const VerificationMeta(
+    'supersededReason',
+  );
+  @override
+  late final GeneratedColumn<String> supersededReason = GeneratedColumn<String>(
+    'superseded_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _positionBeforeMeta = const VerificationMeta(
+    'positionBefore',
+  );
+  @override
+  late final GeneratedColumn<int> positionBefore = GeneratedColumn<int>(
+    'position_before',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _positionAfterMeta = const VerificationMeta(
+    'positionAfter',
+  );
+  @override
+  late final GeneratedColumn<int> positionAfter = GeneratedColumn<int>(
+    'position_after',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    profileId,
+    mode,
+    status,
+    predecessorSessionId,
+    planCreatedAt,
+    startedAt,
+    confirmedAt,
+    staleAt,
+    staleReason,
+    supersededAt,
+    supersededReason,
+    positionBefore,
+    positionAfter,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'carousel_load_sessions';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CarouselLoadSessionRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('profile_id')) {
+      context.handle(
+        _profileIdMeta,
+        profileId.isAcceptableOrUnknown(data['profile_id']!, _profileIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_profileIdMeta);
+    }
+    if (data.containsKey('mode')) {
+      context.handle(
+        _modeMeta,
+        mode.isAcceptableOrUnknown(data['mode']!, _modeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_modeMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('predecessor_session_id')) {
+      context.handle(
+        _predecessorSessionIdMeta,
+        predecessorSessionId.isAcceptableOrUnknown(
+          data['predecessor_session_id']!,
+          _predecessorSessionIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('plan_created_at')) {
+      context.handle(
+        _planCreatedAtMeta,
+        planCreatedAt.isAcceptableOrUnknown(
+          data['plan_created_at']!,
+          _planCreatedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
+    }
+    if (data.containsKey('confirmed_at')) {
+      context.handle(
+        _confirmedAtMeta,
+        confirmedAt.isAcceptableOrUnknown(
+          data['confirmed_at']!,
+          _confirmedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('stale_at')) {
+      context.handle(
+        _staleAtMeta,
+        staleAt.isAcceptableOrUnknown(data['stale_at']!, _staleAtMeta),
+      );
+    }
+    if (data.containsKey('stale_reason')) {
+      context.handle(
+        _staleReasonMeta,
+        staleReason.isAcceptableOrUnknown(
+          data['stale_reason']!,
+          _staleReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('superseded_at')) {
+      context.handle(
+        _supersededAtMeta,
+        supersededAt.isAcceptableOrUnknown(
+          data['superseded_at']!,
+          _supersededAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('superseded_reason')) {
+      context.handle(
+        _supersededReasonMeta,
+        supersededReason.isAcceptableOrUnknown(
+          data['superseded_reason']!,
+          _supersededReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('position_before')) {
+      context.handle(
+        _positionBeforeMeta,
+        positionBefore.isAcceptableOrUnknown(
+          data['position_before']!,
+          _positionBeforeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_positionBeforeMeta);
+    }
+    if (data.containsKey('position_after')) {
+      context.handle(
+        _positionAfterMeta,
+        positionAfter.isAcceptableOrUnknown(
+          data['position_after']!,
+          _positionAfterMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_positionAfterMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CarouselLoadSessionRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CarouselLoadSessionRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      profileId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}profile_id'],
+      )!,
+      mode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mode'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      predecessorSessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}predecessor_session_id'],
+      ),
+      planCreatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}plan_created_at'],
+      ),
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      ),
+      confirmedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}confirmed_at'],
+      ),
+      staleAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}stale_at'],
+      ),
+      staleReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}stale_reason'],
+      ),
+      supersededAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}superseded_at'],
+      ),
+      supersededReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}superseded_reason'],
+      ),
+      positionBefore: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position_before'],
+      )!,
+      positionAfter: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position_after'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CarouselLoadSessionsTable createAlias(String alias) {
+    return $CarouselLoadSessionsTable(attachedDatabase, alias);
+  }
+}
+
+class CarouselLoadSessionRow extends DataClass
+    implements Insertable<CarouselLoadSessionRow> {
+  final String id;
+  final String profileId;
+  final String mode;
+  final String status;
+  final String? predecessorSessionId;
+  final DateTime? planCreatedAt;
+  final DateTime? startedAt;
+  final DateTime? confirmedAt;
+  final DateTime? staleAt;
+  final String? staleReason;
+  final DateTime? supersededAt;
+  final String? supersededReason;
+  final int positionBefore;
+  final int positionAfter;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const CarouselLoadSessionRow({
+    required this.id,
+    required this.profileId,
+    required this.mode,
+    required this.status,
+    this.predecessorSessionId,
+    this.planCreatedAt,
+    this.startedAt,
+    this.confirmedAt,
+    this.staleAt,
+    this.staleReason,
+    this.supersededAt,
+    this.supersededReason,
+    required this.positionBefore,
+    required this.positionAfter,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['profile_id'] = Variable<String>(profileId);
+    map['mode'] = Variable<String>(mode);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || predecessorSessionId != null) {
+      map['predecessor_session_id'] = Variable<String>(predecessorSessionId);
+    }
+    if (!nullToAbsent || planCreatedAt != null) {
+      map['plan_created_at'] = Variable<DateTime>(planCreatedAt);
+    }
+    if (!nullToAbsent || startedAt != null) {
+      map['started_at'] = Variable<DateTime>(startedAt);
+    }
+    if (!nullToAbsent || confirmedAt != null) {
+      map['confirmed_at'] = Variable<DateTime>(confirmedAt);
+    }
+    if (!nullToAbsent || staleAt != null) {
+      map['stale_at'] = Variable<DateTime>(staleAt);
+    }
+    if (!nullToAbsent || staleReason != null) {
+      map['stale_reason'] = Variable<String>(staleReason);
+    }
+    if (!nullToAbsent || supersededAt != null) {
+      map['superseded_at'] = Variable<DateTime>(supersededAt);
+    }
+    if (!nullToAbsent || supersededReason != null) {
+      map['superseded_reason'] = Variable<String>(supersededReason);
+    }
+    map['position_before'] = Variable<int>(positionBefore);
+    map['position_after'] = Variable<int>(positionAfter);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CarouselLoadSessionsCompanion toCompanion(bool nullToAbsent) {
+    return CarouselLoadSessionsCompanion(
+      id: Value(id),
+      profileId: Value(profileId),
+      mode: Value(mode),
+      status: Value(status),
+      predecessorSessionId: predecessorSessionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(predecessorSessionId),
+      planCreatedAt: planCreatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(planCreatedAt),
+      startedAt: startedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startedAt),
+      confirmedAt: confirmedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(confirmedAt),
+      staleAt: staleAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(staleAt),
+      staleReason: staleReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(staleReason),
+      supersededAt: supersededAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(supersededAt),
+      supersededReason: supersededReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(supersededReason),
+      positionBefore: Value(positionBefore),
+      positionAfter: Value(positionAfter),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CarouselLoadSessionRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CarouselLoadSessionRow(
+      id: serializer.fromJson<String>(json['id']),
+      profileId: serializer.fromJson<String>(json['profileId']),
+      mode: serializer.fromJson<String>(json['mode']),
+      status: serializer.fromJson<String>(json['status']),
+      predecessorSessionId: serializer.fromJson<String?>(
+        json['predecessorSessionId'],
+      ),
+      planCreatedAt: serializer.fromJson<DateTime?>(json['planCreatedAt']),
+      startedAt: serializer.fromJson<DateTime?>(json['startedAt']),
+      confirmedAt: serializer.fromJson<DateTime?>(json['confirmedAt']),
+      staleAt: serializer.fromJson<DateTime?>(json['staleAt']),
+      staleReason: serializer.fromJson<String?>(json['staleReason']),
+      supersededAt: serializer.fromJson<DateTime?>(json['supersededAt']),
+      supersededReason: serializer.fromJson<String?>(json['supersededReason']),
+      positionBefore: serializer.fromJson<int>(json['positionBefore']),
+      positionAfter: serializer.fromJson<int>(json['positionAfter']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'profileId': serializer.toJson<String>(profileId),
+      'mode': serializer.toJson<String>(mode),
+      'status': serializer.toJson<String>(status),
+      'predecessorSessionId': serializer.toJson<String?>(predecessorSessionId),
+      'planCreatedAt': serializer.toJson<DateTime?>(planCreatedAt),
+      'startedAt': serializer.toJson<DateTime?>(startedAt),
+      'confirmedAt': serializer.toJson<DateTime?>(confirmedAt),
+      'staleAt': serializer.toJson<DateTime?>(staleAt),
+      'staleReason': serializer.toJson<String?>(staleReason),
+      'supersededAt': serializer.toJson<DateTime?>(supersededAt),
+      'supersededReason': serializer.toJson<String?>(supersededReason),
+      'positionBefore': serializer.toJson<int>(positionBefore),
+      'positionAfter': serializer.toJson<int>(positionAfter),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CarouselLoadSessionRow copyWith({
+    String? id,
+    String? profileId,
+    String? mode,
+    String? status,
+    Value<String?> predecessorSessionId = const Value.absent(),
+    Value<DateTime?> planCreatedAt = const Value.absent(),
+    Value<DateTime?> startedAt = const Value.absent(),
+    Value<DateTime?> confirmedAt = const Value.absent(),
+    Value<DateTime?> staleAt = const Value.absent(),
+    Value<String?> staleReason = const Value.absent(),
+    Value<DateTime?> supersededAt = const Value.absent(),
+    Value<String?> supersededReason = const Value.absent(),
+    int? positionBefore,
+    int? positionAfter,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => CarouselLoadSessionRow(
+    id: id ?? this.id,
+    profileId: profileId ?? this.profileId,
+    mode: mode ?? this.mode,
+    status: status ?? this.status,
+    predecessorSessionId: predecessorSessionId.present
+        ? predecessorSessionId.value
+        : this.predecessorSessionId,
+    planCreatedAt: planCreatedAt.present
+        ? planCreatedAt.value
+        : this.planCreatedAt,
+    startedAt: startedAt.present ? startedAt.value : this.startedAt,
+    confirmedAt: confirmedAt.present ? confirmedAt.value : this.confirmedAt,
+    staleAt: staleAt.present ? staleAt.value : this.staleAt,
+    staleReason: staleReason.present ? staleReason.value : this.staleReason,
+    supersededAt: supersededAt.present ? supersededAt.value : this.supersededAt,
+    supersededReason: supersededReason.present
+        ? supersededReason.value
+        : this.supersededReason,
+    positionBefore: positionBefore ?? this.positionBefore,
+    positionAfter: positionAfter ?? this.positionAfter,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CarouselLoadSessionRow copyWithCompanion(CarouselLoadSessionsCompanion data) {
+    return CarouselLoadSessionRow(
+      id: data.id.present ? data.id.value : this.id,
+      profileId: data.profileId.present ? data.profileId.value : this.profileId,
+      mode: data.mode.present ? data.mode.value : this.mode,
+      status: data.status.present ? data.status.value : this.status,
+      predecessorSessionId: data.predecessorSessionId.present
+          ? data.predecessorSessionId.value
+          : this.predecessorSessionId,
+      planCreatedAt: data.planCreatedAt.present
+          ? data.planCreatedAt.value
+          : this.planCreatedAt,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      confirmedAt: data.confirmedAt.present
+          ? data.confirmedAt.value
+          : this.confirmedAt,
+      staleAt: data.staleAt.present ? data.staleAt.value : this.staleAt,
+      staleReason: data.staleReason.present
+          ? data.staleReason.value
+          : this.staleReason,
+      supersededAt: data.supersededAt.present
+          ? data.supersededAt.value
+          : this.supersededAt,
+      supersededReason: data.supersededReason.present
+          ? data.supersededReason.value
+          : this.supersededReason,
+      positionBefore: data.positionBefore.present
+          ? data.positionBefore.value
+          : this.positionBefore,
+      positionAfter: data.positionAfter.present
+          ? data.positionAfter.value
+          : this.positionAfter,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CarouselLoadSessionRow(')
+          ..write('id: $id, ')
+          ..write('profileId: $profileId, ')
+          ..write('mode: $mode, ')
+          ..write('status: $status, ')
+          ..write('predecessorSessionId: $predecessorSessionId, ')
+          ..write('planCreatedAt: $planCreatedAt, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('confirmedAt: $confirmedAt, ')
+          ..write('staleAt: $staleAt, ')
+          ..write('staleReason: $staleReason, ')
+          ..write('supersededAt: $supersededAt, ')
+          ..write('supersededReason: $supersededReason, ')
+          ..write('positionBefore: $positionBefore, ')
+          ..write('positionAfter: $positionAfter, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    profileId,
+    mode,
+    status,
+    predecessorSessionId,
+    planCreatedAt,
+    startedAt,
+    confirmedAt,
+    staleAt,
+    staleReason,
+    supersededAt,
+    supersededReason,
+    positionBefore,
+    positionAfter,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CarouselLoadSessionRow &&
+          other.id == this.id &&
+          other.profileId == this.profileId &&
+          other.mode == this.mode &&
+          other.status == this.status &&
+          other.predecessorSessionId == this.predecessorSessionId &&
+          other.planCreatedAt == this.planCreatedAt &&
+          other.startedAt == this.startedAt &&
+          other.confirmedAt == this.confirmedAt &&
+          other.staleAt == this.staleAt &&
+          other.staleReason == this.staleReason &&
+          other.supersededAt == this.supersededAt &&
+          other.supersededReason == this.supersededReason &&
+          other.positionBefore == this.positionBefore &&
+          other.positionAfter == this.positionAfter &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CarouselLoadSessionsCompanion
+    extends UpdateCompanion<CarouselLoadSessionRow> {
+  final Value<String> id;
+  final Value<String> profileId;
+  final Value<String> mode;
+  final Value<String> status;
+  final Value<String?> predecessorSessionId;
+  final Value<DateTime?> planCreatedAt;
+  final Value<DateTime?> startedAt;
+  final Value<DateTime?> confirmedAt;
+  final Value<DateTime?> staleAt;
+  final Value<String?> staleReason;
+  final Value<DateTime?> supersededAt;
+  final Value<String?> supersededReason;
+  final Value<int> positionBefore;
+  final Value<int> positionAfter;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const CarouselLoadSessionsCompanion({
+    this.id = const Value.absent(),
+    this.profileId = const Value.absent(),
+    this.mode = const Value.absent(),
+    this.status = const Value.absent(),
+    this.predecessorSessionId = const Value.absent(),
+    this.planCreatedAt = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.confirmedAt = const Value.absent(),
+    this.staleAt = const Value.absent(),
+    this.staleReason = const Value.absent(),
+    this.supersededAt = const Value.absent(),
+    this.supersededReason = const Value.absent(),
+    this.positionBefore = const Value.absent(),
+    this.positionAfter = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CarouselLoadSessionsCompanion.insert({
+    required String id,
+    required String profileId,
+    required String mode,
+    required String status,
+    this.predecessorSessionId = const Value.absent(),
+    this.planCreatedAt = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.confirmedAt = const Value.absent(),
+    this.staleAt = const Value.absent(),
+    this.staleReason = const Value.absent(),
+    this.supersededAt = const Value.absent(),
+    this.supersededReason = const Value.absent(),
+    required int positionBefore,
+    required int positionAfter,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       profileId = Value(profileId),
+       mode = Value(mode),
+       status = Value(status),
+       positionBefore = Value(positionBefore),
+       positionAfter = Value(positionAfter),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<CarouselLoadSessionRow> custom({
+    Expression<String>? id,
+    Expression<String>? profileId,
+    Expression<String>? mode,
+    Expression<String>? status,
+    Expression<String>? predecessorSessionId,
+    Expression<DateTime>? planCreatedAt,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? confirmedAt,
+    Expression<DateTime>? staleAt,
+    Expression<String>? staleReason,
+    Expression<DateTime>? supersededAt,
+    Expression<String>? supersededReason,
+    Expression<int>? positionBefore,
+    Expression<int>? positionAfter,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (profileId != null) 'profile_id': profileId,
+      if (mode != null) 'mode': mode,
+      if (status != null) 'status': status,
+      if (predecessorSessionId != null)
+        'predecessor_session_id': predecessorSessionId,
+      if (planCreatedAt != null) 'plan_created_at': planCreatedAt,
+      if (startedAt != null) 'started_at': startedAt,
+      if (confirmedAt != null) 'confirmed_at': confirmedAt,
+      if (staleAt != null) 'stale_at': staleAt,
+      if (staleReason != null) 'stale_reason': staleReason,
+      if (supersededAt != null) 'superseded_at': supersededAt,
+      if (supersededReason != null) 'superseded_reason': supersededReason,
+      if (positionBefore != null) 'position_before': positionBefore,
+      if (positionAfter != null) 'position_after': positionAfter,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CarouselLoadSessionsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? profileId,
+    Value<String>? mode,
+    Value<String>? status,
+    Value<String?>? predecessorSessionId,
+    Value<DateTime?>? planCreatedAt,
+    Value<DateTime?>? startedAt,
+    Value<DateTime?>? confirmedAt,
+    Value<DateTime?>? staleAt,
+    Value<String?>? staleReason,
+    Value<DateTime?>? supersededAt,
+    Value<String?>? supersededReason,
+    Value<int>? positionBefore,
+    Value<int>? positionAfter,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return CarouselLoadSessionsCompanion(
+      id: id ?? this.id,
+      profileId: profileId ?? this.profileId,
+      mode: mode ?? this.mode,
+      status: status ?? this.status,
+      predecessorSessionId: predecessorSessionId ?? this.predecessorSessionId,
+      planCreatedAt: planCreatedAt ?? this.planCreatedAt,
+      startedAt: startedAt ?? this.startedAt,
+      confirmedAt: confirmedAt ?? this.confirmedAt,
+      staleAt: staleAt ?? this.staleAt,
+      staleReason: staleReason ?? this.staleReason,
+      supersededAt: supersededAt ?? this.supersededAt,
+      supersededReason: supersededReason ?? this.supersededReason,
+      positionBefore: positionBefore ?? this.positionBefore,
+      positionAfter: positionAfter ?? this.positionAfter,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (profileId.present) {
+      map['profile_id'] = Variable<String>(profileId.value);
+    }
+    if (mode.present) {
+      map['mode'] = Variable<String>(mode.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (predecessorSessionId.present) {
+      map['predecessor_session_id'] = Variable<String>(
+        predecessorSessionId.value,
+      );
+    }
+    if (planCreatedAt.present) {
+      map['plan_created_at'] = Variable<DateTime>(planCreatedAt.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (confirmedAt.present) {
+      map['confirmed_at'] = Variable<DateTime>(confirmedAt.value);
+    }
+    if (staleAt.present) {
+      map['stale_at'] = Variable<DateTime>(staleAt.value);
+    }
+    if (staleReason.present) {
+      map['stale_reason'] = Variable<String>(staleReason.value);
+    }
+    if (supersededAt.present) {
+      map['superseded_at'] = Variable<DateTime>(supersededAt.value);
+    }
+    if (supersededReason.present) {
+      map['superseded_reason'] = Variable<String>(supersededReason.value);
+    }
+    if (positionBefore.present) {
+      map['position_before'] = Variable<int>(positionBefore.value);
+    }
+    if (positionAfter.present) {
+      map['position_after'] = Variable<int>(positionAfter.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CarouselLoadSessionsCompanion(')
+          ..write('id: $id, ')
+          ..write('profileId: $profileId, ')
+          ..write('mode: $mode, ')
+          ..write('status: $status, ')
+          ..write('predecessorSessionId: $predecessorSessionId, ')
+          ..write('planCreatedAt: $planCreatedAt, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('confirmedAt: $confirmedAt, ')
+          ..write('staleAt: $staleAt, ')
+          ..write('staleReason: $staleReason, ')
+          ..write('supersededAt: $supersededAt, ')
+          ..write('supersededReason: $supersededReason, ')
+          ..write('positionBefore: $positionBefore, ')
+          ..write('positionAfter: $positionAfter, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CarouselLoadSlotSnapshotsTable extends CarouselLoadSlotSnapshots
+    with
+        TableInfo<
+          $CarouselLoadSlotSnapshotsTable,
+          CarouselLoadSlotSnapshotRow
+        > {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CarouselLoadSlotSnapshotsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sessionIdMeta = const VerificationMeta(
+    'sessionId',
+  );
+  @override
+  late final GeneratedColumn<String> sessionId = GeneratedColumn<String>(
+    'session_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _slotNumberMeta = const VerificationMeta(
+    'slotNumber',
+  );
+  @override
+  late final GeneratedColumn<int> slotNumber = GeneratedColumn<int>(
+    'slot_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scheduledAtMeta = const VerificationMeta(
+    'scheduledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> scheduledAt = GeneratedColumn<DateTime>(
+    'scheduled_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _bundleKeyMeta = const VerificationMeta(
+    'bundleKey',
+  );
+  @override
+  late final GeneratedColumn<String> bundleKey = GeneratedColumn<String>(
+    'bundle_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _scheduleIdsJsonMeta = const VerificationMeta(
+    'scheduleIdsJson',
+  );
+  @override
+  late final GeneratedColumn<String> scheduleIdsJson = GeneratedColumn<String>(
+    'schedule_ids_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _prescriptionIdsJsonMeta =
+      const VerificationMeta('prescriptionIdsJson');
+  @override
+  late final GeneratedColumn<String> prescriptionIdsJson =
+      GeneratedColumn<String>(
+        'prescription_ids_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _prescriptionNamesJsonMeta =
+      const VerificationMeta('prescriptionNamesJson');
+  @override
+  late final GeneratedColumn<String> prescriptionNamesJson =
+      GeneratedColumn<String>(
+        'prescription_names_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _pillIconsJsonMeta = const VerificationMeta(
+    'pillIconsJson',
+  );
+  @override
+  late final GeneratedColumn<String> pillIconsJson = GeneratedColumn<String>(
+    'pill_icons_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _doseInstructionsJsonMeta =
+      const VerificationMeta('doseInstructionsJson');
+  @override
+  late final GeneratedColumn<String> doseInstructionsJson =
+      GeneratedColumn<String>(
+        'dose_instructions_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _loadedAtMeta = const VerificationMeta(
+    'loadedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> loadedAt = GeneratedColumn<DateTime>(
+    'loaded_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _movedAtMeta = const VerificationMeta(
+    'movedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> movedAt = GeneratedColumn<DateTime>(
+    'moved_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _resolvedAtMeta = const VerificationMeta(
+    'resolvedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> resolvedAt = GeneratedColumn<DateTime>(
+    'resolved_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reviewReasonMeta = const VerificationMeta(
+    'reviewReason',
+  );
+  @override
+  late final GeneratedColumn<String> reviewReason = GeneratedColumn<String>(
+    'review_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    sessionId,
+    slotNumber,
+    status,
+    scheduledAt,
+    bundleKey,
+    scheduleIdsJson,
+    prescriptionIdsJson,
+    prescriptionNamesJson,
+    pillIconsJson,
+    doseInstructionsJson,
+    loadedAt,
+    movedAt,
+    resolvedAt,
+    reviewReason,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'carousel_load_slot_snapshots';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CarouselLoadSlotSnapshotRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('session_id')) {
+      context.handle(
+        _sessionIdMeta,
+        sessionId.isAcceptableOrUnknown(data['session_id']!, _sessionIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sessionIdMeta);
+    }
+    if (data.containsKey('slot_number')) {
+      context.handle(
+        _slotNumberMeta,
+        slotNumber.isAcceptableOrUnknown(data['slot_number']!, _slotNumberMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_slotNumberMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('scheduled_at')) {
+      context.handle(
+        _scheduledAtMeta,
+        scheduledAt.isAcceptableOrUnknown(
+          data['scheduled_at']!,
+          _scheduledAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('bundle_key')) {
+      context.handle(
+        _bundleKeyMeta,
+        bundleKey.isAcceptableOrUnknown(data['bundle_key']!, _bundleKeyMeta),
+      );
+    }
+    if (data.containsKey('schedule_ids_json')) {
+      context.handle(
+        _scheduleIdsJsonMeta,
+        scheduleIdsJson.isAcceptableOrUnknown(
+          data['schedule_ids_json']!,
+          _scheduleIdsJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_scheduleIdsJsonMeta);
+    }
+    if (data.containsKey('prescription_ids_json')) {
+      context.handle(
+        _prescriptionIdsJsonMeta,
+        prescriptionIdsJson.isAcceptableOrUnknown(
+          data['prescription_ids_json']!,
+          _prescriptionIdsJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_prescriptionIdsJsonMeta);
+    }
+    if (data.containsKey('prescription_names_json')) {
+      context.handle(
+        _prescriptionNamesJsonMeta,
+        prescriptionNamesJson.isAcceptableOrUnknown(
+          data['prescription_names_json']!,
+          _prescriptionNamesJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_prescriptionNamesJsonMeta);
+    }
+    if (data.containsKey('pill_icons_json')) {
+      context.handle(
+        _pillIconsJsonMeta,
+        pillIconsJson.isAcceptableOrUnknown(
+          data['pill_icons_json']!,
+          _pillIconsJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_pillIconsJsonMeta);
+    }
+    if (data.containsKey('dose_instructions_json')) {
+      context.handle(
+        _doseInstructionsJsonMeta,
+        doseInstructionsJson.isAcceptableOrUnknown(
+          data['dose_instructions_json']!,
+          _doseInstructionsJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_doseInstructionsJsonMeta);
+    }
+    if (data.containsKey('loaded_at')) {
+      context.handle(
+        _loadedAtMeta,
+        loadedAt.isAcceptableOrUnknown(data['loaded_at']!, _loadedAtMeta),
+      );
+    }
+    if (data.containsKey('moved_at')) {
+      context.handle(
+        _movedAtMeta,
+        movedAt.isAcceptableOrUnknown(data['moved_at']!, _movedAtMeta),
+      );
+    }
+    if (data.containsKey('resolved_at')) {
+      context.handle(
+        _resolvedAtMeta,
+        resolvedAt.isAcceptableOrUnknown(data['resolved_at']!, _resolvedAtMeta),
+      );
+    }
+    if (data.containsKey('review_reason')) {
+      context.handle(
+        _reviewReasonMeta,
+        reviewReason.isAcceptableOrUnknown(
+          data['review_reason']!,
+          _reviewReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CarouselLoadSlotSnapshotRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CarouselLoadSlotSnapshotRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      sessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_id'],
+      )!,
+      slotNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}slot_number'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      scheduledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}scheduled_at'],
+      ),
+      bundleKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bundle_key'],
+      ),
+      scheduleIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}schedule_ids_json'],
+      )!,
+      prescriptionIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prescription_ids_json'],
+      )!,
+      prescriptionNamesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prescription_names_json'],
+      )!,
+      pillIconsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pill_icons_json'],
+      )!,
+      doseInstructionsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dose_instructions_json'],
+      )!,
+      loadedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}loaded_at'],
+      ),
+      movedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}moved_at'],
+      ),
+      resolvedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}resolved_at'],
+      ),
+      reviewReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}review_reason'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CarouselLoadSlotSnapshotsTable createAlias(String alias) {
+    return $CarouselLoadSlotSnapshotsTable(attachedDatabase, alias);
+  }
+}
+
+class CarouselLoadSlotSnapshotRow extends DataClass
+    implements Insertable<CarouselLoadSlotSnapshotRow> {
+  final String id;
+  final String sessionId;
+  final int slotNumber;
+  final String status;
+  final DateTime? scheduledAt;
+  final String? bundleKey;
+  final String scheduleIdsJson;
+  final String prescriptionIdsJson;
+  final String prescriptionNamesJson;
+  final String pillIconsJson;
+  final String doseInstructionsJson;
+  final DateTime? loadedAt;
+  final DateTime? movedAt;
+  final DateTime? resolvedAt;
+  final String? reviewReason;
+  final DateTime createdAt;
+  const CarouselLoadSlotSnapshotRow({
+    required this.id,
+    required this.sessionId,
+    required this.slotNumber,
+    required this.status,
+    this.scheduledAt,
+    this.bundleKey,
+    required this.scheduleIdsJson,
+    required this.prescriptionIdsJson,
+    required this.prescriptionNamesJson,
+    required this.pillIconsJson,
+    required this.doseInstructionsJson,
+    this.loadedAt,
+    this.movedAt,
+    this.resolvedAt,
+    this.reviewReason,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['session_id'] = Variable<String>(sessionId);
+    map['slot_number'] = Variable<int>(slotNumber);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || scheduledAt != null) {
+      map['scheduled_at'] = Variable<DateTime>(scheduledAt);
+    }
+    if (!nullToAbsent || bundleKey != null) {
+      map['bundle_key'] = Variable<String>(bundleKey);
+    }
+    map['schedule_ids_json'] = Variable<String>(scheduleIdsJson);
+    map['prescription_ids_json'] = Variable<String>(prescriptionIdsJson);
+    map['prescription_names_json'] = Variable<String>(prescriptionNamesJson);
+    map['pill_icons_json'] = Variable<String>(pillIconsJson);
+    map['dose_instructions_json'] = Variable<String>(doseInstructionsJson);
+    if (!nullToAbsent || loadedAt != null) {
+      map['loaded_at'] = Variable<DateTime>(loadedAt);
+    }
+    if (!nullToAbsent || movedAt != null) {
+      map['moved_at'] = Variable<DateTime>(movedAt);
+    }
+    if (!nullToAbsent || resolvedAt != null) {
+      map['resolved_at'] = Variable<DateTime>(resolvedAt);
+    }
+    if (!nullToAbsent || reviewReason != null) {
+      map['review_reason'] = Variable<String>(reviewReason);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CarouselLoadSlotSnapshotsCompanion toCompanion(bool nullToAbsent) {
+    return CarouselLoadSlotSnapshotsCompanion(
+      id: Value(id),
+      sessionId: Value(sessionId),
+      slotNumber: Value(slotNumber),
+      status: Value(status),
+      scheduledAt: scheduledAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(scheduledAt),
+      bundleKey: bundleKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bundleKey),
+      scheduleIdsJson: Value(scheduleIdsJson),
+      prescriptionIdsJson: Value(prescriptionIdsJson),
+      prescriptionNamesJson: Value(prescriptionNamesJson),
+      pillIconsJson: Value(pillIconsJson),
+      doseInstructionsJson: Value(doseInstructionsJson),
+      loadedAt: loadedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(loadedAt),
+      movedAt: movedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(movedAt),
+      resolvedAt: resolvedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resolvedAt),
+      reviewReason: reviewReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reviewReason),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CarouselLoadSlotSnapshotRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CarouselLoadSlotSnapshotRow(
+      id: serializer.fromJson<String>(json['id']),
+      sessionId: serializer.fromJson<String>(json['sessionId']),
+      slotNumber: serializer.fromJson<int>(json['slotNumber']),
+      status: serializer.fromJson<String>(json['status']),
+      scheduledAt: serializer.fromJson<DateTime?>(json['scheduledAt']),
+      bundleKey: serializer.fromJson<String?>(json['bundleKey']),
+      scheduleIdsJson: serializer.fromJson<String>(json['scheduleIdsJson']),
+      prescriptionIdsJson: serializer.fromJson<String>(
+        json['prescriptionIdsJson'],
+      ),
+      prescriptionNamesJson: serializer.fromJson<String>(
+        json['prescriptionNamesJson'],
+      ),
+      pillIconsJson: serializer.fromJson<String>(json['pillIconsJson']),
+      doseInstructionsJson: serializer.fromJson<String>(
+        json['doseInstructionsJson'],
+      ),
+      loadedAt: serializer.fromJson<DateTime?>(json['loadedAt']),
+      movedAt: serializer.fromJson<DateTime?>(json['movedAt']),
+      resolvedAt: serializer.fromJson<DateTime?>(json['resolvedAt']),
+      reviewReason: serializer.fromJson<String?>(json['reviewReason']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'sessionId': serializer.toJson<String>(sessionId),
+      'slotNumber': serializer.toJson<int>(slotNumber),
+      'status': serializer.toJson<String>(status),
+      'scheduledAt': serializer.toJson<DateTime?>(scheduledAt),
+      'bundleKey': serializer.toJson<String?>(bundleKey),
+      'scheduleIdsJson': serializer.toJson<String>(scheduleIdsJson),
+      'prescriptionIdsJson': serializer.toJson<String>(prescriptionIdsJson),
+      'prescriptionNamesJson': serializer.toJson<String>(prescriptionNamesJson),
+      'pillIconsJson': serializer.toJson<String>(pillIconsJson),
+      'doseInstructionsJson': serializer.toJson<String>(doseInstructionsJson),
+      'loadedAt': serializer.toJson<DateTime?>(loadedAt),
+      'movedAt': serializer.toJson<DateTime?>(movedAt),
+      'resolvedAt': serializer.toJson<DateTime?>(resolvedAt),
+      'reviewReason': serializer.toJson<String?>(reviewReason),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CarouselLoadSlotSnapshotRow copyWith({
+    String? id,
+    String? sessionId,
+    int? slotNumber,
+    String? status,
+    Value<DateTime?> scheduledAt = const Value.absent(),
+    Value<String?> bundleKey = const Value.absent(),
+    String? scheduleIdsJson,
+    String? prescriptionIdsJson,
+    String? prescriptionNamesJson,
+    String? pillIconsJson,
+    String? doseInstructionsJson,
+    Value<DateTime?> loadedAt = const Value.absent(),
+    Value<DateTime?> movedAt = const Value.absent(),
+    Value<DateTime?> resolvedAt = const Value.absent(),
+    Value<String?> reviewReason = const Value.absent(),
+    DateTime? createdAt,
+  }) => CarouselLoadSlotSnapshotRow(
+    id: id ?? this.id,
+    sessionId: sessionId ?? this.sessionId,
+    slotNumber: slotNumber ?? this.slotNumber,
+    status: status ?? this.status,
+    scheduledAt: scheduledAt.present ? scheduledAt.value : this.scheduledAt,
+    bundleKey: bundleKey.present ? bundleKey.value : this.bundleKey,
+    scheduleIdsJson: scheduleIdsJson ?? this.scheduleIdsJson,
+    prescriptionIdsJson: prescriptionIdsJson ?? this.prescriptionIdsJson,
+    prescriptionNamesJson: prescriptionNamesJson ?? this.prescriptionNamesJson,
+    pillIconsJson: pillIconsJson ?? this.pillIconsJson,
+    doseInstructionsJson: doseInstructionsJson ?? this.doseInstructionsJson,
+    loadedAt: loadedAt.present ? loadedAt.value : this.loadedAt,
+    movedAt: movedAt.present ? movedAt.value : this.movedAt,
+    resolvedAt: resolvedAt.present ? resolvedAt.value : this.resolvedAt,
+    reviewReason: reviewReason.present ? reviewReason.value : this.reviewReason,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  CarouselLoadSlotSnapshotRow copyWithCompanion(
+    CarouselLoadSlotSnapshotsCompanion data,
+  ) {
+    return CarouselLoadSlotSnapshotRow(
+      id: data.id.present ? data.id.value : this.id,
+      sessionId: data.sessionId.present ? data.sessionId.value : this.sessionId,
+      slotNumber: data.slotNumber.present
+          ? data.slotNumber.value
+          : this.slotNumber,
+      status: data.status.present ? data.status.value : this.status,
+      scheduledAt: data.scheduledAt.present
+          ? data.scheduledAt.value
+          : this.scheduledAt,
+      bundleKey: data.bundleKey.present ? data.bundleKey.value : this.bundleKey,
+      scheduleIdsJson: data.scheduleIdsJson.present
+          ? data.scheduleIdsJson.value
+          : this.scheduleIdsJson,
+      prescriptionIdsJson: data.prescriptionIdsJson.present
+          ? data.prescriptionIdsJson.value
+          : this.prescriptionIdsJson,
+      prescriptionNamesJson: data.prescriptionNamesJson.present
+          ? data.prescriptionNamesJson.value
+          : this.prescriptionNamesJson,
+      pillIconsJson: data.pillIconsJson.present
+          ? data.pillIconsJson.value
+          : this.pillIconsJson,
+      doseInstructionsJson: data.doseInstructionsJson.present
+          ? data.doseInstructionsJson.value
+          : this.doseInstructionsJson,
+      loadedAt: data.loadedAt.present ? data.loadedAt.value : this.loadedAt,
+      movedAt: data.movedAt.present ? data.movedAt.value : this.movedAt,
+      resolvedAt: data.resolvedAt.present
+          ? data.resolvedAt.value
+          : this.resolvedAt,
+      reviewReason: data.reviewReason.present
+          ? data.reviewReason.value
+          : this.reviewReason,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CarouselLoadSlotSnapshotRow(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('slotNumber: $slotNumber, ')
+          ..write('status: $status, ')
+          ..write('scheduledAt: $scheduledAt, ')
+          ..write('bundleKey: $bundleKey, ')
+          ..write('scheduleIdsJson: $scheduleIdsJson, ')
+          ..write('prescriptionIdsJson: $prescriptionIdsJson, ')
+          ..write('prescriptionNamesJson: $prescriptionNamesJson, ')
+          ..write('pillIconsJson: $pillIconsJson, ')
+          ..write('doseInstructionsJson: $doseInstructionsJson, ')
+          ..write('loadedAt: $loadedAt, ')
+          ..write('movedAt: $movedAt, ')
+          ..write('resolvedAt: $resolvedAt, ')
+          ..write('reviewReason: $reviewReason, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    sessionId,
+    slotNumber,
+    status,
+    scheduledAt,
+    bundleKey,
+    scheduleIdsJson,
+    prescriptionIdsJson,
+    prescriptionNamesJson,
+    pillIconsJson,
+    doseInstructionsJson,
+    loadedAt,
+    movedAt,
+    resolvedAt,
+    reviewReason,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CarouselLoadSlotSnapshotRow &&
+          other.id == this.id &&
+          other.sessionId == this.sessionId &&
+          other.slotNumber == this.slotNumber &&
+          other.status == this.status &&
+          other.scheduledAt == this.scheduledAt &&
+          other.bundleKey == this.bundleKey &&
+          other.scheduleIdsJson == this.scheduleIdsJson &&
+          other.prescriptionIdsJson == this.prescriptionIdsJson &&
+          other.prescriptionNamesJson == this.prescriptionNamesJson &&
+          other.pillIconsJson == this.pillIconsJson &&
+          other.doseInstructionsJson == this.doseInstructionsJson &&
+          other.loadedAt == this.loadedAt &&
+          other.movedAt == this.movedAt &&
+          other.resolvedAt == this.resolvedAt &&
+          other.reviewReason == this.reviewReason &&
+          other.createdAt == this.createdAt);
+}
+
+class CarouselLoadSlotSnapshotsCompanion
+    extends UpdateCompanion<CarouselLoadSlotSnapshotRow> {
+  final Value<String> id;
+  final Value<String> sessionId;
+  final Value<int> slotNumber;
+  final Value<String> status;
+  final Value<DateTime?> scheduledAt;
+  final Value<String?> bundleKey;
+  final Value<String> scheduleIdsJson;
+  final Value<String> prescriptionIdsJson;
+  final Value<String> prescriptionNamesJson;
+  final Value<String> pillIconsJson;
+  final Value<String> doseInstructionsJson;
+  final Value<DateTime?> loadedAt;
+  final Value<DateTime?> movedAt;
+  final Value<DateTime?> resolvedAt;
+  final Value<String?> reviewReason;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const CarouselLoadSlotSnapshotsCompanion({
+    this.id = const Value.absent(),
+    this.sessionId = const Value.absent(),
+    this.slotNumber = const Value.absent(),
+    this.status = const Value.absent(),
+    this.scheduledAt = const Value.absent(),
+    this.bundleKey = const Value.absent(),
+    this.scheduleIdsJson = const Value.absent(),
+    this.prescriptionIdsJson = const Value.absent(),
+    this.prescriptionNamesJson = const Value.absent(),
+    this.pillIconsJson = const Value.absent(),
+    this.doseInstructionsJson = const Value.absent(),
+    this.loadedAt = const Value.absent(),
+    this.movedAt = const Value.absent(),
+    this.resolvedAt = const Value.absent(),
+    this.reviewReason = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CarouselLoadSlotSnapshotsCompanion.insert({
+    required String id,
+    required String sessionId,
+    required int slotNumber,
+    required String status,
+    this.scheduledAt = const Value.absent(),
+    this.bundleKey = const Value.absent(),
+    required String scheduleIdsJson,
+    required String prescriptionIdsJson,
+    required String prescriptionNamesJson,
+    required String pillIconsJson,
+    required String doseInstructionsJson,
+    this.loadedAt = const Value.absent(),
+    this.movedAt = const Value.absent(),
+    this.resolvedAt = const Value.absent(),
+    this.reviewReason = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       sessionId = Value(sessionId),
+       slotNumber = Value(slotNumber),
+       status = Value(status),
+       scheduleIdsJson = Value(scheduleIdsJson),
+       prescriptionIdsJson = Value(prescriptionIdsJson),
+       prescriptionNamesJson = Value(prescriptionNamesJson),
+       pillIconsJson = Value(pillIconsJson),
+       doseInstructionsJson = Value(doseInstructionsJson),
+       createdAt = Value(createdAt);
+  static Insertable<CarouselLoadSlotSnapshotRow> custom({
+    Expression<String>? id,
+    Expression<String>? sessionId,
+    Expression<int>? slotNumber,
+    Expression<String>? status,
+    Expression<DateTime>? scheduledAt,
+    Expression<String>? bundleKey,
+    Expression<String>? scheduleIdsJson,
+    Expression<String>? prescriptionIdsJson,
+    Expression<String>? prescriptionNamesJson,
+    Expression<String>? pillIconsJson,
+    Expression<String>? doseInstructionsJson,
+    Expression<DateTime>? loadedAt,
+    Expression<DateTime>? movedAt,
+    Expression<DateTime>? resolvedAt,
+    Expression<String>? reviewReason,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (sessionId != null) 'session_id': sessionId,
+      if (slotNumber != null) 'slot_number': slotNumber,
+      if (status != null) 'status': status,
+      if (scheduledAt != null) 'scheduled_at': scheduledAt,
+      if (bundleKey != null) 'bundle_key': bundleKey,
+      if (scheduleIdsJson != null) 'schedule_ids_json': scheduleIdsJson,
+      if (prescriptionIdsJson != null)
+        'prescription_ids_json': prescriptionIdsJson,
+      if (prescriptionNamesJson != null)
+        'prescription_names_json': prescriptionNamesJson,
+      if (pillIconsJson != null) 'pill_icons_json': pillIconsJson,
+      if (doseInstructionsJson != null)
+        'dose_instructions_json': doseInstructionsJson,
+      if (loadedAt != null) 'loaded_at': loadedAt,
+      if (movedAt != null) 'moved_at': movedAt,
+      if (resolvedAt != null) 'resolved_at': resolvedAt,
+      if (reviewReason != null) 'review_reason': reviewReason,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CarouselLoadSlotSnapshotsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? sessionId,
+    Value<int>? slotNumber,
+    Value<String>? status,
+    Value<DateTime?>? scheduledAt,
+    Value<String?>? bundleKey,
+    Value<String>? scheduleIdsJson,
+    Value<String>? prescriptionIdsJson,
+    Value<String>? prescriptionNamesJson,
+    Value<String>? pillIconsJson,
+    Value<String>? doseInstructionsJson,
+    Value<DateTime?>? loadedAt,
+    Value<DateTime?>? movedAt,
+    Value<DateTime?>? resolvedAt,
+    Value<String?>? reviewReason,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return CarouselLoadSlotSnapshotsCompanion(
+      id: id ?? this.id,
+      sessionId: sessionId ?? this.sessionId,
+      slotNumber: slotNumber ?? this.slotNumber,
+      status: status ?? this.status,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
+      bundleKey: bundleKey ?? this.bundleKey,
+      scheduleIdsJson: scheduleIdsJson ?? this.scheduleIdsJson,
+      prescriptionIdsJson: prescriptionIdsJson ?? this.prescriptionIdsJson,
+      prescriptionNamesJson:
+          prescriptionNamesJson ?? this.prescriptionNamesJson,
+      pillIconsJson: pillIconsJson ?? this.pillIconsJson,
+      doseInstructionsJson: doseInstructionsJson ?? this.doseInstructionsJson,
+      loadedAt: loadedAt ?? this.loadedAt,
+      movedAt: movedAt ?? this.movedAt,
+      resolvedAt: resolvedAt ?? this.resolvedAt,
+      reviewReason: reviewReason ?? this.reviewReason,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (sessionId.present) {
+      map['session_id'] = Variable<String>(sessionId.value);
+    }
+    if (slotNumber.present) {
+      map['slot_number'] = Variable<int>(slotNumber.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (scheduledAt.present) {
+      map['scheduled_at'] = Variable<DateTime>(scheduledAt.value);
+    }
+    if (bundleKey.present) {
+      map['bundle_key'] = Variable<String>(bundleKey.value);
+    }
+    if (scheduleIdsJson.present) {
+      map['schedule_ids_json'] = Variable<String>(scheduleIdsJson.value);
+    }
+    if (prescriptionIdsJson.present) {
+      map['prescription_ids_json'] = Variable<String>(
+        prescriptionIdsJson.value,
+      );
+    }
+    if (prescriptionNamesJson.present) {
+      map['prescription_names_json'] = Variable<String>(
+        prescriptionNamesJson.value,
+      );
+    }
+    if (pillIconsJson.present) {
+      map['pill_icons_json'] = Variable<String>(pillIconsJson.value);
+    }
+    if (doseInstructionsJson.present) {
+      map['dose_instructions_json'] = Variable<String>(
+        doseInstructionsJson.value,
+      );
+    }
+    if (loadedAt.present) {
+      map['loaded_at'] = Variable<DateTime>(loadedAt.value);
+    }
+    if (movedAt.present) {
+      map['moved_at'] = Variable<DateTime>(movedAt.value);
+    }
+    if (resolvedAt.present) {
+      map['resolved_at'] = Variable<DateTime>(resolvedAt.value);
+    }
+    if (reviewReason.present) {
+      map['review_reason'] = Variable<String>(reviewReason.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CarouselLoadSlotSnapshotsCompanion(')
+          ..write('id: $id, ')
+          ..write('sessionId: $sessionId, ')
+          ..write('slotNumber: $slotNumber, ')
+          ..write('status: $status, ')
+          ..write('scheduledAt: $scheduledAt, ')
+          ..write('bundleKey: $bundleKey, ')
+          ..write('scheduleIdsJson: $scheduleIdsJson, ')
+          ..write('prescriptionIdsJson: $prescriptionIdsJson, ')
+          ..write('prescriptionNamesJson: $prescriptionNamesJson, ')
+          ..write('pillIconsJson: $pillIconsJson, ')
+          ..write('doseInstructionsJson: $doseInstructionsJson, ')
+          ..write('loadedAt: $loadedAt, ')
+          ..write('movedAt: $movedAt, ')
+          ..write('resolvedAt: $resolvedAt, ')
+          ..write('reviewReason: $reviewReason, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CarouselStatesTable extends CarouselStates
+    with TableInfo<$CarouselStatesTable, CarouselStateRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CarouselStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _profileIdMeta = const VerificationMeta(
+    'profileId',
+  );
+  @override
+  late final GeneratedColumn<String> profileId = GeneratedColumn<String>(
+    'profile_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _activeLoadSessionIdMeta =
+      const VerificationMeta('activeLoadSessionId');
+  @override
+  late final GeneratedColumn<String> activeLoadSessionId =
+      GeneratedColumn<String>(
+        'active_load_session_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _currentPositionMeta = const VerificationMeta(
+    'currentPosition',
+  );
+  @override
+  late final GeneratedColumn<int> currentPosition = GeneratedColumn<int>(
+    'current_position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    profileId,
+    activeLoadSessionId,
+    currentPosition,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'carousel_states';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CarouselStateRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('profile_id')) {
+      context.handle(
+        _profileIdMeta,
+        profileId.isAcceptableOrUnknown(data['profile_id']!, _profileIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_profileIdMeta);
+    }
+    if (data.containsKey('active_load_session_id')) {
+      context.handle(
+        _activeLoadSessionIdMeta,
+        activeLoadSessionId.isAcceptableOrUnknown(
+          data['active_load_session_id']!,
+          _activeLoadSessionIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('current_position')) {
+      context.handle(
+        _currentPositionMeta,
+        currentPosition.isAcceptableOrUnknown(
+          data['current_position']!,
+          _currentPositionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {profileId};
+  @override
+  CarouselStateRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CarouselStateRow(
+      profileId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}profile_id'],
+      )!,
+      activeLoadSessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}active_load_session_id'],
+      ),
+      currentPosition: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}current_position'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CarouselStatesTable createAlias(String alias) {
+    return $CarouselStatesTable(attachedDatabase, alias);
+  }
+}
+
+class CarouselStateRow extends DataClass
+    implements Insertable<CarouselStateRow> {
+  final String profileId;
+  final String? activeLoadSessionId;
+  final int currentPosition;
+  final DateTime updatedAt;
+  const CarouselStateRow({
+    required this.profileId,
+    this.activeLoadSessionId,
+    required this.currentPosition,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['profile_id'] = Variable<String>(profileId);
+    if (!nullToAbsent || activeLoadSessionId != null) {
+      map['active_load_session_id'] = Variable<String>(activeLoadSessionId);
+    }
+    map['current_position'] = Variable<int>(currentPosition);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  CarouselStatesCompanion toCompanion(bool nullToAbsent) {
+    return CarouselStatesCompanion(
+      profileId: Value(profileId),
+      activeLoadSessionId: activeLoadSessionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(activeLoadSessionId),
+      currentPosition: Value(currentPosition),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory CarouselStateRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CarouselStateRow(
+      profileId: serializer.fromJson<String>(json['profileId']),
+      activeLoadSessionId: serializer.fromJson<String?>(
+        json['activeLoadSessionId'],
+      ),
+      currentPosition: serializer.fromJson<int>(json['currentPosition']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'profileId': serializer.toJson<String>(profileId),
+      'activeLoadSessionId': serializer.toJson<String?>(activeLoadSessionId),
+      'currentPosition': serializer.toJson<int>(currentPosition),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  CarouselStateRow copyWith({
+    String? profileId,
+    Value<String?> activeLoadSessionId = const Value.absent(),
+    int? currentPosition,
+    DateTime? updatedAt,
+  }) => CarouselStateRow(
+    profileId: profileId ?? this.profileId,
+    activeLoadSessionId: activeLoadSessionId.present
+        ? activeLoadSessionId.value
+        : this.activeLoadSessionId,
+    currentPosition: currentPosition ?? this.currentPosition,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  CarouselStateRow copyWithCompanion(CarouselStatesCompanion data) {
+    return CarouselStateRow(
+      profileId: data.profileId.present ? data.profileId.value : this.profileId,
+      activeLoadSessionId: data.activeLoadSessionId.present
+          ? data.activeLoadSessionId.value
+          : this.activeLoadSessionId,
+      currentPosition: data.currentPosition.present
+          ? data.currentPosition.value
+          : this.currentPosition,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CarouselStateRow(')
+          ..write('profileId: $profileId, ')
+          ..write('activeLoadSessionId: $activeLoadSessionId, ')
+          ..write('currentPosition: $currentPosition, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(profileId, activeLoadSessionId, currentPosition, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CarouselStateRow &&
+          other.profileId == this.profileId &&
+          other.activeLoadSessionId == this.activeLoadSessionId &&
+          other.currentPosition == this.currentPosition &&
+          other.updatedAt == this.updatedAt);
+}
+
+class CarouselStatesCompanion extends UpdateCompanion<CarouselStateRow> {
+  final Value<String> profileId;
+  final Value<String?> activeLoadSessionId;
+  final Value<int> currentPosition;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const CarouselStatesCompanion({
+    this.profileId = const Value.absent(),
+    this.activeLoadSessionId = const Value.absent(),
+    this.currentPosition = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CarouselStatesCompanion.insert({
+    required String profileId,
+    this.activeLoadSessionId = const Value.absent(),
+    this.currentPosition = const Value.absent(),
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : profileId = Value(profileId),
+       updatedAt = Value(updatedAt);
+  static Insertable<CarouselStateRow> custom({
+    Expression<String>? profileId,
+    Expression<String>? activeLoadSessionId,
+    Expression<int>? currentPosition,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (profileId != null) 'profile_id': profileId,
+      if (activeLoadSessionId != null)
+        'active_load_session_id': activeLoadSessionId,
+      if (currentPosition != null) 'current_position': currentPosition,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CarouselStatesCompanion copyWith({
+    Value<String>? profileId,
+    Value<String?>? activeLoadSessionId,
+    Value<int>? currentPosition,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return CarouselStatesCompanion(
+      profileId: profileId ?? this.profileId,
+      activeLoadSessionId: activeLoadSessionId ?? this.activeLoadSessionId,
+      currentPosition: currentPosition ?? this.currentPosition,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (profileId.present) {
+      map['profile_id'] = Variable<String>(profileId.value);
+    }
+    if (activeLoadSessionId.present) {
+      map['active_load_session_id'] = Variable<String>(
+        activeLoadSessionId.value,
+      );
+    }
+    if (currentPosition.present) {
+      map['current_position'] = Variable<int>(currentPosition.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CarouselStatesCompanion(')
+          ..write('profileId: $profileId, ')
+          ..write('activeLoadSessionId: $activeLoadSessionId, ')
+          ..write('currentPosition: $currentPosition, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MedicationShortageAlertsTable extends MedicationShortageAlerts
+    with TableInfo<$MedicationShortageAlertsTable, MedicationShortageAlertRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MedicationShortageAlertsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _profileIdMeta = const VerificationMeta(
+    'profileId',
+  );
+  @override
+  late final GeneratedColumn<String> profileId = GeneratedColumn<String>(
+    'profile_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _loadSessionIdMeta = const VerificationMeta(
+    'loadSessionId',
+  );
+  @override
+  late final GeneratedColumn<String> loadSessionId = GeneratedColumn<String>(
+    'load_session_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _slotNumberMeta = const VerificationMeta(
+    'slotNumber',
+  );
+  @override
+  late final GeneratedColumn<int> slotNumber = GeneratedColumn<int>(
+    'slot_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bundleKeyMeta = const VerificationMeta(
+    'bundleKey',
+  );
+  @override
+  late final GeneratedColumn<String> bundleKey = GeneratedColumn<String>(
+    'bundle_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _scheduledAtMeta = const VerificationMeta(
+    'scheduledAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> scheduledAt = GeneratedColumn<DateTime>(
+    'scheduled_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _prescriptionIdsJsonMeta =
+      const VerificationMeta('prescriptionIdsJson');
+  @override
+  late final GeneratedColumn<String> prescriptionIdsJson =
+      GeneratedColumn<String>(
+        'prescription_ids_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _prescriptionNamesJsonMeta =
+      const VerificationMeta('prescriptionNamesJson');
+  @override
+  late final GeneratedColumn<String> prescriptionNamesJson =
+      GeneratedColumn<String>(
+        'prescription_names_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _recognizedAtMeta = const VerificationMeta(
+    'recognizedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> recognizedAt = GeneratedColumn<DateTime>(
+    'recognized_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _resolvedAtMeta = const VerificationMeta(
+    'resolvedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> resolvedAt = GeneratedColumn<DateTime>(
+    'resolved_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _resolutionMeta = const VerificationMeta(
+    'resolution',
+  );
+  @override
+  late final GeneratedColumn<String> resolution = GeneratedColumn<String>(
+    'resolution',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _intendedAudienceMeta = const VerificationMeta(
+    'intendedAudience',
+  );
+  @override
+  late final GeneratedColumn<String> intendedAudience = GeneratedColumn<String>(
+    'intended_audience',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('household'),
+  );
+  static const VerificationMeta _localDeliveryStateMeta =
+      const VerificationMeta('localDeliveryState');
+  @override
+  late final GeneratedColumn<String> localDeliveryState =
+      GeneratedColumn<String>(
+        'local_delivery_state',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _localNotificationSentAtMeta =
+      const VerificationMeta('localNotificationSentAt');
+  @override
+  late final GeneratedColumn<DateTime> localNotificationSentAt =
+      GeneratedColumn<DateTime>(
+        'local_notification_sent_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _remoteDeliveryStateMeta =
+      const VerificationMeta('remoteDeliveryState');
+  @override
+  late final GeneratedColumn<String> remoteDeliveryState =
+      GeneratedColumn<String>(
+        'remote_delivery_state',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('not_configured'),
+      );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    profileId,
+    loadSessionId,
+    slotNumber,
+    bundleKey,
+    scheduledAt,
+    prescriptionIdsJson,
+    prescriptionNamesJson,
+    status,
+    recognizedAt,
+    resolvedAt,
+    resolution,
+    intendedAudience,
+    localDeliveryState,
+    localNotificationSentAt,
+    remoteDeliveryState,
+    createdAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'medication_shortage_alerts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MedicationShortageAlertRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('profile_id')) {
+      context.handle(
+        _profileIdMeta,
+        profileId.isAcceptableOrUnknown(data['profile_id']!, _profileIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_profileIdMeta);
+    }
+    if (data.containsKey('load_session_id')) {
+      context.handle(
+        _loadSessionIdMeta,
+        loadSessionId.isAcceptableOrUnknown(
+          data['load_session_id']!,
+          _loadSessionIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('slot_number')) {
+      context.handle(
+        _slotNumberMeta,
+        slotNumber.isAcceptableOrUnknown(data['slot_number']!, _slotNumberMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_slotNumberMeta);
+    }
+    if (data.containsKey('bundle_key')) {
+      context.handle(
+        _bundleKeyMeta,
+        bundleKey.isAcceptableOrUnknown(data['bundle_key']!, _bundleKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bundleKeyMeta);
+    }
+    if (data.containsKey('scheduled_at')) {
+      context.handle(
+        _scheduledAtMeta,
+        scheduledAt.isAcceptableOrUnknown(
+          data['scheduled_at']!,
+          _scheduledAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_scheduledAtMeta);
+    }
+    if (data.containsKey('prescription_ids_json')) {
+      context.handle(
+        _prescriptionIdsJsonMeta,
+        prescriptionIdsJson.isAcceptableOrUnknown(
+          data['prescription_ids_json']!,
+          _prescriptionIdsJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_prescriptionIdsJsonMeta);
+    }
+    if (data.containsKey('prescription_names_json')) {
+      context.handle(
+        _prescriptionNamesJsonMeta,
+        prescriptionNamesJson.isAcceptableOrUnknown(
+          data['prescription_names_json']!,
+          _prescriptionNamesJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_prescriptionNamesJsonMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('recognized_at')) {
+      context.handle(
+        _recognizedAtMeta,
+        recognizedAt.isAcceptableOrUnknown(
+          data['recognized_at']!,
+          _recognizedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('resolved_at')) {
+      context.handle(
+        _resolvedAtMeta,
+        resolvedAt.isAcceptableOrUnknown(data['resolved_at']!, _resolvedAtMeta),
+      );
+    }
+    if (data.containsKey('resolution')) {
+      context.handle(
+        _resolutionMeta,
+        resolution.isAcceptableOrUnknown(data['resolution']!, _resolutionMeta),
+      );
+    }
+    if (data.containsKey('intended_audience')) {
+      context.handle(
+        _intendedAudienceMeta,
+        intendedAudience.isAcceptableOrUnknown(
+          data['intended_audience']!,
+          _intendedAudienceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('local_delivery_state')) {
+      context.handle(
+        _localDeliveryStateMeta,
+        localDeliveryState.isAcceptableOrUnknown(
+          data['local_delivery_state']!,
+          _localDeliveryStateMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_localDeliveryStateMeta);
+    }
+    if (data.containsKey('local_notification_sent_at')) {
+      context.handle(
+        _localNotificationSentAtMeta,
+        localNotificationSentAt.isAcceptableOrUnknown(
+          data['local_notification_sent_at']!,
+          _localNotificationSentAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('remote_delivery_state')) {
+      context.handle(
+        _remoteDeliveryStateMeta,
+        remoteDeliveryState.isAcceptableOrUnknown(
+          data['remote_delivery_state']!,
+          _remoteDeliveryStateMeta,
+        ),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MedicationShortageAlertRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MedicationShortageAlertRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      profileId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}profile_id'],
+      )!,
+      loadSessionId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}load_session_id'],
+      ),
+      slotNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}slot_number'],
+      )!,
+      bundleKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bundle_key'],
+      )!,
+      scheduledAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}scheduled_at'],
+      )!,
+      prescriptionIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prescription_ids_json'],
+      )!,
+      prescriptionNamesJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}prescription_names_json'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      recognizedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}recognized_at'],
+      ),
+      resolvedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}resolved_at'],
+      ),
+      resolution: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}resolution'],
+      ),
+      intendedAudience: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}intended_audience'],
+      )!,
+      localDeliveryState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}local_delivery_state'],
+      )!,
+      localNotificationSentAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}local_notification_sent_at'],
+      ),
+      remoteDeliveryState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}remote_delivery_state'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MedicationShortageAlertsTable createAlias(String alias) {
+    return $MedicationShortageAlertsTable(attachedDatabase, alias);
+  }
+}
+
+class MedicationShortageAlertRow extends DataClass
+    implements Insertable<MedicationShortageAlertRow> {
+  final String id;
+  final String profileId;
+  final String? loadSessionId;
+  final int slotNumber;
+  final String bundleKey;
+  final DateTime scheduledAt;
+  final String prescriptionIdsJson;
+  final String prescriptionNamesJson;
+  final String status;
+  final DateTime? recognizedAt;
+  final DateTime? resolvedAt;
+  final String? resolution;
+  final String intendedAudience;
+  final String localDeliveryState;
+  final DateTime? localNotificationSentAt;
+  final String remoteDeliveryState;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const MedicationShortageAlertRow({
+    required this.id,
+    required this.profileId,
+    this.loadSessionId,
+    required this.slotNumber,
+    required this.bundleKey,
+    required this.scheduledAt,
+    required this.prescriptionIdsJson,
+    required this.prescriptionNamesJson,
+    required this.status,
+    this.recognizedAt,
+    this.resolvedAt,
+    this.resolution,
+    required this.intendedAudience,
+    required this.localDeliveryState,
+    this.localNotificationSentAt,
+    required this.remoteDeliveryState,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['profile_id'] = Variable<String>(profileId);
+    if (!nullToAbsent || loadSessionId != null) {
+      map['load_session_id'] = Variable<String>(loadSessionId);
+    }
+    map['slot_number'] = Variable<int>(slotNumber);
+    map['bundle_key'] = Variable<String>(bundleKey);
+    map['scheduled_at'] = Variable<DateTime>(scheduledAt);
+    map['prescription_ids_json'] = Variable<String>(prescriptionIdsJson);
+    map['prescription_names_json'] = Variable<String>(prescriptionNamesJson);
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || recognizedAt != null) {
+      map['recognized_at'] = Variable<DateTime>(recognizedAt);
+    }
+    if (!nullToAbsent || resolvedAt != null) {
+      map['resolved_at'] = Variable<DateTime>(resolvedAt);
+    }
+    if (!nullToAbsent || resolution != null) {
+      map['resolution'] = Variable<String>(resolution);
+    }
+    map['intended_audience'] = Variable<String>(intendedAudience);
+    map['local_delivery_state'] = Variable<String>(localDeliveryState);
+    if (!nullToAbsent || localNotificationSentAt != null) {
+      map['local_notification_sent_at'] = Variable<DateTime>(
+        localNotificationSentAt,
+      );
+    }
+    map['remote_delivery_state'] = Variable<String>(remoteDeliveryState);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  MedicationShortageAlertsCompanion toCompanion(bool nullToAbsent) {
+    return MedicationShortageAlertsCompanion(
+      id: Value(id),
+      profileId: Value(profileId),
+      loadSessionId: loadSessionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(loadSessionId),
+      slotNumber: Value(slotNumber),
+      bundleKey: Value(bundleKey),
+      scheduledAt: Value(scheduledAt),
+      prescriptionIdsJson: Value(prescriptionIdsJson),
+      prescriptionNamesJson: Value(prescriptionNamesJson),
+      status: Value(status),
+      recognizedAt: recognizedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(recognizedAt),
+      resolvedAt: resolvedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resolvedAt),
+      resolution: resolution == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resolution),
+      intendedAudience: Value(intendedAudience),
+      localDeliveryState: Value(localDeliveryState),
+      localNotificationSentAt: localNotificationSentAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(localNotificationSentAt),
+      remoteDeliveryState: Value(remoteDeliveryState),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory MedicationShortageAlertRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MedicationShortageAlertRow(
+      id: serializer.fromJson<String>(json['id']),
+      profileId: serializer.fromJson<String>(json['profileId']),
+      loadSessionId: serializer.fromJson<String?>(json['loadSessionId']),
+      slotNumber: serializer.fromJson<int>(json['slotNumber']),
+      bundleKey: serializer.fromJson<String>(json['bundleKey']),
+      scheduledAt: serializer.fromJson<DateTime>(json['scheduledAt']),
+      prescriptionIdsJson: serializer.fromJson<String>(
+        json['prescriptionIdsJson'],
+      ),
+      prescriptionNamesJson: serializer.fromJson<String>(
+        json['prescriptionNamesJson'],
+      ),
+      status: serializer.fromJson<String>(json['status']),
+      recognizedAt: serializer.fromJson<DateTime?>(json['recognizedAt']),
+      resolvedAt: serializer.fromJson<DateTime?>(json['resolvedAt']),
+      resolution: serializer.fromJson<String?>(json['resolution']),
+      intendedAudience: serializer.fromJson<String>(json['intendedAudience']),
+      localDeliveryState: serializer.fromJson<String>(
+        json['localDeliveryState'],
+      ),
+      localNotificationSentAt: serializer.fromJson<DateTime?>(
+        json['localNotificationSentAt'],
+      ),
+      remoteDeliveryState: serializer.fromJson<String>(
+        json['remoteDeliveryState'],
+      ),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'profileId': serializer.toJson<String>(profileId),
+      'loadSessionId': serializer.toJson<String?>(loadSessionId),
+      'slotNumber': serializer.toJson<int>(slotNumber),
+      'bundleKey': serializer.toJson<String>(bundleKey),
+      'scheduledAt': serializer.toJson<DateTime>(scheduledAt),
+      'prescriptionIdsJson': serializer.toJson<String>(prescriptionIdsJson),
+      'prescriptionNamesJson': serializer.toJson<String>(prescriptionNamesJson),
+      'status': serializer.toJson<String>(status),
+      'recognizedAt': serializer.toJson<DateTime?>(recognizedAt),
+      'resolvedAt': serializer.toJson<DateTime?>(resolvedAt),
+      'resolution': serializer.toJson<String?>(resolution),
+      'intendedAudience': serializer.toJson<String>(intendedAudience),
+      'localDeliveryState': serializer.toJson<String>(localDeliveryState),
+      'localNotificationSentAt': serializer.toJson<DateTime?>(
+        localNotificationSentAt,
+      ),
+      'remoteDeliveryState': serializer.toJson<String>(remoteDeliveryState),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  MedicationShortageAlertRow copyWith({
+    String? id,
+    String? profileId,
+    Value<String?> loadSessionId = const Value.absent(),
+    int? slotNumber,
+    String? bundleKey,
+    DateTime? scheduledAt,
+    String? prescriptionIdsJson,
+    String? prescriptionNamesJson,
+    String? status,
+    Value<DateTime?> recognizedAt = const Value.absent(),
+    Value<DateTime?> resolvedAt = const Value.absent(),
+    Value<String?> resolution = const Value.absent(),
+    String? intendedAudience,
+    String? localDeliveryState,
+    Value<DateTime?> localNotificationSentAt = const Value.absent(),
+    String? remoteDeliveryState,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) => MedicationShortageAlertRow(
+    id: id ?? this.id,
+    profileId: profileId ?? this.profileId,
+    loadSessionId: loadSessionId.present
+        ? loadSessionId.value
+        : this.loadSessionId,
+    slotNumber: slotNumber ?? this.slotNumber,
+    bundleKey: bundleKey ?? this.bundleKey,
+    scheduledAt: scheduledAt ?? this.scheduledAt,
+    prescriptionIdsJson: prescriptionIdsJson ?? this.prescriptionIdsJson,
+    prescriptionNamesJson: prescriptionNamesJson ?? this.prescriptionNamesJson,
+    status: status ?? this.status,
+    recognizedAt: recognizedAt.present ? recognizedAt.value : this.recognizedAt,
+    resolvedAt: resolvedAt.present ? resolvedAt.value : this.resolvedAt,
+    resolution: resolution.present ? resolution.value : this.resolution,
+    intendedAudience: intendedAudience ?? this.intendedAudience,
+    localDeliveryState: localDeliveryState ?? this.localDeliveryState,
+    localNotificationSentAt: localNotificationSentAt.present
+        ? localNotificationSentAt.value
+        : this.localNotificationSentAt,
+    remoteDeliveryState: remoteDeliveryState ?? this.remoteDeliveryState,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  MedicationShortageAlertRow copyWithCompanion(
+    MedicationShortageAlertsCompanion data,
+  ) {
+    return MedicationShortageAlertRow(
+      id: data.id.present ? data.id.value : this.id,
+      profileId: data.profileId.present ? data.profileId.value : this.profileId,
+      loadSessionId: data.loadSessionId.present
+          ? data.loadSessionId.value
+          : this.loadSessionId,
+      slotNumber: data.slotNumber.present
+          ? data.slotNumber.value
+          : this.slotNumber,
+      bundleKey: data.bundleKey.present ? data.bundleKey.value : this.bundleKey,
+      scheduledAt: data.scheduledAt.present
+          ? data.scheduledAt.value
+          : this.scheduledAt,
+      prescriptionIdsJson: data.prescriptionIdsJson.present
+          ? data.prescriptionIdsJson.value
+          : this.prescriptionIdsJson,
+      prescriptionNamesJson: data.prescriptionNamesJson.present
+          ? data.prescriptionNamesJson.value
+          : this.prescriptionNamesJson,
+      status: data.status.present ? data.status.value : this.status,
+      recognizedAt: data.recognizedAt.present
+          ? data.recognizedAt.value
+          : this.recognizedAt,
+      resolvedAt: data.resolvedAt.present
+          ? data.resolvedAt.value
+          : this.resolvedAt,
+      resolution: data.resolution.present
+          ? data.resolution.value
+          : this.resolution,
+      intendedAudience: data.intendedAudience.present
+          ? data.intendedAudience.value
+          : this.intendedAudience,
+      localDeliveryState: data.localDeliveryState.present
+          ? data.localDeliveryState.value
+          : this.localDeliveryState,
+      localNotificationSentAt: data.localNotificationSentAt.present
+          ? data.localNotificationSentAt.value
+          : this.localNotificationSentAt,
+      remoteDeliveryState: data.remoteDeliveryState.present
+          ? data.remoteDeliveryState.value
+          : this.remoteDeliveryState,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MedicationShortageAlertRow(')
+          ..write('id: $id, ')
+          ..write('profileId: $profileId, ')
+          ..write('loadSessionId: $loadSessionId, ')
+          ..write('slotNumber: $slotNumber, ')
+          ..write('bundleKey: $bundleKey, ')
+          ..write('scheduledAt: $scheduledAt, ')
+          ..write('prescriptionIdsJson: $prescriptionIdsJson, ')
+          ..write('prescriptionNamesJson: $prescriptionNamesJson, ')
+          ..write('status: $status, ')
+          ..write('recognizedAt: $recognizedAt, ')
+          ..write('resolvedAt: $resolvedAt, ')
+          ..write('resolution: $resolution, ')
+          ..write('intendedAudience: $intendedAudience, ')
+          ..write('localDeliveryState: $localDeliveryState, ')
+          ..write('localNotificationSentAt: $localNotificationSentAt, ')
+          ..write('remoteDeliveryState: $remoteDeliveryState, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    profileId,
+    loadSessionId,
+    slotNumber,
+    bundleKey,
+    scheduledAt,
+    prescriptionIdsJson,
+    prescriptionNamesJson,
+    status,
+    recognizedAt,
+    resolvedAt,
+    resolution,
+    intendedAudience,
+    localDeliveryState,
+    localNotificationSentAt,
+    remoteDeliveryState,
+    createdAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MedicationShortageAlertRow &&
+          other.id == this.id &&
+          other.profileId == this.profileId &&
+          other.loadSessionId == this.loadSessionId &&
+          other.slotNumber == this.slotNumber &&
+          other.bundleKey == this.bundleKey &&
+          other.scheduledAt == this.scheduledAt &&
+          other.prescriptionIdsJson == this.prescriptionIdsJson &&
+          other.prescriptionNamesJson == this.prescriptionNamesJson &&
+          other.status == this.status &&
+          other.recognizedAt == this.recognizedAt &&
+          other.resolvedAt == this.resolvedAt &&
+          other.resolution == this.resolution &&
+          other.intendedAudience == this.intendedAudience &&
+          other.localDeliveryState == this.localDeliveryState &&
+          other.localNotificationSentAt == this.localNotificationSentAt &&
+          other.remoteDeliveryState == this.remoteDeliveryState &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MedicationShortageAlertsCompanion
+    extends UpdateCompanion<MedicationShortageAlertRow> {
+  final Value<String> id;
+  final Value<String> profileId;
+  final Value<String?> loadSessionId;
+  final Value<int> slotNumber;
+  final Value<String> bundleKey;
+  final Value<DateTime> scheduledAt;
+  final Value<String> prescriptionIdsJson;
+  final Value<String> prescriptionNamesJson;
+  final Value<String> status;
+  final Value<DateTime?> recognizedAt;
+  final Value<DateTime?> resolvedAt;
+  final Value<String?> resolution;
+  final Value<String> intendedAudience;
+  final Value<String> localDeliveryState;
+  final Value<DateTime?> localNotificationSentAt;
+  final Value<String> remoteDeliveryState;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const MedicationShortageAlertsCompanion({
+    this.id = const Value.absent(),
+    this.profileId = const Value.absent(),
+    this.loadSessionId = const Value.absent(),
+    this.slotNumber = const Value.absent(),
+    this.bundleKey = const Value.absent(),
+    this.scheduledAt = const Value.absent(),
+    this.prescriptionIdsJson = const Value.absent(),
+    this.prescriptionNamesJson = const Value.absent(),
+    this.status = const Value.absent(),
+    this.recognizedAt = const Value.absent(),
+    this.resolvedAt = const Value.absent(),
+    this.resolution = const Value.absent(),
+    this.intendedAudience = const Value.absent(),
+    this.localDeliveryState = const Value.absent(),
+    this.localNotificationSentAt = const Value.absent(),
+    this.remoteDeliveryState = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MedicationShortageAlertsCompanion.insert({
+    required String id,
+    required String profileId,
+    this.loadSessionId = const Value.absent(),
+    required int slotNumber,
+    required String bundleKey,
+    required DateTime scheduledAt,
+    required String prescriptionIdsJson,
+    required String prescriptionNamesJson,
+    required String status,
+    this.recognizedAt = const Value.absent(),
+    this.resolvedAt = const Value.absent(),
+    this.resolution = const Value.absent(),
+    this.intendedAudience = const Value.absent(),
+    required String localDeliveryState,
+    this.localNotificationSentAt = const Value.absent(),
+    this.remoteDeliveryState = const Value.absent(),
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       profileId = Value(profileId),
+       slotNumber = Value(slotNumber),
+       bundleKey = Value(bundleKey),
+       scheduledAt = Value(scheduledAt),
+       prescriptionIdsJson = Value(prescriptionIdsJson),
+       prescriptionNamesJson = Value(prescriptionNamesJson),
+       status = Value(status),
+       localDeliveryState = Value(localDeliveryState),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<MedicationShortageAlertRow> custom({
+    Expression<String>? id,
+    Expression<String>? profileId,
+    Expression<String>? loadSessionId,
+    Expression<int>? slotNumber,
+    Expression<String>? bundleKey,
+    Expression<DateTime>? scheduledAt,
+    Expression<String>? prescriptionIdsJson,
+    Expression<String>? prescriptionNamesJson,
+    Expression<String>? status,
+    Expression<DateTime>? recognizedAt,
+    Expression<DateTime>? resolvedAt,
+    Expression<String>? resolution,
+    Expression<String>? intendedAudience,
+    Expression<String>? localDeliveryState,
+    Expression<DateTime>? localNotificationSentAt,
+    Expression<String>? remoteDeliveryState,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (profileId != null) 'profile_id': profileId,
+      if (loadSessionId != null) 'load_session_id': loadSessionId,
+      if (slotNumber != null) 'slot_number': slotNumber,
+      if (bundleKey != null) 'bundle_key': bundleKey,
+      if (scheduledAt != null) 'scheduled_at': scheduledAt,
+      if (prescriptionIdsJson != null)
+        'prescription_ids_json': prescriptionIdsJson,
+      if (prescriptionNamesJson != null)
+        'prescription_names_json': prescriptionNamesJson,
+      if (status != null) 'status': status,
+      if (recognizedAt != null) 'recognized_at': recognizedAt,
+      if (resolvedAt != null) 'resolved_at': resolvedAt,
+      if (resolution != null) 'resolution': resolution,
+      if (intendedAudience != null) 'intended_audience': intendedAudience,
+      if (localDeliveryState != null)
+        'local_delivery_state': localDeliveryState,
+      if (localNotificationSentAt != null)
+        'local_notification_sent_at': localNotificationSentAt,
+      if (remoteDeliveryState != null)
+        'remote_delivery_state': remoteDeliveryState,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MedicationShortageAlertsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? profileId,
+    Value<String?>? loadSessionId,
+    Value<int>? slotNumber,
+    Value<String>? bundleKey,
+    Value<DateTime>? scheduledAt,
+    Value<String>? prescriptionIdsJson,
+    Value<String>? prescriptionNamesJson,
+    Value<String>? status,
+    Value<DateTime?>? recognizedAt,
+    Value<DateTime?>? resolvedAt,
+    Value<String?>? resolution,
+    Value<String>? intendedAudience,
+    Value<String>? localDeliveryState,
+    Value<DateTime?>? localNotificationSentAt,
+    Value<String>? remoteDeliveryState,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return MedicationShortageAlertsCompanion(
+      id: id ?? this.id,
+      profileId: profileId ?? this.profileId,
+      loadSessionId: loadSessionId ?? this.loadSessionId,
+      slotNumber: slotNumber ?? this.slotNumber,
+      bundleKey: bundleKey ?? this.bundleKey,
+      scheduledAt: scheduledAt ?? this.scheduledAt,
+      prescriptionIdsJson: prescriptionIdsJson ?? this.prescriptionIdsJson,
+      prescriptionNamesJson:
+          prescriptionNamesJson ?? this.prescriptionNamesJson,
+      status: status ?? this.status,
+      recognizedAt: recognizedAt ?? this.recognizedAt,
+      resolvedAt: resolvedAt ?? this.resolvedAt,
+      resolution: resolution ?? this.resolution,
+      intendedAudience: intendedAudience ?? this.intendedAudience,
+      localDeliveryState: localDeliveryState ?? this.localDeliveryState,
+      localNotificationSentAt:
+          localNotificationSentAt ?? this.localNotificationSentAt,
+      remoteDeliveryState: remoteDeliveryState ?? this.remoteDeliveryState,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (profileId.present) {
+      map['profile_id'] = Variable<String>(profileId.value);
+    }
+    if (loadSessionId.present) {
+      map['load_session_id'] = Variable<String>(loadSessionId.value);
+    }
+    if (slotNumber.present) {
+      map['slot_number'] = Variable<int>(slotNumber.value);
+    }
+    if (bundleKey.present) {
+      map['bundle_key'] = Variable<String>(bundleKey.value);
+    }
+    if (scheduledAt.present) {
+      map['scheduled_at'] = Variable<DateTime>(scheduledAt.value);
+    }
+    if (prescriptionIdsJson.present) {
+      map['prescription_ids_json'] = Variable<String>(
+        prescriptionIdsJson.value,
+      );
+    }
+    if (prescriptionNamesJson.present) {
+      map['prescription_names_json'] = Variable<String>(
+        prescriptionNamesJson.value,
+      );
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (recognizedAt.present) {
+      map['recognized_at'] = Variable<DateTime>(recognizedAt.value);
+    }
+    if (resolvedAt.present) {
+      map['resolved_at'] = Variable<DateTime>(resolvedAt.value);
+    }
+    if (resolution.present) {
+      map['resolution'] = Variable<String>(resolution.value);
+    }
+    if (intendedAudience.present) {
+      map['intended_audience'] = Variable<String>(intendedAudience.value);
+    }
+    if (localDeliveryState.present) {
+      map['local_delivery_state'] = Variable<String>(localDeliveryState.value);
+    }
+    if (localNotificationSentAt.present) {
+      map['local_notification_sent_at'] = Variable<DateTime>(
+        localNotificationSentAt.value,
+      );
+    }
+    if (remoteDeliveryState.present) {
+      map['remote_delivery_state'] = Variable<String>(
+        remoteDeliveryState.value,
+      );
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MedicationShortageAlertsCompanion(')
+          ..write('id: $id, ')
+          ..write('profileId: $profileId, ')
+          ..write('loadSessionId: $loadSessionId, ')
+          ..write('slotNumber: $slotNumber, ')
+          ..write('bundleKey: $bundleKey, ')
+          ..write('scheduledAt: $scheduledAt, ')
+          ..write('prescriptionIdsJson: $prescriptionIdsJson, ')
+          ..write('prescriptionNamesJson: $prescriptionNamesJson, ')
+          ..write('status: $status, ')
+          ..write('recognizedAt: $recognizedAt, ')
+          ..write('resolvedAt: $resolvedAt, ')
+          ..write('resolution: $resolution, ')
+          ..write('intendedAudience: $intendedAudience, ')
+          ..write('localDeliveryState: $localDeliveryState, ')
+          ..write('localNotificationSentAt: $localNotificationSentAt, ')
+          ..write('remoteDeliveryState: $remoteDeliveryState, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -5349,6 +9106,13 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     this,
   );
   late final $CarouselSlotsTable carouselSlots = $CarouselSlotsTable(this);
+  late final $CarouselLoadSessionsTable carouselLoadSessions =
+      $CarouselLoadSessionsTable(this);
+  late final $CarouselLoadSlotSnapshotsTable carouselLoadSlotSnapshots =
+      $CarouselLoadSlotSnapshotsTable(this);
+  late final $CarouselStatesTable carouselStates = $CarouselStatesTable(this);
+  late final $MedicationShortageAlertsTable medicationShortageAlerts =
+      $MedicationShortageAlertsTable(this);
   late final $AuthSessionsTable authSessions = $AuthSessionsTable(this);
   late final $DoseLogEventsTable doseLogEvents = $DoseLogEventsTable(this);
   late final $ControllerCommandSessionsTable controllerCommandSessions =
@@ -5369,6 +9133,10 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     prescriptionRefills,
     scheduleProfiles,
     carouselSlots,
+    carouselLoadSessions,
+    carouselLoadSlotSnapshots,
+    carouselStates,
+    medicationShortageAlerts,
     authSessions,
     doseLogEvents,
     controllerCommandSessions,
@@ -5836,6 +9604,14 @@ typedef $$PrescriptionsTableCreateCompanionBuilder =
       required String name,
       required String pillType,
       Value<int> remainingDoses,
+      Value<String> guidedPillIcon,
+      Value<int> availableDoses,
+      Value<int> loadedDoses,
+      Value<int> usedDoses,
+      Value<int> reviewDoses,
+      Value<int> defaultRefillQuantity,
+      Value<int> defaultDoseCountPerDose,
+      Value<String> doseInstructions,
       Value<int> refillThreshold,
       required DateTime createdAt,
       required DateTime updatedAt,
@@ -5847,6 +9623,14 @@ typedef $$PrescriptionsTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String> pillType,
       Value<int> remainingDoses,
+      Value<String> guidedPillIcon,
+      Value<int> availableDoses,
+      Value<int> loadedDoses,
+      Value<int> usedDoses,
+      Value<int> reviewDoses,
+      Value<int> defaultRefillQuantity,
+      Value<int> defaultDoseCountPerDose,
+      Value<String> doseInstructions,
       Value<int> refillThreshold,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -5879,6 +9663,46 @@ class $$PrescriptionsTableFilterComposer
 
   ColumnFilters<int> get remainingDoses => $composableBuilder(
     column: $table.remainingDoses,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get guidedPillIcon => $composableBuilder(
+    column: $table.guidedPillIcon,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get availableDoses => $composableBuilder(
+    column: $table.availableDoses,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get loadedDoses => $composableBuilder(
+    column: $table.loadedDoses,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get usedDoses => $composableBuilder(
+    column: $table.usedDoses,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get reviewDoses => $composableBuilder(
+    column: $table.reviewDoses,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get defaultRefillQuantity => $composableBuilder(
+    column: $table.defaultRefillQuantity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get defaultDoseCountPerDose => $composableBuilder(
+    column: $table.defaultDoseCountPerDose,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get doseInstructions => $composableBuilder(
+    column: $table.doseInstructions,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5927,6 +9751,46 @@ class $$PrescriptionsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get guidedPillIcon => $composableBuilder(
+    column: $table.guidedPillIcon,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get availableDoses => $composableBuilder(
+    column: $table.availableDoses,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get loadedDoses => $composableBuilder(
+    column: $table.loadedDoses,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get usedDoses => $composableBuilder(
+    column: $table.usedDoses,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get reviewDoses => $composableBuilder(
+    column: $table.reviewDoses,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get defaultRefillQuantity => $composableBuilder(
+    column: $table.defaultRefillQuantity,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get defaultDoseCountPerDose => $composableBuilder(
+    column: $table.defaultDoseCountPerDose,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get doseInstructions => $composableBuilder(
+    column: $table.doseInstructions,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get refillThreshold => $composableBuilder(
     column: $table.refillThreshold,
     builder: (column) => ColumnOrderings(column),
@@ -5963,6 +9827,44 @@ class $$PrescriptionsTableAnnotationComposer
 
   GeneratedColumn<int> get remainingDoses => $composableBuilder(
     column: $table.remainingDoses,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get guidedPillIcon => $composableBuilder(
+    column: $table.guidedPillIcon,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get availableDoses => $composableBuilder(
+    column: $table.availableDoses,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get loadedDoses => $composableBuilder(
+    column: $table.loadedDoses,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get usedDoses =>
+      $composableBuilder(column: $table.usedDoses, builder: (column) => column);
+
+  GeneratedColumn<int> get reviewDoses => $composableBuilder(
+    column: $table.reviewDoses,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get defaultRefillQuantity => $composableBuilder(
+    column: $table.defaultRefillQuantity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get defaultDoseCountPerDose => $composableBuilder(
+    column: $table.defaultDoseCountPerDose,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get doseInstructions => $composableBuilder(
+    column: $table.doseInstructions,
     builder: (column) => column,
   );
 
@@ -6019,6 +9921,14 @@ class $$PrescriptionsTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> pillType = const Value.absent(),
                 Value<int> remainingDoses = const Value.absent(),
+                Value<String> guidedPillIcon = const Value.absent(),
+                Value<int> availableDoses = const Value.absent(),
+                Value<int> loadedDoses = const Value.absent(),
+                Value<int> usedDoses = const Value.absent(),
+                Value<int> reviewDoses = const Value.absent(),
+                Value<int> defaultRefillQuantity = const Value.absent(),
+                Value<int> defaultDoseCountPerDose = const Value.absent(),
+                Value<String> doseInstructions = const Value.absent(),
                 Value<int> refillThreshold = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -6028,6 +9938,14 @@ class $$PrescriptionsTableTableManager
                 name: name,
                 pillType: pillType,
                 remainingDoses: remainingDoses,
+                guidedPillIcon: guidedPillIcon,
+                availableDoses: availableDoses,
+                loadedDoses: loadedDoses,
+                usedDoses: usedDoses,
+                reviewDoses: reviewDoses,
+                defaultRefillQuantity: defaultRefillQuantity,
+                defaultDoseCountPerDose: defaultDoseCountPerDose,
+                doseInstructions: doseInstructions,
                 refillThreshold: refillThreshold,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -6039,6 +9957,14 @@ class $$PrescriptionsTableTableManager
                 required String name,
                 required String pillType,
                 Value<int> remainingDoses = const Value.absent(),
+                Value<String> guidedPillIcon = const Value.absent(),
+                Value<int> availableDoses = const Value.absent(),
+                Value<int> loadedDoses = const Value.absent(),
+                Value<int> usedDoses = const Value.absent(),
+                Value<int> reviewDoses = const Value.absent(),
+                Value<int> defaultRefillQuantity = const Value.absent(),
+                Value<int> defaultDoseCountPerDose = const Value.absent(),
+                Value<String> doseInstructions = const Value.absent(),
                 Value<int> refillThreshold = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
@@ -6048,6 +9974,14 @@ class $$PrescriptionsTableTableManager
                 name: name,
                 pillType: pillType,
                 remainingDoses: remainingDoses,
+                guidedPillIcon: guidedPillIcon,
+                availableDoses: availableDoses,
+                loadedDoses: loadedDoses,
+                usedDoses: usedDoses,
+                reviewDoses: reviewDoses,
+                defaultRefillQuantity: defaultRefillQuantity,
+                defaultDoseCountPerDose: defaultDoseCountPerDose,
+                doseInstructions: doseInstructions,
                 refillThreshold: refillThreshold,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -6796,6 +10730,1574 @@ typedef $$CarouselSlotsTableProcessedTableManager =
         BaseReferences<_$DoseyDatabase, $CarouselSlotsTable, CarouselSlotRow>,
       ),
       CarouselSlotRow,
+      PrefetchHooks Function()
+    >;
+typedef $$CarouselLoadSessionsTableCreateCompanionBuilder =
+    CarouselLoadSessionsCompanion Function({
+      required String id,
+      required String profileId,
+      required String mode,
+      required String status,
+      Value<String?> predecessorSessionId,
+      Value<DateTime?> planCreatedAt,
+      Value<DateTime?> startedAt,
+      Value<DateTime?> confirmedAt,
+      Value<DateTime?> staleAt,
+      Value<String?> staleReason,
+      Value<DateTime?> supersededAt,
+      Value<String?> supersededReason,
+      required int positionBefore,
+      required int positionAfter,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$CarouselLoadSessionsTableUpdateCompanionBuilder =
+    CarouselLoadSessionsCompanion Function({
+      Value<String> id,
+      Value<String> profileId,
+      Value<String> mode,
+      Value<String> status,
+      Value<String?> predecessorSessionId,
+      Value<DateTime?> planCreatedAt,
+      Value<DateTime?> startedAt,
+      Value<DateTime?> confirmedAt,
+      Value<DateTime?> staleAt,
+      Value<String?> staleReason,
+      Value<DateTime?> supersededAt,
+      Value<String?> supersededReason,
+      Value<int> positionBefore,
+      Value<int> positionAfter,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$CarouselLoadSessionsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $CarouselLoadSessionsTable> {
+  $$CarouselLoadSessionsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mode => $composableBuilder(
+    column: $table.mode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get predecessorSessionId => $composableBuilder(
+    column: $table.predecessorSessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get planCreatedAt => $composableBuilder(
+    column: $table.planCreatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get confirmedAt => $composableBuilder(
+    column: $table.confirmedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get staleAt => $composableBuilder(
+    column: $table.staleAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get staleReason => $composableBuilder(
+    column: $table.staleReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get supersededAt => $composableBuilder(
+    column: $table.supersededAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get supersededReason => $composableBuilder(
+    column: $table.supersededReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get positionBefore => $composableBuilder(
+    column: $table.positionBefore,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get positionAfter => $composableBuilder(
+    column: $table.positionAfter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CarouselLoadSessionsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $CarouselLoadSessionsTable> {
+  $$CarouselLoadSessionsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mode => $composableBuilder(
+    column: $table.mode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get predecessorSessionId => $composableBuilder(
+    column: $table.predecessorSessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get planCreatedAt => $composableBuilder(
+    column: $table.planCreatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get confirmedAt => $composableBuilder(
+    column: $table.confirmedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get staleAt => $composableBuilder(
+    column: $table.staleAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get staleReason => $composableBuilder(
+    column: $table.staleReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get supersededAt => $composableBuilder(
+    column: $table.supersededAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get supersededReason => $composableBuilder(
+    column: $table.supersededReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get positionBefore => $composableBuilder(
+    column: $table.positionBefore,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get positionAfter => $composableBuilder(
+    column: $table.positionAfter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CarouselLoadSessionsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $CarouselLoadSessionsTable> {
+  $$CarouselLoadSessionsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get profileId =>
+      $composableBuilder(column: $table.profileId, builder: (column) => column);
+
+  GeneratedColumn<String> get mode =>
+      $composableBuilder(column: $table.mode, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get predecessorSessionId => $composableBuilder(
+    column: $table.predecessorSessionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get planCreatedAt => $composableBuilder(
+    column: $table.planCreatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get confirmedAt => $composableBuilder(
+    column: $table.confirmedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get staleAt =>
+      $composableBuilder(column: $table.staleAt, builder: (column) => column);
+
+  GeneratedColumn<String> get staleReason => $composableBuilder(
+    column: $table.staleReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get supersededAt => $composableBuilder(
+    column: $table.supersededAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get supersededReason => $composableBuilder(
+    column: $table.supersededReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get positionBefore => $composableBuilder(
+    column: $table.positionBefore,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get positionAfter => $composableBuilder(
+    column: $table.positionAfter,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CarouselLoadSessionsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $CarouselLoadSessionsTable,
+          CarouselLoadSessionRow,
+          $$CarouselLoadSessionsTableFilterComposer,
+          $$CarouselLoadSessionsTableOrderingComposer,
+          $$CarouselLoadSessionsTableAnnotationComposer,
+          $$CarouselLoadSessionsTableCreateCompanionBuilder,
+          $$CarouselLoadSessionsTableUpdateCompanionBuilder,
+          (
+            CarouselLoadSessionRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $CarouselLoadSessionsTable,
+              CarouselLoadSessionRow
+            >,
+          ),
+          CarouselLoadSessionRow,
+          PrefetchHooks Function()
+        > {
+  $$CarouselLoadSessionsTableTableManager(
+    _$DoseyDatabase db,
+    $CarouselLoadSessionsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CarouselLoadSessionsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CarouselLoadSessionsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CarouselLoadSessionsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> profileId = const Value.absent(),
+                Value<String> mode = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String?> predecessorSessionId = const Value.absent(),
+                Value<DateTime?> planCreatedAt = const Value.absent(),
+                Value<DateTime?> startedAt = const Value.absent(),
+                Value<DateTime?> confirmedAt = const Value.absent(),
+                Value<DateTime?> staleAt = const Value.absent(),
+                Value<String?> staleReason = const Value.absent(),
+                Value<DateTime?> supersededAt = const Value.absent(),
+                Value<String?> supersededReason = const Value.absent(),
+                Value<int> positionBefore = const Value.absent(),
+                Value<int> positionAfter = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CarouselLoadSessionsCompanion(
+                id: id,
+                profileId: profileId,
+                mode: mode,
+                status: status,
+                predecessorSessionId: predecessorSessionId,
+                planCreatedAt: planCreatedAt,
+                startedAt: startedAt,
+                confirmedAt: confirmedAt,
+                staleAt: staleAt,
+                staleReason: staleReason,
+                supersededAt: supersededAt,
+                supersededReason: supersededReason,
+                positionBefore: positionBefore,
+                positionAfter: positionAfter,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String profileId,
+                required String mode,
+                required String status,
+                Value<String?> predecessorSessionId = const Value.absent(),
+                Value<DateTime?> planCreatedAt = const Value.absent(),
+                Value<DateTime?> startedAt = const Value.absent(),
+                Value<DateTime?> confirmedAt = const Value.absent(),
+                Value<DateTime?> staleAt = const Value.absent(),
+                Value<String?> staleReason = const Value.absent(),
+                Value<DateTime?> supersededAt = const Value.absent(),
+                Value<String?> supersededReason = const Value.absent(),
+                required int positionBefore,
+                required int positionAfter,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CarouselLoadSessionsCompanion.insert(
+                id: id,
+                profileId: profileId,
+                mode: mode,
+                status: status,
+                predecessorSessionId: predecessorSessionId,
+                planCreatedAt: planCreatedAt,
+                startedAt: startedAt,
+                confirmedAt: confirmedAt,
+                staleAt: staleAt,
+                staleReason: staleReason,
+                supersededAt: supersededAt,
+                supersededReason: supersededReason,
+                positionBefore: positionBefore,
+                positionAfter: positionAfter,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CarouselLoadSessionsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $CarouselLoadSessionsTable,
+      CarouselLoadSessionRow,
+      $$CarouselLoadSessionsTableFilterComposer,
+      $$CarouselLoadSessionsTableOrderingComposer,
+      $$CarouselLoadSessionsTableAnnotationComposer,
+      $$CarouselLoadSessionsTableCreateCompanionBuilder,
+      $$CarouselLoadSessionsTableUpdateCompanionBuilder,
+      (
+        CarouselLoadSessionRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $CarouselLoadSessionsTable,
+          CarouselLoadSessionRow
+        >,
+      ),
+      CarouselLoadSessionRow,
+      PrefetchHooks Function()
+    >;
+typedef $$CarouselLoadSlotSnapshotsTableCreateCompanionBuilder =
+    CarouselLoadSlotSnapshotsCompanion Function({
+      required String id,
+      required String sessionId,
+      required int slotNumber,
+      required String status,
+      Value<DateTime?> scheduledAt,
+      Value<String?> bundleKey,
+      required String scheduleIdsJson,
+      required String prescriptionIdsJson,
+      required String prescriptionNamesJson,
+      required String pillIconsJson,
+      required String doseInstructionsJson,
+      Value<DateTime?> loadedAt,
+      Value<DateTime?> movedAt,
+      Value<DateTime?> resolvedAt,
+      Value<String?> reviewReason,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$CarouselLoadSlotSnapshotsTableUpdateCompanionBuilder =
+    CarouselLoadSlotSnapshotsCompanion Function({
+      Value<String> id,
+      Value<String> sessionId,
+      Value<int> slotNumber,
+      Value<String> status,
+      Value<DateTime?> scheduledAt,
+      Value<String?> bundleKey,
+      Value<String> scheduleIdsJson,
+      Value<String> prescriptionIdsJson,
+      Value<String> prescriptionNamesJson,
+      Value<String> pillIconsJson,
+      Value<String> doseInstructionsJson,
+      Value<DateTime?> loadedAt,
+      Value<DateTime?> movedAt,
+      Value<DateTime?> resolvedAt,
+      Value<String?> reviewReason,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$CarouselLoadSlotSnapshotsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $CarouselLoadSlotSnapshotsTable> {
+  $$CarouselLoadSlotSnapshotsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get slotNumber => $composableBuilder(
+    column: $table.slotNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get scheduledAt => $composableBuilder(
+    column: $table.scheduledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bundleKey => $composableBuilder(
+    column: $table.bundleKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get scheduleIdsJson => $composableBuilder(
+    column: $table.scheduleIdsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prescriptionIdsJson => $composableBuilder(
+    column: $table.prescriptionIdsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prescriptionNamesJson => $composableBuilder(
+    column: $table.prescriptionNamesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pillIconsJson => $composableBuilder(
+    column: $table.pillIconsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get doseInstructionsJson => $composableBuilder(
+    column: $table.doseInstructionsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get loadedAt => $composableBuilder(
+    column: $table.loadedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get movedAt => $composableBuilder(
+    column: $table.movedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get resolvedAt => $composableBuilder(
+    column: $table.resolvedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reviewReason => $composableBuilder(
+    column: $table.reviewReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CarouselLoadSlotSnapshotsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $CarouselLoadSlotSnapshotsTable> {
+  $$CarouselLoadSlotSnapshotsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sessionId => $composableBuilder(
+    column: $table.sessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get slotNumber => $composableBuilder(
+    column: $table.slotNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get scheduledAt => $composableBuilder(
+    column: $table.scheduledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bundleKey => $composableBuilder(
+    column: $table.bundleKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get scheduleIdsJson => $composableBuilder(
+    column: $table.scheduleIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get prescriptionIdsJson => $composableBuilder(
+    column: $table.prescriptionIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get prescriptionNamesJson => $composableBuilder(
+    column: $table.prescriptionNamesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pillIconsJson => $composableBuilder(
+    column: $table.pillIconsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get doseInstructionsJson => $composableBuilder(
+    column: $table.doseInstructionsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get loadedAt => $composableBuilder(
+    column: $table.loadedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get movedAt => $composableBuilder(
+    column: $table.movedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get resolvedAt => $composableBuilder(
+    column: $table.resolvedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reviewReason => $composableBuilder(
+    column: $table.reviewReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CarouselLoadSlotSnapshotsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $CarouselLoadSlotSnapshotsTable> {
+  $$CarouselLoadSlotSnapshotsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionId =>
+      $composableBuilder(column: $table.sessionId, builder: (column) => column);
+
+  GeneratedColumn<int> get slotNumber => $composableBuilder(
+    column: $table.slotNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get scheduledAt => $composableBuilder(
+    column: $table.scheduledAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get bundleKey =>
+      $composableBuilder(column: $table.bundleKey, builder: (column) => column);
+
+  GeneratedColumn<String> get scheduleIdsJson => $composableBuilder(
+    column: $table.scheduleIdsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get prescriptionIdsJson => $composableBuilder(
+    column: $table.prescriptionIdsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get prescriptionNamesJson => $composableBuilder(
+    column: $table.prescriptionNamesJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get pillIconsJson => $composableBuilder(
+    column: $table.pillIconsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get doseInstructionsJson => $composableBuilder(
+    column: $table.doseInstructionsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get loadedAt =>
+      $composableBuilder(column: $table.loadedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get movedAt =>
+      $composableBuilder(column: $table.movedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get resolvedAt => $composableBuilder(
+    column: $table.resolvedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get reviewReason => $composableBuilder(
+    column: $table.reviewReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$CarouselLoadSlotSnapshotsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $CarouselLoadSlotSnapshotsTable,
+          CarouselLoadSlotSnapshotRow,
+          $$CarouselLoadSlotSnapshotsTableFilterComposer,
+          $$CarouselLoadSlotSnapshotsTableOrderingComposer,
+          $$CarouselLoadSlotSnapshotsTableAnnotationComposer,
+          $$CarouselLoadSlotSnapshotsTableCreateCompanionBuilder,
+          $$CarouselLoadSlotSnapshotsTableUpdateCompanionBuilder,
+          (
+            CarouselLoadSlotSnapshotRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $CarouselLoadSlotSnapshotsTable,
+              CarouselLoadSlotSnapshotRow
+            >,
+          ),
+          CarouselLoadSlotSnapshotRow,
+          PrefetchHooks Function()
+        > {
+  $$CarouselLoadSlotSnapshotsTableTableManager(
+    _$DoseyDatabase db,
+    $CarouselLoadSlotSnapshotsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CarouselLoadSlotSnapshotsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CarouselLoadSlotSnapshotsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CarouselLoadSlotSnapshotsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> sessionId = const Value.absent(),
+                Value<int> slotNumber = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime?> scheduledAt = const Value.absent(),
+                Value<String?> bundleKey = const Value.absent(),
+                Value<String> scheduleIdsJson = const Value.absent(),
+                Value<String> prescriptionIdsJson = const Value.absent(),
+                Value<String> prescriptionNamesJson = const Value.absent(),
+                Value<String> pillIconsJson = const Value.absent(),
+                Value<String> doseInstructionsJson = const Value.absent(),
+                Value<DateTime?> loadedAt = const Value.absent(),
+                Value<DateTime?> movedAt = const Value.absent(),
+                Value<DateTime?> resolvedAt = const Value.absent(),
+                Value<String?> reviewReason = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CarouselLoadSlotSnapshotsCompanion(
+                id: id,
+                sessionId: sessionId,
+                slotNumber: slotNumber,
+                status: status,
+                scheduledAt: scheduledAt,
+                bundleKey: bundleKey,
+                scheduleIdsJson: scheduleIdsJson,
+                prescriptionIdsJson: prescriptionIdsJson,
+                prescriptionNamesJson: prescriptionNamesJson,
+                pillIconsJson: pillIconsJson,
+                doseInstructionsJson: doseInstructionsJson,
+                loadedAt: loadedAt,
+                movedAt: movedAt,
+                resolvedAt: resolvedAt,
+                reviewReason: reviewReason,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String sessionId,
+                required int slotNumber,
+                required String status,
+                Value<DateTime?> scheduledAt = const Value.absent(),
+                Value<String?> bundleKey = const Value.absent(),
+                required String scheduleIdsJson,
+                required String prescriptionIdsJson,
+                required String prescriptionNamesJson,
+                required String pillIconsJson,
+                required String doseInstructionsJson,
+                Value<DateTime?> loadedAt = const Value.absent(),
+                Value<DateTime?> movedAt = const Value.absent(),
+                Value<DateTime?> resolvedAt = const Value.absent(),
+                Value<String?> reviewReason = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CarouselLoadSlotSnapshotsCompanion.insert(
+                id: id,
+                sessionId: sessionId,
+                slotNumber: slotNumber,
+                status: status,
+                scheduledAt: scheduledAt,
+                bundleKey: bundleKey,
+                scheduleIdsJson: scheduleIdsJson,
+                prescriptionIdsJson: prescriptionIdsJson,
+                prescriptionNamesJson: prescriptionNamesJson,
+                pillIconsJson: pillIconsJson,
+                doseInstructionsJson: doseInstructionsJson,
+                loadedAt: loadedAt,
+                movedAt: movedAt,
+                resolvedAt: resolvedAt,
+                reviewReason: reviewReason,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CarouselLoadSlotSnapshotsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $CarouselLoadSlotSnapshotsTable,
+      CarouselLoadSlotSnapshotRow,
+      $$CarouselLoadSlotSnapshotsTableFilterComposer,
+      $$CarouselLoadSlotSnapshotsTableOrderingComposer,
+      $$CarouselLoadSlotSnapshotsTableAnnotationComposer,
+      $$CarouselLoadSlotSnapshotsTableCreateCompanionBuilder,
+      $$CarouselLoadSlotSnapshotsTableUpdateCompanionBuilder,
+      (
+        CarouselLoadSlotSnapshotRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $CarouselLoadSlotSnapshotsTable,
+          CarouselLoadSlotSnapshotRow
+        >,
+      ),
+      CarouselLoadSlotSnapshotRow,
+      PrefetchHooks Function()
+    >;
+typedef $$CarouselStatesTableCreateCompanionBuilder =
+    CarouselStatesCompanion Function({
+      required String profileId,
+      Value<String?> activeLoadSessionId,
+      Value<int> currentPosition,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$CarouselStatesTableUpdateCompanionBuilder =
+    CarouselStatesCompanion Function({
+      Value<String> profileId,
+      Value<String?> activeLoadSessionId,
+      Value<int> currentPosition,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$CarouselStatesTableFilterComposer
+    extends Composer<_$DoseyDatabase, $CarouselStatesTable> {
+  $$CarouselStatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get activeLoadSessionId => $composableBuilder(
+    column: $table.activeLoadSessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get currentPosition => $composableBuilder(
+    column: $table.currentPosition,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CarouselStatesTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $CarouselStatesTable> {
+  $$CarouselStatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get activeLoadSessionId => $composableBuilder(
+    column: $table.activeLoadSessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get currentPosition => $composableBuilder(
+    column: $table.currentPosition,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CarouselStatesTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $CarouselStatesTable> {
+  $$CarouselStatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get profileId =>
+      $composableBuilder(column: $table.profileId, builder: (column) => column);
+
+  GeneratedColumn<String> get activeLoadSessionId => $composableBuilder(
+    column: $table.activeLoadSessionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get currentPosition => $composableBuilder(
+    column: $table.currentPosition,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$CarouselStatesTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $CarouselStatesTable,
+          CarouselStateRow,
+          $$CarouselStatesTableFilterComposer,
+          $$CarouselStatesTableOrderingComposer,
+          $$CarouselStatesTableAnnotationComposer,
+          $$CarouselStatesTableCreateCompanionBuilder,
+          $$CarouselStatesTableUpdateCompanionBuilder,
+          (
+            CarouselStateRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $CarouselStatesTable,
+              CarouselStateRow
+            >,
+          ),
+          CarouselStateRow,
+          PrefetchHooks Function()
+        > {
+  $$CarouselStatesTableTableManager(
+    _$DoseyDatabase db,
+    $CarouselStatesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CarouselStatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CarouselStatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CarouselStatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> profileId = const Value.absent(),
+                Value<String?> activeLoadSessionId = const Value.absent(),
+                Value<int> currentPosition = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CarouselStatesCompanion(
+                profileId: profileId,
+                activeLoadSessionId: activeLoadSessionId,
+                currentPosition: currentPosition,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String profileId,
+                Value<String?> activeLoadSessionId = const Value.absent(),
+                Value<int> currentPosition = const Value.absent(),
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CarouselStatesCompanion.insert(
+                profileId: profileId,
+                activeLoadSessionId: activeLoadSessionId,
+                currentPosition: currentPosition,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CarouselStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $CarouselStatesTable,
+      CarouselStateRow,
+      $$CarouselStatesTableFilterComposer,
+      $$CarouselStatesTableOrderingComposer,
+      $$CarouselStatesTableAnnotationComposer,
+      $$CarouselStatesTableCreateCompanionBuilder,
+      $$CarouselStatesTableUpdateCompanionBuilder,
+      (
+        CarouselStateRow,
+        BaseReferences<_$DoseyDatabase, $CarouselStatesTable, CarouselStateRow>,
+      ),
+      CarouselStateRow,
+      PrefetchHooks Function()
+    >;
+typedef $$MedicationShortageAlertsTableCreateCompanionBuilder =
+    MedicationShortageAlertsCompanion Function({
+      required String id,
+      required String profileId,
+      Value<String?> loadSessionId,
+      required int slotNumber,
+      required String bundleKey,
+      required DateTime scheduledAt,
+      required String prescriptionIdsJson,
+      required String prescriptionNamesJson,
+      required String status,
+      Value<DateTime?> recognizedAt,
+      Value<DateTime?> resolvedAt,
+      Value<String?> resolution,
+      Value<String> intendedAudience,
+      required String localDeliveryState,
+      Value<DateTime?> localNotificationSentAt,
+      Value<String> remoteDeliveryState,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$MedicationShortageAlertsTableUpdateCompanionBuilder =
+    MedicationShortageAlertsCompanion Function({
+      Value<String> id,
+      Value<String> profileId,
+      Value<String?> loadSessionId,
+      Value<int> slotNumber,
+      Value<String> bundleKey,
+      Value<DateTime> scheduledAt,
+      Value<String> prescriptionIdsJson,
+      Value<String> prescriptionNamesJson,
+      Value<String> status,
+      Value<DateTime?> recognizedAt,
+      Value<DateTime?> resolvedAt,
+      Value<String?> resolution,
+      Value<String> intendedAudience,
+      Value<String> localDeliveryState,
+      Value<DateTime?> localNotificationSentAt,
+      Value<String> remoteDeliveryState,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$MedicationShortageAlertsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $MedicationShortageAlertsTable> {
+  $$MedicationShortageAlertsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get loadSessionId => $composableBuilder(
+    column: $table.loadSessionId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get slotNumber => $composableBuilder(
+    column: $table.slotNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bundleKey => $composableBuilder(
+    column: $table.bundleKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get scheduledAt => $composableBuilder(
+    column: $table.scheduledAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prescriptionIdsJson => $composableBuilder(
+    column: $table.prescriptionIdsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get prescriptionNamesJson => $composableBuilder(
+    column: $table.prescriptionNamesJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get recognizedAt => $composableBuilder(
+    column: $table.recognizedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get resolvedAt => $composableBuilder(
+    column: $table.resolvedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get resolution => $composableBuilder(
+    column: $table.resolution,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get intendedAudience => $composableBuilder(
+    column: $table.intendedAudience,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get localDeliveryState => $composableBuilder(
+    column: $table.localDeliveryState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get localNotificationSentAt => $composableBuilder(
+    column: $table.localNotificationSentAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get remoteDeliveryState => $composableBuilder(
+    column: $table.remoteDeliveryState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MedicationShortageAlertsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $MedicationShortageAlertsTable> {
+  $$MedicationShortageAlertsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get loadSessionId => $composableBuilder(
+    column: $table.loadSessionId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get slotNumber => $composableBuilder(
+    column: $table.slotNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bundleKey => $composableBuilder(
+    column: $table.bundleKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get scheduledAt => $composableBuilder(
+    column: $table.scheduledAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get prescriptionIdsJson => $composableBuilder(
+    column: $table.prescriptionIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get prescriptionNamesJson => $composableBuilder(
+    column: $table.prescriptionNamesJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get recognizedAt => $composableBuilder(
+    column: $table.recognizedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get resolvedAt => $composableBuilder(
+    column: $table.resolvedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get resolution => $composableBuilder(
+    column: $table.resolution,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get intendedAudience => $composableBuilder(
+    column: $table.intendedAudience,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get localDeliveryState => $composableBuilder(
+    column: $table.localDeliveryState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get localNotificationSentAt => $composableBuilder(
+    column: $table.localNotificationSentAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get remoteDeliveryState => $composableBuilder(
+    column: $table.remoteDeliveryState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MedicationShortageAlertsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $MedicationShortageAlertsTable> {
+  $$MedicationShortageAlertsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get profileId =>
+      $composableBuilder(column: $table.profileId, builder: (column) => column);
+
+  GeneratedColumn<String> get loadSessionId => $composableBuilder(
+    column: $table.loadSessionId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get slotNumber => $composableBuilder(
+    column: $table.slotNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get bundleKey =>
+      $composableBuilder(column: $table.bundleKey, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get scheduledAt => $composableBuilder(
+    column: $table.scheduledAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get prescriptionIdsJson => $composableBuilder(
+    column: $table.prescriptionIdsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get prescriptionNamesJson => $composableBuilder(
+    column: $table.prescriptionNamesJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get recognizedAt => $composableBuilder(
+    column: $table.recognizedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get resolvedAt => $composableBuilder(
+    column: $table.resolvedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get resolution => $composableBuilder(
+    column: $table.resolution,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get intendedAudience => $composableBuilder(
+    column: $table.intendedAudience,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get localDeliveryState => $composableBuilder(
+    column: $table.localDeliveryState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get localNotificationSentAt => $composableBuilder(
+    column: $table.localNotificationSentAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get remoteDeliveryState => $composableBuilder(
+    column: $table.remoteDeliveryState,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$MedicationShortageAlertsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $MedicationShortageAlertsTable,
+          MedicationShortageAlertRow,
+          $$MedicationShortageAlertsTableFilterComposer,
+          $$MedicationShortageAlertsTableOrderingComposer,
+          $$MedicationShortageAlertsTableAnnotationComposer,
+          $$MedicationShortageAlertsTableCreateCompanionBuilder,
+          $$MedicationShortageAlertsTableUpdateCompanionBuilder,
+          (
+            MedicationShortageAlertRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $MedicationShortageAlertsTable,
+              MedicationShortageAlertRow
+            >,
+          ),
+          MedicationShortageAlertRow,
+          PrefetchHooks Function()
+        > {
+  $$MedicationShortageAlertsTableTableManager(
+    _$DoseyDatabase db,
+    $MedicationShortageAlertsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MedicationShortageAlertsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$MedicationShortageAlertsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$MedicationShortageAlertsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> profileId = const Value.absent(),
+                Value<String?> loadSessionId = const Value.absent(),
+                Value<int> slotNumber = const Value.absent(),
+                Value<String> bundleKey = const Value.absent(),
+                Value<DateTime> scheduledAt = const Value.absent(),
+                Value<String> prescriptionIdsJson = const Value.absent(),
+                Value<String> prescriptionNamesJson = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime?> recognizedAt = const Value.absent(),
+                Value<DateTime?> resolvedAt = const Value.absent(),
+                Value<String?> resolution = const Value.absent(),
+                Value<String> intendedAudience = const Value.absent(),
+                Value<String> localDeliveryState = const Value.absent(),
+                Value<DateTime?> localNotificationSentAt = const Value.absent(),
+                Value<String> remoteDeliveryState = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MedicationShortageAlertsCompanion(
+                id: id,
+                profileId: profileId,
+                loadSessionId: loadSessionId,
+                slotNumber: slotNumber,
+                bundleKey: bundleKey,
+                scheduledAt: scheduledAt,
+                prescriptionIdsJson: prescriptionIdsJson,
+                prescriptionNamesJson: prescriptionNamesJson,
+                status: status,
+                recognizedAt: recognizedAt,
+                resolvedAt: resolvedAt,
+                resolution: resolution,
+                intendedAudience: intendedAudience,
+                localDeliveryState: localDeliveryState,
+                localNotificationSentAt: localNotificationSentAt,
+                remoteDeliveryState: remoteDeliveryState,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String profileId,
+                Value<String?> loadSessionId = const Value.absent(),
+                required int slotNumber,
+                required String bundleKey,
+                required DateTime scheduledAt,
+                required String prescriptionIdsJson,
+                required String prescriptionNamesJson,
+                required String status,
+                Value<DateTime?> recognizedAt = const Value.absent(),
+                Value<DateTime?> resolvedAt = const Value.absent(),
+                Value<String?> resolution = const Value.absent(),
+                Value<String> intendedAudience = const Value.absent(),
+                required String localDeliveryState,
+                Value<DateTime?> localNotificationSentAt = const Value.absent(),
+                Value<String> remoteDeliveryState = const Value.absent(),
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => MedicationShortageAlertsCompanion.insert(
+                id: id,
+                profileId: profileId,
+                loadSessionId: loadSessionId,
+                slotNumber: slotNumber,
+                bundleKey: bundleKey,
+                scheduledAt: scheduledAt,
+                prescriptionIdsJson: prescriptionIdsJson,
+                prescriptionNamesJson: prescriptionNamesJson,
+                status: status,
+                recognizedAt: recognizedAt,
+                resolvedAt: resolvedAt,
+                resolution: resolution,
+                intendedAudience: intendedAudience,
+                localDeliveryState: localDeliveryState,
+                localNotificationSentAt: localNotificationSentAt,
+                remoteDeliveryState: remoteDeliveryState,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MedicationShortageAlertsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $MedicationShortageAlertsTable,
+      MedicationShortageAlertRow,
+      $$MedicationShortageAlertsTableFilterComposer,
+      $$MedicationShortageAlertsTableOrderingComposer,
+      $$MedicationShortageAlertsTableAnnotationComposer,
+      $$MedicationShortageAlertsTableCreateCompanionBuilder,
+      $$MedicationShortageAlertsTableUpdateCompanionBuilder,
+      (
+        MedicationShortageAlertRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $MedicationShortageAlertsTable,
+          MedicationShortageAlertRow
+        >,
+      ),
+      MedicationShortageAlertRow,
       PrefetchHooks Function()
     >;
 typedef $$AuthSessionsTableCreateCompanionBuilder =
@@ -8225,6 +13727,20 @@ class $DoseyDatabaseManager {
       $$ScheduleProfilesTableTableManager(_db, _db.scheduleProfiles);
   $$CarouselSlotsTableTableManager get carouselSlots =>
       $$CarouselSlotsTableTableManager(_db, _db.carouselSlots);
+  $$CarouselLoadSessionsTableTableManager get carouselLoadSessions =>
+      $$CarouselLoadSessionsTableTableManager(_db, _db.carouselLoadSessions);
+  $$CarouselLoadSlotSnapshotsTableTableManager get carouselLoadSlotSnapshots =>
+      $$CarouselLoadSlotSnapshotsTableTableManager(
+        _db,
+        _db.carouselLoadSlotSnapshots,
+      );
+  $$CarouselStatesTableTableManager get carouselStates =>
+      $$CarouselStatesTableTableManager(_db, _db.carouselStates);
+  $$MedicationShortageAlertsTableTableManager get medicationShortageAlerts =>
+      $$MedicationShortageAlertsTableTableManager(
+        _db,
+        _db.medicationShortageAlerts,
+      );
   $$AuthSessionsTableTableManager get authSessions =>
       $$AuthSessionsTableTableManager(_db, _db.authSessions);
   $$DoseLogEventsTableTableManager get doseLogEvents =>
