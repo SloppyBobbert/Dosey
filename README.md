@@ -1,16 +1,37 @@
 # Dosey
 
 [![Status](https://img.shields.io/badge/status-early%20prototype-orange)](#project-status)
-[![Medical grade](https://img.shields.io/badge/medical--grade-no-red)](#safety)
-[![Mobile](https://img.shields.io/badge/mobile-Flutter-02569B?logo=flutter&logoColor=white)](#mobile-app)
+[![Flutter](https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
+[![Dart](https://img.shields.io/badge/Dart-0175C2?logo=dart&logoColor=white)](https://dart.dev/)
+[![Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white)](#mobile-app)
+[![iOS](https://img.shields.io/badge/iOS-work%20in%20progress-lightgrey?logo=apple&logoColor=white)](#mobile-app)
 [![Local data](https://img.shields.io/badge/local%20data-Drift%20%2F%20SQLite-336791)](#mobile-app)
+[![ESP32-C6](https://img.shields.io/badge/ESP32--C6-E7352C?logo=espressif&logoColor=white)](#firmware)
 [![Mobile CI](https://github.com/SloppyBobbert/Dosey/actions/workflows/mobile-ci.yml/badge.svg)](https://github.com/SloppyBobbert/Dosey/actions/workflows/mobile-ci.yml)
-[![Hardware](https://img.shields.io/badge/hardware-not%20dispensing%20yet-lightgrey)](#project-status)
+[![Medical grade](https://img.shields.io/badge/medical--grade-never-red)](#safety)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue.svg)](LICENSE)
 
-Dosey is a low-cost, open-source medication-dispensing companion robot prototype. It combines a premade Daviky pill carousel, a mounted Android phone face, a Seeed Studio XIAO ESP32-C6 with the Grove Base for XIAO, a servo-driven one-slot mechanism, and a fully LEGO shell direction.
+**Dosey is a low-cost, open-source medication-dispensing companion robot born from spite.**
 
-This is a prototype and research build. It is not a medical-grade device.
+Dosey is designed around being inexpensive, widely available, and with easily replaceable components. The current prototype uses:
+
+- A premade, food safe-ish pill carousel
+- Almost any inexpensive USB-C Android phone as its face and interface
+- A Seeed Studio XIAO ESP32-C6 microcontroller
+- Grove-compatible sensors and accessories
+- Off-brand LEGO and other easy-to-find construction materials
+
+The goal is to make Dosey as approachable and easy to assemble as possible, for people with little experience in electronics, programming, or robotics.
+
+Although Dosey can be assembled by a caregiver, researcher, student, or hobbyist, I recommend building it with its intended user whenever possible. Seeing how Dosey works and becoming familiar with its components may make the device feel less intimidating and easier to trust, maintain, and repair.
+
+Dosey uses an Android phone as its face, display, speaker, reminder system, and primary user interface. A small microcontroller handles the physical hardware, including sensors and the mechanism used to advance the pill carousel.
+
+## Project Status
+
+Dosey is an experimental prototype and research build originally developed during my 2026 summer student research project at California State University, Chico.
+
+The project is intended to explore whether an inexpensive, expressive, and repairable companion robot can make medication routines more approachable than a standard pill organizer or phone alarm.
 
 ## At a glance
 
