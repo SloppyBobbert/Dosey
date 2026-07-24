@@ -149,6 +149,52 @@ void main() {
       'Before',
     );
   });
+
+  test(
+    'database change during recovery write aborts restore without loss',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await database.customStatement(
+        "INSERT INTO app_settings (key, value, updated_at) VALUES ('profile_display_name', 'Before', 1)",
+      );
+      final store = LocalBackupStore(database);
+      final targetData =
+          {
+              for (final entry in (await store.readSnapshot()).data.entries)
+                entry.key: entry.value.map(Map<String, Object?>.from).toList(),
+            }
+            ..['settings'] = [
+              {
+                'key': 'profile_display_name',
+                'value': 'Target',
+                'updatedAt': 1000000,
+              },
+            ];
+      final target = BackupDocument(data: targetData);
+      final gateway = _FakeGateway()
+        ..onWriteRecovery = () => database.customStatement(
+          "UPDATE app_settings SET value = 'During' WHERE key = 'profile_display_name'",
+        );
+      final service = LocalBackupService(
+        database: database,
+        store: store,
+        gateway: gateway,
+      );
+
+      final result = await service.restore(
+        BackupPreview(target, const BackupCodec().encode(target)),
+      );
+
+      expect(result.status, BackupOperationStatus.restoreRolledBack);
+      expect(
+        (await database.select(database.appSettings).get())
+            .firstWhere((row) => row.key == 'profile_display_name')
+            .value,
+        'During',
+      );
+    },
+  );
 }
 
 class _FailingReplacementStore extends LocalBackupStore {
@@ -168,6 +214,7 @@ class _FakeGateway implements BackupFileGateway {
   Uint8List? recovery;
   int recoveryWrites = 0;
   bool failRecoveryWrite = false;
+  Future<void> Function()? onWriteRecovery;
 
   @override
   Future<bool> hasRecovery() async => recovery != null;
@@ -185,5 +232,6 @@ class _FakeGateway implements BackupFileGateway {
     recoveryWrites++;
     if (failRecoveryWrite) throw const FileSystemException('disk full');
     recovery = Uint8List.fromList(bytes);
+    await onWriteRecovery?.call();
   }
 }

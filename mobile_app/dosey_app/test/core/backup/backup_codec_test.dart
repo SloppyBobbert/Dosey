@@ -55,6 +55,22 @@ void main() {
     ]);
   });
 
+  test('row field order does not affect canonical bytes', () {
+    final firstData = BackupDocument.emptyData()
+      ..['settings'] = <Map<String, Object?>>[
+        {'key': 'profile_display_name', 'value': 'Alex', 'updatedAt': 1000000},
+      ];
+    final secondData = BackupDocument.emptyData()
+      ..['settings'] = <Map<String, Object?>>[
+        {'updatedAt': 1000000, 'value': 'Alex', 'key': 'profile_display_name'},
+      ];
+
+    expect(
+      codec.encode(BackupDocument(data: firstData)),
+      codec.encode(BackupDocument(data: secondData)),
+    );
+  });
+
   test('decode rejects malformed envelopes', () {
     expect(
       () => codec.decode(Uint8List.fromList(utf8.encode('{not json'))),

@@ -58,8 +58,8 @@ class LocalBackupStore {
           '?',
         ).join(',');
         await database.customStatement(
-          "DELETE FROM app_settings WHERE key IN ($placeholders) OR key LIKE ?",
-          [...portableSettingKeys, '$deferredDeletedPrescriptionPrefix%'],
+          "DELETE FROM app_settings WHERE key IN ($placeholders) OR key GLOB ?",
+          [...portableSettingKeys, '$deferredDeletedPrescriptionPrefix*'],
         );
       } else {
         await database.customStatement('DELETE FROM ${config.table}');

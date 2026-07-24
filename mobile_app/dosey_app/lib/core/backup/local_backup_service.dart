@@ -118,21 +118,24 @@ class LocalBackupService {
       );
     }
     try {
+      final current = await database.transaction(store.readSnapshot);
+      final recoveryBytes = codec.encode(current);
+      final Uint8List? verifiedBytes;
+      try {
+        await gateway.writeRecovery(recoveryBytes);
+        verifiedBytes = await gateway.readRecovery();
+      } on Object {
+        throw const _RecoveryException();
+      }
+      if (verifiedBytes == null || !listEquals(verifiedBytes, recoveryBytes)) {
+        throw const _RecoveryException();
+      }
+      codec.decode(verifiedBytes);
       await database.transaction(() async {
-        final current = await store.readSnapshot();
-        final recoveryBytes = codec.encode(current);
-        final Uint8List? verifiedBytes;
-        try {
-          await gateway.writeRecovery(recoveryBytes);
-          verifiedBytes = await gateway.readRecovery();
-        } on Object {
-          throw const _RecoveryException();
+        final latestBytes = codec.encode(await store.readSnapshot());
+        if (!listEquals(latestBytes, recoveryBytes)) {
+          throw const _RestoreVerificationException();
         }
-        if (verifiedBytes == null ||
-            !listEquals(verifiedBytes, recoveryBytes)) {
-          throw const _RecoveryException();
-        }
-        codec.decode(verifiedBytes);
         await store.replaceSnapshot(preview.document);
         final restoredBytes = codec.encode(await store.readSnapshot());
         if (!listEquals(restoredBytes, preview.bytes) ||

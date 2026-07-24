@@ -86,6 +86,36 @@ void main() {
     );
   });
 
+  test(
+    'replacement deletes only exact deferred-delete prefix matches',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final store = LocalBackupStore(database);
+      const deferredKey = 'deferred_deleted_prescription:rx-old';
+      const nearMatchKey = 'deferredXdeletedYprescription:rx-old';
+      await database.customStatement(
+        'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)',
+        [deferredKey, 'true', 1],
+      );
+      await database.customStatement(
+        'INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)',
+        [nearMatchKey, 'keep', 1],
+      );
+      final data = mutableData(await store.readSnapshot())..['settings'] = [];
+
+      await database.transaction(
+        () => store.replaceSnapshot(BackupDocument(data: data)),
+      );
+
+      final keys = (await database.select(database.appSettings).get())
+          .map((row) => row.key)
+          .toSet();
+      expect(keys, contains(nearMatchKey));
+      expect(keys, isNot(contains(deferredKey)));
+    },
+  );
+
   test('health reports logical violations without changing rows', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);

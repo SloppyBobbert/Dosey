@@ -18,7 +18,7 @@ class BackupCodec {
           .map(Map<String, Object?>.from)
           .toList();
       rows.sort((left, right) => _compareRows(section, left, right));
-      canonicalData[section] = rows;
+      canonicalData[section] = rows.map(_canonicalizeRow).toList();
     }
     final payload = <String, Object?>{
       'format': BackupDocument.formatName,
@@ -137,5 +137,10 @@ class BackupCodec {
       if (comparison != 0) return comparison;
     }
     return 0;
+  }
+
+  static Map<String, Object?> _canonicalizeRow(Map<String, Object?> row) {
+    final keys = row.keys.toList()..sort();
+    return {for (final key in keys) key: row[key]};
   }
 }
