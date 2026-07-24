@@ -229,7 +229,9 @@ class _DemoPresenterControls extends StatelessWidget {
                         icon: Icons.skip_next_outlined,
                         onPressed: state.isPlaying || state.isComplete
                             ? null
-                            : () => unawaited(scenarios.next()),
+                            : () => unawaited(
+                                _runDemoAction(context, scenarios.next),
+                              ),
                       ),
                       _PresenterButton(
                         tooltip: state.isPlaying
@@ -241,19 +243,27 @@ class _DemoPresenterControls extends StatelessWidget {
                             ? null
                             : state.isPlaying
                             ? scenarios.pause
-                            : () => unawaited(scenarios.play()),
+                            : () => unawaited(
+                                _runDemoAction(context, scenarios.play),
+                              ),
                       ),
                       _PresenterButton(
                         tooltip: 'Restart the demo from its fake baseline',
                         label: 'Restart demo',
                         icon: Icons.restart_alt,
-                        onPressed: () => unawaited(scenarios.restart()),
+                        onPressed: () => unawaited(
+                          _runDemoAction(context, scenarios.restart),
+                        ),
                       ),
                       _PresenterButton(
                         tooltip: 'Stop presenting and return to Controller',
                         label: 'Return to Controller',
                         icon: Icons.memory_outlined,
-                        onPressed: scenarios.stopPresentation,
+                        onPressed: () => unawaited(
+                          _runDemoAction(context, () async {
+                            scenarios.stopPresentation();
+                          }),
+                        ),
                       ),
                     ],
                   ),
@@ -264,6 +274,20 @@ class _DemoPresenterControls extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+Future<void> _runDemoAction(
+  BuildContext context,
+  Future<void> Function() action,
+) async {
+  try {
+    await action();
+  } on Object catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Demo action failed: $error')));
   }
 }
 
@@ -977,6 +1001,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
 
   List<Widget> _buildActionButtons(BuildContext context) {
     final buttons = <Widget>[];
+    final occurredAt = DoseyAppScope.of(context).appClock.now();
 
     if (widget.state.availableActions.contains(
       RobotFaceActionKind.recognizeMissedDose,
@@ -992,7 +1017,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
             actionKind: RobotFaceActionKind.recognizeMissedDose,
             event: DoseLogEvent.doseMissedRecognized(
               doseId: widget.state.actionDoseId!,
-              occurredAt: DateTime.now().toUtc(),
+              occurredAt: occurredAt,
             ),
             successMessage: 'Missed dose noted.',
           ),
@@ -1013,7 +1038,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
             actionKind: RobotFaceActionKind.confirmTaken,
             event: DoseLogEvent.doseTakenConfirmed(
               doseId: widget.state.actionDoseId!,
-              occurredAt: DateTime.now().toUtc(),
+              occurredAt: occurredAt,
             ),
             successMessage: 'Taken logged.',
           ),
@@ -1032,7 +1057,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
             actionKind: RobotFaceActionKind.skipDose,
             event: DoseLogEvent.doseSkipped(
               doseId: widget.state.actionDoseId!,
-              occurredAt: DateTime.now().toUtc(),
+              occurredAt: occurredAt,
             ),
             successMessage: 'Skip logged.',
           ),
@@ -1053,7 +1078,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
             actionKind: RobotFaceActionKind.askForHelp,
             event: DoseLogEvent.caregiverHelpRequested(
               doseId: widget.state.actionDoseId!,
-              occurredAt: DateTime.now().toUtc(),
+              occurredAt: occurredAt,
             ),
             successMessage: 'Help request logged.',
           ),

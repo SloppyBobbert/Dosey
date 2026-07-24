@@ -167,44 +167,51 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
               }
             },
             child: Scaffold(
-              appBar: AppBar(
-                title: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Dosey',
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(activeTab.title),
-                  ],
-                ),
-                actions: [
-                  StreamBuilder<AuthSession>(
-                    stream: dependencies.auth.watchSession(),
-                    builder: (context, authSnapshot) {
-                      final session =
-                          authSnapshot.data ?? const AuthSession.signedOut();
-
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: PopupMenuButton<_SettingsMenuAction>(
-                          tooltip: 'Open settings menu',
-                          icon: const Icon(Icons.settings_outlined),
-                          onSelected: (action) => _handleSettingsMenuAction(
-                            action,
-                            settingsTabIndex: settingsTabIndex,
+              appBar: _wasPresenting
+                  ? null
+                  : AppBar(
+                      title: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Dosey',
+                            style: Theme.of(context).textTheme.labelLarge
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w800,
+                                ),
                           ),
-                          itemBuilder: (context) =>
-                              _settingsMenuItems(session: session, role: role),
+                          Text(activeTab.title),
+                        ],
+                      ),
+                      actions: [
+                        StreamBuilder<AuthSession>(
+                          stream: dependencies.auth.watchSession(),
+                          builder: (context, authSnapshot) {
+                            final session =
+                                authSnapshot.data ??
+                                const AuthSession.signedOut();
+
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: PopupMenuButton<_SettingsMenuAction>(
+                                tooltip: 'Open settings menu',
+                                icon: const Icon(Icons.settings_outlined),
+                                onSelected: (action) =>
+                                    _handleSettingsMenuAction(
+                                      action,
+                                      settingsTabIndex: settingsTabIndex,
+                                    ),
+                                itemBuilder: (context) => _settingsMenuItems(
+                                  session: session,
+                                  role: role,
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ],
-              ),
+                      ],
+                    ),
               body: IndexedStack(
                 index: selectedIndex,
                 children: [
@@ -212,11 +219,14 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
                     tabs[index].buildScreen(selectedIndex, index),
                 ],
               ),
-              bottomNavigationBar: NavigationBar(
-                selectedIndex: selectedIndex,
-                onDestinationSelected: (index) => _selectTab(tabs[index].id),
-                destinations: tabs.map((tab) => tab.destination).toList(),
-              ),
+              bottomNavigationBar: _wasPresenting
+                  ? null
+                  : NavigationBar(
+                      selectedIndex: selectedIndex,
+                      onDestinationSelected: (index) =>
+                          _selectTab(tabs[index].id),
+                      destinations: tabs.map((tab) => tab.destination).toList(),
+                    ),
             ),
           ),
         );

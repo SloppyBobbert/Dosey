@@ -279,6 +279,31 @@ void main() {
     expect(delays, [const Duration(seconds: 2)]);
     expect(fixture.service.state.isPresenting, isTrue);
   });
+
+  test('restart invalidates a step that was already running', () async {
+    final fixture = await _ScenarioFixture.create();
+    addTearDown(fixture.close);
+    await fixture.service.select(DemoScenarioId.happyPath);
+    await fixture.service.next();
+    await fixture.service.next();
+    await fixture.service.next();
+    final emittedSteps = <int>[];
+    final subscription = fixture.service.states.listen(
+      (state) => emittedSteps.add(state.completedSteps),
+    );
+    addTearDown(subscription.cancel);
+
+    final runningStep = fixture.service.next();
+    final restart = fixture.service.restart();
+    await Future.wait([runningStep, restart]);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(emittedSteps, everyElement(0));
+    expect(fixture.service.state.scenario.id, DemoScenarioId.happyPath);
+    expect(fixture.service.state.completedSteps, 0);
+    expect(fixture.clock.now(), _ScenarioFixture.seedTime);
+    expect(await fixture.doseEvents(), isEmpty);
+  });
 }
 
 class _ScenarioFixture {

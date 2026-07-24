@@ -142,6 +142,7 @@ class _TodayDoseContent extends StatelessWidget {
                         activeLoadSnapshot.data,
                         currentSchedule,
                         currentDoseId,
+                        now,
                       );
                 final latestEvent = currentDoseId == null
                     ? null
@@ -230,6 +231,7 @@ class _CurrentDoseSection extends StatefulWidget {
     CarouselLoadSession? activeLoad,
     ReminderSchedule schedule,
     String? doseId,
+    DateTime fallbackTimestamp,
   ) {
     if (activeLoad != null && doseId != null) {
       final matchingGuidedSlots = activeLoad.slots.where(
@@ -250,7 +252,7 @@ class _CurrentDoseSection extends StatefulWidget {
         if (matchingLegacySlot.isNotEmpty) {
           return matchingLegacySlot.first;
         }
-        final timestamp = guidedSlot.updatedAt ?? DateTime.now().toUtc();
+        final timestamp = guidedSlot.updatedAt ?? fallbackTimestamp;
         return CarouselSlot(
           id: 'guided:${activeLoad.id}:${guidedSlot.slotNumber}',
           slotNumber: guidedSlot.slotNumber,

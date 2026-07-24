@@ -172,7 +172,8 @@ void main() {
       await tester.tap(find.text('Start presentation'));
       await _pumpShellFrame(tester);
 
-      expect(_appBarTitle('Robot Face'), findsOneWidget);
+      expect(find.byType(AppBar), findsNothing);
+      expect(find.byType(NavigationBar), findsNothing);
       expect(screenAwake.states.last, isTrue);
       expect(find.text('Next demo step'), findsOneWidget);
       expect(find.text('Play demo'), findsOneWidget);
@@ -224,10 +225,49 @@ void main() {
       await tester.tap(find.text('Return to Controller'));
       await _pumpShellFrame(tester);
       expect(_appBarTitle('Controller'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
       expect(find.text('Start presentation'), findsOneWidget);
       expect(screenAwake.states.last, isFalse);
     },
   );
+
+  testWidgets('demo presentation reports control failures', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+    addTearDown(database.close);
+    addTearDown(clock.close);
+    await DemoDataRepository(
+      database,
+      seedTime: clock.now(),
+      deviceRole: AppDeviceRole.androidRobot,
+    ).resetAndSeed();
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        appClock: clock,
+        useRealMissedDoseReconciliation: true,
+        startOnController: true,
+      ),
+    );
+    await tester.tap(find.text('Start presentation'));
+    await _pumpShellFrame(tester);
+
+    final scenarios = DoseyAppScope.of(
+      tester.element(find.text('Restart demo')),
+    ).demoScenarios!;
+    await scenarios.close();
+    await database.close();
+    await tester.tap(find.text('Restart demo'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.textContaining('Demo action failed:'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('Personal Mode does not show the Robot Face tab', (
     WidgetTester tester,

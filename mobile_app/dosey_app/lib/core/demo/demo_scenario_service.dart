@@ -105,15 +105,16 @@ class DemoScenarioService {
   Object? _pendingCommandError;
   bool _commandCompleted = true;
   bool _runningStep = false;
+  int _stepGeneration = 0;
+  Future<void> _resetBarrier = Future<void>.value();
 
   DemoScenarioState get state => _state;
   Stream<DemoScenarioState> get states => _states.stream;
 
   Future<void> select(DemoScenarioId id) async {
     final scenario = demoScenarioCatalog.singleWhere((item) => item.id == id);
-    await _resetBaseline();
-    _emit(
-      DemoScenarioState(
+    await _enqueueReset(
+      () => DemoScenarioState(
         scenario: scenario,
         completedSteps: 0,
         isPlaying: false,
@@ -123,24 +124,20 @@ class DemoScenarioService {
 
   Future<void> restart() async {
     pause();
-    final scenario = _state.scenario;
-    final isPresenting = _state.isPresenting;
-    await _resetBaseline();
-    _emit(
-      DemoScenarioState(
-        scenario: scenario,
+    await _enqueueReset(
+      () => DemoScenarioState(
+        scenario: _state.scenario,
         completedSteps: 0,
         isPlaying: false,
-        isPresenting: isPresenting,
+        isPresenting: _state.isPresenting,
       ),
     );
   }
 
   Future<void> startPresentation() async {
     pause();
-    await _resetBaseline();
-    _emit(
-      DemoScenarioState(
+    await _enqueueReset(
+      () => DemoScenarioState(
         scenario: demoScenarioCatalog.first,
         completedSteps: 0,
         isPlaying: false,
@@ -157,11 +154,19 @@ class DemoScenarioService {
   }
 
   Future<void> next() async {
+    final requestedGeneration = _stepGeneration;
+    await _resetBarrier;
+    if (requestedGeneration != _stepGeneration) return;
     if (_runningStep || _state.isComplete) return;
+    final generation = requestedGeneration;
+    final scenario = _state.scenario.id;
+    final step = _state.completedSteps;
     _runningStep = true;
     try {
-      await _execute(_state.scenario.id, _state.completedSteps);
-      _emit(_state.copyWith(completedSteps: _state.completedSteps + 1));
+      await _execute(scenario, step);
+      if (generation == _stepGeneration) {
+        _emit(_state.copyWith(completedSteps: step + 1));
+      }
     } finally {
       _runningStep = false;
     }
@@ -193,8 +198,19 @@ class DemoScenarioService {
 
   Future<void> close() async {
     pause();
+    await _resetBarrier;
     await _settlePendingCommand();
     await _states.close();
+  }
+
+  Future<void> _enqueueReset(DemoScenarioState Function() nextState) {
+    _stepGeneration += 1;
+    final reset = _resetBarrier.then((_) async {
+      await _resetBaseline();
+      _emit(nextState());
+    });
+    _resetBarrier = reset.then<void>((_) {}, onError: (_, _) {});
+    return reset;
   }
 
   Future<void> _execute(DemoScenarioId scenario, int step) async {
