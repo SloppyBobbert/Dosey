@@ -180,6 +180,40 @@ void main() {
     expect(interceptor.batchCalls, 1);
   });
 
+  test('replacement invalidates streams for every restored table', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final store = LocalBackupStore(database);
+    await store.readSnapshot();
+    final updates = database.tableUpdates().first.timeout(
+      const Duration(seconds: 1),
+    );
+
+    await database.transaction(
+      () => store.replaceSnapshot(_populatedDocument()),
+    );
+
+    expect(
+      (await updates).map((update) => update.table),
+      unorderedEquals(const {
+        'app_settings',
+        'schedule_profiles',
+        'prescriptions',
+        'prescription_refills',
+        'reminder_schedules',
+        'carousel_slots',
+        'carousel_load_sessions',
+        'carousel_load_slot_snapshots',
+        'carousel_states',
+        'medication_shortage_alerts',
+        'dose_log_events',
+        'controller_command_sessions',
+        'controller_command_events',
+        'admin_audit_events',
+      }),
+    );
+  });
+
   test('on-disk health check detects an unreadable database file', () async {
     final directory = await Directory.systemTemp.createTemp(
       'dosey-backup-test-',

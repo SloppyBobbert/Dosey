@@ -1,4 +1,5 @@
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:drift/drift.dart';
 
 import 'backup_document.dart';
 import 'backup_validator.dart';
@@ -53,6 +54,7 @@ class LocalBackupStore {
     validator.validateOrThrow(snapshot);
     await database.batch((batch) {
       for (final config in _configs.reversed) {
+        final updates = [TableUpdate(config.table)];
         if (config.section == 'settings') {
           final placeholders = List.filled(
             portableSettingKeys.length,
@@ -61,13 +63,15 @@ class LocalBackupStore {
           batch.customStatement(
             "DELETE FROM app_settings WHERE key IN ($placeholders) OR key GLOB ?",
             [...portableSettingKeys, '$deferredDeletedPrescriptionPrefix*'],
+            updates,
           );
         } else {
-          batch.customStatement('DELETE FROM ${config.table}');
+          batch.customStatement('DELETE FROM ${config.table}', null, updates);
         }
       }
 
       for (final config in _configs) {
+        final updates = [TableUpdate(config.table)];
         final fields = config.fields.keys.toList();
         final columns = fields.map((field) => config.fields[field]).join(',');
         final placeholders = List.filled(fields.length, '?').join(',');
@@ -81,6 +85,7 @@ class LocalBackupStore {
                   timestamp: config.timestamps.contains(field),
                 ),
             ],
+            updates,
           );
         }
       }
