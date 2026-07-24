@@ -139,4 +139,28 @@ void main() {
       ),
     );
   });
+
+  test('encode rejects backups that exceed the import limit', () {
+    final characters = Uint8List(BackupCodec.maxBytes)
+      ..fillRange(0, BackupCodec.maxBytes, 0x78);
+    final data = BackupDocument.emptyData()
+      ..['settings'] = [
+        {
+          'key': 'profile_display_name',
+          'value': String.fromCharCodes(characters),
+          'updatedAt': 1000000,
+        },
+      ];
+
+    expect(
+      () => codec.encode(BackupDocument(data: data)),
+      throwsA(
+        isA<BackupFormatException>().having(
+          (error) => error.kind,
+          'kind',
+          BackupFormatErrorKind.tooLarge,
+        ),
+      ),
+    );
+  });
 }

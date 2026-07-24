@@ -123,6 +123,30 @@ void main() {
     expect(result.status, BackupOperationStatus.recoveryFailure);
   });
 
+  test(
+    'invalid recovery snapshot prevents recovery write and replacement',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final normalStore = LocalBackupStore(database);
+      final target = await normalStore.readSnapshot();
+      final gateway = _FakeGateway();
+      final service = LocalBackupService(
+        database: database,
+        store: _InvalidSnapshotStore(database),
+        gateway: gateway,
+      );
+
+      final result = await service.restore(
+        BackupPreview(target, const BackupCodec().encode(target)),
+      );
+
+      expect(result.status, BackupOperationStatus.recoveryFailure);
+      expect(gateway.recoveryWrites, 0);
+      expect((await normalStore.readSnapshot()).data, target.data);
+    },
+  );
+
   test('replacement failure rolls back database changes', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
@@ -207,6 +231,17 @@ class _FailingReplacementStore extends LocalBackupStore {
     );
     throw StateError('simulated insert failure');
   }
+}
+
+class _InvalidSnapshotStore extends LocalBackupStore {
+  _InvalidSnapshotStore(super.database);
+
+  @override
+  Future<DatabaseHealthResult> checkHealth() async =>
+      const DatabaseHealthResult(DatabaseHealthStatus.healthy);
+
+  @override
+  Future<BackupDocument> readSnapshot() async => BackupDocument.empty();
 }
 
 class _FakeGateway implements BackupFileGateway {

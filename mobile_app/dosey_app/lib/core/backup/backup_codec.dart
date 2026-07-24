@@ -26,7 +26,14 @@ class BackupCodec {
       'sourceSchemaVersion': document.sourceSchemaVersion,
       'data': canonicalData,
     };
-    return Uint8List.fromList(utf8.encode('${jsonEncode(payload)}\n'));
+    final bytes = Uint8List.fromList(utf8.encode('${jsonEncode(payload)}\n'));
+    if (bytes.length > maxBytes) {
+      throw const BackupFormatException(
+        'Backup exceeds the 25 MiB limit.',
+        kind: BackupFormatErrorKind.tooLarge,
+      );
+    }
+    return bytes;
   }
 
   BackupDocument decode(Uint8List bytes) {
