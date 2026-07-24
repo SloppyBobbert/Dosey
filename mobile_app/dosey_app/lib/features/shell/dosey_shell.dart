@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -11,6 +12,7 @@ import 'package:dosey_app/features/log/dose_log_screen.dart';
 import 'package:dosey_app/features/prescriptions/prescriptions_screen.dart';
 import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/today/today_screen.dart';
 import 'package:flutter/material.dart';
@@ -24,17 +26,59 @@ class DoseyShell extends StatefulWidget {
   State<DoseyShell> createState() => _DoseyShellState();
 }
 
-class _DoseyShellState extends State<DoseyShell> {
+class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   _ShellTabId? _selectedTabId;
   SettingsSection? _settingsSectionTarget;
   int _settingsNavigationRequest = 0;
+  DoseyAppDependencies? _dependencies;
   ReminderNotificationTapController? _notificationTaps;
   StreamSubscription<ReminderNotificationTap>? _notificationTapSubscription;
+  Object? _settingsSource;
+  StreamSubscription<AppDeviceRole>? _deviceRoleSubscription;
+  Object? _robotFaceSettingsSource;
+  StreamSubscription<RobotFaceSettings>? _robotFaceSettingsSubscription;
+  AppLifecycleState? _lifecycleState;
+  bool _handledNotificationWhileBackgrounded = false;
+  AppDeviceRole? _currentRole;
+  int _returnToFaceAfterInactivityMinutes =
+      RobotFaceSettings.defaultReturnToFaceAfterInactivityMinutes;
+  Timer? _inactivityTimer;
+  ScreenAwakeGateway? _screenAwake;
+  bool? _screenAwakeRequested;
+  Future<void> _screenAwakeUpdate = Future<void>.value();
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycleState = WidgetsBinding.instance.lifecycleState;
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final notificationTaps = DoseyAppScope.of(context).notificationTaps;
+    final dependencies = DoseyAppScope.of(context);
+    _dependencies = dependencies;
+    if (!identical(dependencies.screenAwake, _screenAwake)) {
+      _screenAwake = dependencies.screenAwake;
+      _screenAwakeRequested = null;
+      _syncScreenAwake();
+    }
+    if (!identical(dependencies.settings, _settingsSource)) {
+      unawaited(_deviceRoleSubscription?.cancel());
+      _settingsSource = dependencies.settings;
+      _deviceRoleSubscription = dependencies.settings.watchDeviceRole().listen(
+        _handleDeviceRoleChanged,
+      );
+    }
+    if (!identical(dependencies.robotFaceSettings, _robotFaceSettingsSource)) {
+      unawaited(_robotFaceSettingsSubscription?.cancel());
+      _robotFaceSettingsSource = dependencies.robotFaceSettings;
+      _robotFaceSettingsSubscription = dependencies.robotFaceSettings
+          .watchSettings()
+          .listen(_handleRobotFaceSettingsChanged);
+    }
+    final notificationTaps = dependencies.notificationTaps;
     if (identical(notificationTaps, _notificationTaps)) {
       return;
     }
@@ -47,8 +91,30 @@ class _DoseyShellState extends State<DoseyShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _inactivityTimer?.cancel();
+    _requestScreenAwake(false);
+    unawaited(_deviceRoleSubscription?.cancel());
+    unawaited(_robotFaceSettingsSubscription?.cancel());
     unawaited(_notificationTapSubscription?.cancel());
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    if (state != AppLifecycleState.resumed) {
+      _inactivityTimer?.cancel();
+      _inactivityTimer = null;
+      _syncScreenAwake();
+      return;
+    }
+
+    final preserveNotificationDestination =
+        _handledNotificationWhileBackgrounded;
+    _handledNotificationWhileBackgrounded = false;
+    _syncScreenAwake();
+    unawaited(_handleResume(preserveNotificationDestination));
   }
 
   @override
@@ -69,60 +135,70 @@ class _DoseyShellState extends State<DoseyShell> {
           (tab) => tab.id == _ShellTabId.settings,
         );
 
-        return Scaffold(
-          appBar: AppBar(
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Dosey',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                Text(activeTab.title),
-              ],
-            ),
-            actions: [
-              StreamBuilder<AuthSession>(
-                stream: dependencies.auth.watchSession(),
-                builder: (context, authSnapshot) {
-                  final session =
-                      authSnapshot.data ?? const AuthSession.signedOut();
-
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: PopupMenuButton<_SettingsMenuAction>(
-                      tooltip: 'Open settings menu',
-                      icon: const Icon(Icons.settings_outlined),
-                      onSelected: (action) => _handleSettingsMenuAction(
-                        action,
-                        settingsTabIndex: settingsTabIndex,
-                      ),
-                      itemBuilder: (context) =>
-                          _settingsMenuItems(session: session, role: role),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-          body: IndexedStack(
-            index: selectedIndex,
-            children: [
-              for (var index = 0; index < tabs.length; index += 1)
-                tabs[index].buildScreen(selectedIndex, index),
-            ],
-          ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: selectedIndex,
-            onDestinationSelected: (index) {
-              setState(() {
-                _selectedTabId = tabs[index].id;
-              });
+        return Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: (_) => _recordInteraction(),
+          child: PopScope<Object?>(
+            canPop: !role.canHostRobot,
+            onPopInvokedWithResult: (didPop, result) {
+              if (!didPop &&
+                  role.canHostRobot &&
+                  activeTab.id != _ShellTabId.robotFace) {
+                _selectTab(_ShellTabId.robotFace);
+              }
             },
-            destinations: tabs.map((tab) => tab.destination).toList(),
+            child: Scaffold(
+              appBar: AppBar(
+                title: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Dosey',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(activeTab.title),
+                  ],
+                ),
+                actions: [
+                  StreamBuilder<AuthSession>(
+                    stream: dependencies.auth.watchSession(),
+                    builder: (context, authSnapshot) {
+                      final session =
+                          authSnapshot.data ?? const AuthSession.signedOut();
+
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: PopupMenuButton<_SettingsMenuAction>(
+                          tooltip: 'Open settings menu',
+                          icon: const Icon(Icons.settings_outlined),
+                          onSelected: (action) => _handleSettingsMenuAction(
+                            action,
+                            settingsTabIndex: settingsTabIndex,
+                          ),
+                          itemBuilder: (context) =>
+                              _settingsMenuItems(session: session, role: role),
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              body: IndexedStack(
+                index: selectedIndex,
+                children: [
+                  for (var index = 0; index < tabs.length; index += 1)
+                    tabs[index].buildScreen(selectedIndex, index),
+                ],
+              ),
+              bottomNavigationBar: NavigationBar(
+                selectedIndex: selectedIndex,
+                onDestinationSelected: (index) => _selectTab(tabs[index].id),
+                destinations: tabs.map((tab) => tab.destination).toList(),
+              ),
+            ),
           ),
         );
       },
@@ -226,17 +302,18 @@ class _DoseyShellState extends State<DoseyShell> {
     required AppDeviceRole role,
   }) {
     return [
-      PopupMenuItem(
-        value: const _SettingsMenuAction.openSection(SettingsSection.account),
-        child: ListTile(
-          leading: Icon(
-            session.isSignedIn ? Icons.account_circle : Icons.login,
+      if (!role.canHostRobot)
+        PopupMenuItem(
+          value: const _SettingsMenuAction.openSection(SettingsSection.account),
+          child: ListTile(
+            leading: Icon(
+              session.isSignedIn ? Icons.account_circle : Icons.login,
+            ),
+            title: const Text('Account'),
+            subtitle: Text(session.isSignedIn ? 'Sign out' : 'Sign in'),
+            contentPadding: EdgeInsets.zero,
           ),
-          title: const Text('Account'),
-          subtitle: Text(session.isSignedIn ? 'Sign out' : 'Sign in'),
-          contentPadding: EdgeInsets.zero,
         ),
-      ),
       const PopupMenuItem(
         value: _SettingsMenuAction.openSection(SettingsSection.deviceMode),
         child: ListTile(
@@ -342,23 +419,156 @@ class _DoseyShellState extends State<DoseyShell> {
       _settingsNavigationRequest += 1;
       _selectedTabId = _ShellTabId.settings;
     });
+    _restartInactivityTimer();
+    _syncScreenAwake();
   }
 
-  void _selectTab(int index) {
-    final nextTabId = _ShellTabId.values[index];
+  void _selectTab(_ShellTabId nextTabId) {
     if (_selectedTabId == nextTabId) {
       return;
     }
     setState(() {
       _selectedTabId = nextTabId;
     });
+    _restartInactivityTimer();
+    _syncScreenAwake();
+  }
+
+  void _handleDeviceRoleChanged(AppDeviceRole storedRole) {
+    _currentRole = _resolvedRole(storedRole, currentAppDevicePlatform());
+    _restartInactivityTimer();
+    _syncScreenAwake();
+  }
+
+  void _handleRobotFaceSettingsChanged(RobotFaceSettings settings) {
+    _returnToFaceAfterInactivityMinutes =
+        settings.returnToFaceAfterInactivityMinutes;
+    _restartInactivityTimer();
+    _syncScreenAwake();
+  }
+
+  void _syncScreenAwake() {
+    final role = _currentRole;
+    final selectedTabId = role == null
+        ? _selectedTabId
+        : _selectedTabId ?? _defaultTabIdFor(role);
+    final isResumed =
+        _lifecycleState == null || _lifecycleState == AppLifecycleState.resumed;
+    _requestScreenAwake(
+      role?.canHostRobot == true &&
+          selectedTabId == _ShellTabId.robotFace &&
+          isResumed,
+    );
+  }
+
+  void _requestScreenAwake(bool enabled) {
+    final gateway = _screenAwake;
+    if (gateway == null || _screenAwakeRequested == enabled) {
+      return;
+    }
+    _screenAwakeRequested = enabled;
+    _screenAwakeUpdate = _screenAwakeUpdate.then((_) async {
+      try {
+        await gateway.setKeepScreenAwake(enabled);
+      } on Object {
+        // Screen wake is a mounted-display convenience, not a startup blocker.
+      }
+    });
+  }
+
+  void _recordInteraction() {
+    if (_shouldRunInactivityTimer) {
+      _restartInactivityTimer();
+    }
+  }
+
+  bool get _shouldRunInactivityTimer {
+    final role = _currentRole;
+    if (role == null || !role.canHostRobot) {
+      return false;
+    }
+    if (_lifecycleState != null &&
+        _lifecycleState != AppLifecycleState.resumed) {
+      return false;
+    }
+    final selectedTabId = _selectedTabId ?? _defaultTabIdFor(role);
+    return selectedTabId != _ShellTabId.robotFace;
+  }
+
+  void _restartInactivityTimer() {
+    _inactivityTimer?.cancel();
+    _inactivityTimer = null;
+    if (!_shouldRunInactivityTimer) {
+      return;
+    }
+    _inactivityTimer = Timer(
+      Duration(minutes: _returnToFaceAfterInactivityMinutes),
+      _handleInactivityTimeout,
+    );
+  }
+
+  void _handleInactivityTimeout() {
+    _inactivityTimer = null;
+    if (!mounted || !_shouldRunInactivityTimer) {
+      return;
+    }
+    if (ModalRoute.of(context)?.isCurrent != true) {
+      _inactivityTimer = Timer(
+        const Duration(seconds: 1),
+        _handleInactivityTimeout,
+      );
+      return;
+    }
+    _selectTab(_ShellTabId.robotFace);
   }
 
   void _handleNotificationTap(ReminderNotificationTap tap) {
+    if (_lifecycleState != null &&
+        _lifecycleState != AppLifecycleState.resumed) {
+      _handledNotificationWhileBackgrounded = true;
+    }
+
+    unawaited(_routeNotificationTap(tap));
+  }
+
+  Future<void> _routeNotificationTap(ReminderNotificationTap tap) async {
+    final dependencies = _dependencies;
+    if (dependencies == null) {
+      return;
+    }
+
+    final storedRole = await dependencies.settings.getDeviceRole();
     if (!mounted) {
       return;
     }
-    _selectTab(_todayTabIndex);
+    final role = _resolvedRole(storedRole, currentAppDevicePlatform());
+    final destination = switch (tap.kind) {
+      ReminderNotificationTapKind.shortage => _ShellTabId.carousel,
+      ReminderNotificationTapKind.doseReminder =>
+        role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.today,
+    };
+    _selectTab(destination);
+  }
+
+  Future<void> _handleResume(bool preserveNotificationDestination) async {
+    final dependencies = _dependencies;
+    if (dependencies == null) {
+      return;
+    }
+
+    unawaited(dependencies.runMissedDoseReconciliation());
+    if (preserveNotificationDestination) {
+      return;
+    }
+
+    final storedRole = await dependencies.settings.getDeviceRole();
+    if (!mounted) {
+      return;
+    }
+    final role = _resolvedRole(storedRole, currentAppDevicePlatform());
+    if (role.canHostRobot) {
+      _selectTab(_ShellTabId.robotFace);
+    }
   }
 
   int _selectedIndexForTabs(List<_ShellTab> tabs, AppDeviceRole role) {
@@ -381,8 +591,6 @@ class _SettingsMenuAction {
 
   final SettingsSection? section;
 }
-
-const _todayTabIndex = 0;
 
 enum _ShellTabId {
   today,

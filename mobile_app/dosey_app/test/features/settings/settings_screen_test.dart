@@ -16,6 +16,177 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_app_scope_dependencies.dart';
 
 void main() {
+  testWidgets('Robot Mode does not offer account sign-in', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in with Google'), findsNothing);
+    expect(find.text('Account'), findsNothing);
+  });
+
+  testWidgets('Personal Mode retains account sign-in', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sign in with Google'), findsOneWidget);
+    expect(find.text('Account'), findsOneWidget);
+  });
+
+  testWidgets('canceling leave Robot Mode keeps Robot Mode selected', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    final settings = DoseyAppScope.of(
+      tester.element(find.byType(MaterialApp)),
+    ).settings;
+
+    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
+    expect(find.text('Leave Robot Mode?'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
+    expect(_selectedDeviceRole(tester), AppDeviceRole.androidRobot);
+  });
+
+  testWidgets('confirmed leave Robot Mode succeeds without configured PIN', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    final settings = DoseyAppScope.of(
+      tester.element(find.byType(MaterialApp)),
+    ).settings;
+
+    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(await settings.getDeviceRole(), AppDeviceRole.androidPersonal);
+  });
+
+  testWidgets('entering Robot Mode does not show leave confirmation', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    final settings = DoseyAppScope.of(
+      tester.element(find.byType(MaterialApp)),
+    ).settings;
+
+    await _chooseDeviceRole(tester, AppDeviceRole.androidRobot);
+
+    expect(find.text('Leave Robot Mode?'), findsNothing);
+    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
+  });
+
+  testWidgets('canceling Action PIN keeps Robot Mode selected', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
+    await settings.setActionPin('1234');
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter Action PIN'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
+    expect(_selectedDeviceRole(tester), AppDeviceRole.androidRobot);
+  });
+
+  testWidgets('wrong Action PIN keeps Robot Mode selected', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
+    await settings.setActionPin('1234');
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '4321');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Wrong PIN.'), findsOneWidget);
+    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
+    expect(_selectedDeviceRole(tester), AppDeviceRole.androidRobot);
+  });
+
+  testWidgets('correct Action PIN leaves Robot Mode', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
+    await settings.setActionPin('1234');
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(await settings.getDeviceRole(), AppDeviceRole.androidPersonal);
+  });
+
   testWidgets('robot-capable role shows robot face settings controls', (
     WidgetTester tester,
   ) async {
@@ -37,6 +208,13 @@ void main() {
     expect(find.text('Flip face 180°'), findsOneWidget);
     expect(find.text('For upside-down mounts.'), findsOneWidget);
     expect(find.text('Dim after inactivity'), findsOneWidget);
+    expect(find.text('Return to Robot Face'), findsOneWidget);
+    expect(
+      find.text(
+        'When Robot Mode is open on another tab, return to the face after this much inactivity.',
+      ),
+      findsOneWidget,
+    );
     expect(
       find.text(
         'After quiet time, show a darker resting face. Dose alerts still stay bright.',
@@ -182,6 +360,11 @@ void main() {
 
     await tester.tap(find.text('Dim after inactivity'));
     await tester.pumpAndSettle();
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('Return to Robot Face:2'),
+      value: 5,
+    );
     await tester.tap(find.text('Robot voice'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Voice variety'));
@@ -239,6 +422,7 @@ void main() {
       const RobotFaceSettings(
         isFlipped: true,
         dimAfterInactivity: false,
+        returnToFaceAfterInactivityMinutes: 5,
         voiceEnabled: true,
         voiceVarietyEnabled: true,
         voiceVolumePreset: RobotVoiceVolumePreset.loud,
@@ -837,6 +1021,22 @@ Finder _findRichTextContaining(String text) {
   return find.byWidgetPredicate(
     (widget) => widget is RichText && widget.text.toPlainText().contains(text),
   );
+}
+
+Future<void> _chooseDeviceRole(WidgetTester tester, AppDeviceRole role) async {
+  final dropdown = tester.widget<DropdownButton<AppDeviceRole>>(
+    find.byType(DropdownButton<AppDeviceRole>),
+  );
+  dropdown.onChanged?.call(role);
+  await tester.pumpAndSettle();
+}
+
+AppDeviceRole? _selectedDeviceRole(WidgetTester tester) {
+  return tester
+      .widget<DropdownButton<AppDeviceRole>>(
+        find.byType(DropdownButton<AppDeviceRole>),
+      )
+      .value;
 }
 
 Future<void> _scrollToRobotFace(WidgetTester tester) async {
