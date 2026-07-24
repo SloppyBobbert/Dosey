@@ -997,9 +997,8 @@ void main() {
         ),
       ]) {
     testWidgets('${testCase.label} uses the scoped app clock', (tester) async {
-      final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8, 45));
+      final clock = _RawAppClock(DateTime(2040, 1, 2, 8, 45));
       final doseActionLogger = _FakeRobotFaceDoseActionLogger();
-      addTearDown(clock.close);
 
       await tester.pumpWidget(
         _RobotFaceTestApp(
@@ -1015,10 +1014,8 @@ void main() {
 
       expect(doseActionLogger.events, hasLength(1));
       expect(doseActionLogger.events.single.kind, testCase.expectedKind);
-      expect(
-        doseActionLogger.events.single.occurredAt,
-        DateTime.utc(2040, 1, 2, 8, 45),
-      );
+      expect(doseActionLogger.events.single.occurredAt, clock.now().toUtc());
+      expect(doseActionLogger.events.single.occurredAt.isUtc, isTrue);
     });
   }
 
@@ -1498,6 +1495,18 @@ void main() {
 
     expect(doseActionLogger.events, hasLength(1));
   });
+}
+
+class _RawAppClock implements AppClock {
+  const _RawAppClock(this.value);
+
+  final DateTime value;
+
+  @override
+  DateTime now() => value;
+
+  @override
+  Stream<DateTime> get ticks => const Stream<DateTime>.empty();
 }
 
 class _RobotFaceTestApp extends StatefulWidget {

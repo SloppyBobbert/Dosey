@@ -1001,7 +1001,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
 
   List<Widget> _buildActionButtons(BuildContext context) {
     final buttons = <Widget>[];
-    final occurredAt = DoseyAppScope.of(context).appClock.now();
+    final occurredAt = DoseyAppScope.of(context).appClock.now().toUtc();
 
     if (widget.state.availableActions.contains(
       RobotFaceActionKind.recognizeMissedDose,

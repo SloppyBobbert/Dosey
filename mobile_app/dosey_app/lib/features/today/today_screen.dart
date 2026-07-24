@@ -180,7 +180,9 @@ class _TodayDoseContent extends StatelessWidget {
                                 context,
                                 DoseLogEvent.doseTakenConfirmed(
                                   doseId: currentDoseId,
-                                  occurredAt: now.toUtc(),
+                                  occurredAt: DoseyAppScope.of(
+                                    context,
+                                  ).appClock.now().toUtc(),
                                 ),
                                 'Dose confirmation logged.',
                                 retireLoadedSlot: loadedSlot,

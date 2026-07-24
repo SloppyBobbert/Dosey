@@ -107,11 +107,13 @@ class DemoScenarioService {
   bool _runningStep = false;
   int _stepGeneration = 0;
   Future<void> _resetBarrier = Future<void>.value();
+  Object? _resetFailure;
 
   DemoScenarioState get state => _state;
   Stream<DemoScenarioState> get states => _states.stream;
 
   Future<void> select(DemoScenarioId id) async {
+    pause();
     final scenario = demoScenarioCatalog.singleWhere((item) => item.id == id);
     await _enqueueReset(
       () => DemoScenarioState(
@@ -157,6 +159,7 @@ class DemoScenarioService {
     final requestedGeneration = _stepGeneration;
     await _resetBarrier;
     if (requestedGeneration != _stepGeneration) return;
+    _throwIfResetFailed();
     if (_runningStep || _state.isComplete) return;
     final generation = requestedGeneration;
     final scenario = _state.scenario.id;
@@ -173,6 +176,8 @@ class DemoScenarioService {
   }
 
   Future<void> play() async {
+    await _resetBarrier;
+    _throwIfResetFailed();
     if (_state.isPlaying || _state.isComplete) return;
     _emit(_state.copyWith(isPlaying: true));
     while (_state.isPlaying && !_state.isComplete) {
@@ -206,11 +211,25 @@ class DemoScenarioService {
   Future<void> _enqueueReset(DemoScenarioState Function() nextState) {
     _stepGeneration += 1;
     final reset = _resetBarrier.then((_) async {
-      await _resetBaseline();
-      _emit(nextState());
+      try {
+        await _resetBaseline();
+        _resetFailure = null;
+        _emit(nextState());
+      } on Object catch (error) {
+        _resetFailure = error;
+        rethrow;
+      }
     });
     _resetBarrier = reset.then<void>((_) {}, onError: (_, _) {});
     return reset;
+  }
+
+  void _throwIfResetFailed() {
+    if (_resetFailure != null) {
+      throw StateError(
+        'Demo scenario reset failed. Restart the scenario before continuing.',
+      );
+    }
   }
 
   Future<void> _execute(DemoScenarioId scenario, int step) async {

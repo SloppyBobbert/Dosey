@@ -236,6 +236,55 @@ void main() {
     },
   );
 
+  test('select pauses autoplay before resetting the scenario', () async {
+    final playbackGate = Completer<void>();
+    final fixture = await _ScenarioFixture.create(
+      playbackDelay: (_) => playbackGate.future,
+    );
+    addTearDown(fixture.close);
+
+    final playback = fixture.service.play();
+    await fixture.service.states.firstWhere(
+      (state) => state.completedSteps == 1,
+    );
+
+    final selection = fixture.service.select(DemoScenarioId.missedRecognized);
+
+    expect(fixture.service.state.isPlaying, isFalse);
+    playbackGate.complete();
+    await Future.wait([playback, selection]);
+    expect(fixture.service.state.scenario.id, DemoScenarioId.missedRecognized);
+    expect(fixture.service.state.completedSteps, 0);
+  });
+
+  test('failed reset blocks steps until a later reset succeeds', () async {
+    final fixture = await _ScenarioFixture.create();
+    addTearDown(fixture.close);
+    await fixture.service.next();
+    expect(fixture.service.state.completedSteps, 1);
+    await fixture.database.customStatement('''
+      CREATE TRIGGER fail_demo_seed
+      BEFORE INSERT ON app_settings
+      BEGIN
+        SELECT RAISE(ABORT, 'seed failed');
+      END;
+    ''');
+
+    await expectLater(
+      fixture.service.select(DemoScenarioId.missedRecognized),
+      throwsA(anything),
+    );
+    await expectLater(fixture.service.next(), throwsStateError);
+    expect(fixture.service.state.completedSteps, 1);
+
+    await fixture.database.customStatement('DROP TRIGGER fail_demo_seed');
+    await fixture.service.restart();
+    expect(fixture.service.state.completedSteps, 0);
+    expect(fixture.clock.now(), _ScenarioFixture.seedTime);
+    await fixture.service.next();
+    expect(fixture.service.state.completedSteps, 1);
+  });
+
   test('presentation starts on a reset happy path and stops cleanly', () async {
     final fixture = await _ScenarioFixture.create();
     addTearDown(fixture.close);

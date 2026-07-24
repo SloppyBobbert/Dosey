@@ -3,6 +3,7 @@ import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
+import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/demo/demo_data_repository.dart';
 import 'package:dosey_app/core/demo/demo_external_services.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
@@ -215,6 +216,39 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('demo startup handles controller connection failure', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final controller = _FailingConnectControllerGateway();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          controllerGateway: controller,
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(controller.connectCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _FailingConnectControllerGateway extends SimulatedControllerGateway {
+  int connectCalls = 0;
+
+  @override
+  Future<void> connect() async {
+    connectCalls += 1;
+    throw StateError('connect failed');
+  }
 }
 
 class _FakeMissedDoseReconciliationService

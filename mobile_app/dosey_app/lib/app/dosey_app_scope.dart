@@ -63,6 +63,7 @@ class DoseyAppScope extends StatefulWidget {
     this.screenAwakeGateway,
     this.backupFileGateway,
     this.appClock,
+    this.controllerGateway,
   });
 
   final Widget child;
@@ -77,6 +78,7 @@ class DoseyAppScope extends StatefulWidget {
   final ScreenAwakeGateway? screenAwakeGateway;
   final BackupFileGateway? backupFileGateway;
   final AppClock? appClock;
+  final SimulatedControllerGateway? controllerGateway;
 
   static DoseyAppDependencies of(BuildContext context) {
     final dependencies = maybeOf(context);
@@ -171,17 +173,19 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     final demoIdGenerator = _database.isDemo
         ? DemoCommandSessionIdGenerator()
         : null;
-    final controller = SimulatedControllerGateway(
-      canHostRobot: () async {
-        final platform = currentAppDevicePlatform();
-        final storedRole = await settings.getDeviceRole();
-        final role = storedRole.isAllowedOn(platform)
-            ? storedRole
-            : AppDeviceRole.defaultFor(platform);
-        return role.canHostRobot;
-      },
-      delay: demoStageGate?.wait,
-    );
+    final controller =
+        widget.controllerGateway ??
+        SimulatedControllerGateway(
+          canHostRobot: () async {
+            final platform = currentAppDevicePlatform();
+            final storedRole = await settings.getDeviceRole();
+            final role = storedRole.isAllowedOn(platform)
+                ? storedRole
+                : AppDeviceRole.defaultFor(platform);
+            return role.canHostRobot;
+          },
+          delay: demoStageGate?.wait,
+        );
     final commandRepository = LocalControllerCommandRepository(
       _database,
       sessionIdGenerator: demoIdGenerator?.call,
@@ -303,9 +307,23 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       runMissedDoseReconciliation: _runMissedDoseReconciliation,
     );
     if (_database.isDemo) {
-      unawaited(controller.connect());
+      unawaited(_connectDemoController());
     } else {
       unawaited(_runStartupMaintenance());
+    }
+  }
+
+  Future<void> _connectDemoController() async {
+    try {
+      await _dependencies.controller.connect();
+    } on Object catch (error, stackTrace) {
+      developer.log(
+        'Demo controller connection failed; continuing app startup.',
+        name: 'dosey.app_scope',
+        level: 1000,
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 
