@@ -20,6 +20,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Carousel loading workflow with Daviky slot assignment, loaded/dispensed/review states, and controller-gated dispense actions.
 - Today dose-state logging that keeps dispense, visible, taken, skipped, missed, and caregiver/help actions separate.
 - Robot Face scaffolding with local face-state timing settings for wake-before-dose and stay-awake-after-dose behavior.
+- Mounted Robot Mode behavior that returns to Robot Face on resume, Back, or configurable inactivity; routes local notification taps by role and alert type; and keeps the Android display awake only while Robot Face is active.
 - Fixed WAV voice catalog for the mounted Robot Mode phone, with app-owned asset playback wiring, previews, category toggles, quiet hours, configurable repetition cooldowns, and reminder repeat policy controls for normal reminder speech.
 - Controller simulator plus BLE foundation for app flow work; controller protocol is still incomplete.
 - Google and Apple sign-in through app-owned auth interfaces; no Firebase/Supabase backend yet.
@@ -42,7 +43,7 @@ No cloud sync, push notifications, Firebase, or Supabase are in the app yet.
 
 Dosey has two app modes:
 
-- **Robot Mode:** Android-only mode for the mounted phone inside Dosey. It shows the face, reminders, dispense UI, refill status, hardware test controls, and controller connection state.
+- **Robot Mode:** Android-only mode for the mounted phone inside Dosey. It shows the face, reminders, dispense UI, refill status, hardware test controls, and controller connection state. It uses soft in-app navigation and screen-awake guardrails rather than device-owner or lock-task kiosk provisioning.
 - **Personal Mode:** Android and iOS mode for patient or caregiver phones. It supports notifications, missed dose/refill visibility, dose history, and schedule editing when permissions allow.
 
 The phone is the brain. It handles schedules, medication data, refill logic, dose history, PIN, caregiver logic, UI, reminders, Bluetooth commands, and future cloud, voice-command, or local AI features. The XIAO should only execute hardware actions and report status.
@@ -61,6 +62,8 @@ Device role rules:
 - Log Today actions separately for dispense success, dose visible, taken confirmations, already taken, early/late taken, snooze, skip, missed, and caregiver help.
 - Prevent duplicate terminal Today actions from double-logging the same dose or spending inventory twice.
 - Store device role, safety acknowledgement, cached auth state, Action PIN state, refill data, carousel state, household/profile metadata, admin audit events, and dose log events locally.
+- Return mounted Robot Mode to Robot Face after 1, 2, 5, 10, or 15 minutes of inactivity, with 2 minutes as the default; pause the timer in the background and defer it while a dialog or sheet is open.
+- Route local dose reminders to Robot Face in Robot Mode and Today in Personal Mode, route shortage alerts to Carousel, and run missed-dose reconciliation when the app resumes.
 - Run Android debug APK and iOS no-codesign debug builds on this machine.
 
 The app must not mark a dose taken because the servo moved. Dispense logging requires a controller success event, and the app separately tracks dose visible and dose taken confirmation.
@@ -68,7 +71,7 @@ The app must not mark a dose taken because the servo moved. Dispense logging req
 ## Near-term app work
 
 - Draft and test the Bluetooth command/status/heartbeat protocol against the simulator before hardware integration.
-- Keep expanding Robot Mode flows around guided Daviky carousel loading, dispense confirmation, refill countdown, and hardware tests.
+- Run mounted-phone manual QA on the Android test device for resume, inactivity, Back, notification, screen-awake, and role-change behavior.
 - Keep Today dose actions and refill inventory behavior aligned with local-first safety rules.
 - Add heartbeat/offline detection for XIAO power loss, crash, disconnect, or missed responses.
 - Keep caregiver alerts, voice commands, cloud sync, facial recognition, and local AI as later features. The current voice scope is fixed prerecorded WAV phrases only.

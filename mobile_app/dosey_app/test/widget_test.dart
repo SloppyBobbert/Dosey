@@ -242,12 +242,16 @@ void main() {
     expect(find.text('Controller'), findsNothing);
   });
 
-  testWidgets('settings shows signed-out profile and grouped safety sections', (
+  testWidgets('settings shows personal profile and grouped safety sections', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
-    await _markOnboardingComplete(database);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    await _saveSignedInUser(database, provider: AuthProvider.google);
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
@@ -255,15 +259,14 @@ void main() {
     await _pumpAppFrame(tester);
 
     expect(find.text('Profile'), findsOneWidget);
-    expect(find.text('Not signed in'), findsOneWidget);
-    expect(find.text('Local prototype'), findsOneWidget);
+    expect(find.text('Dosey Tester'), findsOneWidget);
     expect(find.text('Account'), findsOneWidget);
     expect(find.text('Cloud sync is not active yet.'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Device mode'), 200);
     await _pumpAppFrame(tester);
 
     expect(find.text('Device mode'), findsOneWidget);
-    expect(find.text('Android robot phone'), findsOneWidget);
+    expect(find.text('Android personal phone'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Prototype safety'), 200);
     await _pumpAppFrame(tester);
 
@@ -340,7 +343,11 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
-    await _markOnboardingComplete(database);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    await _saveSignedInUser(database, provider: AuthProvider.google);
     final notificationStatus = {
       AppPermission.notifications: AppPermissionState.granted,
     };
@@ -558,7 +565,11 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
-    await _markOnboardingComplete(database);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    await _saveSignedInUser(database, provider: AuthProvider.google);
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
@@ -3505,7 +3516,11 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
-    await _markOnboardingComplete(database);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    await _saveSignedInUser(database, provider: AuthProvider.google);
     await _addVitaminPrescription(database);
     final notificationStatus = {
       AppPermission.notifications: AppPermissionState.granted,
@@ -3568,8 +3583,12 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
-    await _markOnboardingComplete(database);
-    await _addVitaminPrescription(database);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    await _saveSignedInUser(database, provider: AuthProvider.google);
+    await _addVitaminPrescription(database, remainingDoses: 5);
     await _addVitaminReminder(database);
     final notificationTaps = ReminderNotificationTapController();
     addTearDown(notificationTaps.dispose);
@@ -3594,6 +3613,10 @@ void main() {
       0,
     );
     expect(await database.select(database.doseLogEvents).get(), isEmpty);
+    final prescription = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    expect(prescription.remainingDoses, 5);
   });
 
   testWidgets('Schedule tab shows active routine summary for the timeline', (

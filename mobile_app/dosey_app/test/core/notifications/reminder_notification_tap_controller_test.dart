@@ -4,7 +4,7 @@ import 'package:dosey_app/core/notifications/reminder_notification_tap_controlle
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('tap with active listener is delivered immediately', () async {
+  test('raw dose payload is delivered as a dose reminder tap', () async {
     final controller = ReminderNotificationTapController();
     addTearDown(controller.dispose);
     final tapFuture = controller.taps.first;
@@ -12,10 +12,23 @@ void main() {
     controller.handleTap(' dose-17 ');
 
     final tap = await tapFuture.timeout(const Duration(milliseconds: 50));
-    expect(tap.doseId, 'dose-17');
+    expect(tap, const ReminderNotificationTap.doseReminder('dose-17'));
   });
 
-  test('tap before listener is delivered to the first subscriber', () async {
+  test('shortage payload extracts alert id and ignores metadata', () async {
+    final controller = ReminderNotificationTapController();
+    addTearDown(controller.dispose);
+    final tapFuture = controller.taps.first;
+
+    controller.handleTap(
+      'shortage:shortage-1|slot:2|scheduledAt:2026-06-15T08:30:00.000Z|audience:household|delivery:local_only',
+    );
+
+    final tap = await tapFuture.timeout(const Duration(milliseconds: 50));
+    expect(tap, const ReminderNotificationTap.shortage('shortage-1'));
+  });
+
+  test('typed tap before listener is delivered to first subscriber', () async {
     final controller = ReminderNotificationTapController();
     addTearDown(controller.dispose);
 
@@ -25,7 +38,7 @@ void main() {
       const Duration(milliseconds: 50),
     );
 
-    expect(tap.doseId, 'dose-42');
+    expect(tap, const ReminderNotificationTap.doseReminder('dose-42'));
   });
 
   test('blank taps are ignored', () async {
@@ -33,6 +46,18 @@ void main() {
     addTearDown(controller.dispose);
 
     controller.handleTap('   ');
+
+    await expectLater(
+      controller.taps.first.timeout(const Duration(milliseconds: 50)),
+      throwsA(isA<TimeoutException>()),
+    );
+  });
+
+  test('shortage tap without alert id is ignored', () async {
+    final controller = ReminderNotificationTapController();
+    addTearDown(controller.dispose);
+
+    controller.handleTap('shortage:|slot:2');
 
     await expectLater(
       controller.taps.first.timeout(const Duration(milliseconds: 50)),

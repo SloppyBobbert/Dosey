@@ -13,6 +13,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 | Prescriptions and schedules | Local prescriptions, refill inventory tracking, schedule profiles, schedule editing, and enabled state |
 | Auth | Google + Apple wrappers, no backend yet |
 | Carousel and controller | Polished loading-bay and hardware-bench views, Daviky slot loading workflow, simulator, and BLE foundation only; real protocol incomplete |
+| Mounted Robot Mode | Face-first resume and Back behavior, configurable inactivity return, role-aware local notification routing, and screen-awake control while Robot Face is active |
 | Builds | Android debug APK and iOS no-codesign debug build run locally |
 
 ## Current app
@@ -23,13 +24,14 @@ Current workspace-level status:
 
 - Android and iOS personal-phone support stay in scope. Robot Mode stays Android-only.
 - The app shell, local storage, refill tracking, reminder flows, Daviky carousel loading workflow, controller simulator, and fixed prerecorded Robot Mode voice prompts are in place.
+- Mounted Robot Mode returns to Robot Face on resume and after configurable inactivity, contains Back navigation inside the app, and keeps the display awake only while Robot Face is active.
 - BLE remains foundation-only. The real controller protocol is still incomplete.
 - Google sign-in and native iOS Apple sign-in are wired behind app-owned interfaces. No backend, cloud sync, or push notifications yet.
 - First physical test device: 2024 Moto G Play.
 
 ## Target app direction
 
-Robot Mode on the mounted Android phone should handle the face screen, reminders, dispense UI, missed-dose recognition, hardware test screen, Bluetooth connection, refill status, dose history, fixed prerecorded voice prompts, quiet-hours behavior, and full-screen behavior when practical.
+Robot Mode on the mounted Android phone handles the face screen, reminders, dispense UI, missed-dose recognition, hardware test screen, refill status, dose history, fixed prerecorded voice prompts, quiet-hours behavior, and soft in-app mounted-phone guardrails. Android device-owner, lock-task, and immersive kiosk provisioning remain out of scope.
 
 Voice commands and local AI remain future work.
 

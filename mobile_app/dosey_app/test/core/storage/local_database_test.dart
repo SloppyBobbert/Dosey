@@ -299,6 +299,68 @@ void main() {
     },
   );
 
+  test('robot face return timeout defaults to two minutes', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = RobotFaceSettingsRepository(database);
+
+    final settings = await repository.getSettings();
+
+    expect(
+      settings.returnToFaceAfterInactivityMinutes,
+      RobotFaceSettings.defaultReturnToFaceAfterInactivityMinutes,
+    );
+    expect(settings.returnToFaceAfterInactivityMinutes, 2);
+  });
+
+  test('robot face return timeout persists a custom value', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = RobotFaceSettingsRepository(database);
+
+    await repository.saveSettings(
+      const RobotFaceSettings(returnToFaceAfterInactivityMinutes: 5),
+    );
+
+    expect(
+      (await repository.getSettings()).returnToFaceAfterInactivityMinutes,
+      5,
+    );
+  });
+
+  test('robot face return timeout falls back for malformed storage', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = RobotFaceSettingsRepository(database);
+    await database.setAppSetting(
+      'robot_face_return_to_face_after_inactivity_minutes',
+      'not-a-number',
+    );
+
+    expect(
+      (await repository.getSettings()).returnToFaceAfterInactivityMinutes,
+      RobotFaceSettings.defaultReturnToFaceAfterInactivityMinutes,
+    );
+  });
+
+  test(
+    'robot face return timeout falls back for unsupported storage',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = RobotFaceSettingsRepository(database);
+      await database.setAppSetting(
+        'robot_face_return_to_face_after_inactivity_minutes',
+        '99',
+      );
+
+      expect(
+        (await repository.getSettings()).returnToFaceAfterInactivityMinutes,
+        RobotFaceSettings.defaultReturnToFaceAfterInactivityMinutes,
+      );
+    },
+  );
+
   test(
     'robot face settings fall back to defaults for malformed values',
     () async {

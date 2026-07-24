@@ -11,8 +11,12 @@ class FakeMissedDoseReconciliationService
   FakeMissedDoseReconciliationService()
     : super(reminders: FakeReminderRepository(), doseLog: FakeDoseLog());
 
+  int reconcileCalls = 0;
+
   @override
-  Future<void> reconcile() async {}
+  Future<void> reconcile() async {
+    reconcileCalls += 1;
+  }
 }
 
 class FakeReminderRepository implements ReminderRepository {

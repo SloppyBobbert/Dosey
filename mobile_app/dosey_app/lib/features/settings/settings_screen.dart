@@ -125,98 +125,115 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final usesAppleSignIn = platform == AppDevicePlatform.ios;
     final providerName = usesAppleSignIn ? 'Apple' : 'Google';
 
-    return StreamBuilder<AuthSession>(
-      stream: dependencies.auth.watchSession(),
-      builder: (context, authSnapshot) {
-        final session = authSnapshot.data ?? const AuthSession.signedOut();
+    return StreamBuilder<AppDeviceRole>(
+      stream: dependencies.settings.watchDeviceRole(),
+      builder: (context, roleSnapshot) {
+        final allowedRoles = AppDeviceRole.allowedFor(platform);
+        final storedRole = roleSnapshot.data;
+        final role = storedRole != null && allowedRoles.contains(storedRole)
+            ? storedRole
+            : AppDeviceRole.defaultFor(platform);
 
-        return ListView(
-          controller: _scrollController,
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text('Settings', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            _ProfileSummaryCard(session: session, platform: platform),
-            const SizedBox(height: 12),
-            _SettingsSectionCard(
-              key: _sectionKeys[SettingsSection.account],
-              icon: Icons.account_circle_outlined,
-              title: 'Account',
+        return StreamBuilder<AuthSession>(
+          stream: dependencies.auth.watchSession(),
+          builder: (context, authSnapshot) {
+            final session = authSnapshot.data ?? const AuthSession.signedOut();
+
+            return ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(16),
               children: [
-                Text(
-                  session.user == null
-                      ? 'Signed out. $providerName sign-in is local-only until cloud sync is chosen.'
-                      : 'Signed in as ${session.user!.email}',
-                ),
-                const SizedBox(height: 8),
-                const Text('Cloud sync is not active yet.'),
-                if (_authMessage != null) ...[
-                  const SizedBox(height: 8),
-                  Text(_authMessage!),
-                ],
+                Text('Settings', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
-                if (session.isSignedIn)
-                  OutlinedButton.icon(
-                    onPressed: _signOut,
-                    icon: const Icon(Icons.logout),
-                    label: const Text('Sign out'),
-                  )
-                else
-                  FilledButton.tonalIcon(
-                    onPressed: _isSigningIn ? null : _signIn,
-                    icon: Icon(usesAppleSignIn ? Icons.apple : Icons.login),
-                    label: Text(
-                      _isSigningIn
-                          ? 'Signing in...'
-                          : 'Sign in with $providerName',
-                    ),
+                _ProfileSummaryCard(session: session, platform: platform),
+                const SizedBox(height: 12),
+                if (!role.canHostRobot) ...[
+                  _SettingsSectionCard(
+                    key: _sectionKeys[SettingsSection.account],
+                    icon: Icons.account_circle_outlined,
+                    title: 'Account',
+                    children: [
+                      Text(
+                        session.user == null
+                            ? 'Signed out. $providerName sign-in is local-only until cloud sync is chosen.'
+                            : 'Signed in as ${session.user!.email}',
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('Cloud sync is not active yet.'),
+                      if (_authMessage != null) ...[
+                        const SizedBox(height: 8),
+                        Text(_authMessage!),
+                      ],
+                      const SizedBox(height: 12),
+                      if (session.isSignedIn)
+                        OutlinedButton.icon(
+                          onPressed: _signOut,
+                          icon: const Icon(Icons.logout),
+                          label: const Text('Sign out'),
+                        )
+                      else
+                        FilledButton.tonalIcon(
+                          onPressed: _isSigningIn ? null : _signIn,
+                          icon: Icon(
+                            usesAppleSignIn ? Icons.apple : Icons.login,
+                          ),
+                          label: Text(
+                            _isSigningIn
+                                ? 'Signing in...'
+                                : 'Sign in with $providerName',
+                          ),
+                        ),
+                    ],
                   ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _DeviceModeCard(
-              key: _sectionKeys[SettingsSection.deviceMode],
-              platform: platform,
-            ),
-            const SizedBox(height: 12),
-            _ActionPinCard(key: _sectionKeys[SettingsSection.actionPin]),
-            const SizedBox(height: 12),
-            _HouseholdAccountCard(
-              key: _sectionKeys[SettingsSection.householdAccount],
-              platform: platform,
-            ),
-            const SizedBox(height: 12),
-            _AdminHistoryCard(key: _sectionKeys[SettingsSection.adminHistory]),
-            _RobotFaceSettingsSection(
-              sectionKey: _sectionKeys[SettingsSection.robotFace],
-              previewVoicePlayer: _previewVoicePlayer,
-            ),
-            const SizedBox(height: 12),
-            _ReminderNotificationCard(
-              key: _sectionKeys[SettingsSection.notifications],
-            ),
-            const SizedBox(height: 12),
-            _SafetyCard(key: _sectionKeys[SettingsSection.safety]),
-            const SizedBox(height: 12),
-            _HelpAboutCard(key: _sectionKeys[SettingsSection.helpAbout]),
-            const SizedBox(height: 12),
-            _SettingsSectionCard(
-              key: _sectionKeys[SettingsSection.setup],
-              icon: Icons.restart_alt,
-              title: 'Setup',
-              children: [
-                const Text(
-                  'Show the first-run safety notice and mode selection again.',
+                  const SizedBox(height: 12),
+                ],
+                _DeviceModeCard(
+                  key: _sectionKeys[SettingsSection.deviceMode],
+                  platform: platform,
                 ),
                 const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: _resetSetup,
-                  icon: const Icon(Icons.replay_outlined),
-                  label: const Text('Start over setup'),
+                _ActionPinCard(key: _sectionKeys[SettingsSection.actionPin]),
+                const SizedBox(height: 12),
+                _HouseholdAccountCard(
+                  key: _sectionKeys[SettingsSection.householdAccount],
+                  platform: platform,
+                ),
+                const SizedBox(height: 12),
+                _AdminHistoryCard(
+                  key: _sectionKeys[SettingsSection.adminHistory],
+                ),
+                _RobotFaceSettingsSection(
+                  sectionKey: _sectionKeys[SettingsSection.robotFace],
+                  previewVoicePlayer: _previewVoicePlayer,
+                ),
+                const SizedBox(height: 12),
+                _ReminderNotificationCard(
+                  key: _sectionKeys[SettingsSection.notifications],
+                ),
+                const SizedBox(height: 12),
+                _SafetyCard(key: _sectionKeys[SettingsSection.safety]),
+                const SizedBox(height: 12),
+                _HelpAboutCard(key: _sectionKeys[SettingsSection.helpAbout]),
+                const SizedBox(height: 12),
+                _SettingsSectionCard(
+                  key: _sectionKeys[SettingsSection.setup],
+                  icon: Icons.restart_alt,
+                  title: 'Setup',
+                  children: [
+                    const Text(
+                      'Show the first-run safety notice and mode selection again.',
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _resetSetup,
+                      icon: const Icon(Icons.replay_outlined),
+                      label: const Text('Start over setup'),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
+            );
+          },
         );
       },
     );
@@ -392,7 +409,8 @@ class _DeviceModeCard extends StatelessWidget {
               key: ValueKey('${platform.name}:${role.storageValue}'),
               role: role,
               allowedRoles: allowedRoles,
-              onChanged: dependencies.settings.setDeviceRole,
+              onChanged: (newRole) =>
+                  _changeRole(context, currentRole: role, newRole: newRole),
             ),
             const SizedBox(height: 10),
             Text(
@@ -409,6 +427,47 @@ class _DeviceModeCard extends StatelessWidget {
       },
     );
   }
+
+  Future<bool> _changeRole(
+    BuildContext context, {
+    required AppDeviceRole currentRole,
+    required AppDeviceRole newRole,
+  }) async {
+    final dependencies = DoseyAppScope.of(context);
+    if (!currentRole.canHostRobot || newRole.canHostRobot) {
+      await dependencies.settings.setDeviceRole(newRole);
+      return true;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Leave Robot Mode?'),
+        content: const Text(
+          'This Android phone will stop acting as Dosey\'s mounted robot phone and Robot Face will be removed. Continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) {
+      return false;
+    }
+
+    final result = await runProtectedAdminAction<void>(
+      context,
+      action: (_) => dependencies.settings.setDeviceRole(newRole),
+    );
+    return result.isSuccess;
+  }
 }
 
 class _DeviceModeDropdown extends StatefulWidget {
@@ -421,7 +480,7 @@ class _DeviceModeDropdown extends StatefulWidget {
 
   final AppDeviceRole role;
   final List<AppDeviceRole> allowedRoles;
-  final Future<void> Function(AppDeviceRole role) onChanged;
+  final Future<bool> Function(AppDeviceRole role) onChanged;
 
   @override
   State<_DeviceModeDropdown> createState() => _DeviceModeDropdownState();
@@ -450,7 +509,10 @@ class _DeviceModeDropdownState extends State<_DeviceModeDropdown> {
       onChanged: (newRole) async {
         if (newRole == null) return;
         try {
-          await widget.onChanged(newRole);
+          final accepted = await widget.onChanged(newRole);
+          if (!accepted) {
+            _fieldKey.currentState?.didChange(widget.role);
+          }
         } on Object catch (error) {
           _fieldKey.currentState?.didChange(widget.role);
           if (!context.mounted) return;
@@ -1028,6 +1090,8 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
       RobotFaceSettings.defaultIdleChatterCooldownMinutes;
   static const int _defaultReminderRepeatCooldownMinutes =
       RobotFaceSettings.defaultReminderRepeatCooldownMinutes;
+  static const int _defaultReturnToFaceAfterInactivityMinutes =
+      RobotFaceSettings.defaultReturnToFaceAfterInactivityMinutes;
 
   bool _isSaving = false;
 
@@ -1078,6 +1142,22 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                       'After quiet time, show a darker resting face. Dose alerts still stay bright.',
                   onChanged: (value) => _saveSettings(
                     settings.copyWith(dimAfterInactivity: value),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _RobotFaceTimingDropdown(
+                  label: 'Return to Robot Face',
+                  helperText:
+                      'When Robot Mode is open on another tab, return to the face after this much inactivity.',
+                  value: settings.returnToFaceAfterInactivityMinutes,
+                  fallbackValue: _defaultReturnToFaceAfterInactivityMinutes,
+                  enabled: !_isSaving,
+                  options: RobotFaceSettings
+                      .returnToFaceAfterInactivityMinuteOptions,
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(
+                      returnToFaceAfterInactivityMinutes: value,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),

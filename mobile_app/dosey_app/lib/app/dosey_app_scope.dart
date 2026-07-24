@@ -15,6 +15,7 @@ import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
+import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/household/local_household_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -50,6 +51,7 @@ class DoseyAppScope extends StatefulWidget {
     this.bleGateway,
     this.connectivityGateway,
     this.voicePlayer,
+    this.screenAwakeGateway,
   });
 
   final Widget child;
@@ -61,6 +63,7 @@ class DoseyAppScope extends StatefulWidget {
   final BleGateway? bleGateway;
   final ConnectivityGateway? connectivityGateway;
   final DoseyVoicePlayer? voicePlayer;
+  final ScreenAwakeGateway? screenAwakeGateway;
 
   static DoseyAppDependencies of(BuildContext context) {
     final dependencies = maybeOf(context);
@@ -205,6 +208,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
           DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway()),
       notificationTaps: notificationTaps,
       permissions: widget.permissionGateway ?? PermissionHandlerGateway(),
+      screenAwake:
+          widget.screenAwakeGateway ?? const MethodChannelScreenAwakeGateway(),
+      runMissedDoseReconciliation: _runMissedDoseReconciliation,
     );
     unawaited(_runStartupMaintenance());
   }
@@ -295,6 +301,8 @@ class DoseyAppDependencies {
     required this.voicePlayer,
     required this.notificationTaps,
     required this.permissions,
+    required this.screenAwake,
+    required this.runMissedDoseReconciliation,
   });
 
   final DoseyDatabase database;
@@ -321,6 +329,8 @@ class DoseyAppDependencies {
   final DoseyVoicePlayer voicePlayer;
   final ReminderNotificationTapController notificationTaps;
   final AppPermissionGateway permissions;
+  final ScreenAwakeGateway screenAwake;
+  final Future<void> Function() runMissedDoseReconciliation;
 }
 
 class _DoseyAppScopeInherited extends InheritedWidget {

@@ -1,10 +1,14 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
+import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
+import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/shell/dosey_shell.dart';
 import 'package:flutter/material.dart';
@@ -106,6 +110,439 @@ void main() {
     expect(find.text('Controller'), findsWidgets);
   });
 
+  testWidgets('Robot Mode returns to Robot Face after configured inactivity', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await RobotFaceSettingsRepository(database).saveSettings(
+      const RobotFaceSettings(returnToFaceAfterInactivityMinutes: 1),
+    );
+
+    await _pumpShell(tester, _TestShellApp(database: database));
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Controller'),
+          )
+          .hitTestable(),
+    );
+    await _pumpShellFrame(tester);
+
+    await tester.pump(const Duration(minutes: 1));
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Robot Face'), findsOneWidget);
+  });
+
+  testWidgets('Robot Mode interaction restarts the inactivity timeout', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await RobotFaceSettingsRepository(database).saveSettings(
+      const RobotFaceSettings(returnToFaceAfterInactivityMinutes: 1),
+    );
+
+    await _pumpShell(tester, _TestShellApp(database: database));
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Controller'),
+          )
+          .hitTestable(),
+    );
+    await _pumpShellFrame(tester);
+    await tester.pump(const Duration(seconds: 30));
+
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Controller'),
+          )
+          .hitTestable(),
+    );
+    await _pumpShellFrame(tester);
+    await tester.pump(const Duration(seconds: 31));
+    await _pumpShellFrame(tester);
+    expect(_appBarTitle('Controller'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 29));
+    await _pumpShellFrame(tester);
+    expect(_appBarTitle('Robot Face'), findsOneWidget);
+  });
+
+  testWidgets('Personal Mode does not auto-return after inactivity', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidPersonal);
+    await RobotFaceSettingsRepository(database).saveSettings(
+      const RobotFaceSettings(returnToFaceAfterInactivityMinutes: 1),
+    );
+
+    await _pumpShell(tester, _TestShellApp(database: database));
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+
+    await tester.pump(const Duration(minutes: 2));
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Controller'), findsOneWidget);
+  });
+
+  testWidgets('Robot Mode does not dismiss a dialog when inactivity expires', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await RobotFaceSettingsRepository(database).saveSettings(
+      const RobotFaceSettings(returnToFaceAfterInactivityMinutes: 1),
+    );
+
+    await _pumpShell(tester, _TestShellApp(database: database));
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+    final shellContext = tester.element(find.byType(DoseyShell));
+    showDialog<void>(
+      context: shellContext,
+      builder: (context) => AlertDialog(
+        title: const Text('Mounted action'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    await _pumpShellFrame(tester);
+
+    await tester.pump(const Duration(minutes: 1));
+    await _pumpShellFrame(tester);
+    expect(find.text('Mounted action'), findsOneWidget);
+    expect(_appBarTitle('Controller'), findsOneWidget);
+
+    await tester.tap(find.text('Close'));
+    await _pumpShellFrame(tester);
+    await tester.pump(const Duration(seconds: 1));
+    await _pumpShellFrame(tester);
+    expect(_appBarTitle('Robot Face'), findsOneWidget);
+  });
+
+  testWidgets('Robot Mode Back returns another tab to Robot Face', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(tester, _TestShellApp(database: database));
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+
+    await tester.binding.handlePopRoute();
+    await _pumpShellFrame(tester);
+
+    expect(find.byType(DoseyShell), findsOneWidget);
+    expect(_appBarTitle('Robot Face'), findsOneWidget);
+  });
+
+  testWidgets('Robot Mode Back is consumed on Robot Face', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(tester, _TestShellApp(database: database));
+    await tester.binding.handlePopRoute();
+    await _pumpShellFrame(tester);
+
+    expect(find.byType(DoseyShell), findsOneWidget);
+    expect(_appBarTitle('Robot Face'), findsOneWidget);
+  });
+
+  testWidgets('Personal Mode allows normal route popping', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidPersonal);
+
+    await _pumpShell(tester, _TestShellApp(database: database));
+
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is PopScope<Object?> && widget.canPop,
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Robot Face keeps screen awake only while active and resumed', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final screenAwake = _FakeScreenAwakeGateway();
+    addTearDown(database.close);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, screenAwakeGateway: screenAwake),
+    );
+    expect(screenAwake.states.last, isTrue);
+
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+    expect(screenAwake.states.last, isFalse);
+
+    await tester.tap(find.text('Robot Face').hitTestable());
+    await _pumpShellFrame(tester);
+    expect(screenAwake.states.last, isTrue);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await _pumpShellFrame(tester);
+    expect(screenAwake.states.last, isFalse);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _pumpShellFrame(tester);
+    expect(screenAwake.states.last, isTrue);
+
+    await DoseyAppScope.of(
+      tester.element(find.byType(DoseyShell)),
+    ).settings.setDeviceRole(AppDeviceRole.androidPersonal);
+    await _pumpShellFrame(tester);
+    expect(screenAwake.states.last, isFalse);
+  });
+
+  testWidgets('Personal Mode never requests the screen stay awake', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final screenAwake = _FakeScreenAwakeGateway();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidPersonal);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, screenAwakeGateway: screenAwake),
+    );
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+
+    expect(screenAwake.states, isNot(contains(true)));
+  });
+
+  testWidgets('disposing Robot Face releases the screen awake request', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final screenAwake = _FakeScreenAwakeGateway();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, screenAwakeGateway: screenAwake),
+    );
+    expect(screenAwake.states.last, isTrue);
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+
+    expect(screenAwake.states.last, isFalse);
+  });
+
+  testWidgets('screen awake failure does not crash Robot Mode', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final screenAwake = _FakeScreenAwakeGateway(throwOnSet: true);
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, screenAwakeGateway: screenAwake),
+    );
+
+    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Robot Mode returns to Robot Face and reconciles on resume', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final reconciliation = FakeMissedDoseReconciliationService();
+    addTearDown(database.close);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        missedDoseReconciliationService: reconciliation,
+      ),
+    );
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+    final baselineCalls = reconciliation.reconcileCalls;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    expect(reconciliation.reconcileCalls, baselineCalls + 1);
+  });
+
+  testWidgets('Personal Mode keeps active tab and reconciles on resume', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final reconciliation = FakeMissedDoseReconciliationService();
+    addTearDown(database.close);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    await _setDeviceRole(database, AppDeviceRole.androidPersonal);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        missedDoseReconciliationService: reconciliation,
+      ),
+    );
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+    final baselineCalls = reconciliation.reconcileCalls;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(reconciliation.reconcileCalls, baselineCalls + 1);
+  });
+
+  testWidgets('dose notification routes by device role', (
+    WidgetTester tester,
+  ) async {
+    for (final role in [
+      AppDeviceRole.androidRobot,
+      AppDeviceRole.androidPersonal,
+    ]) {
+      final database = DoseyDatabase.inMemory();
+      final notificationTaps = ReminderNotificationTapController();
+      await _setDeviceRole(database, role);
+
+      await _pumpShell(
+        tester,
+        _TestShellApp(
+          database: database,
+          notificationTapController: notificationTaps,
+        ),
+      );
+      await tester.tap(find.text('Controller').hitTestable());
+      await _pumpShellFrame(tester);
+
+      notificationTaps.handleTap('dose-17');
+      await _pumpShellFrame(tester);
+
+      expect(
+        _appBarTitle(
+          role == AppDeviceRole.androidRobot ? 'Robot Face' : 'Today',
+        ),
+        findsOneWidget,
+      );
+
+      notificationTaps.dispose();
+      await database.close();
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('shortage notification opens Carousel in either role', (
+    WidgetTester tester,
+  ) async {
+    for (final role in [
+      AppDeviceRole.androidRobot,
+      AppDeviceRole.androidPersonal,
+    ]) {
+      final database = DoseyDatabase.inMemory();
+      final notificationTaps = ReminderNotificationTapController();
+      await _setDeviceRole(database, role);
+
+      await _pumpShell(
+        tester,
+        _TestShellApp(
+          database: database,
+          notificationTapController: notificationTaps,
+        ),
+      );
+      notificationTaps.handleTap('shortage:shortage-1|slot:2');
+      await _pumpShellFrame(tester);
+
+      expect(_appBarTitle('Carousel'), findsOneWidget);
+
+      notificationTaps.dispose();
+      await database.close();
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+  });
+
+  testWidgets('background shortage tap is not overwritten on resume', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final notificationTaps = ReminderNotificationTapController();
+    addTearDown(database.close);
+    addTearDown(notificationTaps.dispose);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        notificationTapController: notificationTaps,
+      ),
+    );
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    notificationTaps.handleTap('shortage:shortage-1|slot:2');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Carousel'), findsOneWidget);
+  });
+
   testWidgets('selected index stays safe when role changes', (
     WidgetTester tester,
   ) async {
@@ -144,7 +581,7 @@ void main() {
 
     await _openSettingsMenu(tester);
 
-    expect(find.text('Account'), findsWidgets);
+    expect(find.text('Account'), findsNothing);
     expect(find.text('Device mode'), findsWidgets);
     expect(find.text('Household & robot profile'), findsOneWidget);
     expect(find.text('Admin history'), findsOneWidget);
@@ -172,13 +609,6 @@ void main() {
       findsOneWidget,
     );
 
-    await _scrollSettingsUntilVisible(
-      tester,
-      find.text('Account'),
-      delta: -200,
-    );
-    expect(find.text('Account').hitTestable(), findsWidgets);
-
     await _openSettingsMenu(tester);
     await tester.tap(find.text('Prototype safety').hitTestable());
     await _pumpShellFrame(tester);
@@ -191,6 +621,19 @@ void main() {
       find.text('I understand prototype safety rules').hitTestable(),
       findsOneWidget,
     );
+  });
+
+  testWidgets('Personal Mode settings menu retains Account', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidPersonal);
+
+    await _pumpShell(tester, _TestShellApp(database: database));
+    await _openSettingsMenu(tester);
+
+    expect(find.text('Account'), findsOneWidget);
   });
 
   testWidgets('settings gear menu opens Help and About', (
@@ -291,6 +734,10 @@ Future<void> _setDeviceRole(DoseyDatabase database, AppDeviceRole role) async {
   await settings.setDeviceRole(role);
 }
 
+Finder _appBarTitle(String title) {
+  return find.descendant(of: find.byType(AppBar), matching: find.text(title));
+}
+
 Future<void> _openSettingsMenu(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Open settings menu'));
   await _pumpShellFrame(tester);
@@ -320,9 +767,17 @@ Future<void> _scrollSettingsUntilVisible(
 }
 
 class _TestShellApp extends StatelessWidget {
-  const _TestShellApp({required this.database});
+  const _TestShellApp({
+    required this.database,
+    this.notificationTapController,
+    this.missedDoseReconciliationService,
+    this.screenAwakeGateway,
+  });
 
   final DoseyDatabase database;
+  final ReminderNotificationTapController? notificationTapController;
+  final FakeMissedDoseReconciliationService? missedDoseReconciliationService;
+  final ScreenAwakeGateway? screenAwakeGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -332,9 +787,28 @@ class _TestShellApp extends StatelessWidget {
       connectivityGateway: FakeConnectivityGateway(),
       permissionGateway: const _FakePermissionGateway(),
       reminderScheduler: const _NoopReminderScheduler(),
-      missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
+      notificationTapController: notificationTapController,
+      missedDoseReconciliationService:
+          missedDoseReconciliationService ??
+          FakeMissedDoseReconciliationService(),
+      screenAwakeGateway: screenAwakeGateway,
       child: const MaterialApp(home: DoseyShell()),
     );
+  }
+}
+
+class _FakeScreenAwakeGateway implements ScreenAwakeGateway {
+  _FakeScreenAwakeGateway({this.throwOnSet = false});
+
+  final bool throwOnSet;
+  final List<bool> states = <bool>[];
+
+  @override
+  Future<void> setKeepScreenAwake(bool enabled) async {
+    states.add(enabled);
+    if (throwOnSet) {
+      throw StateError('Screen awake unavailable');
+    }
   }
 }
 

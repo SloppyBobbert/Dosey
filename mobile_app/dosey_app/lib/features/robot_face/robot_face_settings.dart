@@ -36,6 +36,8 @@ class RobotFaceSettings {
     this.reminderRepeatPolicy = RobotReminderRepeatPolicy.noRepeats,
     int wakeBeforeDoseMinutes = defaultWakeBeforeDoseMinutes,
     int stayAwakeAfterDoseMinutes = defaultStayAwakeAfterDoseMinutes,
+    int returnToFaceAfterInactivityMinutes =
+        defaultReturnToFaceAfterInactivityMinutes,
   }) : wakeBeforeDoseMinutes = wakeBeforeDoseMinutes < 0
            ? defaultWakeBeforeDoseMinutes
            : wakeBeforeDoseMinutes,
@@ -48,6 +50,14 @@ class RobotFaceSettings {
        stayAwakeAfterDoseMinutes = stayAwakeAfterDoseMinutes < 0
            ? defaultStayAwakeAfterDoseMinutes
            : stayAwakeAfterDoseMinutes,
+       returnToFaceAfterInactivityMinutes =
+           returnToFaceAfterInactivityMinutes == 1 ||
+               returnToFaceAfterInactivityMinutes == 2 ||
+               returnToFaceAfterInactivityMinutes == 5 ||
+               returnToFaceAfterInactivityMinutes == 10 ||
+               returnToFaceAfterInactivityMinutes == 15
+           ? returnToFaceAfterInactivityMinutes
+           : defaultReturnToFaceAfterInactivityMinutes,
        voiceQuietHoursStartMinutes =
            voiceQuietHoursStartMinutes < 0 ||
                voiceQuietHoursStartMinutes >= 24 * 60
@@ -62,6 +72,14 @@ class RobotFaceSettings {
   static const int defaultStayAwakeAfterDoseMinutes = 10;
   static const int defaultIdleChatterCooldownMinutes = 10;
   static const int defaultReminderRepeatCooldownMinutes = 5;
+  static const int defaultReturnToFaceAfterInactivityMinutes = 2;
+  static const List<int> returnToFaceAfterInactivityMinuteOptions = [
+    1,
+    2,
+    5,
+    10,
+    15,
+  ];
   static const int defaultVoiceQuietHoursStartMinutes = 22 * 60;
   static const int defaultVoiceQuietHoursEndMinutes = 7 * 60;
 
@@ -85,6 +103,7 @@ class RobotFaceSettings {
   final RobotReminderRepeatPolicy reminderRepeatPolicy;
   final int wakeBeforeDoseMinutes;
   final int stayAwakeAfterDoseMinutes;
+  final int returnToFaceAfterInactivityMinutes;
 
   RobotFaceSettings copyWith({
     bool? isFlipped,
@@ -107,6 +126,7 @@ class RobotFaceSettings {
     RobotReminderRepeatPolicy? reminderRepeatPolicy,
     int? wakeBeforeDoseMinutes,
     int? stayAwakeAfterDoseMinutes,
+    int? returnToFaceAfterInactivityMinutes,
   }) {
     return RobotFaceSettings(
       isFlipped: isFlipped ?? this.isFlipped,
@@ -143,6 +163,9 @@ class RobotFaceSettings {
           wakeBeforeDoseMinutes ?? this.wakeBeforeDoseMinutes,
       stayAwakeAfterDoseMinutes:
           stayAwakeAfterDoseMinutes ?? this.stayAwakeAfterDoseMinutes,
+      returnToFaceAfterInactivityMinutes:
+          returnToFaceAfterInactivityMinutes ??
+          this.returnToFaceAfterInactivityMinutes,
     );
   }
 
@@ -174,11 +197,13 @@ class RobotFaceSettings {
         other.reminderRepeatCooldownMinutes == reminderRepeatCooldownMinutes &&
         other.reminderRepeatPolicy == reminderRepeatPolicy &&
         other.wakeBeforeDoseMinutes == wakeBeforeDoseMinutes &&
-        other.stayAwakeAfterDoseMinutes == stayAwakeAfterDoseMinutes;
+        other.stayAwakeAfterDoseMinutes == stayAwakeAfterDoseMinutes &&
+        other.returnToFaceAfterInactivityMinutes ==
+            returnToFaceAfterInactivityMinutes;
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     isFlipped,
     dimAfterInactivity,
     voiceEnabled,
@@ -199,5 +224,6 @@ class RobotFaceSettings {
     reminderRepeatPolicy,
     wakeBeforeDoseMinutes,
     stayAwakeAfterDoseMinutes,
-  );
+    returnToFaceAfterInactivityMinutes,
+  ]);
 }

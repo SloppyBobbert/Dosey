@@ -4,8 +4,8 @@ import 'dart:async';
 ///
 /// If a cold-start tap arrives before the shell subscribes, the controller keeps
 /// the latest pending tap and emits it to the first listener. Later pre-listener
-/// taps replace earlier ones because every reminder tap routes to the same Today
-/// destination.
+/// taps replace earlier ones because only the latest launch intent can be acted
+/// upon.
 class ReminderNotificationTapController {
   late final _controller = StreamController<ReminderNotificationTap>.broadcast(
     onListen: _emitPendingTap,
@@ -14,15 +14,12 @@ class ReminderNotificationTapController {
 
   Stream<ReminderNotificationTap> get taps => _controller.stream;
 
-  void handleTap(String doseId) {
-    final trimmedDoseId = doseId.trim();
-    if (trimmedDoseId.isEmpty) {
-      return;
-    }
+  void handleTap(String payload) {
+    final tap = ReminderNotificationTap.fromPayload(payload);
+    if (tap == null) return;
     if (_controller.isClosed) {
       return;
     }
-    final tap = ReminderNotificationTap(doseId: trimmedDoseId);
     if (_controller.hasListener) {
       _controller.add(tap);
     } else {
@@ -48,8 +45,44 @@ class ReminderNotificationTapController {
   }
 }
 
-class ReminderNotificationTap {
-  const ReminderNotificationTap({required this.doseId});
+enum ReminderNotificationTapKind { doseReminder, shortage }
 
-  final String doseId;
+class ReminderNotificationTap {
+  const ReminderNotificationTap.doseReminder(String doseId)
+    : kind = ReminderNotificationTapKind.doseReminder,
+      targetId = doseId;
+
+  const ReminderNotificationTap.shortage(String alertId)
+    : kind = ReminderNotificationTapKind.shortage,
+      targetId = alertId;
+
+  final ReminderNotificationTapKind kind;
+  final String targetId;
+
+  static ReminderNotificationTap? fromPayload(String payload) {
+    final trimmedPayload = payload.trim();
+    if (trimmedPayload.isEmpty) return null;
+
+    const shortagePrefix = 'shortage:';
+    if (!trimmedPayload.startsWith(shortagePrefix)) {
+      return ReminderNotificationTap.doseReminder(trimmedPayload);
+    }
+
+    final metadataStart = trimmedPayload.indexOf('|');
+    final alertId = trimmedPayload.substring(
+      shortagePrefix.length,
+      metadataStart < 0 ? trimmedPayload.length : metadataStart,
+    );
+    if (alertId.isEmpty) return null;
+    return ReminderNotificationTap.shortage(alertId);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ReminderNotificationTap &&
+      other.kind == kind &&
+      other.targetId == targetId;
+
+  @override
+  int get hashCode => Object.hash(kind, targetId);
 }

@@ -45,7 +45,7 @@ The project is intended to explore whether an inexpensive, expressive, and repai
 | Mechanism | Grove servo pusher with a ratchet or physical stop; basic servo movement is confirmed |
 | Shell | Fully LEGO body around the carousel, phone, electronics, cup opening, and service panels |
 | App data | Drift/SQLite on the phone only; no backend or cloud sync yet |
-| App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus Robot Face in Android Robot Mode |
+| App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus a face-first mounted experience in Android Robot Mode |
 | Safety status | Fake-pill testing only; not for real medication |
 
 ## Safety
@@ -75,6 +75,7 @@ Dosey is built around four main systems:
    - The mounted Android phone is the robot face, speaker, reminder system, and main computer.
    - Robot Mode runs only on Android.
    - Personal Mode runs on Android and iOS phones for patient or caregiver use.
+   - Robot Mode returns to Robot Face on resume, after configurable inactivity, or when Back is pressed from another app tab. The screen stays awake only while Robot Face is active.
    - The phone handles schedules, medication data, refill logic, dose history, PIN rules, caregiver logic, UI, reminders, Bluetooth commands, fixed prerecorded Robot Mode voice prompts, and future cloud, voice-command, or local AI features.
 
 3. **XIAO and Grove controller**
@@ -151,7 +152,7 @@ No firmware build command exists yet.
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the practical platform for Robot Mode because the phone lives inside Dosey; iOS remains supported for Personal Mode.
 
-The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Google and Apple sign-in plumbing, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
+The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. Mounted Robot Mode returns to Robot Face on resume and after a configurable 1, 2, 5, 10, or 15 minutes of inactivity, contains Back navigation inside the app, keeps the screen awake only while the face is active, and routes local dose and shortage notification taps to the appropriate in-app surface. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Google and Apple sign-in plumbing, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
 
 BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
 
@@ -163,7 +164,7 @@ BLE, notifications, local storage, auth, and permissions sit behind app-owned in
 
 The app should grow toward two modes:
 
-- **Robot Mode:** mounted Android phone face, reminders, dispense UI, hardware test screen, Bluetooth connection, refill status, dose history, sounds/TTS, and full-screen or kiosk-style behavior when practical.
+- **Robot Mode:** mounted Android phone face, reminders, dispense UI, hardware test screen, Bluetooth connection, refill status, dose history, fixed prerecorded sounds, and soft in-app mounted-phone guardrails. It does not use Android device-owner, lock-task, or immersive kiosk provisioning.
 - **Personal Mode:** patient or caregiver phone for notifications, missed dose/refill alerts, dose history, and schedule editing when permissions allow.
 
 Reminder notification channel and sound IDs are intended to stay stable once chosen. Actual custom sound assets may still need platform provisioning where required.
@@ -204,15 +205,15 @@ The servo has already been tested as strong enough for the current mechanism, so
 
 ## Project status
 
-Early prototype. The repo has a safety-first Flutter app shell, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no production firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
+Early prototype. The repo has a safety-first Flutter app shell, mounted-phone Robot Mode guardrails, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no production firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
 
 Near-term work:
 
 - Record the ESP32-C6 and Grove Base wiring, power paths, and servo power behavior.
 - Build the Stage 2 servo/carousel rig and run repeated one-slot tests.
 - Draft and test the Bluetooth command/status/heartbeat protocol against the simulator before hardware integration.
-- Add screenshots or manual QA notes for the current app surfaces before a broader app polish PR.
-- Expand Robot Mode around Robot Face wake/sleep behavior, loading, dispense confirmation, refill tracking, and hardware tests.
+- Run mounted-phone manual QA on the Moto G Play, including inactivity return, notification routing, Back containment, screen-awake release, and role changes.
+- Add screenshots or simulator scenario notes for the current app surfaces before a broader app polish PR.
 - Integrate the working rig into a fully LEGO shell only after movement is repeatable.
 
 ## License

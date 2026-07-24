@@ -37,6 +37,8 @@ class RobotFaceSettingsRepository {
       'robot_face_wake_before_dose_minutes';
   static const _stayAwakeAfterDoseMinutesKey =
       'robot_face_stay_awake_after_dose_minutes';
+  static const _returnToFaceAfterInactivityMinutesKey =
+      'robot_face_return_to_face_after_inactivity_minutes';
 
   final DoseyDatabase _database;
 
@@ -63,6 +65,7 @@ class RobotFaceSettingsRepository {
           _reminderRepeatPolicyKey,
           _wakeBeforeDoseMinutesKey,
           _stayAwakeAfterDoseMinutesKey,
+          _returnToFaceAfterInactivityMinutesKey,
         })
         .map(_mapSettings);
   }
@@ -89,6 +92,7 @@ class RobotFaceSettingsRepository {
       _reminderRepeatPolicyKey,
       _wakeBeforeDoseMinutesKey,
       _stayAwakeAfterDoseMinutesKey,
+      _returnToFaceAfterInactivityMinutesKey,
     });
 
     return _mapSettings(settings);
@@ -176,6 +180,10 @@ class RobotFaceSettingsRepository {
         _stayAwakeAfterDoseMinutesKey,
         settings.stayAwakeAfterDoseMinutes.toString(),
       );
+      await _database.setAppSetting(
+        _returnToFaceAfterInactivityMinutesKey,
+        settings.returnToFaceAfterInactivityMinutes.toString(),
+      );
     });
   }
 
@@ -247,6 +255,9 @@ class RobotFaceSettingsRepository {
       stayAwakeAfterDoseMinutes:
           int.tryParse(values[_stayAwakeAfterDoseMinutesKey] ?? '') ??
           RobotFaceSettings.defaultStayAwakeAfterDoseMinutes,
+      returnToFaceAfterInactivityMinutes:
+          int.tryParse(values[_returnToFaceAfterInactivityMinutesKey] ?? '') ??
+          RobotFaceSettings.defaultReturnToFaceAfterInactivityMinutes,
     );
   }
 
