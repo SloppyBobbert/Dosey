@@ -287,7 +287,7 @@ void main() {
             loadSessionId: const Value('session-partial-continuation'),
             slotNumber: 2,
             bundleKey: 'bundle-partial',
-            scheduledAt: DateTime.utc(2026, 7, 24, 8, 30),
+            scheduledAt: DateTime.now().toUtc().add(const Duration(days: 1)),
             prescriptionIdsJson: '["vitamin-d"]',
             prescriptionNamesJson: '["Vitamin D"]',
             status: 'active',
