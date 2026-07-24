@@ -3604,6 +3604,23 @@ void main() {
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       2,
     );
+    final prescriptionBeforeTap = await (database.select(
+      database.prescriptions,
+    )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+    final inventoryBeforeTap = (
+      remainingDoses: prescriptionBeforeTap.remainingDoses,
+      availableDoses: prescriptionBeforeTap.availableDoses,
+      loadedDoses: prescriptionBeforeTap.loadedDoses,
+      usedDoses: prescriptionBeforeTap.usedDoses,
+      reviewDoses: prescriptionBeforeTap.reviewDoses,
+    );
+    expect(inventoryBeforeTap, const (
+      remainingDoses: 5,
+      availableDoses: 5,
+      loadedDoses: 0,
+      usedDoses: 0,
+      reviewDoses: 0,
+    ));
 
     notificationTaps.handleTap('vitamin-d:2026-06-30');
     await _pumpAppFrame(tester);
@@ -3613,10 +3630,16 @@ void main() {
       0,
     );
     expect(await database.select(database.doseLogEvents).get(), isEmpty);
-    final prescription = await (database.select(
+    final prescriptionAfterTap = await (database.select(
       database.prescriptions,
     )..where((row) => row.id.equals('vitamin-d'))).getSingle();
-    expect(prescription.remainingDoses, 5);
+    expect((
+      remainingDoses: prescriptionAfterTap.remainingDoses,
+      availableDoses: prescriptionAfterTap.availableDoses,
+      loadedDoses: prescriptionAfterTap.loadedDoses,
+      usedDoses: prescriptionAfterTap.usedDoses,
+      reviewDoses: prescriptionAfterTap.reviewDoses,
+    ), inventoryBeforeTap);
   });
 
   testWidgets('Schedule tab shows active routine summary for the timeline', (

@@ -20,7 +20,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Carousel loading workflow with Daviky slot assignment, loaded/dispensed/review states, and controller-gated dispense actions.
 - Today dose-state logging that keeps dispense, visible, taken, skipped, missed, and caregiver/help actions separate.
 - Robot Face scaffolding with local face-state timing settings for wake-before-dose and stay-awake-after-dose behavior.
-- Mounted Robot Mode behavior that returns to Robot Face on resume, Back, or configurable inactivity; routes local notification taps by role and alert type; and keeps the Android display awake only while Robot Face is active.
+- Mounted Robot Mode behavior that returns to Robot Face on resume, Back, or configurable inactivity; routes local notification taps by role and alert type; and keeps the Android display awake only while Robot Face is active and the app is resumed, never while backgrounded.
 - Fixed WAV voice catalog for the mounted Robot Mode phone, with app-owned asset playback wiring, previews, category toggles, quiet hours, configurable repetition cooldowns, and reminder repeat policy controls for normal reminder speech.
 - Controller simulator plus BLE foundation for app flow work; controller protocol is still incomplete.
 - Google and Apple sign-in through app-owned auth interfaces; no Firebase/Supabase backend yet.

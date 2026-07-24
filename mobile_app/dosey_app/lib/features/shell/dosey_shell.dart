@@ -522,12 +522,16 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     _selectTab(_ShellTabId.robotFace);
   }
 
-  Future<void> _handleNotificationTap(ReminderNotificationTap tap) async {
+  void _handleNotificationTap(ReminderNotificationTap tap) {
     if (_lifecycleState != null &&
         _lifecycleState != AppLifecycleState.resumed) {
       _handledNotificationWhileBackgrounded = true;
     }
 
+    unawaited(_routeNotificationTap(tap));
+  }
+
+  Future<void> _routeNotificationTap(ReminderNotificationTap tap) async {
     final dependencies = _dependencies;
     if (dependencies == null) {
       return;
