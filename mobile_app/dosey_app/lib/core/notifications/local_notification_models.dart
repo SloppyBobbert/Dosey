@@ -57,3 +57,10 @@ const doseyReminderNotificationChannel = LocalNotificationChannel(
   description: 'Dosey reminder alerts for scheduled doses.',
   sound: doseyReminderNotificationSound,
 );
+
+const doseyUrgentShortageNotificationChannel = LocalNotificationChannel(
+  id: 'dosey_urgent_shortages',
+  name: 'Urgent shortages',
+  description: 'Urgent local-only shortage alerts that need reload review.',
+  sound: doseyReminderNotificationSound,
+);

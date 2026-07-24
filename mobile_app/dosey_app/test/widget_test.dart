@@ -2,7 +2,11 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/main.dart' as app;
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/carousel/carousel_load_session.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
+import 'package:dosey_app/core/carousel/carousel_position.dart';
+import 'package:dosey_app/core/carousel/guided_carousel_load_plan.dart';
+import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -676,18 +680,17 @@ void main() {
     await tester.tap(find.text('Carousel'));
     await _pumpAppFrame(tester);
 
-    expect(find.text('Daviky loading'), findsOneWidget);
-    expect(find.text('0 loaded / 0 assigned'), findsOneWidget);
+    expect(find.text('Guided carousel loading'), findsOneWidget);
+    expect(find.text('START/home ready'), findsOneWidget);
+    expect(find.text('No active load'), findsOneWidget);
+    expect(find.text('Local only'), findsOneWidget);
     expect(
-      find.text(
-        'Use candy, beads, dry beans, vitamins, or fake pills for prototype testing. Do not use real prescription medication in early tests.',
-      ),
+      find.widgetWithText(FilledButton, 'Start refill/loading'),
       findsOneWidget,
     );
-    expect(find.text('No active schedules to load.'), findsOneWidget);
   });
 
-  testWidgets('Carousel screen assigns and loads an active schedule', (
+  testWidgets('Carousel screen opens the guided refill entry flow', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -701,33 +704,18 @@ void main() {
     await tester.tap(find.text('Carousel'));
     await _pumpAppFrame(tester);
 
-    await tester.enterText(
-      find.widgetWithText(TextFormField, 'Slot number'),
-      '1',
+    await tester.tap(find.widgetWithText(FilledButton, 'Start refill/loading'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose a refill path'), findsOneWidget);
+    expect(find.text('Top off empty slots'), findsOneWidget);
+    expect(find.text('Empty and reload all'), findsOneWidget);
+    expect(
+      find.text(
+        'Top-off keeps the current load. Full Reload clears the carousel first.',
+      ),
+      findsOneWidget,
     );
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await _pumpAppFrame(tester);
-    await tester.ensureVisible(find.text('Assign next dose'));
-    await _pumpAppFrame(tester);
-    await tester.tap(find.widgetWithText(FilledButton, 'Assign next dose'));
-    await _pumpAppFrame(tester);
-
-    expect(find.text('Slot 1'), findsOneWidget);
-    expect(find.text('08:30 · Vitamin D'), findsOneWidget);
-    expect(find.text('Assigned'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('0 loaded / 1 assigned'), -220);
-    await _pumpAppFrame(tester);
-    expect(find.text('0 loaded / 1 assigned'), findsOneWidget);
-
-    await tester.scrollUntilVisible(find.text('Mark loaded'), 220);
-    await _pumpAppFrame(tester);
-    await tester.tap(find.text('Mark loaded'));
-    await _pumpAppFrame(tester);
-
-    expect(find.text('Loaded'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('1 loaded / 1 assigned'), -220);
-    await _pumpAppFrame(tester);
-    expect(find.text('1 loaded / 1 assigned'), findsOneWidget);
   });
 
   testWidgets('Carousel tab shows loading bay summary', (
@@ -860,40 +848,47 @@ void main() {
     expect(slot.status, CarouselSlotStatus.loaded.storageValue);
   });
 
-  testWidgets('Carousel skips disabled schedules when assigning slots', (
-    WidgetTester tester,
-  ) async {
-    final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
-    await _markOnboardingComplete(database);
-    await _addVitaminPrescription(database);
-    await _addAllergyPrescription(database);
-    await _addVitaminReminder(
-      database,
-      id: 'disabled-vitamin-d',
-      isEnabled: false,
-    );
-    await LocalReminderRepository(database).upsertSchedule(
-      ReminderSchedule(
-        id: 'allergy-noon',
-        label: 'Allergy pill',
-        prescriptionId: 'allergy-pill',
-        hour: 12,
-        minute: 0,
-        isEnabled: true,
-        createdAt: DateTime.utc(2026),
-        updatedAt: DateTime.utc(2026),
-      ),
-    );
+  testWidgets(
+    'Carousel guided refill entry does not show legacy manual assignment rows for disabled schedules',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database);
+      await _addAllergyPrescription(database);
+      await _addVitaminReminder(
+        database,
+        id: 'disabled-vitamin-d',
+        isEnabled: false,
+      );
+      await LocalReminderRepository(database).upsertSchedule(
+        ReminderSchedule(
+          id: 'allergy-noon',
+          label: 'Allergy pill',
+          prescriptionId: 'allergy-pill',
+          hour: 12,
+          minute: 0,
+          isEnabled: true,
+          createdAt: DateTime.utc(2026),
+          updatedAt: DateTime.utc(2026),
+        ),
+      );
 
-    await tester.pumpWidget(DoseyApp(database: database));
-    await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
-    await _pumpAppFrame(tester);
+      await tester.pumpWidget(DoseyApp(database: database));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Carousel'));
+      await _pumpAppFrame(tester);
 
-    expect(find.text('12:00 · Allergy pill'), findsOneWidget);
-    expect(find.text('08:30 · Vitamin D'), findsNothing);
-  });
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Start refill/loading'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Choose a refill path'), findsOneWidget);
+      expect(find.text('08:30 · Vitamin D'), findsNothing);
+      expect(find.text('12:00 · Allergy pill'), findsNothing);
+    },
+  );
 
   testWidgets('Carousel hides loaded slots for disabled schedules', (
     WidgetTester tester,
@@ -1061,6 +1056,352 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Dose visible'), findsNothing);
     expect(find.text('Current dose'), findsOneWidget);
   });
+
+  testWidgets(
+    'Today confirm taken after dispense moves guided inventory from loaded to used',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database, remainingDoses: 2);
+      await _addVitaminReminder(database, id: 'vitamin-d-morning');
+      await _addLoadedVitaminSlot(database);
+      final guidedLoads = LocalGuidedCarouselLoadRepository(database);
+      final today = DateTime.now();
+      final now = DateTime.utc(today.year, today.month, today.day, 8);
+      await guidedLoads.confirmFullLoad(
+        sessionId: 'session-live-taken',
+        profileId: 'schedule-1',
+        plan: GuidedCarouselLoadPlan(
+          createdAt: now,
+          mode: GuidedCarouselLoadMode.fullReload,
+          priorPosition: CarouselPosition.start,
+          slots: [
+            CarouselLoadPlanSlotPreview.loaded(
+              position: CarouselPosition(1),
+              bundle: CarouselDoseBundle(
+                bundleKey: 'bundle-1',
+                scheduledAt: now,
+                scheduleIds: const ['vitamin-d-morning'],
+                medications: [
+                  CarouselDoseBundleMedication(
+                    prescriptionId: 'vitamin-d',
+                    prescriptionName: 'Vitamin D',
+                    scheduleId: 'vitamin-d-morning',
+                    scheduledAt: now,
+                    availableDoses: 1,
+                    guidedPillIcon: GuidedPillIcon.roundPill,
+                    doseCount: 1,
+                    createdAt: now,
+                    updatedAt: now,
+                  ),
+                ],
+              ),
+            ),
+            ...List<CarouselLoadPlanSlotPreview>.generate(
+              13,
+              (index) => CarouselLoadPlanSlotPreview.empty(
+                position: CarouselPosition(index + 2),
+              ),
+            ),
+          ],
+          shortages: const [],
+        ),
+        startedAt: now,
+        confirmedAt: now,
+      );
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Controller'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Connect simulator'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Today'));
+      await _pumpAppFrame(tester);
+
+      await tester.ensureVisible(find.text('Dispense from slot 1'));
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Dispense from slot 1'),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.ensureVisible(find.text('Confirm taken'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Confirm taken'));
+      await _pumpAppFrame(tester);
+
+      final prescription = await (database.select(
+        database.prescriptions,
+      )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+      expect(prescription.loadedDoses, 0);
+      expect(prescription.usedDoses, 1);
+    },
+  );
+
+  testWidgets(
+    'Today blocks confirm taken for a guided-loaded dose before movement occurs',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database, remainingDoses: 2);
+      await _addVitaminReminder(database, id: 'vitamin-d-morning');
+      await _addLoadedVitaminSlot(database);
+      final guidedLoads = LocalGuidedCarouselLoadRepository(database);
+      final today = DateTime.now();
+      final now = DateTime.utc(today.year, today.month, today.day, 8);
+      await guidedLoads.confirmFullLoad(
+        sessionId: 'session-pre-move-block',
+        profileId: 'schedule-1',
+        plan: GuidedCarouselLoadPlan(
+          createdAt: now,
+          mode: GuidedCarouselLoadMode.fullReload,
+          priorPosition: CarouselPosition.start,
+          slots: [
+            CarouselLoadPlanSlotPreview.loaded(
+              position: CarouselPosition(1),
+              bundle: CarouselDoseBundle(
+                bundleKey: 'bundle-1',
+                scheduledAt: now,
+                scheduleIds: const ['vitamin-d-morning'],
+                medications: [
+                  CarouselDoseBundleMedication(
+                    prescriptionId: 'vitamin-d',
+                    prescriptionName: 'Vitamin D',
+                    scheduleId: 'vitamin-d-morning',
+                    scheduledAt: now,
+                    availableDoses: 1,
+                    guidedPillIcon: GuidedPillIcon.roundPill,
+                    doseCount: 1,
+                    createdAt: now,
+                    updatedAt: now,
+                  ),
+                ],
+              ),
+            ),
+            ...List<CarouselLoadPlanSlotPreview>.generate(
+              13,
+              (index) => CarouselLoadPlanSlotPreview.empty(
+                position: CarouselPosition(index + 2),
+              ),
+            ),
+          ],
+          shortages: const [],
+        ),
+        startedAt: now,
+        confirmedAt: now,
+      );
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await _pumpAppFrame(tester);
+      await tester.ensureVisible(find.text('Confirm taken'));
+      await tester.tap(find.text('Confirm taken'));
+      await _pumpAppFrame(tester);
+
+      final events = await database.select(database.doseLogEvents).get();
+      expect(events, isEmpty);
+      final prescription = await (database.select(
+        database.prescriptions,
+      )..where((row) => row.id.equals('vitamin-d'))).getSingle();
+      expect(prescription.loadedDoses, 1);
+      expect(prescription.usedDoses, 0);
+    },
+  );
+
+  testWidgets(
+    'Today routes repeated schedule occurrences to the correct guided occurrence after dispense and taken confirmation',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database, remainingDoses: 3);
+      await _addVitaminReminder(database, id: 'vitamin-d-morning');
+      await _addLoadedVitaminSlot(database);
+      final guidedLoads = LocalGuidedCarouselLoadRepository(database);
+      final today = DateTime.now();
+      final todayUtc = DateTime.utc(today.year, today.month, today.day, 8);
+      final tomorrowUtc = todayUtc.add(const Duration(days: 1));
+      await guidedLoads.confirmFullLoad(
+        sessionId: 'session-repeated-occurrence',
+        profileId: 'schedule-1',
+        plan: GuidedCarouselLoadPlan(
+          createdAt: todayUtc,
+          mode: GuidedCarouselLoadMode.fullReload,
+          priorPosition: CarouselPosition.start,
+          slots: [
+            CarouselLoadPlanSlotPreview.loaded(
+              position: CarouselPosition(1),
+              bundle: CarouselDoseBundle(
+                bundleKey: 'bundle-tomorrow',
+                scheduledAt: tomorrowUtc,
+                scheduleIds: const ['vitamin-d-morning'],
+                medications: [
+                  CarouselDoseBundleMedication(
+                    prescriptionId: 'vitamin-d',
+                    prescriptionName: 'Vitamin D',
+                    scheduleId: 'vitamin-d-morning',
+                    scheduledAt: tomorrowUtc,
+                    availableDoses: 1,
+                    guidedPillIcon: GuidedPillIcon.roundPill,
+                    doseCount: 1,
+                    createdAt: todayUtc,
+                    updatedAt: todayUtc,
+                  ),
+                ],
+              ),
+            ),
+            CarouselLoadPlanSlotPreview.loaded(
+              position: CarouselPosition(2),
+              bundle: CarouselDoseBundle(
+                bundleKey: 'bundle-today',
+                scheduledAt: todayUtc,
+                scheduleIds: const ['vitamin-d-morning'],
+                medications: [
+                  CarouselDoseBundleMedication(
+                    prescriptionId: 'vitamin-d',
+                    prescriptionName: 'Vitamin D',
+                    scheduleId: 'vitamin-d-morning',
+                    scheduledAt: todayUtc,
+                    availableDoses: 1,
+                    guidedPillIcon: GuidedPillIcon.roundPill,
+                    doseCount: 1,
+                    createdAt: todayUtc,
+                    updatedAt: todayUtc,
+                  ),
+                ],
+              ),
+            ),
+            ...List<CarouselLoadPlanSlotPreview>.generate(
+              12,
+              (index) => CarouselLoadPlanSlotPreview.empty(
+                position: CarouselPosition(index + 3),
+              ),
+            ),
+          ],
+          shortages: const [],
+        ),
+        startedAt: todayUtc,
+        confirmedAt: todayUtc,
+      );
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Controller'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Connect simulator'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Today'));
+      await _pumpAppFrame(tester);
+
+      expect(find.text('Dispense from slot 2'), findsOneWidget);
+      await tester.ensureVisible(find.text('Dispense from slot 2'));
+      await _pumpAppFrame(tester);
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Dispense from slot 2'),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.ensureVisible(find.text('Confirm taken'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Confirm taken'));
+      await _pumpAppFrame(tester);
+
+      final activeLoad = await guidedLoads.readActiveLoad('schedule-1');
+      expect(activeLoad, isNotNull);
+      expect(activeLoad!.currentPosition.value, 2);
+      expect(activeLoad.slots[0].status, CarouselLoadSlotStatus.loaded);
+      expect(activeLoad.slots[1].status, CarouselLoadSlotStatus.dispensed);
+    },
+  );
+
+  testWidgets(
+    'Today skip dose moves a guided dispensed slot to needs review without a legacy slot row',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database, remainingDoses: 2);
+      await _addVitaminReminder(database, id: 'vitamin-d-morning');
+      await _addLoadedVitaminSlot(database);
+      final guidedLoads = LocalGuidedCarouselLoadRepository(database);
+      final today = DateTime.now();
+      final now = DateTime.utc(today.year, today.month, today.day, 8);
+      await guidedLoads.confirmFullLoad(
+        sessionId: 'session-guided-skip-review',
+        profileId: 'schedule-1',
+        plan: GuidedCarouselLoadPlan(
+          createdAt: now,
+          mode: GuidedCarouselLoadMode.fullReload,
+          priorPosition: CarouselPosition.start,
+          slots: [
+            CarouselLoadPlanSlotPreview.loaded(
+              position: CarouselPosition(1),
+              bundle: CarouselDoseBundle(
+                bundleKey: 'bundle-1',
+                scheduledAt: now,
+                scheduleIds: const ['vitamin-d-morning'],
+                medications: [
+                  CarouselDoseBundleMedication(
+                    prescriptionId: 'vitamin-d',
+                    prescriptionName: 'Vitamin D',
+                    scheduleId: 'vitamin-d-morning',
+                    scheduledAt: now,
+                    availableDoses: 1,
+                    guidedPillIcon: GuidedPillIcon.roundPill,
+                    doseCount: 1,
+                    createdAt: now,
+                    updatedAt: now,
+                  ),
+                ],
+              ),
+            ),
+            ...List<CarouselLoadPlanSlotPreview>.generate(
+              13,
+              (index) => CarouselLoadPlanSlotPreview.empty(
+                position: CarouselPosition(index + 2),
+              ),
+            ),
+          ],
+          shortages: const [],
+        ),
+        startedAt: now,
+        confirmedAt: now,
+      );
+
+      await tester.pumpWidget(DoseyApp(database: database));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Controller'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Connect simulator'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Today'));
+      await _pumpAppFrame(tester);
+
+      await tester.ensureVisible(find.text('Dispense from slot 1'));
+      await _pumpAppFrame(tester);
+      await tester.tap(
+        find.widgetWithText(FilledButton, 'Dispense from slot 1'),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      await (database.delete(
+        database.carouselSlots,
+      )..where((row) => row.id.equals('schedule-1-vitamin-d-morning'))).go();
+
+      await tester.ensureVisible(find.text('Skip dose'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Skip dose'));
+      await _pumpAppFrame(tester);
+
+      final activeLoad = await guidedLoads.readActiveLoad('schedule-1');
+      expect(activeLoad, isNotNull);
+      expect(
+        activeLoad!.slots.first.status,
+        CarouselLoadSlotStatus.needsReview,
+      );
+    },
+  );
 
   testWidgets('Today does not log movement when slot update fails', (
     WidgetTester tester,

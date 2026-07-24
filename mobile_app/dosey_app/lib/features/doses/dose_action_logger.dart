@@ -1,4 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/carousel/carousel_load_session.dart';
+import 'package:dosey_app/core/carousel/guided_dispense_target_resolver.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
@@ -34,14 +36,13 @@ class DoseActionLogger {
       final dependencies = DoseyAppScope.of(context);
       // Robot Face may only know the dose id; fill in the slot and inventory
       // context so every surface gets the same transactional side effects.
-      final resolvedContext =
-          retireLoadedSlot == null || inventoryPrescriptionId == null
-          ? await _resolveDoseContext(dependencies, event)
-          : null;
+      final resolvedContext = await _resolveDoseContext(dependencies, event);
       final effectiveLoadedSlot =
           retireLoadedSlot ?? resolvedContext?.loadedSlot;
       final effectiveInventoryPrescriptionId =
           inventoryPrescriptionId ?? resolvedContext?.inventoryPrescriptionId;
+      final effectiveGuidedDispenseContext =
+          resolvedContext?.guidedDispenseContext;
       final retiresLoadedSlot =
           effectiveLoadedSlot != null && _isTerminalDoseEvent(event);
       final recordsInventory =
@@ -65,16 +66,46 @@ class DoseActionLogger {
           ignoredDoseAction = true;
           return;
         }
+        if (effectiveGuidedDispenseContext != null &&
+            _isTerminalDoseEvent(event) &&
+            !effectiveGuidedDispenseContext.canResolveAfterMovement) {
+          throw StateError(
+            'Confirm movement or visible/review state before logging a terminal dose outcome.',
+          );
+        }
+        if (effectiveGuidedDispenseContext != null &&
+            _isTerminalDoseEvent(event) &&
+            !event.marksDoseTaken) {
+          await dependencies.guidedCarouselLoads
+              .confirmDispensedSlotNeedsReview(
+                profileId: effectiveGuidedDispenseContext.profileId,
+                activeSessionId: effectiveGuidedDispenseContext.sessionId,
+                slotNumber: effectiveGuidedDispenseContext.slotNumber,
+                occurredAt: event.occurredAt,
+                reason: event.kind.name,
+              );
+        }
         if (retiresLoadedSlot) {
           final loadedSlot = effectiveLoadedSlot;
-          await dependencies.carouselSlots.markNeedsReview(loadedSlot.id);
+          if (effectiveGuidedDispenseContext == null) {
+            await dependencies.carouselSlots.markNeedsReview(loadedSlot.id);
+          }
         }
         if (recordsInventory) {
-          final inventoryPrescriptionId = effectiveInventoryPrescriptionId;
-          await dependencies.prescriptions.recordTakenDose(
-            inventoryPrescriptionId,
-            occurredAt: event.occurredAt,
-          );
+          if (effectiveGuidedDispenseContext != null) {
+            await dependencies.guidedCarouselLoads.confirmDispensedSlotTaken(
+              profileId: effectiveGuidedDispenseContext.profileId,
+              activeSessionId: effectiveGuidedDispenseContext.sessionId,
+              slotNumber: effectiveGuidedDispenseContext.slotNumber,
+              occurredAt: event.occurredAt,
+            );
+          } else {
+            final inventoryPrescriptionId = effectiveInventoryPrescriptionId;
+            await dependencies.prescriptions.recordTakenDose(
+              inventoryPrescriptionId,
+              occurredAt: event.occurredAt,
+            );
+          }
         }
         await dependencies.doseLog.addEvent(event);
       });
@@ -221,6 +252,35 @@ class DoseActionLogger {
               updatedAt: loadedSlot.updatedAt.toUtc(),
             ),
       inventoryPrescriptionId: prescriptionExists ? prescriptionId : null,
+      guidedDispenseContext: schedule.profileId.isEmpty
+          ? null
+          : await _resolveGuidedDispenseContext(
+              dependencies,
+              scheduleId,
+              event.doseId,
+            ),
+    );
+  }
+
+  static Future<_GuidedDispenseContext?> _resolveGuidedDispenseContext(
+    DoseyAppDependencies dependencies,
+    String scheduleId,
+    String doseId,
+  ) async {
+    final target = await resolveGuidedDispenseTarget(
+      database: dependencies.database,
+      guidedCarouselLoads: dependencies.guidedCarouselLoads,
+      scheduleId: scheduleId,
+      doseId: doseId,
+    );
+    if (target == null) {
+      return null;
+    }
+    return _GuidedDispenseContext(
+      profileId: target.profileId,
+      sessionId: target.sessionId,
+      slotNumber: target.slotNumber,
+      slotStatus: target.slotStatus,
     );
   }
 
@@ -237,8 +297,27 @@ class _ResolvedDoseActionContext {
   const _ResolvedDoseActionContext({
     required this.loadedSlot,
     required this.inventoryPrescriptionId,
+    required this.guidedDispenseContext,
   });
 
   final CarouselSlot? loadedSlot;
   final String? inventoryPrescriptionId;
+  final _GuidedDispenseContext? guidedDispenseContext;
+}
+
+class _GuidedDispenseContext {
+  const _GuidedDispenseContext({
+    required this.profileId,
+    required this.sessionId,
+    required this.slotNumber,
+    required this.slotStatus,
+  });
+
+  final String profileId;
+  final String sessionId;
+  final int slotNumber;
+  final CarouselLoadSlotStatus slotStatus;
+
+  bool get canResolveAfterMovement =>
+      slotStatus == CarouselLoadSlotStatus.dispensed;
 }

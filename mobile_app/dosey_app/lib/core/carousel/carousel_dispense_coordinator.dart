@@ -6,7 +6,7 @@ class CarouselDispenseCoordinator {
   final ControllerLifecycleService controllerLifecycle;
 
   Future<void> dispenseLoadedSlot({
-    required String slotId,
+    String? slotId,
     required String doseId,
     String? scheduleId,
   }) async {

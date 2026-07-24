@@ -5,14 +5,18 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as timezone_data;
 import 'package:timezone/timezone.dart';
 
-class FlutterLocalNotificationScheduler implements ReminderScheduler {
+class FlutterLocalNotificationScheduler
+    implements ReminderScheduler, UrgentShortageNotifier {
   FlutterLocalNotificationScheduler({
     LocalNotificationsPlugin? plugin,
     this.notificationTapHandler,
-  }) : _plugin = plugin ?? FlutterLocalNotificationsPluginAdapter();
+    DateTime Function(DateTime dateTime)? localTimeConverter,
+  }) : _plugin = plugin ?? FlutterLocalNotificationsPluginAdapter(),
+       _localTimeConverter = localTimeConverter ?? _defaultLocalTimeConverter;
 
   final LocalNotificationsPlugin _plugin;
   final void Function(String doseId)? notificationTapHandler;
+  final DateTime Function(DateTime dateTime) _localTimeConverter;
   bool _isInitialized = false;
   Future<void>? _initializing;
 
@@ -93,6 +97,47 @@ class FlutterLocalNotificationScheduler implements ReminderScheduler {
     }
     notificationTapHandler?.call(doseId);
   }
+
+  @override
+  Future<void> showUrgentShortageNotification({
+    required String alertId,
+    required String medicationLabel,
+    required DateTime scheduledAt,
+    required int slotNumber,
+  }) async {
+    final localScheduledAt = _localTimeConverter(scheduledAt);
+    final scheduledLabel =
+        '${localScheduledAt.hour.toString().padLeft(2, '0')}:${localScheduledAt.minute.toString().padLeft(2, '0')}';
+    await _ensureInitialized();
+    await _plugin.createChannel(doseyUrgentShortageNotificationChannel);
+    await _plugin.schedule(
+      PluginScheduledNotification(
+        id: _notificationIdForDose('shortage:$alertId'),
+        channel: doseyUrgentShortageNotificationChannel,
+        title: 'Dosey urgent shortage',
+        body:
+            '$medicationLabel is unavailable for slot $slotNumber at $scheduledLabel. This local only alert needs review in Dosey now.',
+        scheduledFor: DateTime.now().toUtc(),
+        payload:
+            'shortage:$alertId|slot:$slotNumber|scheduledAt:${scheduledAt.toUtc().toIso8601String()}|audience:household|delivery:local_only',
+        scheduleMode: PluginNotificationScheduleMode.inexactAllowWhileIdle,
+        repeatsDaily: false,
+      ),
+    );
+  }
+
+  static DateTime _defaultLocalTimeConverter(DateTime dateTime) {
+    return dateTime.toLocal();
+  }
+}
+
+abstract interface class UrgentShortageNotifier {
+  Future<void> showUrgentShortageNotification({
+    required String alertId,
+    required String medicationLabel,
+    required DateTime scheduledAt,
+    required int slotNumber,
+  });
 }
 
 class PluginScheduledNotification {

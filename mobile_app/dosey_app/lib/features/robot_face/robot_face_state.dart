@@ -67,6 +67,11 @@ class RobotFaceState {
     this.voiceOccurrenceKey,
     this.isAwaitingControllerConfirmation = false,
     this.availableActions = const <RobotFaceActionKind>{},
+    this.hasPinnedShortageAlert = false,
+    this.activeShortageLabel,
+    this.activeShortageMedicationLabel,
+    this.activeShortageScheduledLabel,
+    this.activeShortageSlotNumber,
   });
 
   final RobotFaceMode mode;
@@ -81,6 +86,11 @@ class RobotFaceState {
   final bool isAwaitingControllerConfirmation;
   // Non-empty only when the current dose should expose explicit human actions.
   final Set<RobotFaceActionKind> availableActions;
+  final bool hasPinnedShortageAlert;
+  final String? activeShortageLabel;
+  final String? activeShortageMedicationLabel;
+  final String? activeShortageScheduledLabel;
+  final int? activeShortageSlotNumber;
 
   RobotFaceState copyWith({
     RobotFaceMode? mode,
@@ -94,6 +104,11 @@ class RobotFaceState {
     Object? voiceOccurrenceKey = _unset,
     bool? isAwaitingControllerConfirmation,
     Set<RobotFaceActionKind>? availableActions,
+    bool? hasPinnedShortageAlert,
+    Object? activeShortageLabel = _unset,
+    Object? activeShortageMedicationLabel = _unset,
+    Object? activeShortageScheduledLabel = _unset,
+    Object? activeShortageSlotNumber = _unset,
   }) {
     return RobotFaceState(
       mode: mode ?? this.mode,
@@ -113,6 +128,22 @@ class RobotFaceState {
           isAwaitingControllerConfirmation ??
           this.isAwaitingControllerConfirmation,
       availableActions: availableActions ?? this.availableActions,
+      hasPinnedShortageAlert:
+          hasPinnedShortageAlert ?? this.hasPinnedShortageAlert,
+      activeShortageLabel: identical(activeShortageLabel, _unset)
+          ? this.activeShortageLabel
+          : activeShortageLabel as String?,
+      activeShortageMedicationLabel:
+          identical(activeShortageMedicationLabel, _unset)
+          ? this.activeShortageMedicationLabel
+          : activeShortageMedicationLabel as String?,
+      activeShortageScheduledLabel:
+          identical(activeShortageScheduledLabel, _unset)
+          ? this.activeShortageScheduledLabel
+          : activeShortageScheduledLabel as String?,
+      activeShortageSlotNumber: identical(activeShortageSlotNumber, _unset)
+          ? this.activeShortageSlotNumber
+          : activeShortageSlotNumber as int?,
     );
   }
 
@@ -134,6 +165,11 @@ class RobotFaceState {
         other.voiceOccurrenceKey == voiceOccurrenceKey &&
         other.isAwaitingControllerConfirmation ==
             isAwaitingControllerConfirmation &&
+        other.hasPinnedShortageAlert == hasPinnedShortageAlert &&
+        other.activeShortageLabel == activeShortageLabel &&
+        other.activeShortageMedicationLabel == activeShortageMedicationLabel &&
+        other.activeShortageScheduledLabel == activeShortageScheduledLabel &&
+        other.activeShortageSlotNumber == activeShortageSlotNumber &&
         _setEquals(other.availableActions, availableActions);
   }
 
@@ -149,6 +185,11 @@ class RobotFaceState {
     actionDoseId,
     voiceOccurrenceKey,
     isAwaitingControllerConfirmation,
+    hasPinnedShortageAlert,
+    activeShortageLabel,
+    activeShortageMedicationLabel,
+    activeShortageScheduledLabel,
+    activeShortageSlotNumber,
     _unorderedSetHash(availableActions),
   );
 

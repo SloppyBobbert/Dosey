@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
+import 'package:dosey_app/core/carousel/carousel_load_session.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -124,62 +125,77 @@ class _TodayDoseContent extends StatelessWidget {
                   profileId: currentSchedule.profileId,
                 ),
           builder: (context, slotSnapshot) {
-            final loadedSlot = currentSchedule == null
-                ? null
-                : _CurrentDoseSection.loadedSlotForSchedule(
-                    slotSnapshot.data ?? const <CarouselSlot>[],
-                    currentSchedule,
-                  );
-            final latestEvent = currentDoseId == null
-                ? null
-                : TodayNextDoseHelper.latestEventForDose(events, currentDoseId);
-            final inventoryPrescriptionId =
-                DoseActionLogger.inventoryPrescriptionIdFor(
-                  currentSchedule,
-                  prescriptionsById.keys,
-                );
+            return StreamBuilder<CarouselLoadSession?>(
+              stream: currentSchedule == null
+                  ? Stream<CarouselLoadSession?>.value(null)
+                  : dependencies.guidedCarouselLoads.watchActiveLoad(
+                      currentSchedule.profileId,
+                    ),
+              builder: (context, activeLoadSnapshot) {
+                final loadedSlot = currentSchedule == null
+                    ? null
+                    : _CurrentDoseSection.loadedSlotForSchedule(
+                        slotSnapshot.data ?? const <CarouselSlot>[],
+                        activeLoadSnapshot.data,
+                        currentSchedule,
+                        currentDoseId,
+                      );
+                final latestEvent = currentDoseId == null
+                    ? null
+                    : TodayNextDoseHelper.latestEventForDose(
+                        events,
+                        currentDoseId,
+                      );
+                final inventoryPrescriptionId =
+                    DoseActionLogger.inventoryPrescriptionIdFor(
+                      currentSchedule,
+                      prescriptionsById.keys,
+                    );
 
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _TodayHeroCard(
-                  currentSchedule: currentSchedule,
-                  prescription: currentSchedule == null
-                      ? null
-                      : prescriptionsById[currentSchedule.prescriptionId],
-                  latestEvent: latestEvent,
-                  loadedSlot: loadedSlot,
-                  scheduledDoseCount: schedules
-                      .where((s) => s.isEnabled)
-                      .length,
-                  onConfirmDoseTaken: currentDoseId == null
-                      ? null
-                      : () async {
-                          if (!await authorizeActionPin(context)) {
-                            return;
-                          }
-                          if (!context.mounted) return;
-                          await DoseActionLogger.logDoseAction(
-                            context,
-                            DoseLogEvent.doseTakenConfirmed(
-                              doseId: currentDoseId,
-                              occurredAt: DateTime.now().toUtc(),
-                            ),
-                            'Dose confirmation logged.',
-                            retireLoadedSlot: loadedSlot,
-                            inventoryPrescriptionId: inventoryPrescriptionId,
-                          );
-                        },
-                ),
-                const SizedBox(height: 12),
-                _CurrentDoseSection(
-                  events: events,
-                  currentSchedule: currentSchedule,
-                  currentDoseId: currentDoseId,
-                  prescriptionsById: prescriptionsById,
-                  loadedSlot: loadedSlot,
-                ),
-              ],
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _TodayHeroCard(
+                      currentSchedule: currentSchedule,
+                      prescription: currentSchedule == null
+                          ? null
+                          : prescriptionsById[currentSchedule.prescriptionId],
+                      latestEvent: latestEvent,
+                      loadedSlot: loadedSlot,
+                      scheduledDoseCount: schedules
+                          .where((s) => s.isEnabled)
+                          .length,
+                      onConfirmDoseTaken: currentDoseId == null
+                          ? null
+                          : () async {
+                              if (!await authorizeActionPin(context)) {
+                                return;
+                              }
+                              if (!context.mounted) return;
+                              await DoseActionLogger.logDoseAction(
+                                context,
+                                DoseLogEvent.doseTakenConfirmed(
+                                  doseId: currentDoseId,
+                                  occurredAt: DateTime.now().toUtc(),
+                                ),
+                                'Dose confirmation logged.',
+                                retireLoadedSlot: loadedSlot,
+                                inventoryPrescriptionId:
+                                    inventoryPrescriptionId,
+                              );
+                            },
+                    ),
+                    const SizedBox(height: 12),
+                    _CurrentDoseSection(
+                      events: events,
+                      currentSchedule: currentSchedule,
+                      currentDoseId: currentDoseId,
+                      prescriptionsById: prescriptionsById,
+                      loadedSlot: loadedSlot,
+                    ),
+                  ],
+                );
+              },
             );
           },
         );
@@ -208,10 +224,43 @@ class _CurrentDoseSection extends StatefulWidget {
 
   static CarouselSlot? loadedSlotForSchedule(
     List<CarouselSlot> slots,
+    CarouselLoadSession? activeLoad,
     ReminderSchedule schedule,
+    String? doseId,
   ) {
-    // Today only offers dispense for loaded slots. Terminal logging can still
-    // retire an already-dispensed slot through DoseActionLogger's fallback.
+    if (activeLoad != null && doseId != null) {
+      final matchingGuidedSlots = activeLoad.slots.where(
+        (slot) =>
+            slot.scheduleIds.contains(schedule.id) &&
+            _matchesDoseOccurrence(slot, doseId) &&
+            (slot.status == CarouselLoadSlotStatus.loaded ||
+                slot.status == CarouselLoadSlotStatus.retained),
+      );
+      if (matchingGuidedSlots.isNotEmpty) {
+        final guidedSlot = matchingGuidedSlots.first;
+        final matchingLegacySlot = slots.where(
+          (slot) =>
+              slot.scheduleId == schedule.id &&
+              slot.slotNumber == guidedSlot.slotNumber &&
+              slot.status == CarouselSlotStatus.loaded,
+        );
+        if (matchingLegacySlot.isNotEmpty) {
+          return matchingLegacySlot.first;
+        }
+        final timestamp = guidedSlot.updatedAt ?? DateTime.now().toUtc();
+        return CarouselSlot(
+          id: 'guided:${activeLoad.id}:${guidedSlot.slotNumber}',
+          slotNumber: guidedSlot.slotNumber,
+          prescriptionId: schedule.prescriptionId ?? '',
+          scheduleId: schedule.id,
+          profileId: schedule.profileId,
+          status: CarouselSlotStatus.loaded,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        );
+      }
+      return null;
+    }
     for (final slot in slots) {
       if (slot.scheduleId == schedule.id &&
           slot.status == CarouselSlotStatus.loaded) {
@@ -219,6 +268,23 @@ class _CurrentDoseSection extends StatefulWidget {
       }
     }
     return null;
+  }
+
+  static bool _matchesDoseOccurrence(
+    CarouselLoadSlotSnapshot slot,
+    String doseId,
+  ) {
+    final scheduledAt = slot.scheduledAt;
+    if (scheduledAt == null) {
+      return true;
+    }
+    final separatorIndex = doseId.lastIndexOf(':');
+    if (separatorIndex <= 0 || separatorIndex >= doseId.length - 1) {
+      return true;
+    }
+    final occurrenceDate = doseId.substring(separatorIndex + 1);
+    final slotDate = scheduledAt.toLocal().toIso8601String().split('T').first;
+    return occurrenceDate == slotDate;
   }
 }
 
@@ -454,10 +520,11 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
       }
       if (!context.mounted) return;
       final dependencies = DoseyAppScope.of(context);
+      final slotId = slot.id.startsWith('guided:') ? null : slot.id;
       await CarouselDispenseCoordinator(
         controllerLifecycle: dependencies.controllerLifecycle,
       ).dispenseLoadedSlot(
-        slotId: slot.id,
+        slotId: slotId,
         doseId: doseId,
         scheduleId: slot.scheduleId,
       );

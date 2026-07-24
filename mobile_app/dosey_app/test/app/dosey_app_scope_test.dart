@@ -10,6 +10,7 @@ import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,6 +77,66 @@ void main() {
     expect(dependencies.permissions, same(permissionGateway));
     expect(dependencies.robotFaceSettings, isNotNull);
     expect(dependencies.robotFaceController, isNotNull);
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('app scope wires robot face controller to live shortage alerts', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final bleGateway = _FakeBleGateway();
+    final connectivityGateway = _FakeConnectivityGateway();
+    final reminderScheduler = _FakeReminderScheduler();
+    final permissionGateway = _FakePermissionGateway();
+    final missedDoseReconciliation = _FakeMissedDoseReconciliationService();
+    late DoseyAppDependencies dependencies;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          bleGateway: bleGateway,
+          connectivityGateway: connectivityGateway,
+          reminderScheduler: reminderScheduler,
+          permissionGateway: permissionGateway,
+          missedDoseReconciliationService: missedDoseReconciliation,
+          child: Builder(
+            builder: (context) {
+              dependencies = DoseyAppScope.of(context);
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+
+    await database
+        .into(database.medicationShortageAlerts)
+        .insert(
+          MedicationShortageAlertsCompanion.insert(
+            id: 'shortage-1',
+            profileId: 'schedule-1',
+            loadSessionId: const Value('session-1'),
+            slotNumber: 2,
+            bundleKey: 'bundle-1',
+            scheduledAt: DateTime.utc(2026, 7, 23, 8),
+            prescriptionIdsJson: '["rx-1"]',
+            prescriptionNamesJson: '["Vitamin D"]',
+            status: 'active',
+            localDeliveryState: 'sent',
+            createdAt: DateTime.utc(2026, 7, 23, 8),
+            updatedAt: DateTime.utc(2026, 7, 23, 8),
+          ),
+        );
+    await tester.pump();
+
+    final state = await dependencies.robotFaceController.watchState().first;
+
+    expect(state.hasPinnedShortageAlert, isTrue);
+    expect(state.activeShortageLabel, 'Urgent shortage · slot 2');
 
     await tester.pumpWidget(const SizedBox());
   });

@@ -10,6 +10,7 @@ import 'package:dosey_app/core/bluetooth/flutter_blue_plus_ble_gateway.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_plus_gateway.dart';
+import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
@@ -118,6 +119,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         FlutterLocalNotificationScheduler(
           notificationTapHandler: notificationTaps.handleTap,
         );
+    final urgentShortageNotifier = reminderScheduler is UrgentShortageNotifier
+        ? reminderScheduler as UrgentShortageNotifier
+        : null;
     final settings = LocalAppSettingsRepository(
       _database,
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
@@ -126,6 +130,10 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     final robotFaceSettings = RobotFaceSettingsRepository(_database);
     final scheduleProfiles = LocalScheduleProfileRepository(_database);
     final carouselSlots = LocalCarouselSlotRepository(_database);
+    final guidedCarouselLoads = LocalGuidedCarouselLoadRepository(
+      _database,
+      urgentShortageNotifier: urgentShortageNotifier,
+    );
     final controller = SimulatedControllerGateway(
       canHostRobot: () async {
         final platform = currentAppDevicePlatform();
@@ -141,6 +149,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       commandRepository: LocalControllerCommandRepository(_database),
       doseLog: doseLog,
       carouselSlots: carouselSlots,
+      guidedCarouselLoads: guidedCarouselLoads,
+      database: _database,
     );
     _missedDoseReconciliation =
         widget.missedDoseReconciliationService ??
@@ -166,6 +176,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         scheduler: reminderScheduler,
       ),
       carouselSlots: carouselSlots,
+      guidedCarouselLoads: guidedCarouselLoads,
       doseLog: doseLog,
       adminAudit: adminAudit,
       household: household,
@@ -182,6 +193,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         scheduleProfiles: scheduleProfiles,
         reminders: reminders,
         doseLog: doseLog,
+        carouselSlots: carouselSlots,
+        shortageAlerts: guidedCarouselLoads.watchAllActiveShortageAlerts(),
         clock: _robotFaceClockController.stream,
       ),
       ble: widget.bleGateway ?? FlutterBluePlusBleGateway(),
@@ -266,6 +279,7 @@ class DoseyAppDependencies {
     required this.reminders,
     required this.reminderSchedules,
     required this.carouselSlots,
+    required this.guidedCarouselLoads,
     required this.doseLog,
     required this.adminAudit,
     required this.household,
@@ -291,6 +305,7 @@ class DoseyAppDependencies {
   final LocalReminderRepository reminders;
   final ReminderScheduleService reminderSchedules;
   final LocalCarouselSlotRepository carouselSlots;
+  final LocalGuidedCarouselLoadRepository guidedCarouselLoads;
   final DriftDoseLogRepository doseLog;
   final AdminAuditRepository adminAudit;
   final LocalHouseholdRepository household;

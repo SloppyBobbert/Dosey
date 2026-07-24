@@ -1,0 +1,721 @@
+import 'dart:convert';
+
+import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:drift/drift.dart';
+import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/carousel/carousel_position.dart';
+import 'package:dosey_app/core/carousel/guided_carousel_load_plan.dart';
+import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
+import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
+import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
+import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
+import 'package:dosey_app/core/prescriptions/prescription.dart';
+import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/features/carousel/carousel_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+void main() {
+  testWidgets(
+    'guided refill entry shows both top-off and full reload options',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _seedPrescription(database, availableDoses: 6);
+      await _seedReminder(database);
+
+      await tester.pumpWidget(_TestApp(database: database));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start refill/loading'), findsOneWidget);
+
+      await tester.tap(find.text('Start refill/loading'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Top off empty slots'), findsOneWidget);
+      expect(find.text('Empty and reload all'), findsOneWidget);
+    },
+  );
+
+  testWidgets('full reload keeps reload confirmation gated until unload is saved', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _seedPrescription(database, availableDoses: 6);
+    await _seedReminder(database);
+    await _seedEveningReminder(database);
+    final repository = LocalGuidedCarouselLoadRepository(database);
+    final now = DateTime.utc(2026, 7, 23, 8);
+
+    await repository.confirmFullLoad(
+      sessionId: 'session-gated-reload',
+      profileId: ReminderSchedule.defaultProfileId,
+      plan: _plan(now),
+      startedAt: now,
+      confirmedAt: now,
+    );
+
+    await tester.pumpWidget(_TestApp(database: database));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Start refill/loading'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Empty and reload all'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Full Reload requires a separate persisted physical unload transaction first. The new load cannot be confirmed until this unload step is saved.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Reload confirmation stays locked until the physical unload transaction is saved.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('2. Confirm the new load'), findsNothing);
+    expect(find.text('Confirm empty and reload all'), findsNothing);
+  });
+
+  testWidgets('stale active loads block top-off before the flow can proceed', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _seedPrescription(database, availableDoses: 6);
+    await _seedReminder(database);
+    await _seedEveningReminder(database);
+    final repository = LocalGuidedCarouselLoadRepository(database);
+    final now = DateTime.utc(2026, 7, 23, 8);
+
+    await repository.confirmFullLoad(
+      sessionId: 'session-stale',
+      profileId: ReminderSchedule.defaultProfileId,
+      plan: _plan(now),
+      startedAt: now,
+      confirmedAt: now,
+    );
+    await (database.update(
+      database.carouselLoadSessions,
+    )..where((row) => row.id.equals('session-stale'))).write(
+      CarouselLoadSessionsCompanion(
+        status: const Value('stale'),
+        staleAt: Value(now.add(const Duration(minutes: 1))),
+        updatedAt: Value(now.add(const Duration(minutes: 1))),
+      ),
+    );
+
+    await tester.pumpWidget(_TestApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'The saved load changed and now needs review before any top-off. Use Full Reload after you review the carousel.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Start refill/loading'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'This saved load needs review or Full Reload before top-off can continue.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Top off empty slots'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Choose a refill path'), findsOneWidget);
+    expect(find.text('Top off empty slots'), findsOneWidget);
+  });
+
+  testWidgets(
+    'top-off shows a stronger saved-position checkpoint before confirm',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _seedPrescription(database, availableDoses: 6);
+      await _seedReminder(database);
+      final repository = LocalGuidedCarouselLoadRepository(database);
+      final now = DateTime.utc(2026, 7, 23, 8);
+
+      await repository.confirmFullLoad(
+        sessionId: 'session-top-off',
+        profileId: ReminderSchedule.defaultProfileId,
+        plan: _plan(now),
+        startedAt: now,
+        confirmedAt: now,
+      );
+      await (database.update(database.carouselStates)..where(
+            (row) => row.profileId.equals(ReminderSchedule.defaultProfileId),
+          ))
+          .write(CarouselStatesCompanion(currentPosition: const Value(5)));
+
+      await tester.pumpWidget(_TestApp(database: database));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Start refill/loading'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Top off empty slots'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Start from START/home. Tap only the compartments this top-off will fill now. Then return the carousel to slot 5 before you confirm.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Return checkpoint'), findsOneWidget);
+      expect(find.text('Current saved position slot 5'), findsOneWidget);
+      expect(find.text('Return to preserved position slot 5'), findsOneWidget);
+      expect(
+        find.text(
+          'Before you tap confirm, manually return the carousel to slot 5.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byType(CheckboxListTile), findsNothing);
+
+      final confirmButton = tester.widget<FilledButton>(
+        find.widgetWithText(
+          FilledButton,
+          'Return to slot 5 and confirm top-off',
+        ),
+      );
+      expect(confirmButton.onPressed, equals(null));
+
+      for (var slot = 2; slot <= 6; slot += 1) {
+        await tester.tap(find.text('$slot').last);
+        await tester.pump();
+      }
+
+      final enabledConfirmButton = tester.widget<FilledButton>(
+        find.widgetWithText(
+          FilledButton,
+          'Return to slot 5 and confirm top-off',
+        ),
+      );
+      expect(enabledConfirmButton.onPressed, isNot(equals(null)));
+    },
+  );
+
+  testWidgets(
+    'real persisted shortage sessions stay visible and route to full reload',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _seedPrescription(database, availableDoses: 6);
+      await _seedReminder(database);
+      final repository = LocalGuidedCarouselLoadRepository(database);
+      final now = DateTime.utc(2026, 7, 23, 8);
+
+      await repository.confirmFullLoad(
+        sessionId: 'session-1',
+        profileId: ReminderSchedule.defaultProfileId,
+        plan: _shortagePlan(now),
+        startedAt: now,
+        confirmedAt: now,
+      );
+      final alertRow = await (database.select(
+        database.medicationShortageAlerts,
+      )..where((row) => row.id.equals('shortage:session-1:2'))).getSingle();
+
+      await tester.pumpWidget(_TestApp(database: database));
+      await tester.pumpAndSettle();
+
+      final scheduledLabel = _localTimeLabel(DateTime.utc(2026, 7, 23, 10));
+      final medicationLabel =
+          (jsonDecode(alertRow.prescriptionNamesJson) as List<dynamic>).first
+              as String;
+
+      expect(find.text('Urgent shortage'), findsOneWidget);
+      expect(find.text(medicationLabel), findsOneWidget);
+      expect(find.text('Scheduled $scheduledLabel'), findsOneWidget);
+      expect(find.text('Slot 2'), findsOneWidget);
+      expect(
+        find.text(
+          'Local-only alert on this phone. Dosey is not sending remote shortage updates yet.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'This shortage stays pinned in Robot Face until loading is handled here.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Resolve and continue loading'), findsNothing);
+      expect(find.text('Use Full Reload instead'), findsOneWidget);
+      expect(find.byType(CheckboxListTile), findsNothing);
+    },
+  );
+
+  testWidgets('continuation top-off only targets the subset this plan can fill now', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _seedPrescription(database, availableDoses: 2);
+    await _seedReminder(database);
+    final repository = LocalGuidedCarouselLoadRepository(database);
+    final now = DateTime.utc(2026, 7, 23, 8);
+
+    await repository.confirmFullLoad(
+      sessionId: 'session-partial-continuation',
+      profileId: ReminderSchedule.defaultProfileId,
+      plan: _plan(now),
+      startedAt: now,
+      confirmedAt: now,
+    );
+    await database
+        .into(database.medicationShortageAlerts)
+        .insert(
+          MedicationShortageAlertsCompanion.insert(
+            id: 'shortage:session-partial-continuation:2',
+            profileId: ReminderSchedule.defaultProfileId,
+            loadSessionId: const Value('session-partial-continuation'),
+            slotNumber: 2,
+            bundleKey: 'bundle-partial',
+            scheduledAt: DateTime.utc(2026, 7, 24, 8, 30),
+            prescriptionIdsJson: '["vitamin-d"]',
+            prescriptionNamesJson: '["Vitamin D"]',
+            status: 'active',
+            localDeliveryState: 'sent',
+            createdAt: now,
+            updatedAt: now,
+          ),
+        );
+
+    await tester.pumpWidget(_TestApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Resolve and continue loading'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('Resolve and continue loading'),
+      220,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Resolve and continue loading'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'This shortage can continue with a partial top-off. Start from START/home, fill only the compartments planned for this pass, then return to START/home before you confirm.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Stops again at slot 3'), findsOneWidget);
+    expect(find.text('11 later slots stay empty'), findsOneWidget);
+    expect(
+      find.text(
+        'Selected 0 of 1 compartments planned for this pass. Later empty slots are not part of this continuation.',
+      ),
+      findsOneWidget,
+    );
+
+    final confirmBeforeSelection = tester.widget<FilledButton>(
+      find.widgetWithText(
+        FilledButton,
+        'Return to START/home and confirm top-off',
+      ),
+    );
+    expect(confirmBeforeSelection.onPressed, equals(null));
+
+    await tester.tap(find.text('3').last);
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Selected 0 of 1 compartments planned for this pass. Later empty slots are not part of this continuation.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('2').last);
+    await tester.pump();
+
+    expect(
+      find.text(
+        'Selected 1 of 1 compartments planned for this pass. Later empty slots are not part of this continuation.',
+      ),
+      findsOneWidget,
+    );
+
+    final confirmAfterSelection = tester.widget<FilledButton>(
+      find.widgetWithText(
+        FilledButton,
+        'Return to START/home and confirm top-off',
+      ),
+    );
+    expect(confirmAfterSelection.onPressed, isNot(equals(null)));
+  });
+
+  testWidgets('past-due unresolved shortages stay visible on Carousel', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _seedPrescription(database, availableDoses: 6);
+    await _seedReminder(database);
+    final repository = LocalGuidedCarouselLoadRepository(database);
+    final now = DateTime.utc(2026, 7, 23, 8);
+
+    await repository.confirmFullLoad(
+      sessionId: 'session-past-due',
+      profileId: ReminderSchedule.defaultProfileId,
+      plan: _shortagePlan(now),
+      startedAt: now,
+      confirmedAt: now,
+    );
+    await (database.update(
+      database.medicationShortageAlerts,
+    )..where((row) => row.loadSessionId.equals('session-past-due'))).write(
+      MedicationShortageAlertsCompanion(
+        status: const Value('past_due'),
+        updatedAt: Value(now.add(const Duration(hours: 3))),
+      ),
+    );
+
+    await tester.pumpWidget(_TestApp(database: database));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Urgent shortage'), findsOneWidget);
+    expect(
+      find.text(
+        'This local-only shortage is still unresolved and past due on this phone. Dosey is not sending remote shortage updates yet.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'Carousel prioritizes a past-due unresolved shortage for pinned display',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _seedPrescription(database, availableDoses: 6);
+      await _seedReminder(database);
+      final repository = LocalGuidedCarouselLoadRepository(database);
+      final now = DateTime.utc(2026, 7, 23, 8);
+
+      await repository.confirmFullLoad(
+        sessionId: 'session-priority',
+        profileId: ReminderSchedule.defaultProfileId,
+        plan: _shortagePlan(now),
+        startedAt: now,
+        confirmedAt: now,
+      );
+      await database
+          .into(database.medicationShortageAlerts)
+          .insert(
+            MedicationShortageAlertsCompanion.insert(
+              id: 'shortage:session-priority:1-active',
+              profileId: ReminderSchedule.defaultProfileId,
+              loadSessionId: const Value('session-priority'),
+              slotNumber: 1,
+              bundleKey: 'bundle-active',
+              scheduledAt: DateTime.utc(2026, 7, 23, 9),
+              prescriptionIdsJson: '["vitamin-d"]',
+              prescriptionNamesJson: '["active alert"]',
+              status: 'active',
+              localDeliveryState: 'sent',
+              createdAt: now.add(const Duration(minutes: 1)),
+              updatedAt: now.add(const Duration(minutes: 1)),
+            ),
+          );
+      await (database.update(
+        database.medicationShortageAlerts,
+      )..where((row) => row.id.equals('shortage:session-priority:2'))).write(
+        MedicationShortageAlertsCompanion(
+          status: const Value('past_due'),
+          updatedAt: Value(now.add(const Duration(hours: 3))),
+        ),
+      );
+
+      await tester.pumpWidget(_TestApp(database: database));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Slot 2'), findsOneWidget);
+      expect(find.text('Slot 1'), findsNothing);
+      expect(
+        find.text(
+          'This local-only shortage is still unresolved and past due on this phone. Dosey is not sending remote shortage updates yet.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+}
+
+GuidedCarouselLoadPlan _plan(DateTime now) {
+  return GuidedCarouselLoadPlan(
+    createdAt: now,
+    mode: GuidedCarouselLoadMode.fullReload,
+    priorPosition: CarouselPosition.start,
+    slots: List<CarouselLoadPlanSlotPreview>.generate(14, (index) {
+      if (index == 0) {
+        return CarouselLoadPlanSlotPreview.loaded(
+          position: CarouselPosition(1),
+          bundle: CarouselDoseBundle(
+            bundleKey: 'bundle-1',
+            scheduledAt: DateTime.utc(2026, 7, 23, 8, 30),
+            scheduleIds: const ['vitamin-d-morning'],
+            medications: [
+              CarouselDoseBundleMedication(
+                prescriptionId: 'vitamin-d',
+                prescriptionName: 'Vitamin D',
+                scheduleId: 'vitamin-d-morning',
+                scheduledAt: DateTime.utc(2026, 7, 23, 8, 30),
+                availableDoses: 6,
+                guidedPillIcon: GuidedPillIcon.roundPill,
+                doseCount: 1,
+                createdAt: now,
+                updatedAt: now,
+              ),
+            ],
+          ),
+        );
+      }
+      return CarouselLoadPlanSlotPreview.empty(
+        position: CarouselPosition(index + 1),
+      );
+    }),
+    shortages: const [],
+  );
+}
+
+GuidedCarouselLoadPlan _shortagePlan(DateTime now) {
+  return GuidedCarouselLoadPlan(
+    createdAt: now,
+    mode: GuidedCarouselLoadMode.fullReload,
+    priorPosition: CarouselPosition.start,
+    slots: [
+      CarouselLoadPlanSlotPreview.loaded(
+        position: CarouselPosition(1),
+        bundle: CarouselDoseBundle(
+          bundleKey: 'bundle-1',
+          scheduledAt: DateTime.utc(2026, 7, 23, 8, 30),
+          scheduleIds: const ['vitamin-d-morning'],
+          medications: [
+            CarouselDoseBundleMedication(
+              prescriptionId: 'vitamin-d',
+              prescriptionName: 'Vitamin D',
+              scheduleId: 'vitamin-d-morning',
+              scheduledAt: DateTime.utc(2026, 7, 23, 8, 30),
+              availableDoses: 6,
+              guidedPillIcon: GuidedPillIcon.roundPill,
+              doseCount: 1,
+              createdAt: now,
+              updatedAt: now,
+            ),
+          ],
+        ),
+      ),
+      CarouselLoadPlanSlotPreview.shortage(
+        position: CarouselPosition(2),
+        shortage: CarouselLoadPlanShortage(
+          position: CarouselPosition(2),
+          bundleKey: 'bundle-2',
+          scheduledAt: DateTime.utc(2026, 7, 23, 10),
+          scheduleIds: const ['vitamin-d-evening'],
+        ),
+      ),
+      ...List<CarouselLoadPlanSlotPreview>.generate(
+        12,
+        (index) => CarouselLoadPlanSlotPreview.empty(
+          position: CarouselPosition(index + 3),
+        ),
+      ),
+    ],
+    shortages: [
+      CarouselLoadPlanShortage(
+        position: CarouselPosition(2),
+        bundleKey: 'bundle-2',
+        scheduledAt: DateTime.utc(2026, 7, 23, 10),
+        scheduleIds: const ['vitamin-d-evening'],
+      ),
+    ],
+  );
+}
+
+Future<void> _seedPrescription(
+  DoseyDatabase database, {
+  int availableDoses = 0,
+}) {
+  return LocalPrescriptionRepository(database).upsertPrescription(
+    Prescription(
+      id: 'vitamin-d',
+      name: 'Vitamin D',
+      pillType: PillType.capsule,
+      availableDoses: availableDoses,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    ),
+  );
+}
+
+Future<void> _seedReminder(DoseyDatabase database) {
+  return LocalReminderRepository(database).upsertSchedule(
+    ReminderSchedule(
+      id: 'vitamin-d-morning',
+      label: 'Vitamin D',
+      prescriptionId: 'vitamin-d',
+      hour: 8,
+      minute: 30,
+      isEnabled: true,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    ),
+  );
+}
+
+Future<void> _seedEveningReminder(DoseyDatabase database) {
+  return LocalReminderRepository(database).upsertSchedule(
+    ReminderSchedule(
+      id: 'vitamin-d-evening',
+      label: 'Vitamin D',
+      prescriptionId: 'vitamin-d',
+      hour: 10,
+      minute: 0,
+      isEnabled: true,
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    ),
+  );
+}
+
+String _localTimeLabel(DateTime value) {
+  final local = value.toLocal();
+  final hour = local.hour.toString().padLeft(2, '0');
+  final minute = local.minute.toString().padLeft(2, '0');
+  return '$hour:$minute';
+}
+
+class _TestApp extends StatelessWidget {
+  const _TestApp({required this.database});
+
+  final DoseyDatabase database;
+
+  @override
+  Widget build(BuildContext context) {
+    return DoseyAppScope(
+      database: database,
+      bleGateway: _FakeBleGateway(),
+      connectivityGateway: _FakeConnectivityGateway(),
+      reminderScheduler: const _NoopReminderScheduler(),
+      permissionGateway: _FakePermissionGateway(),
+      missedDoseReconciliationService: _FakeMissedDoseReconciliationService(),
+      child: MaterialApp(home: Scaffold(body: CarouselScreen())),
+    );
+  }
+}
+
+class _FakeMissedDoseReconciliationService
+    extends MissedDoseReconciliationService {
+  _FakeMissedDoseReconciliationService()
+    : super(reminders: _FakeReminderRepository(), doseLog: _FakeDoseLog());
+
+  @override
+  Future<void> reconcile() async {}
+}
+
+class _FakeReminderRepository implements ReminderRepository {
+  @override
+  Future<int> deleteSchedule(String id, {dynamic auditEvent}) async => 1;
+
+  @override
+  Future<void> upsertSchedule(
+    ReminderSchedule schedule, {
+    dynamic auditEvent,
+  }) async {}
+
+  @override
+  Stream<List<ReminderSchedule>> watchSchedules({String? profileId}) {
+    return Stream.value(const <ReminderSchedule>[]);
+  }
+}
+
+class _FakeDoseLog implements DoseLogRepository {
+  @override
+  Future<void> addEvent(DoseLogEvent event) async {}
+
+  @override
+  Stream<List<DoseLogEvent>> watchEvents() {
+    return Stream.value(const <DoseLogEvent>[]);
+  }
+}
+
+class _FakeBleGateway implements BleGateway {
+  @override
+  Future<void> close() async {}
+
+  @override
+  Stream<BleAvailabilitySnapshot> watchAvailability() {
+    return Stream.value(const BleAvailabilitySnapshot.available());
+  }
+
+  @override
+  Stream<BleConnectionSnapshot> watchConnection() {
+    return Stream.value(const BleConnectionSnapshot.disconnected());
+  }
+
+  @override
+  Future<void> connect({required String deviceId, String? deviceName}) async {}
+
+  @override
+  Future<void> disconnect() async {}
+}
+
+class _FakeConnectivityGateway implements ConnectivityGateway {
+  @override
+  Future<ConnectivityState> currentConnectivity() async {
+    return ConnectivityState.offline;
+  }
+
+  @override
+  Stream<ConnectivityState> watchConnectivity() {
+    return Stream.value(ConnectivityState.offline);
+  }
+}
+
+class _FakePermissionGateway implements AppPermissionGateway {
+  @override
+  Future<AppPermissionState> check(AppPermission permission) async {
+    return AppPermissionState.granted;
+  }
+
+  @override
+  Future<AppPermissionState> request(AppPermission permission) async {
+    return AppPermissionState.granted;
+  }
+}
+
+class _NoopReminderScheduler implements ReminderScheduler {
+  const _NoopReminderScheduler();
+
+  @override
+  Future<void> requestPermission() async {}
+
+  @override
+  Future<void> scheduleDoseReminder({
+    required String doseId,
+    required DateTime scheduledFor,
+    required String label,
+    required bool repeatsDaily,
+  }) async {}
+
+  @override
+  Future<void> cancelDoseReminder(String doseId) async {}
+}

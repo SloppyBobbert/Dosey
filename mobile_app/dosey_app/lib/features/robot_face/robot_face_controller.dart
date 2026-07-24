@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
+import 'dart:convert';
+
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
@@ -9,6 +12,7 @@ import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart'
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
+import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
@@ -23,6 +27,8 @@ class RobotFaceController {
     required this._scheduleProfiles,
     required this._reminders,
     required this._doseLog,
+    this.carouselSlots,
+    Stream<List<MedicationShortageAlertRow>>? shortageAlerts,
     Stream<DateTime>? clock,
     DateTime Function()? now,
     this.sleepyAfter = const Duration(minutes: 30),
@@ -54,6 +60,14 @@ class RobotFaceController {
         _emit();
       }),
     ];
+    if (shortageAlerts != null) {
+      _subscriptions.add(
+        shortageAlerts.listen((value) {
+          _shortageAlerts = value;
+          _emit();
+        }),
+      );
+    }
     final tickStream = clock;
     if (tickStream != null) {
       _subscriptions.add(
@@ -72,6 +86,7 @@ class RobotFaceController {
   final ScheduleProfileRepository _scheduleProfiles;
   final ReminderRepository _reminders;
   final DoseLogRepository _doseLog;
+  final CarouselSlotRepository? carouselSlots;
   final DateTime Function() _now;
   final Duration sleepyAfter;
 
@@ -85,6 +100,8 @@ class RobotFaceController {
   ScheduleProfile? _activeProfile;
   List<ReminderSchedule> _schedules = const <ReminderSchedule>[];
   List<DoseLogEvent> _events = const <DoseLogEvent>[];
+  List<MedicationShortageAlertRow> _shortageAlerts =
+      const <MedicationShortageAlertRow>[];
   String? _dispensingDoseId;
   late DateTime _lastInteractionAt;
   DateTime? _currentTime;
@@ -148,6 +165,7 @@ class RobotFaceController {
   RobotFaceState _computeState() {
     final role = _role;
     final now = _current();
+    final activeShortageAlert = _activeShortageAlert();
     final activeMissedDose = _activeMissedAlertDose(now);
     // Missed-dose alerts intentionally pin the display to the unresolved dose
     // so recognition and follow-up actions stay attached to the event the user
@@ -215,6 +233,15 @@ class RobotFaceController {
         mode: mode,
         hasActiveMissedAlert: hasActiveMissedAlert,
       ),
+      hasPinnedShortageAlert: activeShortageAlert != null,
+      activeShortageLabel: _activeShortageAlertLabel(activeShortageAlert),
+      activeShortageMedicationLabel: _activeShortageMedicationLabel(
+        activeShortageAlert,
+      ),
+      activeShortageScheduledLabel: _activeShortageScheduledLabel(
+        activeShortageAlert,
+      ),
+      activeShortageSlotNumber: activeShortageAlert?.slotNumber,
     );
     if (baseState.mode == RobotFaceMode.idle &&
         !baseState.isInAwakeWindow &&
@@ -223,6 +250,69 @@ class RobotFaceController {
       return baseState.copyWith(mode: RobotFaceMode.sleepy);
     }
     return baseState;
+  }
+
+  MedicationShortageAlertRow? _activeShortageAlert() {
+    final profileId = _activeProfile?.id;
+    if (profileId == null) {
+      return null;
+    }
+    MedicationShortageAlertRow? activeAlert;
+    for (final alert in _shortageAlerts) {
+      if (alert.profileId != profileId) {
+        continue;
+      }
+      if (alert.status == 'past_due') {
+        return alert;
+      }
+      if (alert.status == 'active') {
+        activeAlert ??= alert;
+      }
+    }
+    return activeAlert;
+  }
+
+  String? _activeShortageAlertLabel(MedicationShortageAlertRow? alert) {
+    if (alert == null) {
+      return null;
+    }
+    return 'Urgent shortage · slot ${alert.slotNumber}';
+  }
+
+  String? _activeShortageMedicationLabel(MedicationShortageAlertRow? alert) {
+    if (alert == null) {
+      return null;
+    }
+    return _joinedPrescriptionNames(alert.prescriptionNamesJson);
+  }
+
+  String? _activeShortageScheduledLabel(MedicationShortageAlertRow? alert) {
+    if (alert == null) {
+      return null;
+    }
+    final scheduledAt = alert.scheduledAt.toLocal();
+    final hour = scheduledAt.hour.toString().padLeft(2, '0');
+    final minute = scheduledAt.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _joinedPrescriptionNames(String namesJson) {
+    try {
+      final decoded = jsonDecode(namesJson);
+      if (decoded is List) {
+        final labels = decoded
+            .whereType<String>()
+            .map((value) => value.trim())
+            .where((value) => value.isNotEmpty)
+            .toList(growable: false);
+        if (labels.isNotEmpty) {
+          return labels.join(' + ');
+        }
+      }
+    } on FormatException {
+      // Fall through to the stored raw value when legacy rows contain bad JSON.
+    }
+    return namesJson;
   }
 
   String? _actionDoseIdFor(

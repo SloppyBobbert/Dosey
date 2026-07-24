@@ -638,6 +638,10 @@ class _RobotFaceStatusCard extends StatelessWidget {
                 ],
               ],
             ),
+            if (state.hasPinnedShortageAlert) ...<Widget>[
+              const SizedBox(height: 12),
+              _RobotFaceShortageCard(state: state),
+            ],
             if (showActionPanel) ...<Widget>[
               const SizedBox(height: 10),
               _RobotFaceActionPanel(
@@ -704,6 +708,108 @@ class _RobotFaceStatusCard extends StatelessWidget {
       RobotFaceMode.idle when state.isInAwakeWindow => 0.24,
       _ => 0,
     };
+  }
+}
+
+class _RobotFaceShortageCard extends StatelessWidget {
+  const _RobotFaceShortageCard({required this.state});
+
+  final RobotFaceState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final medicationLabel = state.activeShortageMedicationLabel ?? 'Medication';
+    final slotNumber = state.activeShortageSlotNumber;
+    final scheduledLabel = state.activeShortageScheduledLabel;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0x26FF728C),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0x66FF728C)),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x24FF728C),
+            blurRadius: 18,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Row(
+              children: <Widget>[
+                Icon(Icons.warning_amber_rounded, color: Color(0xFFFF9AAC)),
+                SizedBox(width: 8),
+                Text(
+                  'Urgent shortage',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              medicationLabel,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 12,
+              runSpacing: 4,
+              children: <Widget>[
+                if (scheduledLabel != null)
+                  Text(
+                    'Scheduled $scheduledLabel',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFF8C8D1),
+                    ),
+                  ),
+                if (slotNumber != null)
+                  Text(
+                    'Slot $slotNumber',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFF8C8D1),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Local-only alert on this phone. Open Carousel to review loading before the next dispense.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.35,
+                color: Color(0xFFF4D7DD),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Pinned until loading is handled on this phone.',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFFFB4C1),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
