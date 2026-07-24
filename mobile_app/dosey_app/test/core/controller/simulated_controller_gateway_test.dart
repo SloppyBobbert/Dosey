@@ -4,6 +4,69 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('simulated controller reports accepted then movement started', () async {
+    final stages = <ControllerDispenseStage>[];
+    final gateway = SimulatedControllerGateway(
+      canHostRobot: () => true,
+      delay: (_) async {},
+    );
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    await gateway.requestStagedDispense(
+      doseId: 'morning',
+      onStage: (stage) async => stages.add(stage),
+    );
+
+    expect(stages, [
+      ControllerDispenseStage.accepted,
+      ControllerDispenseStage.movementStarted,
+    ]);
+  });
+
+  test('pre-accept timeout reports no accepted stage', () async {
+    final stages = <ControllerDispenseStage>[];
+    final gateway = SimulatedControllerGateway(
+      canHostRobot: () => true,
+      nextDispenseOutcome: SimulatedDispenseOutcome.timeoutBeforeAcceptance,
+      delay: (_) async {},
+    );
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    await expectLater(
+      gateway.requestStagedDispense(
+        doseId: 'morning',
+        onStage: (stage) async => stages.add(stage),
+      ),
+      throwsA(isA<ControllerCommandPreAcceptanceTimeoutException>()),
+    );
+    expect(stages, isEmpty);
+  });
+
+  test('jam occurs after accepted and movement started stages', () async {
+    final stages = <ControllerDispenseStage>[];
+    final gateway = SimulatedControllerGateway(
+      canHostRobot: () => true,
+      nextDispenseOutcome: SimulatedDispenseOutcome.jamAfterAcceptance,
+      delay: (_) async {},
+    );
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    await expectLater(
+      gateway.requestStagedDispense(
+        doseId: 'morning',
+        onStage: (stage) async => stages.add(stage),
+      ),
+      throwsA(isA<ControllerCommandJamException>()),
+    );
+    expect(stages, [
+      ControllerDispenseStage.accepted,
+      ControllerDispenseStage.movementStarted,
+    ]);
+  });
+
   test('simulated controller starts disconnected and unsafe', () async {
     final gateway = SimulatedControllerGateway();
     addTearDown(gateway.close);

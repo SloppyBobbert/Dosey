@@ -1706,6 +1706,13 @@ class _UnusedControllerCommandRepository
   }
 
   @override
+  Stream<List<ControllerCommandHistoryEntry>> watchRecentHistory({
+    int limit = 12,
+  }) {
+    return const Stream<List<ControllerCommandHistoryEntry>>.empty();
+  }
+
+  @override
   Stream<List<ControllerCommandSession>> watchUnresolvedSessions() {
     return const Stream<List<ControllerCommandSession>>.empty();
   }

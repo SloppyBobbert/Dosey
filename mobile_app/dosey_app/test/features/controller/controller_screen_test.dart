@@ -1,11 +1,15 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/demo/demo_data_repository.dart';
+import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/features/controller/controller_screen.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -113,6 +117,117 @@ void main() {
     expect(session, isNotNull);
     expect(session!.commandType, ControllerCommandType.dispenseTest);
   });
+
+  testWidgets('enters and exits isolated demo mode from Controller', (
+    WidgetTester tester,
+  ) async {
+    final production = DoseyDatabase.inMemory();
+    final demo = DoseyDatabase.inMemory(isDemo: true);
+    final productionClock = ControllableAppClock(DateTime.utc(2039));
+    addTearDown(() async {
+      await productionClock.close();
+      await production.close();
+      await demo.close();
+    });
+
+    await tester.pumpWidget(
+      _TestControllerHost(
+        production: production,
+        demo: demo,
+        productionClock: productionClock,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter demo mode'), findsOneWidget);
+    await tester.tap(find.text('Enter demo mode'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('FAKE DATA'), findsOneWidget);
+    expect(find.text('Demo scenario runner'), findsOneWidget);
+    expect(find.text('Exit demo mode'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Exit demo mode'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Exit demo mode'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('FAKE DATA'), findsNothing);
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter demo mode'), findsOneWidget);
+  });
+
+  testWidgets('steps a scenario and records bench command history', (
+    WidgetTester tester,
+  ) async {
+    final production = DoseyDatabase.inMemory();
+    final demo = DoseyDatabase.inMemory(isDemo: true);
+    final productionClock = ControllableAppClock(DateTime.utc(2039));
+    addTearDown(() async {
+      await productionClock.close();
+      await production.close();
+      await demo.close();
+    });
+
+    await tester.pumpWidget(
+      _TestControllerHost(
+        production: production,
+        demo: demo,
+        productionClock: productionClock,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Enter demo mode'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Next: Dose approaching'), findsOneWidget);
+    await tester.tap(find.text('Next step'));
+    await tester.pumpAndSettle();
+    expect(find.text('1 of 8 steps complete'), findsOneWidget);
+    expect(find.text('Next: Dose ready'), findsOneWidget);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('STATUS'));
+    await tester.pumpAndSettle();
+
+    await tester.fling(find.byType(ListView), const Offset(0, -1000), 1000);
+    await tester.pumpAndSettle();
+    expect(find.text('Command history'), findsOneWidget);
+    expect(find.text('STATUS'), findsWidgets);
+    await tester.tap(find.widgetWithText(ExpansionTile, 'STATUS'));
+    await tester.pumpAndSettle();
+    expect(find.text('ACK'), findsOneWidget);
+    expect(find.text('Simulator connected'), findsOneWidget);
+  });
+
+  testWidgets('iOS demo does not offer Robot Face presentation', (
+    WidgetTester tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      final database = DoseyDatabase.inMemory(isDemo: true);
+      addTearDown(database.close);
+      await DemoDataRepository(
+        database,
+        seedTime: DateTime.utc(2040, 1, 2, 8),
+        deviceRole: AppDeviceRole.iosPersonal,
+      ).resetAndSeed();
+
+      await tester.pumpWidget(_TestControllerApp(database: database));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Demo scenario runner'), findsOneWidget);
+      expect(find.text('Start presentation'), findsNothing);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
 }
 
 Future<void> _setDeviceRole(DoseyDatabase database, AppDeviceRole role) async {
@@ -143,6 +258,49 @@ class _TestControllerApp extends StatelessWidget {
           useMaterial3: true,
         ),
         home: const Scaffold(body: ControllerScreen()),
+      ),
+    );
+  }
+}
+
+class _TestControllerHost extends StatelessWidget {
+  const _TestControllerHost({
+    required this.production,
+    required this.demo,
+    required this.productionClock,
+  });
+
+  final DoseyDatabase production;
+  final DoseyDatabase demo;
+  final ControllableAppClock productionClock;
+
+  @override
+  Widget build(BuildContext context) {
+    return DemoModeHost(
+      productionDatabase: production,
+      productionClock: productionClock,
+      demoDatabaseFactory: () => demo,
+      devicePlatform: AppDevicePlatform.android,
+      builder: (context, session) => DoseyAppScope(
+        key: ValueKey(session.isDemo),
+        database: session.database,
+        appClock: session.clock,
+        bleGateway: FakeBleGateway(),
+        connectivityGateway: FakeConnectivityGateway(),
+        permissionGateway: const _FakePermissionGateway(),
+        reminderScheduler: const _NoopReminderScheduler(),
+        missedDoseReconciliationService: session.isDemo
+            ? null
+            : FakeMissedDoseReconciliationService(),
+        child: MaterialApp(
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF2F6F5E),
+            ),
+            useMaterial3: true,
+          ),
+          home: const Scaffold(body: ControllerScreen()),
+        ),
       ),
     );
   }

@@ -138,6 +138,7 @@ void main() {
       expect(eventRows.map((row) => row.eventType).toList(), <String>[
         ControllerCommandEventType.commandSent.name,
         ControllerCommandEventType.ack.name,
+        ControllerCommandEventType.moveStarted.name,
         ControllerCommandEventType.servoDone.name,
       ]);
 
@@ -154,6 +155,43 @@ void main() {
       );
       expect(doseLogRows.single.doseId, 'dose-1');
       expect(doseLogRows.single.marksDoseTaken, isFalse);
+    },
+  );
+
+  test(
+    'timeout before acceptance keeps slot loaded without acceptance history',
+    () async {
+      final fixture = await _LifecycleFixture.create(
+        gateway: _TimeoutBeforeAcceptanceControllerGateway(),
+      );
+      addTearDown(fixture.close);
+
+      await expectLater(
+        fixture.service.requestDoseDispense(
+          doseId: 'dose-1',
+          scheduleId: 'schedule-1',
+          slotId: 'slot-1',
+        ),
+        throwsA(isA<ControllerCommandPreAcceptanceTimeoutException>()),
+      );
+
+      final session = await fixture.database
+          .select(fixture.database.controllerCommandSessions)
+          .getSingle();
+      expect(session.state, ControllerCommandSessionState.timedOut.name);
+      expect(session.acceptedAt, isNull);
+      expect(
+        session.failureReason,
+        ControllerCommandFailureReason.timeout.name,
+      );
+      expect(
+        (await fixture.slotRow('slot-1')).status,
+        CarouselSlotStatus.loaded.storageValue,
+      );
+      expect(
+        await fixture.database.select(fixture.database.doseLogEvents).get(),
+        isEmpty,
+      );
     },
   );
 
@@ -321,13 +359,15 @@ void main() {
         sessionRows.single.state,
         ControllerCommandSessionState.timedOut.name,
       );
-      expect(sessionRows.single.acceptedAt, isNull);
+      expect(sessionRows.single.acceptedAt, isNotNull);
 
       final eventRows = await fixture.database
           .select(fixture.database.controllerCommandEvents)
           .get();
       expect(eventRows.map((row) => row.eventType).toList(), <String>[
         ControllerCommandEventType.commandSent.name,
+        ControllerCommandEventType.ack.name,
+        ControllerCommandEventType.moveStarted.name,
         ControllerCommandEventType.controllerError.name,
       ]);
 
@@ -547,6 +587,7 @@ void main() {
       expect(eventRows.map((row) => row.eventType).toList(), <String>[
         ControllerCommandEventType.commandSent.name,
         ControllerCommandEventType.ack.name,
+        ControllerCommandEventType.moveStarted.name,
         ControllerCommandEventType.servoDone.name,
       ]);
 
@@ -963,8 +1004,27 @@ class _OfflineBeforeAcceptanceControllerGateway
   }
 }
 
-class _TimeoutAfterAcceptanceControllerGateway
+class _TimeoutBeforeAcceptanceControllerGateway
     extends _AcceptingControllerGateway {
+  @override
+  Future<void> requestDispense({required String doseId}) async {
+    throw const ControllerCommandPreAcceptanceTimeoutException();
+  }
+}
+
+class _TimeoutAfterAcceptanceControllerGateway
+    extends _AcceptingControllerGateway
+    implements StagedControllerGateway {
+  @override
+  Future<void> requestStagedDispense({
+    required String doseId,
+    required ControllerDispenseStageCallback onStage,
+  }) async {
+    await onStage(ControllerDispenseStage.accepted);
+    await onStage(ControllerDispenseStage.movementStarted);
+    throw const ControllerCommandTimeoutException();
+  }
+
   @override
   Future<void> requestDispense({required String doseId}) async {
     throw const ControllerCommandTimeoutException();

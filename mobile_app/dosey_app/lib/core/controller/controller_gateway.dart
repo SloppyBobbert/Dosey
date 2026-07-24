@@ -34,6 +34,13 @@ class ControllerCommandTimeoutException extends ControllerGatewayException {
   ]);
 }
 
+class ControllerCommandPreAcceptanceTimeoutException
+    extends ControllerGatewayException {
+  const ControllerCommandPreAcceptanceTimeoutException([
+    super.message = 'Controller did not respond before command acceptance.',
+  ]);
+}
+
 class ControllerCommandJamException extends ControllerGatewayException {
   const ControllerCommandJamException([
     super.message = 'Controller reported a jam after acceptance.',
@@ -86,4 +93,29 @@ abstract interface class ControllerGateway {
   Future<void> cancelActiveCommand();
 
   Future<void> close();
+}
+
+enum ControllerDispenseStage { accepted, movementStarted }
+
+typedef ControllerDispenseStageCallback =
+    Future<void> Function(ControllerDispenseStage stage);
+
+abstract interface class StagedControllerGateway implements ControllerGateway {
+  Future<void> requestStagedDispense({
+    required String doseId,
+    required ControllerDispenseStageCallback onStage,
+  });
+}
+
+enum ControllerBenchCommand {
+  status,
+  heartbeat,
+  servoTest,
+  dispenseTest,
+  pirStatus,
+  ledTest,
+}
+
+abstract interface class ControllerBenchGateway {
+  Future<String> runBenchCommand(ControllerBenchCommand command);
 }

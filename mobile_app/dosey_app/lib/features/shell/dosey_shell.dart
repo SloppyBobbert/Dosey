@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
+import 'package:dosey_app/core/demo/demo_scenario.dart';
+import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -18,9 +20,14 @@ import 'package:dosey_app/features/today/today_screen.dart';
 import 'package:flutter/material.dart';
 
 class DoseyShell extends StatefulWidget {
-  const DoseyShell({super.key, this.forceTodayTab = false});
+  const DoseyShell({
+    super.key,
+    this.forceTodayTab = false,
+    this.startOnController = false,
+  });
 
   final bool forceTodayTab;
+  final bool startOnController;
 
   @override
   State<DoseyShell> createState() => _DoseyShellState();
@@ -37,6 +44,9 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   StreamSubscription<AppDeviceRole>? _deviceRoleSubscription;
   Object? _robotFaceSettingsSource;
   StreamSubscription<RobotFaceSettings>? _robotFaceSettingsSubscription;
+  DemoScenarioService? _demoScenarios;
+  StreamSubscription<DemoScenarioState>? _demoScenarioSubscription;
+  bool _wasPresenting = false;
   AppLifecycleState? _lifecycleState;
   bool _handledNotificationWhileBackgrounded = false;
   AppDeviceRole? _currentRole;
@@ -78,6 +88,14 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
           .watchSettings()
           .listen(_handleRobotFaceSettingsChanged);
     }
+    if (!identical(dependencies.demoScenarios, _demoScenarios)) {
+      unawaited(_demoScenarioSubscription?.cancel());
+      _demoScenarios = dependencies.demoScenarios;
+      _wasPresenting = dependencies.demoScenarios?.state.isPresenting ?? false;
+      _demoScenarioSubscription = dependencies.demoScenarios?.states.listen(
+        _handleDemoScenarioChanged,
+      );
+    }
     final notificationTaps = dependencies.notificationTaps;
     if (identical(notificationTaps, _notificationTaps)) {
       return;
@@ -96,6 +114,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     _requestScreenAwake(false);
     unawaited(_deviceRoleSubscription?.cancel());
     unawaited(_robotFaceSettingsSubscription?.cancel());
+    unawaited(_demoScenarioSubscription?.cancel());
     unawaited(_notificationTapSubscription?.cancel());
     super.dispose();
   }
@@ -447,6 +466,21 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     _syncScreenAwake();
   }
 
+  void _handleDemoScenarioChanged(DemoScenarioState state) {
+    if (!mounted || state.isPresenting == _wasPresenting) {
+      return;
+    }
+    final wasPresenting = _wasPresenting;
+    _wasPresenting = state.isPresenting;
+    _selectTab(
+      state.isPresenting
+          ? _ShellTabId.robotFace
+          : wasPresenting
+          ? _ShellTabId.controller
+          : _selectedTabId ?? _ShellTabId.controller,
+    );
+  }
+
   void _syncScreenAwake() {
     final role = _currentRole;
     final selectedTabId = role == null
@@ -580,6 +614,9 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   _ShellTabId _defaultTabIdFor(AppDeviceRole role) {
     if (widget.forceTodayTab) {
       return _ShellTabId.today;
+    }
+    if (widget.startOnController) {
+      return _ShellTabId.controller;
     }
     return role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.today;
   }

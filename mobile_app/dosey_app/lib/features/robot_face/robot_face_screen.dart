@@ -3,6 +3,8 @@ import 'dart:math' as math;
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/demo/demo_scenario.dart';
+import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/features/doses/dose_action_logger.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
@@ -144,6 +146,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scenarios = DoseyAppScope.maybeOf(context)?.demoScenarios;
     return Scaffold(
       backgroundColor: const Color(0xFF04070D),
       body: StreamBuilder<RobotFaceState>(
@@ -151,30 +154,143 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
         initialData: _initialState ?? _fallbackState,
         builder: (context, snapshot) {
           final state = snapshot.data ?? _fallbackState;
-          return ColoredBox(
-            color: const Color(0xFF04070D),
-            child: SafeArea(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final isPortraitFrame =
-                      constraints.maxHeight > constraints.maxWidth;
-                  Widget frame = _RobotFaceFrame(
-                    state: state,
-                    isActive: widget.isActive,
-                    onInteraction: _handleInteraction,
-                    doseActionLogger: widget.doseActionLogger,
-                  );
+          return Stack(
+            children: [
+              ColoredBox(
+                color: const Color(0xFF04070D),
+                child: SafeArea(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isPortraitFrame =
+                          constraints.maxHeight > constraints.maxWidth;
+                      Widget frame = _RobotFaceFrame(
+                        state: state,
+                        isActive: widget.isActive,
+                        onInteraction: _handleInteraction,
+                        doseActionLogger: widget.doseActionLogger,
+                      );
 
-                  if (isPortraitFrame) {
-                    frame = RotatedBox(quarterTurns: 1, child: frame);
-                  }
+                      if (isPortraitFrame) {
+                        frame = RotatedBox(quarterTurns: 1, child: frame);
+                      }
 
-                  return Center(child: frame);
-                },
+                      return Center(child: frame);
+                    },
+                  ),
+                ),
               ),
-            ),
+              if (scenarios != null)
+                _DemoPresenterControls(scenarios: scenarios),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _DemoPresenterControls extends StatelessWidget {
+  const _DemoPresenterControls({required this.scenarios});
+
+  final DemoScenarioService scenarios;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DemoScenarioState>(
+      stream: scenarios.states,
+      initialData: scenarios.state,
+      builder: (context, snapshot) {
+        final state = snapshot.requireData;
+        if (!state.isPresenting) {
+          return const SizedBox.shrink();
+        }
+
+        return SafeArea(
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: const Color(0xEE101722),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0x5564D8FF)),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _PresenterButton(
+                        tooltip: 'Advance to the next demo state',
+                        label: 'Next demo step',
+                        icon: Icons.skip_next_outlined,
+                        onPressed: state.isPlaying || state.isComplete
+                            ? null
+                            : () => unawaited(scenarios.next()),
+                      ),
+                      _PresenterButton(
+                        tooltip: state.isPlaying
+                            ? 'Pause automatic demo playback'
+                            : 'Play demo automatically',
+                        label: state.isPlaying ? 'Pause demo' : 'Play demo',
+                        icon: state.isPlaying ? Icons.pause : Icons.play_arrow,
+                        onPressed: state.isComplete
+                            ? null
+                            : state.isPlaying
+                            ? scenarios.pause
+                            : () => unawaited(scenarios.play()),
+                      ),
+                      _PresenterButton(
+                        tooltip: 'Restart the demo from its fake baseline',
+                        label: 'Restart demo',
+                        icon: Icons.restart_alt,
+                        onPressed: () => unawaited(scenarios.restart()),
+                      ),
+                      _PresenterButton(
+                        tooltip: 'Stop presenting and return to Controller',
+                        label: 'Return to Controller',
+                        icon: Icons.memory_outlined,
+                        onPressed: scenarios.stopPresentation,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _PresenterButton extends StatelessWidget {
+  const _PresenterButton({
+    required this.tooltip,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: Tooltip(
+        message: tooltip,
+        child: FilledButton.tonalIcon(
+          onPressed: onPressed,
+          icon: Icon(icon),
+          label: Text(label),
+        ),
       ),
     );
   }

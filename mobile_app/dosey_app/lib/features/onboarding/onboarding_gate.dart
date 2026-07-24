@@ -11,10 +11,12 @@ class OnboardingGate extends StatelessWidget {
     super.key,
     this.onboardingCompletedStream,
     this.shellForceTodayTab = false,
+    this.demoMode = false,
   });
 
   final Stream<bool>? onboardingCompletedStream;
   final bool shellForceTodayTab;
+  final bool demoMode;
 
   @override
   Widget build(BuildContext context) {
@@ -42,6 +44,7 @@ class OnboardingGate extends StatelessWidget {
           return _CompletedOnboardingGate(
             dependencies: dependencies!,
             shellForceTodayTab: shellForceTodayTab,
+            demoMode: demoMode,
           );
         }
 
@@ -55,10 +58,12 @@ class _CompletedOnboardingGate extends StatelessWidget {
   const _CompletedOnboardingGate({
     required this.dependencies,
     required this.shellForceTodayTab,
+    required this.demoMode,
   });
 
   final DoseyAppDependencies dependencies;
   final bool shellForceTodayTab;
+  final bool demoMode;
 
   @override
   Widget build(BuildContext context) {
@@ -79,7 +84,14 @@ class _CompletedOnboardingGate extends StatelessWidget {
             : AppDeviceRole.defaultFor(platform);
         // Robot Mode is local-only; personal phones must pass through sign-in.
         if (role.canHostRobot) {
-          return DoseyShell(forceTodayTab: shellForceTodayTab);
+          return DoseyShell(
+            forceTodayTab: shellForceTodayTab,
+            startOnController: demoMode,
+          );
+        }
+
+        if (demoMode) {
+          return const DoseyShell(startOnController: true);
         }
 
         return StreamBuilder<AuthSession>(

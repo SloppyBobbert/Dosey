@@ -7,6 +7,7 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
@@ -41,6 +42,47 @@ void main() {
     expect(find.text('Export backup'), findsOneWidget);
     expect(find.text('Restore backup'), findsOneWidget);
     expect(find.text('Check database'), findsOneWidget);
+  });
+
+  testWidgets('demo mode disables backup and restore actions', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+    addTearDown(database.close);
+    addTearDown(clock.close);
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        appClock: clock,
+        sectionTarget: SettingsSection.backupDatabase,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'Backup and restore are unavailable while FAKE DATA is active.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Export backup'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Restore backup'),
+          )
+          .onPressed,
+      isNull,
+    );
   });
 
   testWidgets('backup export warning is followed by Action PIN', (
@@ -1208,6 +1250,7 @@ class _TestSettingsApp extends StatelessWidget {
     this.previewVoicePlayer,
     this.sectionTarget,
     this.backupFileGateway,
+    this.appClock,
   });
 
   final DoseyDatabase database;
@@ -1215,11 +1258,13 @@ class _TestSettingsApp extends StatelessWidget {
   final DoseyVoicePlayer? previewVoicePlayer;
   final SettingsSection? sectionTarget;
   final BackupFileGateway? backupFileGateway;
+  final AppClock? appClock;
 
   @override
   Widget build(BuildContext context) {
     return DoseyAppScope(
       database: database,
+      appClock: appClock,
       bleGateway: FakeBleGateway(),
       connectivityGateway: FakeConnectivityGateway(),
       permissionGateway: const _FakePermissionGateway(),

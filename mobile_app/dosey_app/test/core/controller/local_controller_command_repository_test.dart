@@ -3,6 +3,64 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('session ids can be deterministic', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalControllerCommandRepository(
+      database,
+      sessionIdGenerator: (commandType, now) =>
+          'demo:${commandType.name}:${now.millisecondsSinceEpoch}',
+    );
+    final createdAt = DateTime.utc(2026, 7, 10, 7);
+
+    final session = await repository.createSession(
+      commandType: ControllerCommandType.status,
+      now: createdAt,
+    );
+
+    expect(session.id, 'demo:status:${createdAt.millisecondsSinceEpoch}');
+  });
+
+  test('recent history groups ordered events under newest sessions', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    var sequence = 0;
+    final repository = LocalControllerCommandRepository(
+      database,
+      sessionIdGenerator: (_, _) => 'session-${sequence++}',
+    );
+    final createdAt = DateTime.utc(2026, 7, 10, 7);
+    final sessions = <ControllerCommandSession>[];
+    for (var index = 0; index < 3; index++) {
+      final session = await repository.createSession(
+        commandType: ControllerCommandType.status,
+        now: createdAt.add(Duration(minutes: index)),
+      );
+      sessions.add(session);
+      await repository.appendEvent(
+        session.id,
+        ControllerCommandEventType.commandSent,
+        occurredAt: createdAt.add(Duration(minutes: index)),
+      );
+      await repository.appendEvent(
+        session.id,
+        ControllerCommandEventType.ack,
+        occurredAt: createdAt.add(Duration(minutes: index, seconds: 1)),
+      );
+    }
+
+    final history = await repository.watchRecentHistory(limit: 2).first;
+
+    expect(history.map((entry) => entry.session.id), [
+      sessions[2].id,
+      sessions[1].id,
+    ]);
+    expect(history.first.events.map((event) => event.eventType), [
+      ControllerCommandEventType.commandSent,
+      ControllerCommandEventType.ack,
+    ]);
+  });
+
   test(
     'controller command sessions and ordered events persist in the db',
     () async {
