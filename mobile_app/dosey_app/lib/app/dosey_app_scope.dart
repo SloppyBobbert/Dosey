@@ -7,6 +7,9 @@ import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:dosey_app/core/audit/admin_audit_repository.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/bluetooth/flutter_blue_plus_ble_gateway.dart';
+import 'package:dosey_app/core/backup/backup_file_gateway.dart';
+import 'package:dosey_app/core/backup/local_backup_service.dart';
+import 'package:dosey_app/core/backup/local_backup_store.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_plus_gateway.dart';
@@ -52,6 +55,7 @@ class DoseyAppScope extends StatefulWidget {
     this.connectivityGateway,
     this.voicePlayer,
     this.screenAwakeGateway,
+    this.backupFileGateway,
   });
 
   final Widget child;
@@ -64,6 +68,7 @@ class DoseyAppScope extends StatefulWidget {
   final ConnectivityGateway? connectivityGateway;
   final DoseyVoicePlayer? voicePlayer;
   final ScreenAwakeGateway? screenAwakeGateway;
+  final BackupFileGateway? backupFileGateway;
 
   static DoseyAppDependencies of(BuildContext context) {
     final dependencies = maybeOf(context);
@@ -122,6 +127,10 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         FlutterLocalNotificationScheduler(
           notificationTapHandler: notificationTaps.handleTap,
         );
+    final reminderSchedules = ReminderScheduleService(
+      repository: reminders,
+      scheduler: reminderScheduler,
+    );
     final urgentShortageNotifier = reminderScheduler is UrgentShortageNotifier
         ? reminderScheduler as UrgentShortageNotifier
         : null;
@@ -130,6 +139,12 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
     );
     final actionPinGate = ActionPinGate(settings);
+    final backups = LocalBackupService(
+      database: _database,
+      store: LocalBackupStore(_database),
+      gateway: widget.backupFileGateway ?? const PluginBackupFileGateway(),
+      syncNotifications: reminderSchedules.syncScheduledNotifications,
+    );
     final robotFaceSettings = RobotFaceSettingsRepository(_database);
     final scheduleProfiles = LocalScheduleProfileRepository(_database);
     final carouselSlots = LocalCarouselSlotRepository(_database);
@@ -174,10 +189,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       prescriptions: LocalPrescriptionRepository(_database),
       scheduleProfiles: scheduleProfiles,
       reminders: reminders,
-      reminderSchedules: ReminderScheduleService(
-        repository: reminders,
-        scheduler: reminderScheduler,
-      ),
+      reminderSchedules: reminderSchedules,
+      backups: backups,
       carouselSlots: carouselSlots,
       guidedCarouselLoads: guidedCarouselLoads,
       doseLog: doseLog,
@@ -284,6 +297,7 @@ class DoseyAppDependencies {
     required this.scheduleProfiles,
     required this.reminders,
     required this.reminderSchedules,
+    required this.backups,
     required this.carouselSlots,
     required this.guidedCarouselLoads,
     required this.doseLog,
@@ -312,6 +326,7 @@ class DoseyAppDependencies {
   final LocalScheduleProfileRepository scheduleProfiles;
   final LocalReminderRepository reminders;
   final ReminderScheduleService reminderSchedules;
+  final LocalBackupService backups;
   final LocalCarouselSlotRepository carouselSlots;
   final LocalGuidedCarouselLoadRepository guidedCarouselLoads;
   final DriftDoseLogRepository doseLog;

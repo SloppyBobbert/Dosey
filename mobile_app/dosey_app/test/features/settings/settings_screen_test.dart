@@ -1,4 +1,7 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/backup/backup_codec.dart';
+import 'package:dosey_app/core/backup/backup_file_gateway.dart';
+import 'package:dosey_app/core/backup/local_backup_store.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -16,6 +19,120 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_app_scope_dependencies.dart';
 
 void main() {
+  testWidgets('backup database section exposes local maintenance actions', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.backupDatabase,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Backup and database'), findsOneWidget);
+    expect(find.text('Export backup'), findsOneWidget);
+    expect(find.text('Restore backup'), findsOneWidget);
+    expect(find.text('Check database'), findsOneWidget);
+  });
+
+  testWidgets('backup export warning is followed by Action PIN', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    await settings.setDeviceRole(AppDeviceRole.androidPersonal);
+    await settings.setOnboardingCompleted(true);
+    await settings.setActionPin('1234');
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.backupDatabase,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Export backup'));
+    await tester.pumpAndSettle();
+    expect(find.text('Export unencrypted backup?'), findsOneWidget);
+
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    expect(find.text('Enter Action PIN'), findsOneWidget);
+  });
+
+  testWidgets('database health check does not require Action PIN', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    await settings.setDeviceRole(AppDeviceRole.androidPersonal);
+    await settings.setOnboardingCompleted(true);
+    await settings.setActionPin('1234');
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.backupDatabase,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Check database'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter Action PIN'), findsNothing);
+    expect(find.text('Database check passed.'), findsOneWidget);
+  });
+
+  testWidgets('restore previews validated record count before replacement', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    final document = await LocalBackupStore(database).readSnapshot();
+    final gateway = _FakeBackupFileGateway(
+      picked: const BackupCodec().encode(document),
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        backupFileGateway: gateway,
+        sectionTarget: SettingsSection.backupDatabase,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Restore backup'));
+    await tester.pump();
+
+    expect(find.text('Replace local backup data?'), findsOneWidget);
+    expect(
+      find.textContaining('${document.summary.totalRecords} records'),
+      findsOneWidget,
+    );
+    expect(find.text('Replace data'), findsOneWidget);
+  });
+
   testWidgets('Robot Mode does not offer account sign-in', (
     WidgetTester tester,
   ) async {
@@ -1090,12 +1207,14 @@ class _TestSettingsApp extends StatelessWidget {
     this.voicePlayer,
     this.previewVoicePlayer,
     this.sectionTarget,
+    this.backupFileGateway,
   });
 
   final DoseyDatabase database;
   final DoseyVoicePlayer? voicePlayer;
   final DoseyVoicePlayer? previewVoicePlayer;
   final SettingsSection? sectionTarget;
+  final BackupFileGateway? backupFileGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -1106,6 +1225,7 @@ class _TestSettingsApp extends StatelessWidget {
       permissionGateway: const _FakePermissionGateway(),
       reminderScheduler: const _NoopReminderScheduler(),
       missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
+      backupFileGateway: backupFileGateway,
       voicePlayer: voicePlayer,
       child: MaterialApp(
         theme: ThemeData(
@@ -1121,6 +1241,30 @@ class _TestSettingsApp extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FakeBackupFileGateway implements BackupFileGateway {
+  _FakeBackupFileGateway({this.picked});
+
+  final Uint8List? picked;
+
+  @override
+  Future<bool> hasRecovery() async => false;
+
+  @override
+  Future<Uint8List?> pickImportBytes() async => picked;
+
+  @override
+  Future<Uint8List?> readRecovery() async => null;
+
+  @override
+  Future<BackupShareResult> shareExport({
+    required Uint8List bytes,
+    required String filename,
+  }) async => BackupShareResult.completed;
+
+  @override
+  Future<void> writeRecovery(Uint8List bytes) async {}
 }
 
 class _FakePermissionGateway implements AppPermissionGateway {
