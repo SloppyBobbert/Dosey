@@ -1067,7 +1067,7 @@ void main() {
       await _addVitaminReminder(database, id: 'vitamin-d-morning');
       await _addLoadedVitaminSlot(database);
       final guidedLoads = LocalGuidedCarouselLoadRepository(database);
-      final today = DateTime.now().toUtc();
+      final today = DateTime.now();
       final now = DateTime.utc(today.year, today.month, today.day, 8);
       await guidedLoads.confirmFullLoad(
         sessionId: 'session-live-taken',
@@ -1324,7 +1324,7 @@ void main() {
       await _addVitaminReminder(database, id: 'vitamin-d-morning');
       await _addLoadedVitaminSlot(database);
       final guidedLoads = LocalGuidedCarouselLoadRepository(database);
-      final today = DateTime.now().toUtc();
+      final today = DateTime.now();
       final now = DateTime.utc(today.year, today.month, today.day, 8);
       await guidedLoads.confirmFullLoad(
         sessionId: 'session-guided-skip-review',

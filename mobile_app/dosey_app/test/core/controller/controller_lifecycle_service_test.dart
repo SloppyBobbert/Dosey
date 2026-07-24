@@ -366,6 +366,26 @@ void main() {
         activeLoad!.slots.first.status,
         CarouselLoadSlotStatus.needsReview,
       );
+
+      var prescription = await (fixture.database.select(
+        fixture.database.prescriptions,
+      )..where((row) => row.id.equals('prescription-1'))).getSingle();
+      expect(prescription.loadedDoses, 0);
+      expect(prescription.reviewDoses, 1);
+
+      await fixture.guidedLoads.confirmPhysicalUnload(
+        profileId: 'schedule-1',
+        activeSessionId: 'session-1',
+        recoveredScheduleIds: const [],
+        recoveredSlotNumbers: const [],
+        occurredAt: DateTime.utc(2026, 7, 10, 12, 1),
+      );
+
+      prescription = await (fixture.database.select(
+        fixture.database.prescriptions,
+      )..where((row) => row.id.equals('prescription-1'))).getSingle();
+      expect(prescription.loadedDoses, 0);
+      expect(prescription.reviewDoses, 1);
     },
   );
 

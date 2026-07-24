@@ -462,12 +462,22 @@ class LocalGuidedCarouselLoadRepository {
               snapshot.status != 'dispensed')) {
         return;
       }
+      final prescriptionIds =
+          (jsonDecode(snapshot.prescriptionIdsJson) as List<dynamic>)
+              .cast<String>();
+      final occurredAtUtc = occurredAt.toUtc();
+      await _moveLoadedInventory(
+        prescriptionIds: prescriptionIds,
+        occurredAt: occurredAtUtc,
+        toUsed: false,
+      );
       await (_database.update(
         _database.carouselLoadSlotSnapshots,
       )..where((row) => row.id.equals(snapshot.id))).write(
         CarouselLoadSlotSnapshotsCompanion(
           status: const Value('needs_review'),
-          resolvedAt: Value(occurredAt.toUtc()),
+          movedAt: Value(snapshot.movedAt ?? occurredAtUtc),
+          resolvedAt: Value(occurredAtUtc),
           reviewReason: Value(reason),
         ),
       );

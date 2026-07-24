@@ -1214,6 +1214,17 @@ void main() {
         reason: 'timeout',
       );
 
+      var prescriptions = await LocalPrescriptionRepository(
+        database,
+      ).watchPrescriptions().first;
+      expect(
+        prescriptions.single,
+        isA<Prescription>()
+            .having((p) => p.availableDoses, 'available', 0)
+            .having((p) => p.loadedDoses, 'loaded', 0)
+            .having((p) => p.reviewDoses, 'review', 1),
+      );
+
       await repository.confirmPhysicalUnload(
         profileId: 'schedule-1',
         activeSessionId: 'session-quarantine-unload',
@@ -1222,7 +1233,7 @@ void main() {
         occurredAt: now.add(const Duration(minutes: 2)),
       );
 
-      final prescriptions = await LocalPrescriptionRepository(
+      prescriptions = await LocalPrescriptionRepository(
         database,
       ).watchPrescriptions().first;
       expect(
