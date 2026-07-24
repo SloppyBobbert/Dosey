@@ -164,6 +164,22 @@ void main() {
     );
   });
 
+  test('replacement submits deletes and inserts as one Drift batch', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final store = LocalBackupStore(database);
+    final interceptor = _BatchCountingInterceptor();
+
+    await database.runWithInterceptor(
+      () => database.transaction(
+        () => store.replaceSnapshot(_populatedDocument()),
+      ),
+      interceptor: interceptor,
+    );
+
+    expect(interceptor.batchCalls, 1);
+  });
+
   test('on-disk health check detects an unreadable database file', () async {
     final directory = await Directory.systemTemp.createTemp(
       'dosey-backup-test-',
@@ -186,6 +202,19 @@ void main() {
       isNot(DatabaseHealthStatus.healthy),
     );
   });
+}
+
+class _BatchCountingInterceptor extends QueryInterceptor {
+  int batchCalls = 0;
+
+  @override
+  Future<void> runBatched(
+    QueryExecutor executor,
+    BatchedStatements statements,
+  ) {
+    batchCalls++;
+    return executor.runBatched(statements);
+  }
 }
 
 Map<String, List<Map<String, Object?>>> mutableData(BackupDocument document) =>

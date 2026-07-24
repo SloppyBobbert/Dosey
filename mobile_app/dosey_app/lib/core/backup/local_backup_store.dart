@@ -51,37 +51,40 @@ class LocalBackupStore {
 
   Future<void> replaceSnapshot(BackupDocument snapshot) async {
     validator.validateOrThrow(snapshot);
-    for (final config in _configs.reversed) {
-      if (config.section == 'settings') {
-        final placeholders = List.filled(
-          portableSettingKeys.length,
-          '?',
-        ).join(',');
-        await database.customStatement(
-          "DELETE FROM app_settings WHERE key IN ($placeholders) OR key GLOB ?",
-          [...portableSettingKeys, '$deferredDeletedPrescriptionPrefix*'],
-        );
-      } else {
-        await database.customStatement('DELETE FROM ${config.table}');
+    await database.batch((batch) {
+      for (final config in _configs.reversed) {
+        if (config.section == 'settings') {
+          final placeholders = List.filled(
+            portableSettingKeys.length,
+            '?',
+          ).join(',');
+          batch.customStatement(
+            "DELETE FROM app_settings WHERE key IN ($placeholders) OR key GLOB ?",
+            [...portableSettingKeys, '$deferredDeletedPrescriptionPrefix*'],
+          );
+        } else {
+          batch.customStatement('DELETE FROM ${config.table}');
+        }
       }
-    }
-    for (final config in _configs) {
-      for (final row in snapshot.data[config.section]!) {
+
+      for (final config in _configs) {
         final fields = config.fields.keys.toList();
         final columns = fields.map((field) => config.fields[field]).join(',');
         final placeholders = List.filled(fields.length, '?').join(',');
-        await database.customStatement(
-          'INSERT INTO ${config.table} ($columns) VALUES ($placeholders)',
-          [
-            for (final field in fields)
-              _writeValue(
-                row[field],
-                timestamp: config.timestamps.contains(field),
-              ),
-          ],
-        );
+        for (final row in snapshot.data[config.section]!) {
+          batch.customStatement(
+            'INSERT INTO ${config.table} ($columns) VALUES ($placeholders)',
+            [
+              for (final field in fields)
+                _writeValue(
+                  row[field],
+                  timestamp: config.timestamps.contains(field),
+                ),
+            ],
+          );
+        }
       }
-    }
+    });
   }
 
   Future<bool> integrityIsOk() async {
