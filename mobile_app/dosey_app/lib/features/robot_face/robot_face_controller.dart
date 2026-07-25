@@ -437,6 +437,9 @@ class RobotFaceController {
     if (role == null || !role.canHostRobot) {
       return RobotFaceMode.offline;
     }
+    if (hasActiveMissedAlert) {
+      return RobotFaceMode.missed;
+    }
     if (_controllerSnapshot.healthState == ControllerHealthState.error) {
       return RobotFaceMode.error;
     }

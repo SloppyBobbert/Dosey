@@ -39,6 +39,8 @@ class RobotFaceVoiceCoordinator {
   final int Function(int max) _randomIndex;
   bool _isActive;
   late final List<StreamSubscription<Object?>> _subscriptions;
+  Future<void> _deactivation = Future<void>.value();
+  bool _hasQueuedDeactivation = false;
 
   RobotFaceSettings _settings = const RobotFaceSettings();
   AppDeviceRole? _role;
@@ -54,17 +56,29 @@ class RobotFaceVoiceCoordinator {
 
   Future<void> close() async {
     _isActive = false;
-    await Future.wait(
+    final cancellation = Future.wait(
       _subscriptions.map((subscription) => subscription.cancel()),
     );
-    await _voicePlayer.stop();
+    await deactivate();
+    await cancellation;
+  }
+
+  Future<void> deactivate() {
+    _isActive = false;
+    if (!_hasQueuedDeactivation) {
+      _hasQueuedDeactivation = true;
+      _deactivation = _deactivation.then((_) => _voicePlayer.stop());
+    }
+    return _deactivation;
   }
 
   void setActive(bool isActive) {
     if (_isActive == isActive) return;
     _isActive = isActive;
-    if (!isActive) {
-      unawaited(_voicePlayer.stop());
+    if (isActive) {
+      _hasQueuedDeactivation = false;
+    } else {
+      unawaited(deactivate());
     }
   }
 

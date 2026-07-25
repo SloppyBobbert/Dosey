@@ -1218,6 +1218,62 @@ void main() {
     },
   );
 
+  for (final testCase
+      in <
+        ({ControllerSnapshot snapshot, RobotFaceControllerCondition condition})
+      >[
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.disconnected,
+            canRequestDispense: false,
+            statusLabel: 'Controller heartbeat missed',
+            healthState: ControllerHealthState.offline,
+          ),
+          condition: RobotFaceControllerCondition.offline,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.error,
+            canRequestDispense: false,
+            statusLabel: 'Controller fault',
+            healthState: ControllerHealthState.error,
+            errorKind: ControllerErrorKind.other,
+          ),
+          condition: RobotFaceControllerCondition.fault,
+        ),
+      ]) {
+    test(
+      'active missed alert outranks ${testCase.condition.name} controller mode',
+      () async {
+        final fixture = await _RobotFaceControllerFixture.create(
+          now: DateTime(2026, 7, 8, 9, 5),
+          scheduleHour: 9,
+          controllerSnapshot: testCase.snapshot,
+        );
+        addTearDown(fixture.close);
+
+        await fixture.settle();
+        await fixture.doseLog.addEvent(
+          DoseLogEvent.doseMissed(
+            doseId: fixture.currentDoseId,
+            occurredAt: fixture.now.toUtc(),
+          ),
+        );
+        await fixture.settle();
+
+        final state = await fixture.controller.watchState().first;
+
+        expect(state.mode, RobotFaceMode.missed);
+        expect(state.controllerCondition, testCase.condition);
+        expect(state.statusLabel, testCase.snapshot.statusLabel);
+        expect(state.actionDoseId, fixture.currentDoseId);
+        expect(state.availableActions, const <RobotFaceActionKind>{
+          RobotFaceActionKind.recognizeMissedDose,
+        });
+      },
+    );
+  }
+
   test(
     'an unrecognized missed dose stays visible even after a later dose becomes due',
     () async {

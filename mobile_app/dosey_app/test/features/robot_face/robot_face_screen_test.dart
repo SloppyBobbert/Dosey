@@ -382,6 +382,204 @@ void main() {
     );
   });
 
+  testWidgets('voice coordinator rebind waits for stale playback stop', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await database.setAppSetting(
+      'device_role',
+      AppDeviceRole.androidRobot.storageValue,
+    );
+    await RobotFaceSettingsRepository(
+      database,
+    ).saveSettings(const RobotFaceSettings(voiceEnabled: true));
+    final firstStates = StreamController<RobotFaceState>.broadcast();
+    final secondStates = StreamController<RobotFaceState>.broadcast();
+    final stateStream = ValueNotifier<Stream<RobotFaceState>>(
+      firstStates.stream,
+    );
+    addTearDown(firstStates.close);
+    addTearDown(secondStates.close);
+    addTearDown(stateStream.dispose);
+    final gateway = _RecordingVoicePlaybackGateway();
+    final voicePlayer = DoseyVoicePlayer(playbackGateway: gateway);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        stateStreamNotifier: stateStream,
+        voicePlayer: voicePlayer,
+      ),
+    );
+    await tester.pump();
+    firstStates.add(
+      const RobotFaceState(
+        mode: RobotFaceMode.doseReady,
+        nextEventLabel: 'Now · Morning meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+        actionDoseId: 'dose-0',
+        voiceOccurrenceKey: 'schedule-0:2026-07-20',
+      ),
+    );
+    for (
+      var attempt = 0;
+      attempt < 20 && gateway.playedAssets.isEmpty;
+      attempt += 1
+    ) {
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    expect(gateway.playedAssets, hasLength(1));
+    gateway.playedAssets.clear();
+
+    gateway.blockNextStop();
+    stateStream.value = secondStates.stream;
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        stateStreamNotifier: stateStream,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+        ),
+        isActive: false,
+        voicePlayer: voicePlayer,
+      ),
+    );
+    expect(
+      tester.widget<RobotFaceScreen>(find.byType(RobotFaceScreen)).stateStream,
+      same(stateStream.value),
+    );
+    for (
+      var attempt = 0;
+      attempt < 20 && !gateway.hasBlockedStop;
+      attempt += 1
+    ) {
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    expect(
+      gateway.hasBlockedStop,
+      isTrue,
+      reason:
+          'Expected coordinator close to stop playback; stops: ${gateway.stopCount}',
+    );
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        stateStreamNotifier: stateStream,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+        ),
+        voicePlayer: voicePlayer,
+      ),
+    );
+    const replacementState = RobotFaceState(
+      mode: RobotFaceMode.doseReady,
+      nextEventLabel: 'Now · Morning meds',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 1,
+      isInAwakeWindow: true,
+      actionDoseId: 'dose-1',
+      voiceOccurrenceKey: 'schedule-1:2026-07-20',
+    );
+    secondStates.add(replacementState);
+    await tester.pump();
+
+    expect(gateway.playedAssets, isEmpty);
+
+    gateway.completeBlockedStop();
+    for (
+      var attempt = 0;
+      attempt < 200 && gateway.playedAssets.isEmpty;
+      attempt += 1
+    ) {
+      secondStates.add(replacementState);
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    expect(
+      gateway.playedAssets,
+      hasLength(1),
+      reason:
+          'Replacement coordinator did not become active; stops: ${gateway.stopCount}',
+    );
+  });
+
+  testWidgets('background keeps Robot Face voice inactive until resume', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await database.setAppSetting(
+      'device_role',
+      AppDeviceRole.androidRobot.storageValue,
+    );
+    await RobotFaceSettingsRepository(
+      database,
+    ).saveSettings(const RobotFaceSettings(voiceEnabled: true));
+    final states = StreamController<RobotFaceState>.broadcast();
+    addTearDown(states.close);
+    final gateway = _RecordingVoicePlaybackGateway();
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        stateStream: states.stream,
+        voicePlayer: DoseyVoicePlayer(playbackGateway: gateway),
+      ),
+    );
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    states.add(
+      const RobotFaceState(
+        mode: RobotFaceMode.doseReady,
+        nextEventLabel: 'Now · Morning meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      ),
+    );
+    await tester.pump();
+
+    expect(gateway.playedAssets, isEmpty);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    states.add(
+      const RobotFaceState(
+        mode: RobotFaceMode.doseReady,
+        nextEventLabel: 'Now · Morning meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      ),
+    );
+    await tester.pump();
+
+    expect(gateway.playedAssets, hasLength(1));
+  });
+
   testWidgets('reduced motion uses a static speaking indication', (
     WidgetTester tester,
   ) async {
@@ -2189,6 +2387,7 @@ class _RobotFaceTestApp extends StatefulWidget {
     this.database,
     this.controller,
     this.stateStream,
+    this.stateStreamNotifier,
     this.initialState,
     this.isActive = true,
     this.doseActionLogger,
@@ -2199,6 +2398,7 @@ class _RobotFaceTestApp extends StatefulWidget {
   final DoseyDatabase? database;
   final RobotFaceController? controller;
   final Stream<RobotFaceState>? stateStream;
+  final ValueNotifier<Stream<RobotFaceState>>? stateStreamNotifier;
   final RobotFaceState? initialState;
   final bool isActive;
   final RobotFaceDoseActionLogger? doseActionLogger;
@@ -2223,6 +2423,17 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
 
   @override
   Widget build(BuildContext context) {
+    Widget buildScreen(Stream<RobotFaceState>? stateStream) {
+      return RobotFaceScreen(
+        controller: widget.controller,
+        stateStream: stateStream,
+        initialState: widget.initialState,
+        isActive: widget.isActive,
+        doseActionLogger: widget.doseActionLogger,
+      );
+    }
+
+    final stateStreamNotifier = widget.stateStreamNotifier;
     return DoseyAppScope(
       database: _database,
       appClock: widget.appClock,
@@ -2233,13 +2444,14 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
       missedDoseReconciliationService: _FakeMissedDoseReconciliationService(),
       voicePlayer: widget.voicePlayer,
       child: MaterialApp(
-        home: RobotFaceScreen(
-          controller: widget.controller,
-          stateStream: widget.stateStream,
-          initialState: widget.initialState,
-          isActive: widget.isActive,
-          doseActionLogger: widget.doseActionLogger,
-        ),
+        home: stateStreamNotifier == null
+            ? buildScreen(widget.stateStream)
+            : ValueListenableBuilder<Stream<RobotFaceState>>(
+                valueListenable: stateStreamNotifier,
+                builder: (context, stateStream, child) {
+                  return buildScreen(stateStream);
+                },
+              ),
       ),
     );
   }
@@ -2284,6 +2496,57 @@ class _ControllableVoicePlaybackGateway implements VoicePlaybackGateway {
   void completePreparation() {
     _preparationCompleter?.complete();
     _preparationCompleter = null;
+  }
+}
+
+class _RecordingVoicePlaybackGateway implements VoicePlaybackGateway {
+  final StreamController<bool> _playing = StreamController<bool>.broadcast();
+  final List<String> playedAssets = <String>[];
+  Completer<void>? _blockedStop;
+  bool _blockNextStop = false;
+  bool _isPlaying = false;
+  int stopCount = 0;
+
+  @override
+  bool get isPlaying => _isPlaying;
+
+  @override
+  Stream<bool> get playing => _playing.stream;
+
+  bool get hasBlockedStop => _blockedStop != null;
+
+  void blockNextStop() {
+    _blockNextStop = true;
+  }
+
+  void completeBlockedStop() {
+    _blockedStop?.complete();
+    _blockedStop = null;
+  }
+
+  @override
+  Future<void> dispose() => _playing.close();
+
+  @override
+  Future<void> playAsset(String assetPath, {required double volume}) async {
+    playedAssets.add(assetPath);
+    _setPlaying(true);
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCount += 1;
+    if (_blockNextStop) {
+      _blockNextStop = false;
+      _blockedStop = Completer<void>();
+      await _blockedStop!.future;
+    }
+    _setPlaying(false);
+  }
+
+  void _setPlaying(bool value) {
+    _isPlaying = value;
+    _playing.add(value);
   }
 }
 

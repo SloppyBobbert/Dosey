@@ -101,7 +101,8 @@ class RobotFaceScreen extends StatefulWidget {
   State<RobotFaceScreen> createState() => _RobotFaceScreenState();
 }
 
-class _RobotFaceScreenState extends State<RobotFaceScreen> {
+class _RobotFaceScreenState extends State<RobotFaceScreen>
+    with WidgetsBindingObserver {
   static const _fallbackState = RobotFaceState(
     mode: RobotFaceMode.offline,
     nextEventLabel: 'No reminders scheduled',
@@ -116,7 +117,21 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   RobotFaceState? _initialState;
   RobotFaceController? _interactionController;
   RobotFaceVoiceCoordinator? _voiceCoordinator;
+  Future<void> _voiceBinding = Future<void>.value();
+  int _voiceBindingGeneration = 0;
+  late bool _isForeground;
   int _interactionRevision = 0;
+
+  bool get _isVoiceActive => widget.isActive && _isForeground;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _isForeground =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
+  }
 
   @override
   void didChangeDependencies() {
@@ -128,7 +143,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   void didUpdateWidget(covariant RobotFaceScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive != widget.isActive) {
-      _voiceCoordinator?.setActive(widget.isActive);
+      _voiceCoordinator?.setActive(_isVoiceActive);
     }
     if (oldWidget.controller != widget.controller ||
         oldWidget.controllerResolver != widget.controllerResolver ||
@@ -147,37 +162,65 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
           widget.controllerResolver?.call(context) ??
           DoseyAppScope.maybeOf(context)?.robotFaceController;
     }
-    _stateStream = (widget.stateStream ?? widget.controller?.watchState())
-        ?.asBroadcastStream();
+    _stateStream = _asBroadcast(
+      widget.stateStream ?? widget.controller?.watchState(),
+    );
     if (_stateStream == null && widget.initialState == null) {
-      _stateStream = _interactionController?.watchState().asBroadcastStream();
+      _stateStream = _asBroadcast(_interactionController?.watchState());
     }
     _initialState = widget.initialState;
     _bindVoiceCoordinator();
   }
 
-  void _bindVoiceCoordinator() {
-    unawaited(_voiceCoordinator?.close());
-    _voiceCoordinator = null;
+  Stream<RobotFaceState>? _asBroadcast(Stream<RobotFaceState>? stream) {
+    if (stream == null || stream.isBroadcast) return stream;
+    return stream.asBroadcastStream();
+  }
 
+  void _bindVoiceCoordinator() {
     final dependencies = DoseyAppScope.maybeOf(context);
     final stateStream = _stateStream;
-    if (dependencies == null || stateStream == null) {
-      return;
-    }
+    final generation = ++_voiceBindingGeneration;
+    _voiceBinding = _voiceBinding.then((_) async {
+      final previousCoordinator = _voiceCoordinator;
+      _voiceCoordinator = null;
+      if (previousCoordinator != null) {
+        final cleanup = previousCoordinator.close();
+        await previousCoordinator.deactivate();
+        unawaited(cleanup);
+      }
+      if (!mounted || generation != _voiceBindingGeneration) return;
+      if (dependencies == null || stateStream == null) return;
 
-    _voiceCoordinator = RobotFaceVoiceCoordinator(
-      stateStream: stateStream,
-      settingsStream: dependencies.robotFaceSettings.watchSettings(),
-      roleStream: dependencies.settings.watchDeviceRole(),
-      voicePlayer: dependencies.voicePlayer,
-      isActive: widget.isActive,
-    );
+      _voiceCoordinator = RobotFaceVoiceCoordinator(
+        stateStream: stateStream,
+        settingsStream: dependencies.robotFaceSettings.watchSettings(),
+        roleStream: dependencies.settings.watchDeviceRole(),
+        voicePlayer: dependencies.voicePlayer,
+        isActive: _isVoiceActive,
+      );
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final isForeground = state == AppLifecycleState.resumed;
+    if (_isForeground == isForeground) return;
+    _isForeground = isForeground;
+    _voiceCoordinator?.setActive(_isVoiceActive);
   }
 
   @override
   void dispose() {
-    unawaited(_voiceCoordinator?.close());
+    WidgetsBinding.instance.removeObserver(this);
+    _voiceBindingGeneration += 1;
+    unawaited(
+      _voiceBinding.then((_) async {
+        final coordinator = _voiceCoordinator;
+        _voiceCoordinator = null;
+        await coordinator?.close();
+      }),
+    );
     super.dispose();
   }
 
