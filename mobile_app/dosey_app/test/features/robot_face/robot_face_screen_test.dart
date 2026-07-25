@@ -604,6 +604,7 @@ void main() {
   testWidgets('shows an amber local-first advisory while internet is offline', (
     WidgetTester tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     await tester.pumpWidget(
       _RobotFaceTestApp(
         initialState: const RobotFaceState(
@@ -624,6 +625,15 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(RobotFaceScreen.networkAdvisoryBadgeKey), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(
+            find.text('Internet offline. Local reminders still work.'),
+          )
+          .label,
+      'Internet offline. Local reminders still work.',
+    );
+    semantics.dispose();
     final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
     expect(canvasState.debugUsesNetworkAdvisoryPalette as bool, isTrue);
   });

@@ -158,4 +158,28 @@ void main() {
     expect(lab.state.face, DemoFacePreview.idle);
     expect(lab.state.animationCue, RobotFaceAnimationCue.wake);
   });
+
+  test('manual tour wraps backward and forward across its boundaries', () {
+    final lab = DemoFaceLabController();
+    addTearDown(lab.close);
+
+    lab.nextTourStep();
+    expect(lab.state.tourIndex, 0);
+
+    lab.previousTourStep();
+    expect(lab.state.tourIndex, demoFaceTourSteps.length - 1);
+
+    lab.nextTourStep();
+    expect(lab.state.tourIndex, 0);
+  });
+
+  test('internet offline preview adds the local-first advisory', () {
+    final lab = DemoFaceLabController();
+    addTearDown(lab.close);
+
+    lab.setInternetOffline(true);
+    final preview = lab.state.previewStateFor(liveState);
+
+    expect(preview.networkAdvisory, RobotFaceNetworkAdvisory.internetOffline);
+  });
 }

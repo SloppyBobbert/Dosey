@@ -613,8 +613,9 @@ void main() {
           snapshot: const ControllerSnapshot(
             connectionState: ControllerConnectionState.error,
             canRequestDispense: false,
-            statusLabel: 'Bluetooth is unavailable',
+            statusLabel: 'Wireless hardware is unavailable',
             healthState: ControllerHealthState.error,
+            errorKind: ControllerErrorKind.bluetoothUnavailable,
           ),
           condition: RobotFaceControllerCondition.bluetoothUnavailable,
         ),
@@ -622,8 +623,9 @@ void main() {
           snapshot: const ControllerSnapshot(
             connectionState: ControllerConnectionState.error,
             canRequestDispense: false,
-            statusLabel: 'Controller reported a jam',
+            statusLabel: 'Bluetooth controller reported a jam',
             healthState: ControllerHealthState.error,
+            errorKind: ControllerErrorKind.other,
           ),
           condition: RobotFaceControllerCondition.fault,
         ),

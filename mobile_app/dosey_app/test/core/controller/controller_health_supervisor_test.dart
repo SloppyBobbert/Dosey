@@ -371,6 +371,10 @@ void main() {
       await _flushEvents();
 
       expect(harness.latest.healthState, ControllerHealthState.error);
+      expect(
+        harness.latest.errorKind,
+        ControllerErrorKind.bluetoothUnavailable,
+      );
       expect(harness.latest.canRequestDispense, isFalse);
       expect(harness.scheduler.hasPendingTimer, isFalse);
 
@@ -424,6 +428,7 @@ void main() {
 
       expect(delegate.connectCount, 1);
       expect(harness.latest.healthState, ControllerHealthState.error);
+      expect(harness.latest.errorKind, ControllerErrorKind.other);
 
       await harness.supervisor.connect();
       await _flushEvents();

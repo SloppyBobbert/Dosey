@@ -281,7 +281,7 @@ class RobotFaceController {
       ControllerHealthState.reconnecting =>
         RobotFaceControllerCondition.reconnecting,
       ControllerHealthState.error =>
-        snapshot.statusLabel.toLowerCase().contains('bluetooth')
+        snapshot.errorKind == ControllerErrorKind.bluetoothUnavailable
             ? RobotFaceControllerCondition.bluetoothUnavailable
             : RobotFaceControllerCondition.fault,
     };

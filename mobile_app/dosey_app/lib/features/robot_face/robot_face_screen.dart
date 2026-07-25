@@ -1277,36 +1277,33 @@ class _RobotFaceNetworkAdvisoryBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      label: 'Internet offline. Local reminders still work.',
-      child: DecoratedBox(
-        key: RobotFaceScreen.networkAdvisoryBadgeKey,
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFB84D).withValues(alpha: 0.09),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: const Color(0xFFFFC765).withValues(alpha: 0.3),
-          ),
+    return DecoratedBox(
+      key: RobotFaceScreen.networkAdvisoryBadgeKey,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFB84D).withValues(alpha: 0.09),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFFC765).withValues(alpha: 0.3),
         ),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              Icon(Icons.wifi_off_rounded, size: 16, color: Color(0xFFFFCC73)),
-              SizedBox(width: 8),
-              Flexible(
-                child: Text(
-                  'Internet offline. Local reminders still work.',
-                  style: TextStyle(
-                    color: Color(0xFFFFD99A),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            Icon(Icons.wifi_off_rounded, size: 16, color: Color(0xFFFFCC73)),
+            SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Internet offline. Local reminders still work.',
+                style: TextStyle(
+                  color: Color(0xFFFFD99A),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

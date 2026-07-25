@@ -128,7 +128,11 @@ class ControllerHealthSupervisor
     _retrySuppressed = false;
     _availabilitySuppressed = false;
     if (_availability == BleAvailabilityState.unavailable) {
-      _setState(ControllerHealthState.error, 'Bluetooth is unavailable');
+      _setState(
+        ControllerHealthState.error,
+        'Bluetooth is unavailable',
+        errorKind: ControllerErrorKind.bluetoothUnavailable,
+      );
       throw const ControllerCommandPreconditionException(
         'Bluetooth is unavailable.',
       );
@@ -479,7 +483,11 @@ class ControllerHealthSupervisor
       _availabilitySuppressed = true;
       _cancelTimer();
       unawaited(_disconnectDelegate());
-      _setState(ControllerHealthState.error, 'Bluetooth is unavailable');
+      _setState(
+        ControllerHealthState.error,
+        'Bluetooth is unavailable',
+        errorKind: ControllerErrorKind.bluetoothUnavailable,
+      );
       _recordEvent(
         ControllerHealthEventType.error,
         details: 'Bluetooth is unavailable.',
@@ -551,6 +559,7 @@ class ControllerHealthSupervisor
     ControllerHealthState state,
     String label, {
     DateTime? nextReconnectAt,
+    ControllerErrorKind? errorKind,
   }) {
     if (_closed) return;
     final connectionState = switch (state) {
@@ -567,6 +576,9 @@ class ControllerHealthSupervisor
       canRequestDispense: state == ControllerHealthState.online,
       statusLabel: label,
       healthState: state,
+      errorKind: state == ControllerHealthState.error
+          ? errorKind ?? ControllerErrorKind.other
+          : null,
       lastSuccessfulHeartbeatAt: _lastSuccessfulHeartbeatAt,
       reconnectAttempt: _reconnectAttempt,
       nextReconnectAt: nextReconnectAt,
