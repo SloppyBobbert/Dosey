@@ -26,6 +26,7 @@ import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/demo_face_lab_controller.dart';
+import 'package:dosey_app/features/robot_face/robot_face_animation.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
@@ -411,6 +412,193 @@ void main() {
     final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
     expect(canvasState.debugIsAnimating as bool, isFalse);
     expect(find.bySemanticsLabel('Robot is speaking'), findsOneWidget);
+  });
+
+  testWidgets('state changes trigger the matching one-shot face cue', (
+    WidgetTester tester,
+  ) async {
+    final faceState = ValueNotifier<RobotFaceState>(
+      const RobotFaceState(
+        mode: RobotFaceMode.sleepy,
+        nextEventLabel: 'No reminders scheduled',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 0,
+        isInAwakeWindow: false,
+      ),
+    );
+    addTearDown(faceState.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<RobotFaceState>(
+          valueListenable: faceState,
+          builder: (context, state, child) => RobotFaceCanvas(state: state),
+        ),
+      ),
+    );
+
+    faceState.value = const RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+    await tester.pump();
+
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.wake);
+    expect(canvas.debugIsCueAnimating, isTrue);
+
+    await tester.pump(const Duration(milliseconds: 1000));
+    expect(canvas.debugActiveCue, isNull);
+  });
+
+  testWidgets(
+    'explicit cue replay restarts and safety faces sanitize the cue',
+    (WidgetTester tester) async {
+      const missed = RobotFaceState(
+        mode: RobotFaceMode.missed,
+        nextEventLabel: '8:00 PM · Evening meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: RobotFaceCanvas(
+            state: missed,
+            animationCue: RobotFaceAnimationCue.celebrate,
+            animationRevision: 1,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 240));
+
+      final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+      expect(canvas.debugActiveCue, RobotFaceAnimationCue.concern);
+      final firstProgress = canvas.debugCueProgress as double;
+      expect(firstProgress, greaterThan(0));
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: RobotFaceCanvas(
+            state: missed,
+            animationCue: RobotFaceAnimationCue.celebrate,
+            animationRevision: 2,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(canvas.debugCueProgress as double, lessThan(firstProgress));
+    },
+  );
+
+  testWidgets('reduced motion shows a static cue without running a ticker', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(disableAnimations: true),
+          child: RobotFaceCanvas(
+            state: RobotFaceState(
+              mode: RobotFaceMode.doseReady,
+              nextEventLabel: 'Now · Morning meds',
+              isFlipped: false,
+              isLandscapeOnly: true,
+              rampProgress: 1,
+              isInAwakeWindow: true,
+            ),
+            animationCue: RobotFaceAnimationCue.focus,
+            animationRevision: 1,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.focus);
+    expect(canvas.debugIsCueAnimating, isFalse);
+    expect(canvas.debugCueProgress, greaterThan(0));
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(canvas.debugActiveCue, isNull);
+  });
+
+  testWidgets('inactive face cancels a one-shot cue', (
+    WidgetTester tester,
+  ) async {
+    const state = RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: RobotFaceCanvas(
+          state: state,
+          animationCue: RobotFaceAnimationCue.acknowledge,
+          animationRevision: 1,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: RobotFaceCanvas(
+          state: state,
+          isActive: false,
+          animationCue: RobotFaceAnimationCue.acknowledge,
+          animationRevision: 1,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, isNull);
+    expect(canvas.debugIsCueAnimating, isFalse);
+  });
+
+  testWidgets('tapping the face triggers an acknowledgment cue', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(RobotFaceScreen.canvasKey));
+    await tester.pump();
+
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.acknowledge);
+    expect(canvas.debugIsCueAnimating, isTrue);
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).animationCue,
+      isNull,
+    );
   });
 
   testWidgets('shows an amber local-first advisory while internet is offline', (
@@ -1907,7 +2095,12 @@ void main() {
     await tester.tap(find.byKey(RobotFaceScreen.faceLabButtonKey));
     await tester.pump();
     await tester.tap(find.byKey(RobotFaceScreen.faceLabVoiceSpeakingKey));
-    await tester.tap(find.byKey(RobotFaceScreen.faceLabReducedMotionKey));
+    tester
+        .widget<SwitchListTile>(
+          find.byKey(RobotFaceScreen.faceLabReducedMotionKey),
+        )
+        .onChanged
+        ?.call(true);
     await tester.pump();
 
     expect(
@@ -1924,6 +2117,47 @@ void main() {
       tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
       isFalse,
     );
+  });
+
+  testWidgets('Face Lab replays cues and advances the manual animation tour', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(database.close);
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabButtonKey));
+    await tester.pump();
+
+    await tester.ensureVisible(
+      find.byKey(RobotFaceScreen.faceLabAnimationFocusKey),
+    );
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabAnimationFocusKey));
+    await tester.pump();
+
+    dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.focus);
+    expect(find.text('Playing Focus'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(RobotFaceScreen.faceLabTourNextKey));
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabTourNextKey));
+    await tester.pump();
+
+    canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.wake);
+    expect(find.text('Tour 1 of 8 · Wake up'), findsOneWidget);
   });
 }
 

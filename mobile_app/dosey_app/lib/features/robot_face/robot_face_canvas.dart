@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:dosey_app/features/robot_face/robot_face_animation.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:flutter/material.dart';
 
@@ -31,22 +33,35 @@ class RobotFaceCanvas extends StatefulWidget {
     this.isActive = true,
     this.isPreparing = false,
     this.isSpeaking = false,
+    this.animationCue,
+    this.animationRevision = 0,
+    this.onAnimationCompleted,
   });
 
   final RobotFaceState state;
   final bool isActive;
   final bool isPreparing;
   final bool isSpeaking;
+  final RobotFaceAnimationCue? animationCue;
+  final int animationRevision;
+  final void Function(RobotFaceAnimationCue cue, int revision)?
+  onAnimationCompleted;
 
   @override
   State<RobotFaceCanvas> createState() => _RobotFaceCanvasState();
 }
 
 class _RobotFaceCanvasState extends State<RobotFaceCanvas>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _controller;
+  late final AnimationController _cueController;
   int _resumeGeneration = 0;
   bool _disableAnimations = false;
+  bool _hasBoundDependencies = false;
+  RobotFaceAnimationCue? _activeCue;
+  RobotFaceAnimationCue? _requestedCue;
+  int _activeCueRevision = 0;
+  Timer? _reducedMotionCueTimer;
 
   static const _ambientDuration = Duration(milliseconds: 5200);
   static const _speakingDuration = Duration(milliseconds: 920);
@@ -58,6 +73,10 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
       vsync: this,
       duration: _durationForWidget(widget),
     );
+    _cueController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
     _syncAnimationActivity();
   }
 
@@ -65,14 +84,44 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final disableAnimations = MediaQuery.disableAnimationsOf(context);
-    if (_disableAnimations == disableAnimations) return;
+    final changed = _disableAnimations != disableAnimations;
     _disableAnimations = disableAnimations;
-    _syncAnimationActivity();
+    if (changed) {
+      _syncAnimationActivity();
+      if (_activeCue != null) {
+        _startCue(_requestedCue!, _activeCueRevision);
+      }
+    }
+    if (!_hasBoundDependencies) {
+      _hasBoundDependencies = true;
+      final cue = widget.animationCue;
+      if (cue != null && widget.animationRevision > 0) {
+        _startCue(cue, widget.animationRevision);
+      }
+    }
   }
 
   @override
   void didUpdateWidget(covariant RobotFaceCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (!widget.isActive) {
+      _cancelCue();
+    } else if (oldWidget.animationRevision != widget.animationRevision) {
+      final cue = widget.animationCue;
+      if (cue == null) {
+        _cancelCue();
+      } else {
+        _startCue(cue, widget.animationRevision);
+      }
+    } else {
+      final transitionCue = robotFaceTransitionCue(
+        oldWidget.state,
+        widget.state,
+      );
+      if (transitionCue != null) {
+        _startCue(transitionCue, widget.animationRevision);
+      }
+    }
     if (oldWidget.isSpeaking != widget.isSpeaking ||
         oldWidget.state.mode != widget.state.mode ||
         oldWidget.state.controllerCondition !=
@@ -141,6 +190,9 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
   double get debugPhase => _controller.value;
   Duration get debugAnimationDuration => _controller.duration!;
   bool get debugIsAnimating => _controller.isAnimating;
+  RobotFaceAnimationCue? get debugActiveCue => _activeCue;
+  bool get debugIsCueAnimating => _cueController.isAnimating;
+  double get debugCueProgress => _cueProgress;
   RobotFaceControllerCondition? get debugEffectiveControllerCondition =>
       _effectiveControllerCondition(widget.state);
   bool get debugUsesNetworkAdvisoryPalette =>
@@ -166,9 +218,86 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
     };
   }
 
+  double get _cueProgress {
+    if (_activeCue == null) return 0;
+    return _disableAnimations ? 0.62 : _cueController.value;
+  }
+
+  void _startCue(RobotFaceAnimationCue cue, int revision) {
+    if (!widget.isActive) {
+      _cancelCue();
+      return;
+    }
+
+    final effectiveCue = safeRobotFaceAnimationCue(cue, widget.state);
+    _requestedCue = cue;
+    _activeCue = effectiveCue;
+    _activeCueRevision = revision;
+    _reducedMotionCueTimer?.cancel();
+    _cueController
+      ..stop(canceled: false)
+      ..duration = _durationForCue(effectiveCue)
+      ..value = _cueController.lowerBound;
+
+    if (_disableAnimations) {
+      _reducedMotionCueTimer = Timer(_durationForCue(effectiveCue), () {
+        _completeCue(effectiveCue, revision);
+      });
+      return;
+    }
+
+    _cueController.forward().whenCompleteOrCancel(() {
+      if (!mounted ||
+          _disableAnimations ||
+          _activeCue != effectiveCue ||
+          _activeCueRevision != revision ||
+          _cueController.status != AnimationStatus.completed) {
+        return;
+      }
+      _completeCue(effectiveCue, revision);
+    });
+  }
+
+  void _completeCue(RobotFaceAnimationCue effectiveCue, int revision) {
+    if (!mounted ||
+        _activeCue != effectiveCue ||
+        _activeCueRevision != revision) {
+      return;
+    }
+    final completedCue = _requestedCue!;
+    setState(() {
+      _activeCue = null;
+      _requestedCue = null;
+    });
+    widget.onAnimationCompleted?.call(completedCue, revision);
+  }
+
+  void _cancelCue() {
+    _reducedMotionCueTimer?.cancel();
+    _reducedMotionCueTimer = null;
+    _cueController
+      ..stop(canceled: false)
+      ..value = _cueController.lowerBound;
+    _activeCue = null;
+    _requestedCue = null;
+  }
+
+  static Duration _durationForCue(RobotFaceAnimationCue cue) => switch (cue) {
+    RobotFaceAnimationCue.wake => const Duration(milliseconds: 900),
+    RobotFaceAnimationCue.acknowledge => const Duration(milliseconds: 620),
+    RobotFaceAnimationCue.notice => const Duration(milliseconds: 720),
+    RobotFaceAnimationCue.focus => const Duration(milliseconds: 640),
+    RobotFaceAnimationCue.track => const Duration(milliseconds: 880),
+    RobotFaceAnimationCue.celebrate => const Duration(milliseconds: 920),
+    RobotFaceAnimationCue.concern => const Duration(milliseconds: 820),
+    RobotFaceAnimationCue.recover => const Duration(milliseconds: 780),
+  };
+
   @override
   void dispose() {
+    _reducedMotionCueTimer?.cancel();
     _controller.dispose();
+    _cueController.dispose();
     super.dispose();
   }
 
@@ -178,7 +307,7 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
       label: widget.isSpeaking ? 'Robot is speaking' : null,
       liveRegion: widget.isSpeaking,
       child: AnimatedBuilder(
-        animation: _controller,
+        animation: Listenable.merge(<Listenable>[_controller, _cueController]),
         builder: (context, child) {
           return CustomPaint(
             painter: _RobotFacePainter(
@@ -187,6 +316,8 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
               isPreparing: widget.isPreparing,
               isSpeaking: widget.isSpeaking,
               reducedMotion: _disableAnimations,
+              animationCue: _activeCue,
+              cueProgress: _cueProgress,
             ),
             child: const SizedBox.expand(),
           );
@@ -203,6 +334,8 @@ class _RobotFacePainter extends CustomPainter {
     required this.isPreparing,
     required this.isSpeaking,
     required this.reducedMotion,
+    required this.animationCue,
+    required this.cueProgress,
   });
 
   final RobotFaceState state;
@@ -210,12 +343,15 @@ class _RobotFacePainter extends CustomPainter {
   final bool isPreparing;
   final bool isSpeaking;
   final bool reducedMotion;
+  final RobotFaceAnimationCue? animationCue;
+  final double cueProgress;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final controllerCondition = _effectiveControllerCondition(state);
     final motion = _motionProfileFor(state, size);
+    final cue = _cueFrameFor(animationCue, cueProgress, size);
     final speakingPulse = isSpeaking
         ? reducedMotion
               ? 0.55
@@ -224,7 +360,8 @@ class _RobotFacePainter extends CustomPainter {
     final breathing =
         1 +
         math.sin(phase * math.pi * 2) * motion.breathingAmplitude +
-        (speakingPulse * 0.035);
+        (speakingPulse * 0.035) +
+        cue.eyeScale;
     final pulse = _pulseValue();
     final blink = _blinkValue();
 
@@ -233,13 +370,18 @@ class _RobotFacePainter extends CustomPainter {
               ? _networkAdvisoryPalette
               : _paletteFor(state.mode)
         : _controllerPaletteFor(controllerCondition);
-    final concernTilt = _concernTiltFor(state.mode, controllerCondition);
+    final concernTilt =
+        _concernTiltFor(state.mode, controllerCondition) + cue.concernTilt;
     // Keep expression changes in the eyes only. Robot Mode intentionally has no
     // mouth so status color, tilt, blink, and glow carry the state.
-    final eyelidOpen = _eyelidOpenFor(state, blink, phase, controllerCondition);
+    final eyelidOpen =
+        (_eyelidOpenFor(state, blink, phase, controllerCondition) +
+                cue.eyelidBoost)
+            .clamp(0.12, 1.08);
     final pupilOffset = isPreparing
         ? Offset.zero
-        : _pupilOffsetFor(state, size, phase, controllerCondition);
+        : _pupilOffsetFor(state, size, phase, controllerCondition) +
+              cue.pupilOffset;
 
     final backgroundPaint = Paint()
       ..shader = LinearGradient(
@@ -275,7 +417,7 @@ class _RobotFacePainter extends CustomPainter {
     final eyeArea = Rect.fromCenter(
       center: Offset(
         size.width * 0.5,
-        size.height * (0.48 - motion.eyeLift) + motion.idleDrift,
+        size.height * (0.48 - motion.eyeLift - cue.eyeLift) + motion.idleDrift,
       ),
       width: size.width * 0.8,
       height: size.height * 0.48,
@@ -303,7 +445,7 @@ class _RobotFacePainter extends CustomPainter {
     );
 
     final attentionRingStrength = math.max(
-      motion.attentionRingStrength,
+      math.max(motion.attentionRingStrength, cue.attentionRingStrength),
       isSpeaking
           ? 0.38 + (speakingPulse * 0.34)
           : isPreparing
@@ -333,7 +475,10 @@ class _RobotFacePainter extends CustomPainter {
       palette,
       pupilOffset,
       concernTilt * -1,
-      motion.glowBoost + (isPreparing ? 0.08 : 0) + (speakingPulse * 0.14),
+      motion.glowBoost +
+          cue.glowBoost +
+          (isPreparing ? 0.08 : 0) +
+          (speakingPulse * 0.14),
     );
     _paintEye(
       canvas,
@@ -341,7 +486,10 @@ class _RobotFacePainter extends CustomPainter {
       palette,
       pupilOffset,
       concernTilt,
-      motion.glowBoost + (isPreparing ? 0.08 : 0) + (speakingPulse * 0.14),
+      motion.glowBoost +
+          cue.glowBoost +
+          (isPreparing ? 0.08 : 0) +
+          (speakingPulse * 0.14),
     );
 
     _paintDisplayVignette(canvas, rect, state);
@@ -612,6 +760,73 @@ class _RobotFacePainter extends CustomPainter {
   double _pulseValue() {
     final pulse = (math.sin(phase * math.pi * 2) + 1) / 2;
     return Curves.easeOut.transform(pulse);
+  }
+
+  _FaceCueFrame _cueFrameFor(
+    RobotFaceAnimationCue? cue,
+    double progress,
+    Size size,
+  ) {
+    if (cue == null) return const _FaceCueFrame();
+    final envelope = math.sin(progress.clamp(0.0, 1.0) * math.pi);
+    return switch (cue) {
+      RobotFaceAnimationCue.wake => _FaceCueFrame(
+        eyelidBoost: envelope * 0.18,
+        eyeLift: envelope * 0.028,
+        eyeScale: envelope * 0.045,
+        attentionRingStrength: envelope * 0.38,
+        glowBoost: envelope * 0.12,
+      ),
+      RobotFaceAnimationCue.acknowledge => _FaceCueFrame(
+        eyeLift: envelope * 0.018,
+        pupilOffset: Offset(0, -size.height * 0.018 * envelope),
+        attentionRingStrength: envelope * 0.32,
+        glowBoost: envelope * 0.1,
+      ),
+      RobotFaceAnimationCue.notice => _FaceCueFrame(
+        eyelidBoost: envelope * 0.08,
+        pupilOffset: Offset(size.width * 0.018 * envelope, 0),
+        attentionRingStrength: envelope * 0.42,
+        glowBoost: envelope * 0.12,
+      ),
+      RobotFaceAnimationCue.focus => _FaceCueFrame(
+        eyelidBoost: envelope * 0.08,
+        eyeLift: envelope * 0.016,
+        eyeScale: envelope * 0.055,
+        pupilOffset: Offset(0, -size.height * 0.014 * envelope),
+        attentionRingStrength: envelope * 0.62,
+        glowBoost: envelope * 0.16,
+      ),
+      RobotFaceAnimationCue.track => _FaceCueFrame(
+        pupilOffset: Offset(
+          math.sin(progress * math.pi * 2) * size.width * 0.026,
+          -size.height * 0.006 * envelope,
+        ),
+        attentionRingStrength: envelope * 0.42,
+        glowBoost: envelope * 0.1,
+      ),
+      RobotFaceAnimationCue.celebrate => _FaceCueFrame(
+        eyelidBoost: envelope * 0.12,
+        eyeLift: envelope * 0.046,
+        eyeScale: envelope * 0.075,
+        attentionRingStrength: envelope * 0.72,
+        glowBoost: envelope * 0.2,
+      ),
+      RobotFaceAnimationCue.concern => _FaceCueFrame(
+        eyeLift: envelope * -0.014,
+        pupilOffset: Offset(0, size.height * 0.012 * envelope),
+        concernTilt: envelope * 0.045,
+        attentionRingStrength: envelope * 0.28,
+        glowBoost: envelope * 0.08,
+      ),
+      RobotFaceAnimationCue.recover => _FaceCueFrame(
+        eyelidBoost: envelope * 0.1,
+        eyeLift: envelope * 0.022,
+        eyeScale: envelope * 0.04,
+        attentionRingStrength: envelope * 0.46,
+        glowBoost: envelope * 0.14,
+      ),
+    };
   }
 
   double _eyelidOpenFor(
@@ -1040,7 +1255,9 @@ class _RobotFacePainter extends CustomPainter {
         oldDelegate.phase != phase ||
         oldDelegate.isPreparing != isPreparing ||
         oldDelegate.isSpeaking != isSpeaking ||
-        oldDelegate.reducedMotion != reducedMotion;
+        oldDelegate.reducedMotion != reducedMotion ||
+        oldDelegate.animationCue != animationCue ||
+        oldDelegate.cueProgress != cueProgress;
   }
 }
 
@@ -1080,4 +1297,24 @@ class _FaceMotionProfile {
   final double attentionRingStrength;
   final double wakeAura;
   final double idleDrift;
+}
+
+class _FaceCueFrame {
+  const _FaceCueFrame({
+    this.eyelidBoost = 0,
+    this.eyeLift = 0,
+    this.eyeScale = 0,
+    this.pupilOffset = Offset.zero,
+    this.concernTilt = 0,
+    this.attentionRingStrength = 0,
+    this.glowBoost = 0,
+  });
+
+  final double eyelidBoost;
+  final double eyeLift;
+  final double eyeScale;
+  final Offset pupilOffset;
+  final double concernTilt;
+  final double attentionRingStrength;
+  final double glowBoost;
 }

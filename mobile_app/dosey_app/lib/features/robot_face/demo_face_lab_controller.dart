@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/voice/voice_player.dart';
+import 'package:dosey_app/features/robot_face/robot_face_animation.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 
 enum DemoFacePreview {
@@ -23,6 +24,63 @@ enum DemoFacePreview {
 }
 
 enum DemoFaceVoiceResult { completed, interrupted, failed }
+
+enum DemoFaceAnimationResult { playing, completed, interrupted }
+
+class DemoFaceTourStep {
+  const DemoFaceTourStep({
+    required this.label,
+    required this.face,
+    required this.cue,
+  });
+
+  final String label;
+  final DemoFacePreview face;
+  final RobotFaceAnimationCue cue;
+}
+
+const demoFaceTourSteps = <DemoFaceTourStep>[
+  DemoFaceTourStep(
+    label: 'Wake up',
+    face: DemoFacePreview.idle,
+    cue: RobotFaceAnimationCue.wake,
+  ),
+  DemoFaceTourStep(
+    label: 'Notice dose',
+    face: DemoFacePreview.doseApproaching,
+    cue: RobotFaceAnimationCue.notice,
+  ),
+  DemoFaceTourStep(
+    label: 'Focus',
+    face: DemoFacePreview.doseReady,
+    cue: RobotFaceAnimationCue.focus,
+  ),
+  DemoFaceTourStep(
+    label: 'Track dispense',
+    face: DemoFacePreview.dispensing,
+    cue: RobotFaceAnimationCue.track,
+  ),
+  DemoFaceTourStep(
+    label: 'Celebrate',
+    face: DemoFacePreview.happyConfirmed,
+    cue: RobotFaceAnimationCue.celebrate,
+  ),
+  DemoFaceTourStep(
+    label: 'Show concern',
+    face: DemoFacePreview.missed,
+    cue: RobotFaceAnimationCue.concern,
+  ),
+  DemoFaceTourStep(
+    label: 'Search',
+    face: DemoFacePreview.reconnecting,
+    cue: RobotFaceAnimationCue.track,
+  ),
+  DemoFaceTourStep(
+    label: 'Recover',
+    face: DemoFacePreview.online,
+    cue: RobotFaceAnimationCue.recover,
+  ),
+];
 
 extension DemoFacePreviewPresentation on DemoFacePreview {
   String get label {
@@ -55,6 +113,10 @@ class DemoFaceLabState {
     this.face,
     this.voicePhase,
     this.voiceResult,
+    this.animationCue,
+    this.animationRevision = 0,
+    this.animationResult,
+    this.tourIndex,
     this.internetOffline = false,
     this.reducedMotion = false,
   });
@@ -63,6 +125,10 @@ class DemoFaceLabState {
   final DemoFacePreview? face;
   final VoicePlaybackPhase? voicePhase;
   final DemoFaceVoiceResult? voiceResult;
+  final RobotFaceAnimationCue? animationCue;
+  final int animationRevision;
+  final DemoFaceAnimationResult? animationResult;
+  final int? tourIndex;
   final bool internetOffline;
   final bool reducedMotion;
 
@@ -70,12 +136,15 @@ class DemoFaceLabState {
       face != null ||
       voicePhase != null ||
       voiceResult != null ||
+      animationCue != null ||
+      animationResult != null ||
+      tourIndex != null ||
       internetOffline ||
       reducedMotion;
 
   RobotFaceState previewStateFor(RobotFaceState liveState) {
     final selectedFace = face;
-    if (selectedFace == null && !internetOffline) return liveState;
+    if (!isPreviewing) return liveState;
 
     final presentation = selectedFace == null
         ? null
@@ -115,7 +184,16 @@ class DemoFaceLabController {
   }
 
   void selectFace(DemoFacePreview face) {
-    _emit(_copyWith(face: face, clearVoiceResult: true));
+    _emit(
+      _copyWith(
+        face: face,
+        animationRevision: _state.animationRevision + 1,
+        clearVoiceResult: true,
+        clearAnimationCue: true,
+        clearAnimationResult: true,
+        clearTourIndex: true,
+      ),
+    );
   }
 
   void previewVoicePreparing() {
@@ -142,6 +220,47 @@ class DemoFaceLabController {
 
   void failVoice() => _finishVoice(DemoFaceVoiceResult.failed);
 
+  void previewAnimation(RobotFaceAnimationCue cue) {
+    _emit(
+      _copyWith(
+        animationCue: cue,
+        animationRevision: _state.animationRevision + 1,
+        animationResult: DemoFaceAnimationResult.playing,
+        clearTourIndex: true,
+      ),
+    );
+  }
+
+  void completeAnimation(RobotFaceAnimationCue cue, int revision) {
+    if (_state.animationCue != cue ||
+        _state.animationRevision != revision ||
+        _state.animationResult != DemoFaceAnimationResult.playing) {
+      return;
+    }
+    _emit(_copyWith(animationResult: DemoFaceAnimationResult.completed));
+  }
+
+  void interruptAnimation() {
+    _emit(
+      _copyWith(
+        animationRevision: _state.animationRevision + 1,
+        animationResult: DemoFaceAnimationResult.interrupted,
+        clearAnimationCue: true,
+      ),
+    );
+  }
+
+  void nextTourStep() {
+    final nextIndex = ((_state.tourIndex ?? -1) + 1) % demoFaceTourSteps.length;
+    _showTourStep(nextIndex);
+  }
+
+  void previousTourStep() {
+    final previousIndex =
+        ((_state.tourIndex ?? 1) - 1) % demoFaceTourSteps.length;
+    _showTourStep(previousIndex);
+  }
+
   void setInternetOffline(bool value) {
     _emit(_copyWith(internetOffline: value));
   }
@@ -165,15 +284,30 @@ class DemoFaceLabController {
     DemoFacePreview? face,
     VoicePlaybackPhase? voicePhase,
     DemoFaceVoiceResult? voiceResult,
+    RobotFaceAnimationCue? animationCue,
+    int? animationRevision,
+    DemoFaceAnimationResult? animationResult,
+    int? tourIndex,
     bool? internetOffline,
     bool? reducedMotion,
     bool clearVoiceResult = false,
+    bool clearAnimationCue = false,
+    bool clearAnimationResult = false,
+    bool clearTourIndex = false,
   }) {
     return DemoFaceLabState(
       isExpanded: isExpanded ?? _state.isExpanded,
       face: face ?? _state.face,
       voicePhase: voicePhase ?? _state.voicePhase,
       voiceResult: clearVoiceResult ? null : voiceResult ?? _state.voiceResult,
+      animationCue: clearAnimationCue
+          ? null
+          : animationCue ?? _state.animationCue,
+      animationRevision: animationRevision ?? _state.animationRevision,
+      animationResult: clearAnimationResult
+          ? null
+          : animationResult ?? _state.animationResult,
+      tourIndex: clearTourIndex ? null : tourIndex ?? _state.tourIndex,
       internetOffline: internetOffline ?? _state.internetOffline,
       reducedMotion: reducedMotion ?? _state.reducedMotion,
     );
@@ -182,6 +316,20 @@ class DemoFaceLabController {
   void _emit(DemoFaceLabState state) {
     _state = state;
     _states.add(state);
+  }
+
+  void _showTourStep(int index) {
+    final step = demoFaceTourSteps[index];
+    _emit(
+      _copyWith(
+        face: step.face,
+        animationCue: step.cue,
+        animationRevision: _state.animationRevision + 1,
+        animationResult: DemoFaceAnimationResult.playing,
+        tourIndex: index,
+        clearVoiceResult: true,
+      ),
+    );
   }
 }
 

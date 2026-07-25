@@ -9,6 +9,7 @@ import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/doses/dose_action_logger.dart';
 import 'package:dosey_app/features/robot_face/demo_face_lab_controller.dart';
+import 'package:dosey_app/features/robot_face/robot_face_animation.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
@@ -63,6 +64,18 @@ class RobotFaceScreen extends StatefulWidget {
     'robot-face-lab-reduced-motion',
   );
   static const faceLabResetKey = ValueKey<String>('robot-face-lab-reset');
+  static const faceLabAnimationFocusKey = ValueKey<String>(
+    'robot-face-lab-animation-focus',
+  );
+  static const faceLabAnimationInterruptKey = ValueKey<String>(
+    'robot-face-lab-animation-interrupt',
+  );
+  static const faceLabTourPreviousKey = ValueKey<String>(
+    'robot-face-lab-tour-previous',
+  );
+  static const faceLabTourNextKey = ValueKey<String>(
+    'robot-face-lab-tour-next',
+  );
   static const actionPanelKey = ValueKey<String>('robot-face-action-panel');
   static const confirmTakenButtonKey = ValueKey<String>(
     'robot-face-confirm-taken-button',
@@ -103,6 +116,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   RobotFaceState? _initialState;
   RobotFaceController? _interactionController;
   RobotFaceVoiceCoordinator? _voiceCoordinator;
+  int _interactionRevision = 0;
 
   @override
   void didChangeDependencies() {
@@ -168,7 +182,18 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   }
 
   void _handleInteraction() {
+    if (!widget.isActive) return;
+    setState(() {
+      _interactionRevision -= 1;
+    });
     _interactionController?.recordInteraction();
+  }
+
+  void _completeInteractionAnimation(RobotFaceAnimationCue cue, int revision) {
+    if (!mounted || revision >= 0 || revision != _interactionRevision) return;
+    setState(() {
+      _interactionRevision = 0;
+    });
   }
 
   @override
@@ -193,6 +218,15 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
               Widget buildFace(DemoFaceLabState labState) {
                 final state = labState.previewStateFor(liveState);
                 final effectiveVoicePhase = labState.voicePhase ?? voicePhase;
+                final labControlsAnimation = labState.animationRevision > 0;
+                final animationCue = labControlsAnimation
+                    ? labState.animationCue
+                    : _interactionRevision < 0
+                    ? RobotFaceAnimationCue.acknowledge
+                    : null;
+                final animationRevision = labControlsAnimation
+                    ? labState.animationRevision
+                    : _interactionRevision;
                 Widget content = Stack(
                   children: [
                     ColoredBox(
@@ -206,6 +240,11 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
                               state: state,
                               isActive: widget.isActive,
                               voicePhase: effectiveVoicePhase,
+                              animationCue: animationCue,
+                              animationRevision: animationRevision,
+                              onAnimationCompleted: labControlsAnimation
+                                  ? faceLab?.completeAnimation
+                                  : _completeInteractionAnimation,
                               onInteraction: _handleInteraction,
                               doseActionLogger: widget.doseActionLogger,
                             );
@@ -430,6 +469,80 @@ class _DemoFaceLabPanel extends StatelessWidget {
                   DemoFaceVoiceResult.failed => 'Voice playback failed',
                 }, style: const TextStyle(color: Color(0xFFF5B942))),
               ],
+              const SizedBox(height: 14),
+              const Text(
+                'Animation cues',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final cue in RobotFaceAnimationCue.values)
+                    _FaceLabAction(
+                      key: cue == RobotFaceAnimationCue.focus
+                          ? RobotFaceScreen.faceLabAnimationFocusKey
+                          : ValueKey<String>(
+                              'robot-face-lab-animation-${cue.name}',
+                            ),
+                      label: cue.label,
+                      onPressed: () => controller.previewAnimation(cue),
+                    ),
+                  _FaceLabAction(
+                    key: RobotFaceScreen.faceLabAnimationInterruptKey,
+                    label: 'Interrupt animation',
+                    onPressed: controller.interruptAnimation,
+                  ),
+                ],
+              ),
+              if (state.animationResult case final result?) ...[
+                const SizedBox(height: 8),
+                Text(switch (result) {
+                  DemoFaceAnimationResult.playing =>
+                    'Playing ${state.animationCue?.label ?? 'animation'}',
+                  DemoFaceAnimationResult.completed =>
+                    '${state.animationCue?.label ?? 'Animation'} complete',
+                  DemoFaceAnimationResult.interrupted =>
+                    'Animation interrupted',
+                }, style: const TextStyle(color: Color(0xFFF5B942))),
+              ],
+              const SizedBox(height: 14),
+              const Text(
+                'Animation tour',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              if (state.tourIndex case final index?)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    'Tour ${index + 1} of ${demoFaceTourSteps.length} · '
+                    '${demoFaceTourSteps[index].label}',
+                    style: const TextStyle(color: Color(0xFF9DE8FF)),
+                  ),
+                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      key: RobotFaceScreen.faceLabTourPreviousKey,
+                      onPressed: controller.previousTourStep,
+                      icon: const Icon(Icons.skip_previous),
+                      label: const Text('Previous'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      key: RobotFaceScreen.faceLabTourNextKey,
+                      onPressed: controller.nextTourStep,
+                      icon: const Icon(Icons.skip_next),
+                      label: const Text('Next'),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 10),
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
@@ -732,6 +845,9 @@ class _RobotFaceFrame extends StatelessWidget {
     required this.state,
     required this.isActive,
     required this.voicePhase,
+    required this.animationCue,
+    required this.animationRevision,
+    required this.onAnimationCompleted,
     required this.onInteraction,
     this.doseActionLogger,
   });
@@ -739,6 +855,10 @@ class _RobotFaceFrame extends StatelessWidget {
   final RobotFaceState state;
   final bool isActive;
   final VoicePlaybackPhase voicePhase;
+  final RobotFaceAnimationCue? animationCue;
+  final int animationRevision;
+  final void Function(RobotFaceAnimationCue cue, int revision)?
+  onAnimationCompleted;
   final VoidCallback onInteraction;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
@@ -808,6 +928,9 @@ class _RobotFaceFrame extends StatelessWidget {
                                     voicePhase == VoicePlaybackPhase.preparing,
                                 isSpeaking:
                                     voicePhase == VoicePlaybackPhase.speaking,
+                                animationCue: animationCue,
+                                animationRevision: animationRevision,
+                                onAnimationCompleted: onAnimationCompleted,
                               ),
                             ),
                           ),
