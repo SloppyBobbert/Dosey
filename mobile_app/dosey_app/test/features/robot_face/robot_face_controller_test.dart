@@ -1421,8 +1421,7 @@ class _RobotFaceControllerFixture {
     Stream<DateTime>? clock,
     Stream<List<MedicationShortageAlertRow>>? shortageAlerts,
     CarouselSlotRepository? carouselSlots,
-    ControllerSnapshot controllerSnapshot =
-        const ControllerSnapshot.connected(),
+    ControllerSnapshot controllerSnapshot = const ControllerSnapshot.online(),
   }) async {
     final database = DoseyDatabase.inMemory();
     final settings = LocalAppSettingsRepository(

@@ -71,7 +71,7 @@ class SimulatedControllerGateway
         'Simulator connection failed.',
       );
     }
-    _setSnapshot(const ControllerSnapshot.connected());
+    _setSnapshot(const ControllerSnapshot.online());
   }
 
   @override

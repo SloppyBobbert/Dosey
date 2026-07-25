@@ -100,16 +100,17 @@ class ControllerHealthSupervisor
   Future<void> setMonitoringEligible(bool eligible) async {
     if (_closed || _eligible == eligible) return;
     _eligible = eligible;
-    _cancelTimer();
     if (!eligible) {
       _monitorGeneration += 1;
-      await _disconnectDelegate();
+      _cancelTimer();
       _setState(
         ControllerHealthState.disconnected,
         'Controller monitoring paused',
       );
+      await _disconnectDelegate();
       return;
     }
+    _cancelTimer();
     if (_connectionWanted) {
       unawaited(_startConnection(isReconnect: true));
     }
@@ -509,7 +510,16 @@ class ControllerHealthSupervisor
   Future<void> _performDelegateDisconnect() async {
     _suppressDelegateDisconnect = true;
     try {
-      await _delegate.disconnect();
+      try {
+        await _delegate.disconnect();
+      } on Object catch (error) {
+        // Disconnect is best effort. Health is already fail-closed, and retry
+        // policy must not be blocked by a transport cleanup failure.
+        _recordEvent(
+          ControllerHealthEventType.error,
+          details: 'Controller disconnect cleanup failed: $error',
+        );
+      }
     } finally {
       await Future<void>.value();
       _suppressDelegateDisconnect = false;
@@ -519,6 +529,7 @@ class ControllerHealthSupervisor
   bool _isTransportFailure(Object error) {
     return error is ControllerTransportOfflineException ||
         error is ControllerCommandPreAcceptanceTimeoutException ||
+        error is ControllerCommandTimeoutException ||
         error is ControllerCommandInterruptedException;
   }
 

@@ -3807,7 +3807,7 @@ void main() {
     expect(find.text('Manual dispense test'), findsOneWidget);
     expect(
       find.text(
-        'Locked until Android robot mode and a controller connection are active.',
+        'Locked until Android robot mode is active and controller health is verified.',
       ),
       findsOneWidget,
     );

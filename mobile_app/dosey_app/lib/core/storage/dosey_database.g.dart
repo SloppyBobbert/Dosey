@@ -9444,6 +9444,10 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
   late final $AdminAuditEventsTable adminAuditEvents = $AdminAuditEventsTable(
     this,
   );
+  late final Index controllerHealthEventsOccurredAtIdx = Index(
+    'controller_health_events_occurred_at_idx',
+    'CREATE INDEX controller_health_events_occurred_at_idx ON controller_health_events (occurred_at DESC)',
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -9465,6 +9469,7 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     controllerCommandEvents,
     controllerHealthEvents,
     adminAuditEvents,
+    controllerHealthEventsOccurredAtIdx,
   ];
 }
 

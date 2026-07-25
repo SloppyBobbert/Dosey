@@ -6,6 +6,29 @@ import 'package:dosey_app/core/controller/controller_health_supervisor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('connected transport snapshot is fail-closed until verified', () {
+    const snapshot = ControllerSnapshot.connected();
+
+    expect(snapshot.connectionState, ControllerConnectionState.connected);
+    expect(snapshot.healthState, ControllerHealthState.verifying);
+    expect(snapshot.canRequestDispense, isFalse);
+  });
+
+  test(
+    'manual scheduler fires timers reached across cumulative elapsed time',
+    () async {
+      final scheduler = _ManualScheduler();
+      var fired = false;
+      scheduler.schedule(const Duration(seconds: 5), () => fired = true);
+
+      await scheduler.elapse(const Duration(seconds: 2));
+      expect(fired, isFalse);
+
+      await scheduler.elapse(const Duration(seconds: 3));
+      expect(fired, isTrue);
+    },
+  );
+
   test('connection stays verifying until its heartbeat succeeds', () async {
     final delegate = _FakeControllerGateway();
     final heartbeat = Completer<String>();
@@ -201,6 +224,65 @@ void main() {
   );
 
   test(
+    'background pause fails closed before transport disconnect finishes',
+    () async {
+      final disconnect = Completer<void>();
+      addTearDown(() {
+        if (!disconnect.isCompleted) disconnect.complete();
+      });
+      final delegate = _FakeControllerGateway();
+      final harness = _Harness(delegate);
+      addTearDown(harness.close);
+      await harness.supervisor.setMonitoringEligible(true);
+      await harness.supervisor.connect();
+      delegate.disconnectResult = disconnect.future;
+
+      final pause = harness.supervisor.setMonitoringEligible(false);
+      await _flushEvents();
+
+      expect(harness.latest.healthState, ControllerHealthState.disconnected);
+      expect(harness.latest.canRequestDispense, isFalse);
+      await expectLater(
+        harness.supervisor.requestStagedDispense(
+          doseId: 'dose-1',
+          onStage: (_) async {},
+        ),
+        throwsA(isA<ControllerTransportOfflineException>()),
+      );
+
+      disconnect.complete();
+      await pause;
+    },
+  );
+
+  test(
+    'accepted movement timeout revokes verified controller health',
+    () async {
+      final delegate = _FakeControllerGateway();
+      final harness = _Harness(delegate);
+      addTearDown(harness.close);
+      await harness.supervisor.setMonitoringEligible(true);
+      await harness.supervisor.connect();
+      delegate.movementResult = Future<void>.error(
+        const ControllerCommandTimeoutException(),
+      );
+
+      await expectLater(
+        harness.supervisor.requestStagedDispense(
+          doseId: 'dose-1',
+          onStage: (_) async {},
+        ),
+        throwsA(isA<ControllerCommandTimeoutException>()),
+      );
+
+      expect(harness.latest.healthState, ControllerHealthState.offline);
+      expect(harness.latest.canRequestDispense, isFalse);
+      expect(delegate.disconnectCount, 1);
+      expect(harness.scheduler.nextDelay, const Duration(seconds: 2));
+    },
+  );
+
+  test(
     'pause and resume during verification ignores stale heartbeat',
     () async {
       final firstHeartbeat = Completer<String>();
@@ -367,6 +449,22 @@ void main() {
     expect(delegate.connectCount, 1);
   });
 
+  test('delegate disconnect errors are best effort', () async {
+    final delegate = _FakeControllerGateway();
+    final harness = _Harness(delegate);
+    addTearDown(harness.close);
+    await harness.supervisor.setMonitoringEligible(true);
+    await harness.supervisor.connect();
+    delegate.disconnectError = StateError('disconnect failed');
+
+    await harness.supervisor.disconnect();
+    final snapshot = await harness.supervisor.watchController().first;
+
+    expect(snapshot.healthState, ControllerHealthState.disconnected);
+    expect(snapshot.canRequestDispense, isFalse);
+    expect(harness.events, contains(ControllerHealthEventType.error));
+  });
+
   test('duplicate disconnect signals schedule only one reconnect', () async {
     final delegate = _FakeControllerGateway();
     final harness = _Harness(delegate);
@@ -480,6 +578,7 @@ class _FakeControllerGateway
   Future<void> movementResult = Future<void>.value();
   Future<void> cancelResult = Future<void>.value();
   Future<void> disconnectResult = Future<void>.value();
+  Object? disconnectError;
   ControllerSnapshot snapshot = const ControllerSnapshot.disconnected();
   int connectCount = 0;
   int disconnectCount = 0;
@@ -507,6 +606,7 @@ class _FakeControllerGateway
   Future<void> disconnect() async {
     disconnectCount += 1;
     await disconnectResult;
+    if (disconnectError case final Object error) throw error;
     emitDisconnected();
   }
 
@@ -554,9 +654,10 @@ class _FakeControllerGateway
 
 class _ManualScheduler {
   final _timers = <_ManualTimer>[];
+  Duration _elapsed = Duration.zero;
 
   ControllerHealthTimer schedule(Duration delay, void Function() callback) {
-    final timer = _ManualTimer(delay, callback);
+    final timer = _ManualTimer(_elapsed + delay, callback);
     _timers.add(timer);
     return timer;
   }
@@ -567,27 +668,34 @@ class _ManualScheduler {
       _timers.where((timer) => !timer.isCancelled).length;
 
   Duration? get nextDelay {
-    for (final timer in _timers) {
-      if (!timer.isCancelled) return timer.delay;
-    }
-    return null;
+    final pending = _timers.where((timer) => !timer.isCancelled);
+    if (pending.isEmpty) return null;
+    final deadline = pending
+        .map((timer) => timer.deadline)
+        .reduce((first, second) => first <= second ? first : second);
+    return deadline - _elapsed;
   }
 
   Future<void> elapse(Duration delay) async {
-    final timers = _timers
-        .where((timer) => !timer.isCancelled && timer.delay == delay)
-        .toList();
-    for (final timer in timers) {
-      timer.fire();
+    _elapsed += delay;
+    while (true) {
+      final timers = _timers
+          .where((timer) => !timer.isCancelled && timer.deadline <= _elapsed)
+          .toList();
+      if (timers.isEmpty) break;
+      for (final timer in timers) {
+        timer.fire();
+      }
+      await _flushEvents();
     }
     await _flushEvents();
   }
 }
 
 class _ManualTimer implements ControllerHealthTimer {
-  _ManualTimer(this.delay, this._callback);
+  _ManualTimer(this.deadline, this._callback);
 
-  final Duration delay;
+  final Duration deadline;
   final void Function() _callback;
   bool isCancelled = false;
 

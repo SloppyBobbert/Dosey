@@ -954,6 +954,30 @@ void main() {
   });
 
   test(
+    'migration from schema fourteen creates the health event index',
+    () async {
+      final executor = NativeDatabase.memory(
+        setup: (database) {
+          database.execute('PRAGMA user_version = 14;');
+        },
+      );
+      final database = DoseyDatabase(executor);
+      addTearDown(database.close);
+
+      final index = await database
+          .customSelect(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
+            variables: [
+              Variable<String>('controller_health_events_occurred_at_idx'),
+            ],
+          )
+          .getSingle();
+
+      expect(index.read<String>('sql'), contains('occurred_at DESC'));
+    },
+  );
+
+  test(
     'fresh revised guided loading storage persists inventory buckets and explicit snapshot fields',
     () async {
       final database = DoseyDatabase.inMemory();

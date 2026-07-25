@@ -66,6 +66,65 @@ void main() {
     expect(find.text('Next retry: 2026-07-24 12:35 UTC'), findsOneWidget);
   });
 
+  testWidgets('bench movement waits for verified controller health', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    final controller = _SnapshotControllerGateway(
+      const ControllerSnapshot.connected(),
+    );
+    addTearDown(controller.close);
+
+    await tester.pumpWidget(
+      _TestControllerApp(database: database, controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Bench commands'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'STATUS'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'HEARTBEAT'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'SERVO_TEST'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'DISPENSE_TEST'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      find.text(
+        'Locked until Android robot mode is active and controller health is verified.',
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('shows timed out controller work as needs review', (
     WidgetTester tester,
   ) async {

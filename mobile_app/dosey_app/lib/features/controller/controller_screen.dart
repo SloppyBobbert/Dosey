@@ -33,8 +33,8 @@ class ControllerScreen extends StatelessWidget {
             final controller =
                 controllerSnapshot.data ??
                 const ControllerSnapshot.disconnected();
-            // Manual commands are allowed only from a robot-capable phone with
-            // a connected controller; Personal Mode stays read-only here.
+            // Movement commands require verified health on a robot-capable
+            // phone; Personal Mode stays read-only here.
             final canDispense =
                 role.canHostRobot && controller.canRequestDispense;
             return ListView(
@@ -76,6 +76,7 @@ class ControllerScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 if (dependencies.isDemo) ...[
                   _ControllerBenchCard(
+                    canRunMovement: canDispense,
                     runCommand: (command) => _runControllerAction(
                       context,
                       () => dependencies.controllerBench.run(command),
@@ -95,7 +96,7 @@ class ControllerScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Locked until Android robot mode and a controller connection are active.',
+                          'Locked until Android robot mode is active and controller health is verified.',
                         ),
                         const SizedBox(height: 8),
                         const Text(
@@ -146,6 +147,7 @@ class ControllerScreen extends StatelessWidget {
                 if (!dependencies.isDemo) ...[
                   const SizedBox(height: 12),
                   _ControllerBenchCard(
+                    canRunMovement: canDispense,
                     runCommand: (command) => _runControllerAction(
                       context,
                       () => dependencies.controllerBench.run(command),
@@ -339,8 +341,12 @@ class _DemoScenarioCard extends StatelessWidget {
 }
 
 class _ControllerBenchCard extends StatelessWidget {
-  const _ControllerBenchCard({required this.runCommand});
+  const _ControllerBenchCard({
+    required this.canRunMovement,
+    required this.runCommand,
+  });
 
+  final bool canRunMovement;
   final Future<void> Function(ControllerBenchCommand command) runCommand;
 
   @override
@@ -374,7 +380,12 @@ class _ControllerBenchCard extends StatelessWidget {
               children: [
                 for (final command in commands)
                   OutlinedButton(
-                    onPressed: () => runCommand(command),
+                    onPressed:
+                        !canRunMovement &&
+                            (command == ControllerBenchCommand.servoTest ||
+                                command == ControllerBenchCommand.dispenseTest)
+                        ? null
+                        : () => runCommand(command),
                     child: Text(_commandLabel(command)),
                   ),
               ],

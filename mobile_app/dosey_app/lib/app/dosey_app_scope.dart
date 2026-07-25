@@ -132,6 +132,12 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
         WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     _database = widget.database ?? DoseyDatabase();
     _ownsDatabase = widget.database == null;
+    assert(
+      !_database.isDemo ||
+          widget.controllerGateway == null ||
+          widget.controllerGateway is SimulatedControllerGateway,
+      'Demo mode requires a SimulatedControllerGateway.',
+    );
     if (_database.isDemo &&
         widget.appClock != null &&
         widget.appClock is! ControllableAppClock) {

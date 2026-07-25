@@ -174,7 +174,7 @@ Base, servo, battery/JST, SWD, and every external wire disconnected.
 4. Confirm the app reports both `Transport connected` and `Health: Online`. A transport connection without `HEARTBEAT_OK` must remain verifying and must not enable movement.
 5. Run the explicit manual `HEARTBEAT` command and confirm its command history includes `HEARTBEAT_OK`. The app's automatic successful heartbeats update health and the last-heartbeat time without flooding command history.
 6. Do not enable the servo yet. `SERVO_TEST` and `DISPENSE_TEST` must return `CONFIGURATION_REQUIRED`; `DISPENSE_NEXT` must return `COMMAND_DISABLED`.
-7. Disconnect from the app and confirm the controller advertises again before reconnecting once. Then interrupt the controller connection and confirm the app fails closed and reports recovery only after a new `HEARTBEAT_OK`. The single-client limit, automatic retry timing, and recovery behavior remain unverified until observed on the physical radio.
+7. Disconnect from the app and confirm the controller advertises again before reconnecting once. Then interrupt the controller connection and confirm the app fails closed and reports recovery only after a new `HEARTBEAT_OK`. That fail-closed and verified-recovery policy is app- and simulator-tested. Physical-radio recovery, the single-client limit, and automatic retry timing remain unverified until observed on the bench.
 
 The BLE service UUID is `8f3a1001-6f5b-4d4f-9c2a-5d6e7f801001`. The write
 characteristic ends in `1002`, and the notify characteristic ends in `1003`.

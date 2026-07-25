@@ -18,6 +18,7 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
   Future<void>? _activeConnectAttempt;
   int _connectGeneration = 0;
   String? _protocolSetupDeviceId;
+  int? _protocolSetupGeneration;
   BleConnectionSnapshot _connectionSnapshot =
       const BleConnectionSnapshot.disconnected();
 
@@ -58,24 +59,25 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
       D1Protocol.deviceName,
       const Duration(seconds: 10),
     );
-    if (generation != _connectGeneration) return;
+    if (generation != _connectGeneration) {
+      throw StateError('Dosey controller connection was cancelled.');
+    }
     if (result == null) {
       throw StateError('Dosey controller was not found.');
     }
 
     _protocolSetupDeviceId = result.deviceId;
+    _protocolSetupGeneration = generation;
     try {
       await connect(deviceId: result.deviceId, deviceName: result.deviceName);
       if (generation != _connectGeneration) {
-        await _plugin.disconnect(result.deviceId);
-        return;
+        throw StateError('Dosey controller connection was cancelled.');
       }
       if (!await _plugin.discoverDoseyProtocol(result.deviceId)) {
         throw StateError('Dosey BLE protocol characteristics were not found.');
       }
       if (generation != _connectGeneration) {
-        await _plugin.disconnect(result.deviceId);
-        return;
+        throw StateError('Dosey controller connection was cancelled.');
       }
       await _clearProtocolSubscription();
       _protocolSubscription = _plugin
@@ -83,8 +85,7 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
           .listen(_protocolController.add);
       await _plugin.setProtocolNotifications(result.deviceId, true);
       if (generation != _connectGeneration) {
-        await _plugin.disconnect(result.deviceId);
-        return;
+        throw StateError('Dosey controller connection was cancelled.');
       }
       _setConnection(
         BleConnectionSnapshot.connected(
@@ -93,11 +94,32 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
         ),
       );
     } on Object {
-      await disconnect();
+      if (generation != _connectGeneration) {
+        await _cleanupCancelledSetup(generation, result.deviceId);
+      } else {
+        await disconnect();
+      }
       rethrow;
     } finally {
-      _protocolSetupDeviceId = null;
+      if (_protocolSetupGeneration == generation) {
+        _protocolSetupDeviceId = null;
+        _protocolSetupGeneration = null;
+      }
     }
+  }
+
+  Future<void> _cleanupCancelledSetup(int generation, String deviceId) async {
+    if (_protocolSetupGeneration != generation) return;
+    try {
+      await _plugin.disconnect(deviceId);
+    } on Object {
+      // Cancellation cleanup is best effort; the connection attempt still
+      // reports its original cancellation.
+    }
+    if (_protocolSetupGeneration != generation) return;
+    await _clearConnectionSubscription();
+    await _clearProtocolSubscription();
+    _setConnection(const BleConnectionSnapshot.disconnected());
   }
 
   @override
@@ -218,7 +240,9 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
 
   void _setConnection(BleConnectionSnapshot snapshot) {
     _connectionSnapshot = snapshot;
-    _connectionController.add(snapshot);
+    if (!_connectionController.isClosed) {
+      _connectionController.add(snapshot);
+    }
   }
 
   static BleAvailabilitySnapshot _mapAvailability(PluginBleAdapterState state) {

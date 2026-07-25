@@ -90,14 +90,19 @@ class LocalControllerHealthEventRepository
       ..limit(limit);
     return query.watch().map(
       (rows) => rows
-          .map(
-            (row) => ControllerHealthEvent(
+          .map((row) {
+            final type = ControllerHealthEventType.values
+                .where((value) => value.name == row.eventType)
+                .firstOrNull;
+            if (type == null) return null;
+            return ControllerHealthEvent(
               id: row.id,
-              type: ControllerHealthEventType.values.byName(row.eventType),
+              type: type,
               occurredAt: row.occurredAt.toUtc(),
               details: row.details,
-            ),
-          )
+            );
+          })
+          .whereType<ControllerHealthEvent>()
           .toList(),
     );
   }

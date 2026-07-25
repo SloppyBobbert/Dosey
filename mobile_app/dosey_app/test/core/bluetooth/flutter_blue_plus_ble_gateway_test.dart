@@ -219,7 +219,7 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       await gateway.disconnect();
       scanGate.complete();
-      await connection;
+      await expectLater(connection, throwsStateError);
 
       expect(plugin.cancelScanCalls, 1);
       expect(plugin.connectCalls, isEmpty);
@@ -252,13 +252,51 @@ void main() {
 
     await gateway.disconnect();
     connectGate.complete();
-    await connection;
+    await expectLater(connection, throwsStateError);
 
     expect(plugin.connectedDeviceIds, isEmpty);
     expect(plugin.disconnectCalls, ['dosey-1', 'dosey-1']);
 
     await gateway.close();
   });
+
+  test(
+    'cancelled protocol setup clears subscriptions and connection state',
+    () async {
+      final notificationSetup = Completer<void>();
+      final notifications = StreamController<List<int>>.broadcast();
+      final plugin = _FakeFlutterBluePlusPlugin(
+        adapterStates: const Stream.empty(),
+        currentAdapterState: PluginBleAdapterState.on,
+        connectionStatesByDeviceId: {'dosey-1': const Stream.empty()},
+        scanResult: const PluginBleScanResult(
+          deviceId: 'dosey-1',
+          deviceName: 'Dosey-XIAO-C6',
+        ),
+        protocolValues: notifications.stream,
+        notificationSetup: notificationSetup,
+      );
+      final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+
+      final connection = gateway.connectToDosey();
+      await Future<void>.delayed(Duration.zero);
+      expect(notifications.hasListener, isTrue);
+
+      await gateway.disconnect();
+      notificationSetup.complete();
+      await expectLater(connection, throwsStateError);
+
+      expect(notifications.hasListener, isFalse);
+      expect(
+        await gateway.watchConnection().first,
+        const BleConnectionSnapshot.disconnected(),
+      );
+      await expectLater(gateway.writeProtocolBytes([1]), throwsStateError);
+
+      await gateway.close();
+      await notifications.close();
+    },
+  );
 
   test('close cancels an active scan and prevents a late connection', () async {
     final scanGate = Completer<void>();
@@ -278,7 +316,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     await gateway.close();
     scanGate.complete();
-    await connection;
+    await expectLater(connection, throwsStateError);
 
     expect(plugin.cancelScanCalls, 1);
     expect(plugin.connectCalls, isEmpty);

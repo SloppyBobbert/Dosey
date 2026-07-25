@@ -86,8 +86,17 @@ class ControllerSnapshot {
 
   const ControllerSnapshot.connected()
     : connectionState = ControllerConnectionState.connected,
+      canRequestDispense = false,
+      statusLabel = 'Controller connected; heartbeat not verified',
+      healthState = ControllerHealthState.verifying,
+      lastSuccessfulHeartbeatAt = null,
+      reconnectAttempt = 0,
+      nextReconnectAt = null;
+
+  const ControllerSnapshot.online()
+    : connectionState = ControllerConnectionState.connected,
       canRequestDispense = true,
-      statusLabel = 'Controller connected',
+      statusLabel = 'Controller online',
       healthState = ControllerHealthState.online,
       lastSuccessfulHeartbeatAt = null,
       reconnectAttempt = 0,

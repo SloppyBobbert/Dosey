@@ -315,6 +315,10 @@ class ControllerCommandEvents extends Table {
 }
 
 @DataClassName('ControllerHealthEventRow')
+@TableIndex.sql(
+  'CREATE INDEX controller_health_events_occurred_at_idx '
+  'ON controller_health_events (occurred_at DESC)',
+)
 class ControllerHealthEvents extends Table {
   TextColumn get id => text()();
   TextColumn get eventType => text()();
@@ -323,14 +327,6 @@ class ControllerHealthEvents extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
-
-  List<Index> get indexes => [
-    Index(
-      'controller_health_events_occurred_at_idx',
-      'CREATE INDEX controller_health_events_occurred_at_idx '
-          'ON controller_health_events (occurred_at DESC)',
-    ),
-  ];
 }
 
 @DataClassName('AdminAuditEventRow')
@@ -474,6 +470,7 @@ class DoseyDatabase extends _$DoseyDatabase {
       }
       if (from < 15) {
         await migrator.createTable(controllerHealthEvents);
+        await migrator.createIndex(controllerHealthEventsOccurredAtIdx);
       }
     },
   );

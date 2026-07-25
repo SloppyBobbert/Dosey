@@ -243,6 +243,33 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('demo scope rejects a non-simulated controller injection', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(database.close);
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          controllerGateway: _NonSimulatedControllerGateway(),
+          child: const SizedBox(),
+        ),
+      ),
+    );
+
+    expect(
+      tester.takeException(),
+      isA<AssertionError>().having(
+        (error) => error.message,
+        'message',
+        'Demo mode requires a SimulatedControllerGateway.',
+      ),
+    );
+  });
+
   testWidgets(
     'production supervisor runs only in foreground Android Robot Mode',
     (WidgetTester tester) async {
@@ -329,6 +356,35 @@ class _FailingConnectControllerGateway extends SimulatedControllerGateway {
   Future<void> connect() async {
     connectCalls += 1;
     throw StateError('connect failed');
+  }
+}
+
+class _NonSimulatedControllerGateway implements StagedControllerGateway {
+  @override
+  Future<void> cancelActiveCommand() async {}
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  Future<void> connect() async {}
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> requestDispense({required String doseId}) async {}
+
+  @override
+  Future<void> requestStagedDispense({
+    required String doseId,
+    ControllerMovementCommand movement = ControllerMovementCommand.dispenseNext,
+    required ControllerDispenseStageCallback onStage,
+  }) async {}
+
+  @override
+  Stream<ControllerSnapshot> watchController() {
+    return Stream.value(const ControllerSnapshot.disconnected());
   }
 }
 
