@@ -354,17 +354,24 @@ class AdminAuditEvents extends Table {
   ],
 )
 class DoseyDatabase extends _$DoseyDatabase {
-  DoseyDatabase([QueryExecutor? executor])
-    : super(executor ?? _openConnection());
+  DoseyDatabase([QueryExecutor? executor, this.isDemo = false])
+    : super(executor ?? _openConnection(name: 'dosey'));
 
-  factory DoseyDatabase.inMemory() {
+  factory DoseyDatabase.demo() {
+    return DoseyDatabase(_openConnection(name: 'dosey_demo'), true);
+  }
+
+  factory DoseyDatabase.inMemory({bool isDemo = false}) {
     return DoseyDatabase(
       DatabaseConnection(
         NativeDatabase.memory(),
         closeStreamsSynchronously: true,
       ),
+      isDemo,
     );
   }
+
+  final bool isDemo;
 
   @override
   int get schemaVersion => 14;
@@ -709,6 +716,6 @@ class DoseyDatabase extends _$DoseyDatabase {
   }
 }
 
-QueryExecutor _openConnection() {
-  return driftDatabase(name: 'dosey');
+QueryExecutor _openConnection({required String name}) {
+  return driftDatabase(name: name);
 }

@@ -4,7 +4,15 @@ import 'dart:math';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
 
-enum ControllerCommandType { dispenseNext, dispenseTest, heartbeat, status }
+enum ControllerCommandType {
+  dispenseNext,
+  dispenseTest,
+  servoTest,
+  heartbeat,
+  status,
+  pirStatus,
+  ledTest,
+}
 
 enum ControllerCommandSessionState {
   pending,
@@ -16,7 +24,7 @@ enum ControllerCommandSessionState {
   interrupted,
 }
 
-enum ControllerCommandFailureReason { nack, jam, offline, disconnect }
+enum ControllerCommandFailureReason { nack, timeout, jam, offline, disconnect }
 
 enum ControllerCommandEventType {
   commandSent,
@@ -30,6 +38,9 @@ enum ControllerCommandEventType {
   offline,
   reconnected,
 }
+
+typedef ControllerCommandSessionIdGenerator =
+    String Function(ControllerCommandType commandType, DateTime now);
 
 class ControllerCommandSession {
   const ControllerCommandSession({
@@ -77,6 +88,16 @@ class ControllerCommandEvent {
   final String? details;
 }
 
+class ControllerCommandHistoryEntry {
+  const ControllerCommandHistoryEntry({
+    required this.session,
+    required this.events,
+  });
+
+  final ControllerCommandSession session;
+  final List<ControllerCommandEvent> events;
+}
+
 abstract interface class ControllerCommandRepository {
   Future<ControllerCommandSession> createSession({
     required ControllerCommandType commandType,
@@ -113,14 +134,25 @@ abstract interface class ControllerCommandRepository {
   Future<ControllerCommandSession?> getLatestRelevantSession();
 
   Future<List<ControllerCommandEvent>> getEventsForSession(String sessionId);
+
+  Stream<List<ControllerCommandHistoryEntry>> watchRecentHistory({
+    int limit = 12,
+  });
 }
 
 class LocalControllerCommandRepository implements ControllerCommandRepository {
-  LocalControllerCommandRepository(this._database, {Random? random})
-    : _random = random ?? Random.secure();
+  LocalControllerCommandRepository(
+    this._database, {
+    Random? random,
+    ControllerCommandSessionIdGenerator? sessionIdGenerator,
+  }) : _random = random ?? Random.secure(),
+       // Keep the public constructor parameter free of a library-private name.
+       // ignore: prefer_initializing_formals
+       _sessionIdGenerator = sessionIdGenerator;
 
   final DoseyDatabase _database;
   final Random _random;
+  final ControllerCommandSessionIdGenerator? _sessionIdGenerator;
 
   @override
   Future<ControllerCommandSession> createSession({
@@ -272,6 +304,27 @@ class LocalControllerCommandRepository implements ControllerCommandRepository {
     return rows.map(_eventFromRow).toList();
   }
 
+  @override
+  Stream<List<ControllerCommandHistoryEntry>> watchRecentHistory({
+    int limit = 12,
+  }) {
+    if (limit <= 0) {
+      throw ArgumentError.value(limit, 'limit', 'Must be greater than zero.');
+    }
+    final query = _latestSessionQuery()..limit(limit);
+    return query.watch().asyncMap((rows) async {
+      return Future.wait(
+        rows.map((row) async {
+          final session = _sessionFromRow(row);
+          return ControllerCommandHistoryEntry(
+            session: session,
+            events: await getEventsForSession(session.id),
+          );
+        }),
+      );
+    });
+  }
+
   SimpleSelectStatement<
     $ControllerCommandSessionsTable,
     ControllerCommandSessionRow
@@ -305,10 +358,15 @@ class LocalControllerCommandRepository implements ControllerCommandRepository {
     return _database.select(_database.controllerCommandSessions)..orderBy([
       (session) => OrderingTerm.desc(session.updatedAt),
       (session) => OrderingTerm.desc(session.createdAt),
+      (session) => OrderingTerm.desc(session.id),
     ]);
   }
 
   String _nextSessionId(ControllerCommandType commandType, DateTime now) {
+    final generated = _sessionIdGenerator?.call(commandType, now);
+    if (generated != null) {
+      return generated;
+    }
     final randomSuffix = _random.nextInt(1 << 32).toRadixString(16);
     return '${commandType.name}:${now.microsecondsSinceEpoch}:$randomSuffix';
   }

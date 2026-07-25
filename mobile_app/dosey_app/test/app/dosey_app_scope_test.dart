@@ -3,13 +3,19 @@ import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
+import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
+import 'package:dosey_app/core/demo/demo_data_repository.dart';
+import 'package:dosey_app/core/demo/demo_external_services.dart';
+import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -77,6 +83,7 @@ void main() {
     expect(dependencies.permissions, same(permissionGateway));
     expect(dependencies.robotFaceSettings, isNotNull);
     expect(dependencies.robotFaceController, isNotNull);
+    expect(dependencies.doseActions, isNotNull);
 
     await tester.pumpWidget(const SizedBox());
   });
@@ -140,6 +147,109 @@ void main() {
 
     await tester.pumpWidget(const SizedBox());
   });
+
+  testWidgets('demo scope wires scenarios and disables external services', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+    addTearDown(database.close);
+    addTearDown(clock.close);
+    await DemoDataRepository(
+      database,
+      seedTime: clock.now(),
+      deviceRole: AppDeviceRole.androidRobot,
+    ).resetAndSeed();
+    final screenAwake = _FakeScreenAwakeGateway();
+    late DoseyAppDependencies dependencies;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          appClock: clock,
+          screenAwakeGateway: screenAwake,
+          child: Builder(
+            builder: (context) {
+              dependencies = DoseyAppScope.of(context);
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(dependencies.isDemo, isTrue);
+    expect(dependencies.demoScenarios, isNotNull);
+    expect(dependencies.reminderScheduler, isA<DemoReminderScheduler>());
+    expect(dependencies.ble, isA<DemoBleGateway>());
+    expect(dependencies.connectivity, isA<DemoConnectivityGateway>());
+    expect(dependencies.permissions, isA<DemoPermissionGateway>());
+    expect(dependencies.screenAwake, same(screenAwake));
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('demo scope creates a controllable clock when none is injected', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(database.close);
+    late DoseyAppDependencies dependencies;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          child: Builder(
+            builder: (context) {
+              dependencies = DoseyAppScope.of(context);
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(dependencies.appClock, isA<ControllableAppClock>());
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('demo startup handles controller connection failure', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final controller = _FailingConnectControllerGateway();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          controllerGateway: controller,
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(controller.connectCalls, 1);
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _FailingConnectControllerGateway extends SimulatedControllerGateway {
+  int connectCalls = 0;
+
+  @override
+  Future<void> connect() async {
+    connectCalls += 1;
+    throw StateError('connect failed');
+  }
 }
 
 class _FakeMissedDoseReconciliationService
@@ -237,4 +347,9 @@ class _FakePermissionGateway implements AppPermissionGateway {
   Future<AppPermissionState> request(AppPermission permission) async {
     return AppPermissionState.granted;
   }
+}
+
+class _FakeScreenAwakeGateway implements ScreenAwakeGateway {
+  @override
+  Future<void> setKeepScreenAwake(bool enabled) async {}
 }

@@ -1561,6 +1561,9 @@ class _FakeControllerLifecycleService implements ControllerLifecycleService {
 
   @override
   Future<void> requestManualDispenseTest() async {}
+
+  @override
+  Future<void> requestManualServoTest() async {}
 }
 
 class _FakeCarouselSlotRepository implements CarouselSlotRepository {

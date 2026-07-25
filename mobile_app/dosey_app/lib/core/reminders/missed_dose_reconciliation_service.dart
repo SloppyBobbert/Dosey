@@ -59,8 +59,8 @@ class MissedDoseReconciliationService {
     final schedules = await reminders.watchSchedules().first;
     final events = await doseLog.watchEvents().first;
     final datesToCheck = <DateTime>[
-      DateTime(now.year, now.month, now.day - 1),
-      DateTime(now.year, now.month, now.day),
+      _dateAtMidnight(now, dayOffset: -1),
+      _dateAtMidnight(now),
     ];
 
     for (final date in datesToCheck) {
@@ -212,5 +212,11 @@ class MissedDoseReconciliationService {
         .split(',')
         .map((value) => value.trim())
         .contains(scheduleId);
+  }
+
+  static DateTime _dateAtMidnight(DateTime date, {int dayOffset = 0}) {
+    return date.isUtc
+        ? DateTime.utc(date.year, date.month, date.day + dayOffset)
+        : DateTime(date.year, date.month, date.day + dayOffset);
   }
 }

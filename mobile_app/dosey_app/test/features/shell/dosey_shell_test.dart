@@ -1,11 +1,13 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
+import 'package:dosey_app/core/demo/demo_data_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
@@ -47,6 +49,224 @@ void main() {
           .isActive,
       isTrue,
     );
+  });
+
+  testWidgets('demo launch opens Controller before Robot Face', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, startOnController: true),
+    );
+
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('Controller'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('demo scenario clock drives Robot Face and Today', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+    addTearDown(database.close);
+    addTearDown(clock.close);
+    await DemoDataRepository(
+      database,
+      seedTime: clock.now(),
+      deviceRole: AppDeviceRole.androidRobot,
+    ).resetAndSeed();
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        appClock: clock,
+        useRealMissedDoseReconciliation: true,
+        startOnController: true,
+      ),
+    );
+
+    expect(find.text('Next: Dose approaching'), findsOneWidget);
+    await tester.tap(find.text('Next step'));
+    await _pumpShellFrame(tester);
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Robot Face'),
+          )
+          .hitTestable(),
+    );
+    await _pumpShellFrame(tester);
+    expect(find.text('SOON'), findsOneWidget);
+
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Controller'),
+          )
+          .hitTestable(),
+    );
+    await _pumpShellFrame(tester);
+    await tester.tap(find.text('Next step'));
+    await _pumpShellFrame(tester);
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Robot Face'),
+          )
+          .hitTestable(),
+    );
+    await _pumpShellFrame(tester);
+    expect(find.text('READY'), findsOneWidget);
+
+    await tester.tap(
+      find
+          .descendant(
+            of: find.byType(NavigationBar),
+            matching: find.text('Today'),
+          )
+          .hitTestable(),
+    );
+    await _pumpShellFrame(tester);
+    expect(find.text('Current dose'), findsOneWidget);
+    expect(find.textContaining('FAKE Demo Tablets'), findsWidgets);
+  });
+
+  testWidgets(
+    'demo presentation runs from Robot Face and returns to Controller',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory(isDemo: true);
+      final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+      final screenAwake = _FakeScreenAwakeGateway();
+      addTearDown(database.close);
+      addTearDown(clock.close);
+      await DemoDataRepository(
+        database,
+        seedTime: clock.now(),
+        deviceRole: AppDeviceRole.androidRobot,
+      ).resetAndSeed();
+
+      await _pumpShell(
+        tester,
+        _TestShellApp(
+          database: database,
+          appClock: clock,
+          useRealMissedDoseReconciliation: true,
+          startOnController: true,
+          screenAwakeGateway: screenAwake,
+        ),
+      );
+
+      await tester.tap(find.text('Start presentation'));
+      await _pumpShellFrame(tester);
+
+      expect(find.byType(AppBar), findsNothing);
+      expect(find.byType(NavigationBar), findsNothing);
+      expect(screenAwake.states.last, isTrue);
+      expect(find.text('Next demo step'), findsOneWidget);
+      expect(find.text('Play demo'), findsOneWidget);
+      expect(find.text('Restart demo'), findsOneWidget);
+      expect(find.text('Return to Controller'), findsOneWidget);
+      for (final label in <String>[
+        'Next demo step',
+        'Play demo',
+        'Restart demo',
+        'Return to Controller',
+      ]) {
+        expect(tester.getSize(find.text(label).first).height, lessThan(48));
+        expect(
+          tester
+              .getSize(
+                find
+                    .ancestor(
+                      of: find.text(label).first,
+                      matching: find.byWidgetPredicate(
+                        (widget) => widget is ButtonStyleButton,
+                      ),
+                    )
+                    .first,
+              )
+              .height,
+          greaterThanOrEqualTo(48),
+        );
+      }
+
+      await tester.tap(find.text('Play demo'));
+      await _pumpShellFrame(tester);
+      expect(find.text('Pause demo'), findsOneWidget);
+      await tester.tap(find.text('Pause demo'));
+      await _pumpShellFrame(tester);
+      expect(find.text('Play demo'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 2));
+
+      await tester.tap(find.text('Restart demo'));
+      await _pumpShellFrame(tester);
+
+      await tester.tap(find.text('Next demo step'));
+      await _pumpShellFrame(tester);
+      expect(find.text('SOON'), findsOneWidget);
+
+      await tester.tap(find.text('Restart demo'));
+      await _pumpShellFrame(tester);
+      expect(find.text('SOON'), findsNothing);
+
+      await tester.tap(find.text('Return to Controller'));
+      await _pumpShellFrame(tester);
+      expect(_appBarTitle('Controller'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.text('Start presentation'), findsOneWidget);
+      expect(screenAwake.states.last, isFalse);
+    },
+  );
+
+  testWidgets('demo presentation reports control failures', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+    addTearDown(database.close);
+    addTearDown(clock.close);
+    await DemoDataRepository(
+      database,
+      seedTime: clock.now(),
+      deviceRole: AppDeviceRole.androidRobot,
+    ).resetAndSeed();
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        appClock: clock,
+        useRealMissedDoseReconciliation: true,
+        startOnController: true,
+      ),
+    );
+    await tester.tap(find.text('Start presentation'));
+    await _pumpShellFrame(tester);
+
+    final scenarios = DoseyAppScope.of(
+      tester.element(find.text('Restart demo')),
+    ).demoScenarios!;
+    await scenarios.close();
+    await database.close();
+    await tester.tap(find.text('Restart demo'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.textContaining('Demo action failed:'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets('Personal Mode does not show the Robot Face tab', (
@@ -772,27 +992,37 @@ class _TestShellApp extends StatelessWidget {
     this.notificationTapController,
     this.missedDoseReconciliationService,
     this.screenAwakeGateway,
+    this.startOnController = false,
+    this.appClock,
+    this.useRealMissedDoseReconciliation = false,
   });
 
   final DoseyDatabase database;
   final ReminderNotificationTapController? notificationTapController;
   final FakeMissedDoseReconciliationService? missedDoseReconciliationService;
   final ScreenAwakeGateway? screenAwakeGateway;
+  final bool startOnController;
+  final AppClock? appClock;
+  final bool useRealMissedDoseReconciliation;
 
   @override
   Widget build(BuildContext context) {
     return DoseyAppScope(
       database: database,
+      appClock: appClock,
       bleGateway: FakeBleGateway(),
       connectivityGateway: FakeConnectivityGateway(),
       permissionGateway: const _FakePermissionGateway(),
       reminderScheduler: const _NoopReminderScheduler(),
       notificationTapController: notificationTapController,
-      missedDoseReconciliationService:
-          missedDoseReconciliationService ??
-          FakeMissedDoseReconciliationService(),
+      missedDoseReconciliationService: useRealMissedDoseReconciliation
+          ? null
+          : missedDoseReconciliationService ??
+                FakeMissedDoseReconciliationService(),
       screenAwakeGateway: screenAwakeGateway,
-      child: const MaterialApp(home: DoseyShell()),
+      child: MaterialApp(
+        home: DoseyShell(startOnController: startOnController),
+      ),
     );
   }
 }

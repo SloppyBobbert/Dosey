@@ -1,6 +1,9 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
+import 'package:dosey_app/core/demo/demo_mode_host.dart';
+import 'package:dosey_app/core/demo/demo_scenario.dart';
+import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -12,9 +15,8 @@ class ControllerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.of(context);
-    final commandRepository = LocalControllerCommandRepository(
-      dependencies.database,
-    );
+    final commandRepository = dependencies.controllerCommands;
+    final demoMode = DemoModeHost.maybeOf(context);
 
     return StreamBuilder<AppDeviceRole>(
       stream: dependencies.settings.watchDeviceRole(),
@@ -36,8 +38,19 @@ class ControllerScreen extends StatelessWidget {
             final canDispense =
                 role.canHostRobot && controller.canRequestDispense;
             return ListView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
+                if (dependencies.isDemo &&
+                    dependencies.demoScenarios != null) ...[
+                  _DemoScenarioCard(
+                    scenarios: dependencies.demoScenarios!,
+                    canPresent: role.canHostRobot,
+                    onExit: demoMode?.exit,
+                    runAction: (action) =>
+                        _runControllerAction(context, action),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 _ControllerHeroCard(
                   controller: controller,
                   role: role,
@@ -60,6 +73,15 @@ class ControllerScreen extends StatelessWidget {
                   },
                 ),
                 const SizedBox(height: 12),
+                if (dependencies.isDemo) ...[
+                  _ControllerBenchCard(
+                    runCommand: (command) => _runControllerAction(
+                      context,
+                      () => dependencies.controllerBench.run(command),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -102,6 +124,22 @@ class ControllerScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+                StreamBuilder<List<ControllerCommandHistoryEntry>>(
+                  stream: commandRepository.watchRecentHistory(),
+                  builder: (context, historySnapshot) {
+                    return _ControllerHistoryCard(
+                      history: historySnapshot.data ?? const [],
+                    );
+                  },
+                ),
+                if (!dependencies.isDemo && demoMode != null) ...[
+                  const SizedBox(height: 12),
+                  _EnterDemoCard(
+                    onEnter: () =>
+                        _runControllerAction(context, demoMode.enter),
+                  ),
+                ],
               ],
             );
           },
@@ -131,6 +169,294 @@ class ControllerScreen extends StatelessWidget {
     }
   }
 }
+
+class _EnterDemoCard extends StatelessWidget {
+  const _EnterDemoCard({required this.onEnter});
+
+  final VoidCallback onEnter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Deterministic demo',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Run fake controller and dose scenarios in a separate database. Your real local data is not changed.',
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: onEnter,
+              icon: const Icon(Icons.science_outlined),
+              label: const Text('Enter demo mode'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DemoScenarioCard extends StatelessWidget {
+  const _DemoScenarioCard({
+    required this.scenarios,
+    required this.canPresent,
+    required this.onExit,
+    required this.runAction,
+  });
+
+  final DemoScenarioService scenarios;
+  final bool canPresent;
+  final Future<void> Function(Future<void> Function() action) runAction;
+  final Future<void> Function()? onExit;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DemoScenarioState>(
+      stream: scenarios.states,
+      initialData: scenarios.state,
+      builder: (context, snapshot) {
+        final state = snapshot.requireData;
+        return Card(
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Demo scenario runner',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 4),
+                Text(state.scenario.description),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<DemoScenarioId>(
+                  initialValue: state.scenario.id,
+                  decoration: const InputDecoration(labelText: 'Scenario'),
+                  items: [
+                    for (final scenario in demoScenarioCatalog)
+                      DropdownMenuItem(
+                        value: scenario.id,
+                        child: Text(scenario.title),
+                      ),
+                  ],
+                  onChanged: state.isPlaying
+                      ? null
+                      : (id) {
+                          if (id != null) {
+                            runAction(() => scenarios.select(id));
+                          }
+                        },
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '${state.completedSteps} of ${state.scenario.steps.length} steps complete',
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  state.nextStep == null
+                      ? 'Scenario complete'
+                      : 'Next: ${state.nextStep!.label}',
+                ),
+                if (state.lastMessage != null) ...[
+                  const SizedBox(height: 4),
+                  Text(state.lastMessage!),
+                ],
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (canPresent)
+                      FilledButton.icon(
+                        onPressed: state.isPlaying
+                            ? null
+                            : () => runAction(scenarios.startPresentation),
+                        icon: const Icon(Icons.present_to_all_outlined),
+                        label: const Text('Start presentation'),
+                      ),
+                    FilledButton.icon(
+                      onPressed: state.isPlaying || state.isComplete
+                          ? null
+                          : () => runAction(scenarios.next),
+                      icon: const Icon(Icons.skip_next_outlined),
+                      label: const Text('Next step'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: state.isComplete
+                          ? null
+                          : state.isPlaying
+                          ? scenarios.pause
+                          : () => runAction(scenarios.play),
+                      icon: Icon(
+                        state.isPlaying ? Icons.pause : Icons.play_arrow,
+                      ),
+                      label: Text(state.isPlaying ? 'Pause' : 'Auto-play'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => runAction(scenarios.restart),
+                      icon: const Icon(Icons.restart_alt),
+                      label: const Text('Restart'),
+                    ),
+                    if (onExit != null)
+                      OutlinedButton.icon(
+                        onPressed: () => runAction(onExit!),
+                        icon: const Icon(Icons.exit_to_app),
+                        label: const Text('Exit demo mode'),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ControllerBenchCard extends StatelessWidget {
+  const _ControllerBenchCard({required this.runCommand});
+
+  final Future<void> Function(ControllerBenchCommand command) runCommand;
+
+  @override
+  Widget build(BuildContext context) {
+    const commands = [
+      ControllerBenchCommand.status,
+      ControllerBenchCommand.heartbeat,
+      ControllerBenchCommand.servoTest,
+      ControllerBenchCommand.dispenseTest,
+      ControllerBenchCommand.pirStatus,
+      ControllerBenchCommand.ledTest,
+    ];
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Bench commands',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Movement tests create controller history only. They never mark a dose taken or change inventory.',
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final command in commands)
+                  OutlinedButton(
+                    onPressed: () => runCommand(command),
+                    child: Text(_commandLabel(command)),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ControllerHistoryCard extends StatelessWidget {
+  const _ControllerHistoryCard({required this.history});
+
+  final List<ControllerCommandHistoryEntry> history;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                'Command history',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+            if (history.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                child: Text('No command sessions yet.'),
+              )
+            else
+              for (final entry in history)
+                ExpansionTile(
+                  title: Text(_commandTypeLabel(entry.session.commandType)),
+                  subtitle: Text(_sessionStateLabel(entry.session)),
+                  children: [
+                    for (final event in entry.events)
+                      ListTile(
+                        dense: true,
+                        title: Text(_eventLabel(event.eventType)),
+                        subtitle: event.details == null
+                            ? null
+                            : Text(event.details!),
+                      ),
+                  ],
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+String _commandLabel(ControllerBenchCommand command) => switch (command) {
+  ControllerBenchCommand.status => 'STATUS',
+  ControllerBenchCommand.heartbeat => 'HEARTBEAT',
+  ControllerBenchCommand.servoTest => 'SERVO_TEST',
+  ControllerBenchCommand.dispenseTest => 'DISPENSE_TEST',
+  ControllerBenchCommand.pirStatus => 'PIR_STATUS',
+  ControllerBenchCommand.ledTest => 'LED_TEST',
+};
+
+String _commandTypeLabel(ControllerCommandType command) => switch (command) {
+  ControllerCommandType.dispenseNext => 'DISPENSE_NEXT',
+  ControllerCommandType.dispenseTest => 'DISPENSE_TEST',
+  ControllerCommandType.servoTest => 'SERVO_TEST',
+  ControllerCommandType.heartbeat => 'HEARTBEAT',
+  ControllerCommandType.status => 'STATUS',
+  ControllerCommandType.pirStatus => 'PIR_STATUS',
+  ControllerCommandType.ledTest => 'LED_TEST',
+};
+
+String _sessionStateLabel(ControllerCommandSession session) {
+  final failure = session.failureReason;
+  return failure == null
+      ? session.state.name
+      : '${session.state.name}: ${failure.name}';
+}
+
+String _eventLabel(ControllerCommandEventType event) => switch (event) {
+  ControllerCommandEventType.commandSent => 'COMMAND SENT',
+  ControllerCommandEventType.ack => 'ACK',
+  ControllerCommandEventType.nack => 'NACK',
+  ControllerCommandEventType.moveStarted => 'MOVEMENT STARTED',
+  ControllerCommandEventType.servoDone => 'SERVO DONE',
+  ControllerCommandEventType.controllerError => 'CONTROLLER ERROR',
+  ControllerCommandEventType.heartbeatOk => 'HEARTBEAT OK',
+  ControllerCommandEventType.heartbeatMissed => 'HEARTBEAT MISSED',
+  ControllerCommandEventType.offline => 'OFFLINE',
+  ControllerCommandEventType.reconnected => 'RECONNECTED',
+};
 
 class _ControllerCommandStatusCard extends StatelessWidget {
   const _ControllerCommandStatusCard({required this.session});
@@ -451,6 +777,14 @@ class _ControllerCommandStatusViewData {
               headline: 'The last controller command reported a jam.',
               detail: 'Check the dispenser before trying again.',
               icon: Icons.error_outline,
+              color: Colors.red,
+            ),
+          ControllerCommandFailureReason.timeout =>
+            const _ControllerCommandStatusViewData(
+              label: 'Timed out',
+              headline: 'The last controller command timed out.',
+              detail: 'Check the command history before trying again.',
+              icon: Icons.timer_off_outlined,
               color: Colors.red,
             ),
           ControllerCommandFailureReason.disconnect ||

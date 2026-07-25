@@ -23,56 +23,60 @@ class TodayScreen extends StatelessWidget {
     final dependencies = DoseyAppScope.of(context);
     final reminders = dependencies.reminders;
 
-    return StreamBuilder<List<Prescription>>(
-      stream: dependencies.prescriptions.watchPrescriptions(),
-      builder: (context, prescriptionSnapshot) {
-        final prescriptionsById = <String, Prescription>{
-          for (final prescription
-              in prescriptionSnapshot.data ?? const <Prescription>[])
-            prescription.id: prescription,
-        };
+    return StreamBuilder<DateTime>(
+      stream: dependencies.appClock.ticks,
+      initialData: dependencies.appClock.now(),
+      builder: (context, _) => StreamBuilder<List<Prescription>>(
+        stream: dependencies.prescriptions.watchPrescriptions(),
+        builder: (context, prescriptionSnapshot) {
+          final prescriptionsById = <String, Prescription>{
+            for (final prescription
+                in prescriptionSnapshot.data ?? const <Prescription>[])
+              prescription.id: prescription,
+          };
 
-        return StreamBuilder<ScheduleProfile?>(
-          stream: dependencies.scheduleProfiles.watchActiveProfile(),
-          builder: (context, profileSnapshot) {
-            return StreamBuilder<List<ReminderSchedule>>(
-              stream: watchActiveProfileSchedules(
-                reminders,
-                profileSnapshot.data,
-              ),
-              builder: (context, reminderSnapshot) {
-                final schedules =
-                    reminderSnapshot.data ?? const <ReminderSchedule>[];
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _TodayDoseContent(
-                        schedules: schedules,
-                        prescriptionsById: prescriptionsById,
-                      ),
-                      const SizedBox(height: 12),
-                      const _SafetyCard(),
-                      const SizedBox(height: 12),
-                      StreamBuilder<List<DoseLogEvent>>(
-                        stream: dependencies.doseLog.watchEvents(),
-                        builder: (context, logSnapshot) =>
-                            _ScheduleTimelineCard(
-                              schedules: schedules,
-                              events:
-                                  logSnapshot.data ?? const <DoseLogEvent>[],
-                              prescriptionsById: prescriptionsById,
-                            ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            );
-          },
-        );
-      },
+          return StreamBuilder<ScheduleProfile?>(
+            stream: dependencies.scheduleProfiles.watchActiveProfile(),
+            builder: (context, profileSnapshot) {
+              return StreamBuilder<List<ReminderSchedule>>(
+                stream: watchActiveProfileSchedules(
+                  reminders,
+                  profileSnapshot.data,
+                ),
+                builder: (context, reminderSnapshot) {
+                  final schedules =
+                      reminderSnapshot.data ?? const <ReminderSchedule>[];
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _TodayDoseContent(
+                          schedules: schedules,
+                          prescriptionsById: prescriptionsById,
+                        ),
+                        const SizedBox(height: 12),
+                        const _SafetyCard(),
+                        const SizedBox(height: 12),
+                        StreamBuilder<List<DoseLogEvent>>(
+                          stream: dependencies.doseLog.watchEvents(),
+                          builder: (context, logSnapshot) =>
+                              _ScheduleTimelineCard(
+                                schedules: schedules,
+                                events:
+                                    logSnapshot.data ?? const <DoseLogEvent>[],
+                                prescriptionsById: prescriptionsById,
+                              ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -105,16 +109,15 @@ class _TodayDoseContent extends StatelessWidget {
       stream: DoseyAppScope.of(context).doseLog.watchEvents(),
       builder: (context, logSnapshot) {
         final events = logSnapshot.data ?? const <DoseLogEvent>[];
+        final now = DoseyAppScope.of(context).appClock.now();
         final currentSchedule = TodayNextDoseHelper.currentSchedule(
           schedules,
           events,
+          now: now,
         );
         final currentDoseId = currentSchedule == null
             ? null
-            : TodayNextDoseHelper.doseIdForDate(
-                currentSchedule.id,
-                DateTime.now(),
-              );
+            : TodayNextDoseHelper.doseIdForDate(currentSchedule.id, now);
 
         final dependencies = DoseyAppScope.of(context);
 
@@ -139,6 +142,7 @@ class _TodayDoseContent extends StatelessWidget {
                         activeLoadSnapshot.data,
                         currentSchedule,
                         currentDoseId,
+                        now,
                       );
                 final latestEvent = currentDoseId == null
                     ? null
@@ -176,7 +180,9 @@ class _TodayDoseContent extends StatelessWidget {
                                 context,
                                 DoseLogEvent.doseTakenConfirmed(
                                   doseId: currentDoseId,
-                                  occurredAt: DateTime.now().toUtc(),
+                                  occurredAt: DoseyAppScope.of(
+                                    context,
+                                  ).appClock.now().toUtc(),
                                 ),
                                 'Dose confirmation logged.',
                                 retireLoadedSlot: loadedSlot,
@@ -227,6 +233,7 @@ class _CurrentDoseSection extends StatefulWidget {
     CarouselLoadSession? activeLoad,
     ReminderSchedule schedule,
     String? doseId,
+    DateTime fallbackTimestamp,
   ) {
     if (activeLoad != null && doseId != null) {
       final matchingGuidedSlots = activeLoad.slots.where(
@@ -247,7 +254,7 @@ class _CurrentDoseSection extends StatefulWidget {
         if (matchingLegacySlot.isNotEmpty) {
           return matchingLegacySlot.first;
         }
-        final timestamp = guidedSlot.updatedAt ?? DateTime.now().toUtc();
+        final timestamp = guidedSlot.updatedAt ?? fallbackTimestamp;
         return CarouselSlot(
           id: 'guided:${activeLoad.id}:${guidedSlot.slotNumber}',
           slotNumber: guidedSlot.slotNumber,
@@ -351,6 +358,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     }
 
     final dependencies = DoseyAppScope.of(context);
+    final now = dependencies.appClock.now;
     return StreamBuilder<AppDeviceRole>(
       stream: dependencies.settings.watchDeviceRole(),
       builder: (context, roleSnapshot) {
@@ -383,7 +391,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   context,
                   DoseLogEvent.doseSnoozed(
                     doseId: currentDoseId,
-                    occurredAt: DateTime.now().toUtc(),
+                    occurredAt: now().toUtc(),
                   ),
                   'Snooze logged locally; reminder timing is unchanged.',
                 ),
@@ -393,7 +401,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   context,
                   DoseLogEvent.doseTakenConfirmed(
                     doseId: currentDoseId,
-                    occurredAt: DateTime.now().toUtc(),
+                    occurredAt: now().toUtc(),
                   ),
                   'Dose marked taken.',
                   retireLoadedSlot: loadedSlot,
@@ -406,7 +414,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   context,
                   DoseLogEvent.doseAlreadyTaken(
                     doseId: currentDoseId,
-                    occurredAt: DateTime.now().toUtc(),
+                    occurredAt: now().toUtc(),
                   ),
                   'Already-taken dose logged.',
                   retireLoadedSlot: loadedSlot,
@@ -419,7 +427,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   context,
                   DoseLogEvent.doseTakenEarly(
                     doseId: currentDoseId,
-                    occurredAt: DateTime.now().toUtc(),
+                    occurredAt: now().toUtc(),
                   ),
                   'Early dose logged.',
                   retireLoadedSlot: loadedSlot,
@@ -432,7 +440,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   context,
                   DoseLogEvent.doseTakenLate(
                     doseId: currentDoseId,
-                    occurredAt: DateTime.now().toUtc(),
+                    occurredAt: now().toUtc(),
                   ),
                   'Late dose logged.',
                   retireLoadedSlot: loadedSlot,
@@ -446,7 +454,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                         context,
                         DoseLogEvent.doseVisibleConfirmed(
                           doseId: currentDoseId,
-                          occurredAt: DateTime.now().toUtc(),
+                          occurredAt: now().toUtc(),
                         ),
                         'Visible dose logged. Confirm taken only after the dose is taken.',
                       ),
@@ -457,7 +465,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   context,
                   DoseLogEvent.caregiverHelpRequested(
                     doseId: currentDoseId,
-                    occurredAt: DateTime.now().toUtc(),
+                    occurredAt: now().toUtc(),
                   ),
                   'Caregiver request noted locally. Contact your caregiver, pharmacist, or doctor if you are unsure what to do.',
                 ),
@@ -467,7 +475,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   context,
                   DoseLogEvent.doseSkipped(
                     doseId: currentDoseId,
-                    occurredAt: DateTime.now().toUtc(),
+                    occurredAt: now().toUtc(),
                   ),
                   'Dose skipped.',
                   retireLoadedSlot: loadedSlot,
@@ -479,7 +487,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
                   context,
                   DoseLogEvent.doseMissed(
                     doseId: currentDoseId,
-                    occurredAt: DateTime.now().toUtc(),
+                    occurredAt: now().toUtc(),
                   ),
                   'This dose was missed. Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
                   retireLoadedSlot: loadedSlot,
@@ -1056,7 +1064,11 @@ class _ScheduleTimelineCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final timelineRows = _timelineRows(schedules, events).take(4).toList();
+    final timelineRows = _timelineRows(
+      schedules,
+      events,
+      DoseyAppScope.of(context).appClock.now(),
+    ).take(4).toList();
 
     return Card(
       child: Padding(
@@ -1109,13 +1121,11 @@ class _ScheduleTimelineCard extends StatelessWidget {
   _timelineRows(
     Iterable<ReminderSchedule> schedules,
     List<DoseLogEvent> events,
+    DateTime now,
   ) sync* {
     var foundFirstEnabled = false;
     for (final schedule in schedules) {
-      final doseId = TodayNextDoseHelper.doseIdForDate(
-        schedule.id,
-        DateTime.now(),
-      );
+      final doseId = TodayNextDoseHelper.doseIdForDate(schedule.id, now);
       if (TodayNextDoseHelper.hasTerminalEventForDose(events, doseId)) {
         continue;
       }

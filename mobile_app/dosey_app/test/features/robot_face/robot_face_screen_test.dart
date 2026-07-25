@@ -22,6 +22,7 @@ import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
@@ -925,6 +926,100 @@ void main() {
     expect(find.text('Taken logged.'), findsOneWidget);
   });
 
+  for (final testCase
+      in <
+        ({
+          String label,
+          Key buttonKey,
+          RobotFaceState state,
+          DoseLogEventKind expectedKind,
+        })
+      >[
+        (
+          label: 'confirm taken',
+          buttonKey: RobotFaceScreen.confirmTakenButtonKey,
+          state: const RobotFaceState(
+            mode: RobotFaceMode.waitingForConfirmation,
+            nextEventLabel: 'Taken? · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            actionDoseId: 'demo-dose',
+            availableActions: {RobotFaceActionKind.confirmTaken},
+          ),
+          expectedKind: DoseLogEventKind.doseTakenConfirmed,
+        ),
+        (
+          label: 'skip',
+          buttonKey: RobotFaceScreen.skipDoseButtonKey,
+          state: const RobotFaceState(
+            mode: RobotFaceMode.waitingForConfirmation,
+            nextEventLabel: 'Taken? · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            actionDoseId: 'demo-dose',
+            availableActions: {RobotFaceActionKind.skipDose},
+          ),
+          expectedKind: DoseLogEventKind.doseSkipped,
+        ),
+        (
+          label: 'help request',
+          buttonKey: RobotFaceScreen.needHelpButtonKey,
+          state: const RobotFaceState(
+            mode: RobotFaceMode.waitingForConfirmation,
+            nextEventLabel: 'Taken? · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            actionDoseId: 'demo-dose',
+            availableActions: {RobotFaceActionKind.askForHelp},
+          ),
+          expectedKind: DoseLogEventKind.caregiverHelpRequested,
+        ),
+        (
+          label: 'missed recognition',
+          buttonKey: RobotFaceScreen.recognizeMissedDoseButtonKey,
+          state: const RobotFaceState(
+            mode: RobotFaceMode.missed,
+            nextEventLabel: '8:30 AM · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            actionDoseId: 'demo-dose',
+            availableActions: {RobotFaceActionKind.recognizeMissedDose},
+          ),
+          expectedKind: DoseLogEventKind.doseMissedRecognized,
+        ),
+      ]) {
+    testWidgets('${testCase.label} uses the scoped app clock', (tester) async {
+      final clock = _RawAppClock(DateTime(2040, 1, 2, 8, 45));
+      final doseActionLogger = _FakeRobotFaceDoseActionLogger();
+
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          appClock: clock,
+          doseActionLogger: doseActionLogger.call,
+          initialState: testCase.state,
+        ),
+      );
+      await tester.pump();
+
+      clock.value = DateTime(2040, 1, 2, 8, 55);
+      await tester.tap(find.byKey(testCase.buttonKey));
+      await tester.pump();
+
+      expect(doseActionLogger.events, hasLength(1));
+      expect(doseActionLogger.events.single.kind, testCase.expectedKind);
+      expect(doseActionLogger.events.single.occurredAt, clock.now().toUtc());
+      expect(doseActionLogger.events.single.occurredAt.isUtc, isTrue);
+    });
+  }
+
   testWidgets('action PIN blocks Robot Face confirm taken until accepted', (
     WidgetTester tester,
   ) async {
@@ -1403,6 +1498,18 @@ void main() {
   });
 }
 
+class _RawAppClock implements AppClock {
+  _RawAppClock(this.value);
+
+  DateTime value;
+
+  @override
+  DateTime now() => value;
+
+  @override
+  Stream<DateTime> get ticks => const Stream<DateTime>.empty();
+}
+
 class _RobotFaceTestApp extends StatefulWidget {
   const _RobotFaceTestApp({
     super.key,
@@ -1412,6 +1519,7 @@ class _RobotFaceTestApp extends StatefulWidget {
     this.initialState,
     this.isActive = true,
     this.doseActionLogger,
+    this.appClock,
   });
 
   final DoseyDatabase? database;
@@ -1420,6 +1528,7 @@ class _RobotFaceTestApp extends StatefulWidget {
   final RobotFaceState? initialState;
   final bool isActive;
   final RobotFaceDoseActionLogger? doseActionLogger;
+  final AppClock? appClock;
 
   @override
   State<_RobotFaceTestApp> createState() => _RobotFaceTestAppState();
@@ -1441,6 +1550,7 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
   Widget build(BuildContext context) {
     return DoseyAppScope(
       database: _database,
+      appClock: widget.appClock,
       bleGateway: _FakeBleGateway(),
       connectivityGateway: _FakeConnectivityGateway(),
       permissionGateway: _FakePermissionGateway(),
@@ -1703,6 +1813,13 @@ class _UnusedControllerCommandRepository
   @override
   Stream<ControllerCommandSession?> watchLatestRelevantSession() {
     return const Stream<ControllerCommandSession?>.empty();
+  }
+
+  @override
+  Stream<List<ControllerCommandHistoryEntry>> watchRecentHistory({
+    int limit = 12,
+  }) {
+    return const Stream<List<ControllerCommandHistoryEntry>>.empty();
   }
 
   @override

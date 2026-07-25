@@ -440,12 +440,9 @@ class RobotFaceController {
           return RobotFaceMode.error;
       }
     }
-    final scheduledTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      nextSchedule.hour,
-      nextSchedule.minute,
+    final scheduledTime = TodayNextDoseHelper.scheduledTimeForDate(
+      nextSchedule,
+      now,
     );
     if (!scheduledTime.isAfter(now)) {
       return RobotFaceMode.doseReady;
@@ -528,7 +525,9 @@ class RobotFaceController {
   _RobotFaceDisplayDose? _activeMissedAlertDose(DateTime now) {
     _RobotFaceDisplayDose? activeDose;
     DateTime? activeScheduledTime;
-    final today = DateTime(now.year, now.month, now.day);
+    final today = now.isUtc
+        ? DateTime.utc(now.year, now.month, now.day)
+        : DateTime(now.year, now.month, now.day);
     final candidateDates = <DateTime>[
       today.subtract(const Duration(days: 1)),
       today,
@@ -540,12 +539,9 @@ class RobotFaceController {
       }
 
       for (final doseDate in candidateDates) {
-        final scheduledTime = DateTime(
-          doseDate.year,
-          doseDate.month,
-          doseDate.day,
-          schedule.hour,
-          schedule.minute,
+        final scheduledTime = TodayNextDoseHelper.scheduledTimeForDate(
+          schedule,
+          doseDate,
         );
         if (scheduledTime.isAfter(now)) {
           continue;
@@ -605,12 +601,9 @@ class RobotFaceController {
         continue;
       }
 
-      final scheduledTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        schedule.hour,
-        schedule.minute,
+      final scheduledTime = TodayNextDoseHelper.scheduledTimeForDate(
+        schedule,
+        now,
       );
 
       if (scheduledTime.isAfter(now)) {
@@ -664,12 +657,9 @@ class RobotFaceController {
       );
     }
 
-    final scheduledTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      schedule.hour,
-      schedule.minute,
+    final scheduledTime = TodayNextDoseHelper.scheduledTimeForDate(
+      schedule,
+      now,
     );
     final wakeBeforeWindow = _wakeBeforeWindow;
     final stayAwakeWindow = Duration(

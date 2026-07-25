@@ -15,10 +15,14 @@ import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_plus_gateway.dart';
 import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_bench_service.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
+import 'package:dosey_app/core/demo/demo_data_repository.dart';
+import 'package:dosey_app/core/demo/demo_external_services.dart';
+import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/household/local_household_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -37,9 +41,11 @@ import 'package:dosey_app/core/settings/action_pin_gate.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
+import 'package:dosey_app/features/doses/dose_action_service.dart';
 import 'package:flutter/widgets.dart';
 
 class DoseyAppScope extends StatefulWidget {
@@ -56,6 +62,8 @@ class DoseyAppScope extends StatefulWidget {
     this.voicePlayer,
     this.screenAwakeGateway,
     this.backupFileGateway,
+    this.appClock,
+    this.controllerGateway,
   });
 
   final Widget child;
@@ -69,6 +77,8 @@ class DoseyAppScope extends StatefulWidget {
   final DoseyVoicePlayer? voicePlayer;
   final ScreenAwakeGateway? screenAwakeGateway;
   final BackupFileGateway? backupFileGateway;
+  final AppClock? appClock;
+  final SimulatedControllerGateway? controllerGateway;
 
   static DoseyAppDependencies of(BuildContext context) {
     final dependencies = maybeOf(context);
@@ -91,13 +101,14 @@ class DoseyAppScope extends StatefulWidget {
 
 class _DoseyAppScopeState extends State<DoseyAppScope> {
   static const _missedDoseReconciliationInterval = Duration(minutes: 15);
+  static final _demoSeedTime = DateTime.utc(2040, 1, 2, 8);
 
   late final DoseyDatabase _database;
   late final bool _ownsDatabase;
   late final bool _ownsNotificationTapController;
-  late final StreamController<DateTime> _robotFaceClockController;
-  late final Timer _robotFaceClockTimer;
-  late final Timer _missedDoseReconciliationTimer;
+  late final AppClock _appClock;
+  late final bool _ownsAppClock;
+  Timer? _missedDoseReconciliationTimer;
   late final MissedDoseReconciliationService _missedDoseReconciliation;
   late final DoseyAppDependencies _dependencies;
 
@@ -106,14 +117,17 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     super.initState();
     _database = widget.database ?? DoseyDatabase();
     _ownsDatabase = widget.database == null;
-    _robotFaceClockController = StreamController<DateTime>.broadcast();
-    // Robot Face only needs coarse time ticks for reminder ramp/sleep state;
-    // user actions and dose logs still update it immediately through streams.
-    _robotFaceClockTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (!_robotFaceClockController.isClosed) {
-        _robotFaceClockController.add(DateTime.now());
-      }
-    });
+    if (_database.isDemo &&
+        widget.appClock != null &&
+        widget.appClock is! ControllableAppClock) {
+      throw ArgumentError('Demo mode requires a controllable app clock.');
+    }
+    _appClock =
+        widget.appClock ??
+        (_database.isDemo
+            ? ControllableAppClock(_demoSeedTime)
+            : SystemAppClock());
+    _ownsAppClock = widget.appClock == null;
     final doseLog = DriftDoseLogRepository(_database);
     final adminAudit = LocalAdminAuditRepository(_database);
     final localAuth = LocalAuthRepository(_database);
@@ -122,11 +136,12 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     final notificationTaps =
         widget.notificationTapController ?? ReminderNotificationTapController();
     _ownsNotificationTapController = widget.notificationTapController == null;
-    final reminderScheduler =
-        widget.reminderScheduler ??
-        FlutterLocalNotificationScheduler(
-          notificationTapHandler: notificationTaps.handleTap,
-        );
+    final reminderScheduler = _database.isDemo
+        ? const DemoReminderScheduler()
+        : widget.reminderScheduler ??
+              FlutterLocalNotificationScheduler(
+                notificationTapHandler: notificationTaps.handleTap,
+              );
     final reminderSchedules = ReminderScheduleService(
       repository: reminders,
       scheduler: reminderScheduler,
@@ -142,33 +157,48 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     final backups = LocalBackupService(
       database: _database,
       store: LocalBackupStore(_database),
-      gateway: widget.backupFileGateway ?? const PluginBackupFileGateway(),
+      gateway: _database.isDemo
+          ? const DemoBackupFileGateway()
+          : widget.backupFileGateway ?? const PluginBackupFileGateway(),
       syncNotifications: reminderSchedules.syncScheduledNotifications,
     );
     final robotFaceSettings = RobotFaceSettingsRepository(_database);
     final scheduleProfiles = LocalScheduleProfileRepository(_database);
+    final prescriptions = LocalPrescriptionRepository(_database);
     final carouselSlots = LocalCarouselSlotRepository(_database);
     final guidedCarouselLoads = LocalGuidedCarouselLoadRepository(
       _database,
       urgentShortageNotifier: urgentShortageNotifier,
     );
-    final controller = SimulatedControllerGateway(
-      canHostRobot: () async {
-        final platform = currentAppDevicePlatform();
-        final storedRole = await settings.getDeviceRole();
-        final role = storedRole.isAllowedOn(platform)
-            ? storedRole
-            : AppDeviceRole.defaultFor(platform);
-        return role.canHostRobot;
-      },
+    final demoStageGate = _database.isDemo ? DemoStageGate() : null;
+    final demoIdGenerator = _database.isDemo
+        ? DemoCommandSessionIdGenerator()
+        : null;
+    final controller =
+        widget.controllerGateway ??
+        SimulatedControllerGateway(
+          canHostRobot: () async {
+            final platform = currentAppDevicePlatform();
+            final storedRole = await settings.getDeviceRole();
+            final role = storedRole.isAllowedOn(platform)
+                ? storedRole
+                : AppDeviceRole.defaultFor(platform);
+            return role.canHostRobot;
+          },
+          delay: demoStageGate?.wait,
+        );
+    final commandRepository = LocalControllerCommandRepository(
+      _database,
+      sessionIdGenerator: demoIdGenerator?.call,
     );
     final controllerLifecycle = ControllerLifecycleService(
       controller: controller,
-      commandRepository: LocalControllerCommandRepository(_database),
+      commandRepository: commandRepository,
       doseLog: doseLog,
       carouselSlots: carouselSlots,
       guidedCarouselLoads: guidedCarouselLoads,
       database: _database,
+      now: _appClock.now,
     );
     _missedDoseReconciliation =
         widget.missedDoseReconciliationService ??
@@ -177,16 +207,57 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
           doseLog: doseLog,
           carouselSlots: carouselSlots,
           database: _database,
+          now: _appClock.now,
         );
-    _missedDoseReconciliationTimer = Timer.periodic(
-      _missedDoseReconciliationInterval,
-      (_) => unawaited(_runMissedDoseReconciliation()),
+    if (!_database.isDemo) {
+      _missedDoseReconciliationTimer = Timer.periodic(
+        _missedDoseReconciliationInterval,
+        (_) => unawaited(_runMissedDoseReconciliation()),
+      );
+    }
+    final controllerBench = ControllerBenchService(
+      controller: controller,
+      lifecycle: controllerLifecycle,
+      commandRepository: commandRepository,
+      now: _appClock.now,
     );
+    final doseActions = DoseActionService(
+      database: _database,
+      carouselSlots: carouselSlots,
+      guidedCarouselLoads: guidedCarouselLoads,
+      prescriptions: prescriptions,
+      doseLog: doseLog,
+    );
+    final demoScenarios = _database.isDemo
+        ? DemoScenarioService(
+            data: DemoDataRepository(
+              _database,
+              seedTime: _appClock.now(),
+              deviceRole:
+                  currentAppDevicePlatform() == AppDevicePlatform.android
+                  ? AppDeviceRole.androidRobot
+                  : AppDeviceRole.iosPersonal,
+            ),
+            database: _database,
+            clock: _appClock as ControllableAppClock,
+            controller: controller,
+            stageGate: demoStageGate!,
+            idGenerator: demoIdGenerator!,
+            lifecycle: controllerLifecycle,
+            bench: controllerBench,
+            commandRepository: commandRepository,
+            doseActions: doseActions,
+            reconciliation: _missedDoseReconciliation,
+          )
+        : null;
     _dependencies = DoseyAppDependencies(
       database: _database,
+      isDemo: _database.isDemo,
+      appClock: _appClock,
       settings: settings,
       actionPinGate: actionPinGate,
-      prescriptions: LocalPrescriptionRepository(_database),
+      prescriptions: prescriptions,
+      doseActions: doseActions,
       scheduleProfiles: scheduleProfiles,
       reminders: reminders,
       reminderSchedules: reminderSchedules,
@@ -200,6 +271,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       auth: AppAuthService(localAuth: localAuth),
       controller: controller,
       controllerLifecycle: controllerLifecycle,
+      controllerCommands: commandRepository,
+      controllerBench: controllerBench,
+      demoScenarios: demoScenarios,
       robotFaceSettings: robotFaceSettings,
       robotFaceController: RobotFaceController(
         settings: settings,
@@ -211,21 +285,48 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         doseLog: doseLog,
         carouselSlots: carouselSlots,
         shortageAlerts: guidedCarouselLoads.watchAllActiveShortageAlerts(),
-        clock: _robotFaceClockController.stream,
+        clock: _appClock.ticks,
+        now: _appClock.now,
       ),
-      ble: widget.bleGateway ?? FlutterBluePlusBleGateway(),
-      connectivity: widget.connectivityGateway ?? ConnectivityPlusGateway(),
+      ble: _database.isDemo
+          ? const DemoBleGateway()
+          : widget.bleGateway ?? FlutterBluePlusBleGateway(),
+      connectivity: _database.isDemo
+          ? const DemoConnectivityGateway()
+          : widget.connectivityGateway ?? ConnectivityPlusGateway(),
       reminderScheduler: reminderScheduler,
       voicePlayer:
           widget.voicePlayer ??
           DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway()),
       notificationTaps: notificationTaps,
-      permissions: widget.permissionGateway ?? PermissionHandlerGateway(),
+      permissions: _database.isDemo
+          ? const DemoPermissionGateway()
+          : widget.permissionGateway ?? PermissionHandlerGateway(),
+      // Keeping a mounted display awake is reversible device behavior, unlike
+      // the network, notification, and backup effects disabled in demo mode.
       screenAwake:
           widget.screenAwakeGateway ?? const MethodChannelScreenAwakeGateway(),
       runMissedDoseReconciliation: _runMissedDoseReconciliation,
     );
-    unawaited(_runStartupMaintenance());
+    if (_database.isDemo) {
+      unawaited(_connectDemoController());
+    } else {
+      unawaited(_runStartupMaintenance());
+    }
+  }
+
+  Future<void> _connectDemoController() async {
+    try {
+      await _dependencies.controller.connect();
+    } on Object catch (error, stackTrace) {
+      developer.log(
+        'Demo controller connection failed; continuing app startup.',
+        name: 'dosey.app_scope',
+        level: 1000,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
   }
 
   Future<void> _runStartupMaintenance() async {
@@ -263,10 +364,16 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
 
   @override
   void dispose() {
-    _robotFaceClockTimer.cancel();
-    _missedDoseReconciliationTimer.cancel();
-    unawaited(_robotFaceClockController.close());
+    _missedDoseReconciliationTimer?.cancel();
+    if (_ownsAppClock) {
+      if (_appClock case final SystemAppClock clock) {
+        unawaited(clock.close());
+      } else if (_appClock case final ControllableAppClock clock) {
+        unawaited(clock.close());
+      }
+    }
     unawaited(_dependencies.controller.close());
+    unawaited(_dependencies.demoScenarios?.close());
     unawaited(_dependencies.robotFaceController.close());
     unawaited(_dependencies.ble.close());
     unawaited(_dependencies.voicePlayer.dispose());
@@ -291,9 +398,12 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
 class DoseyAppDependencies {
   const DoseyAppDependencies({
     required this.database,
+    required this.isDemo,
+    required this.appClock,
     required this.settings,
     required this.actionPinGate,
     required this.prescriptions,
+    required this.doseActions,
     required this.scheduleProfiles,
     required this.reminders,
     required this.reminderSchedules,
@@ -307,6 +417,9 @@ class DoseyAppDependencies {
     required this.auth,
     required this.controller,
     required this.controllerLifecycle,
+    required this.controllerCommands,
+    required this.controllerBench,
+    required this.demoScenarios,
     required this.robotFaceSettings,
     required this.robotFaceController,
     required this.ble,
@@ -320,9 +433,12 @@ class DoseyAppDependencies {
   });
 
   final DoseyDatabase database;
+  final bool isDemo;
+  final AppClock appClock;
   final LocalAppSettingsRepository settings;
   final ActionPinGate actionPinGate;
   final LocalPrescriptionRepository prescriptions;
+  final DoseActionService doseActions;
   final LocalScheduleProfileRepository scheduleProfiles;
   final LocalReminderRepository reminders;
   final ReminderScheduleService reminderSchedules;
@@ -336,6 +452,9 @@ class DoseyAppDependencies {
   final AuthService auth;
   final ControllerGateway controller;
   final ControllerLifecycleService controllerLifecycle;
+  final ControllerCommandRepository controllerCommands;
+  final ControllerBenchService controllerBench;
+  final DemoScenarioService? demoScenarios;
   final RobotFaceSettingsRepository robotFaceSettings;
   final RobotFaceController robotFaceController;
   final BleGateway ble;

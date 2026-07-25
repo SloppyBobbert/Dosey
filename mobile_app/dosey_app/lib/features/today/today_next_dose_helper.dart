@@ -44,13 +44,7 @@ class TodayNextDoseHelper {
       if (!schedule.isEnabled) {
         continue;
       }
-      final scheduledTime = DateTime(
-        referenceTime.year,
-        referenceTime.month,
-        referenceTime.day,
-        schedule.hour,
-        schedule.minute,
-      );
+      final scheduledTime = scheduledTimeForDate(schedule, referenceTime);
       if (scheduledTime.isAfter(referenceTime)) {
         continue;
       }
@@ -112,5 +106,26 @@ class TodayNextDoseHelper {
     final month = now.month.toString().padLeft(2, '0');
     final day = now.day.toString().padLeft(2, '0');
     return '$scheduleId:${now.year}-$month-$day';
+  }
+
+  static DateTime scheduledTimeForDate(
+    ReminderSchedule schedule,
+    DateTime date,
+  ) {
+    return date.isUtc
+        ? DateTime.utc(
+            date.year,
+            date.month,
+            date.day,
+            schedule.hour,
+            schedule.minute,
+          )
+        : DateTime(
+            date.year,
+            date.month,
+            date.day,
+            schedule.hour,
+            schedule.minute,
+          );
   }
 }

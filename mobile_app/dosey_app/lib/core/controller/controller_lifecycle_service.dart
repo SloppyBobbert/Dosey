@@ -46,6 +46,13 @@ class ControllerLifecycleService {
     );
   }
 
+  Future<void> requestManualServoTest() {
+    return _runDispense(
+      commandType: ControllerCommandType.servoTest,
+      doseId: manualTestDoseId,
+    );
+  }
+
   Future<void> requestDoseDispense({
     required String doseId,
     String? slotId,
@@ -116,22 +123,59 @@ class ControllerLifecycleService {
       );
 
       try {
-        await _controller.requestDispense(doseId: doseId);
-        // In the simulator phase, request completion means movement finished.
-        // A real BLE transport should split send, ACK, and servo-done events.
+        var movementStarted = false;
+        Future<void> recordStage(ControllerDispenseStage stage) async {
+          final occurredAt = _current();
+          switch (stage) {
+            case ControllerDispenseStage.accepted:
+              if (acceptedAt != null) {
+                return;
+              }
+              acceptedAt = occurredAt;
+              await _commandRepository.appendEvent(
+                session.id,
+                ControllerCommandEventType.ack,
+                occurredAt: occurredAt,
+              );
+              await _commandRepository.updateSessionState(
+                session.id,
+                ControllerCommandSessionState.accepted,
+                acceptedAt: occurredAt,
+                updatedAt: occurredAt,
+              );
+            case ControllerDispenseStage.movementStarted:
+              if (movementStarted) {
+                return;
+              }
+              if (acceptedAt == null) {
+                await recordStage(ControllerDispenseStage.accepted);
+              }
+              movementStarted = true;
+              await _commandRepository.appendEvent(
+                session.id,
+                ControllerCommandEventType.moveStarted,
+                occurredAt: occurredAt,
+              );
+              await _commandRepository.updateSessionState(
+                session.id,
+                ControllerCommandSessionState.accepted,
+                acceptedAt: acceptedAt,
+                updatedAt: occurredAt,
+              );
+          }
+        }
+
+        if (_controller case final StagedControllerGateway stagedController) {
+          await stagedController.requestStagedDispense(
+            doseId: doseId,
+            onStage: recordStage,
+          );
+        } else {
+          await _controller.requestDispense(doseId: doseId);
+          await recordStage(ControllerDispenseStage.accepted);
+          await recordStage(ControllerDispenseStage.movementStarted);
+        }
         controllerMoved = true;
-        acceptedAt = _current();
-        await _commandRepository.appendEvent(
-          session.id,
-          ControllerCommandEventType.ack,
-          occurredAt: acceptedAt,
-        );
-        await _commandRepository.updateSessionState(
-          session.id,
-          ControllerCommandSessionState.accepted,
-          acceptedAt: acceptedAt,
-          updatedAt: acceptedAt,
-        );
 
         final resolvedAt = _current();
         await _commandRepository.appendEvent(
@@ -173,7 +217,24 @@ class ControllerLifecycleService {
         );
       } on Object catch (error) {
         final failedAt = _current();
-        if (error is ControllerCommandRejectedException) {
+        if (error is ControllerCommandPreAcceptanceTimeoutException) {
+          await _commandRepository.appendEvent(
+            session.id,
+            ControllerCommandEventType.controllerError,
+            occurredAt: failedAt,
+            details: error.toString(),
+          );
+          await _commandRepository.updateSessionState(
+            session.id,
+            ControllerCommandSessionState.timedOut,
+            failureReason: ControllerCommandFailureReason.timeout,
+            updatedAt: failedAt,
+          );
+          await _restoreReadyStateForFailedGuidedOrLegacySlot(
+            slotId: slotId,
+            guidedTarget: guidedTarget,
+          );
+        } else if (error is ControllerCommandRejectedException) {
           await _commandRepository.appendEvent(
             session.id,
             ControllerCommandEventType.nack,
@@ -245,6 +306,8 @@ class ControllerLifecycleService {
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.timedOut,
+            failureReason: ControllerCommandFailureReason.timeout,
+            acceptedAt: acceptedAt,
             updatedAt: failedAt,
           );
         } else if (error is ControllerCommandJamException) {
@@ -266,6 +329,7 @@ class ControllerLifecycleService {
             session.id,
             ControllerCommandSessionState.failed,
             failureReason: ControllerCommandFailureReason.jam,
+            acceptedAt: acceptedAt,
             updatedAt: failedAt,
           );
         } else if (error is ControllerCommandInterruptedException) {
@@ -287,6 +351,7 @@ class ControllerLifecycleService {
             session.id,
             ControllerCommandSessionState.interrupted,
             failureReason: ControllerCommandFailureReason.disconnect,
+            acceptedAt: acceptedAt,
             updatedAt: failedAt,
           );
         } else if (controllerMoved) {
@@ -328,6 +393,7 @@ class ControllerLifecycleService {
           await _commandRepository.updateSessionState(
             session.id,
             ControllerCommandSessionState.interrupted,
+            acceptedAt: acceptedAt,
             updatedAt: failedAt,
           );
         }

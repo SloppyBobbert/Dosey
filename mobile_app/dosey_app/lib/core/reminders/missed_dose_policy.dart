@@ -28,13 +28,21 @@ class MissedDosePolicy {
       return null;
     }
 
-    final scheduledAt = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      schedule.hour,
-      schedule.minute,
-    );
+    final scheduledAt = date.isUtc
+        ? DateTime.utc(
+            date.year,
+            date.month,
+            date.day,
+            schedule.hour,
+            schedule.minute,
+          )
+        : DateTime(
+            date.year,
+            date.month,
+            date.day,
+            schedule.hour,
+            schedule.minute,
+          );
     if (!_canProveScheduleExistedAt(schedule, scheduledAt)) {
       return null;
     }

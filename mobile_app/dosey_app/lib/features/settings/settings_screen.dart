@@ -1050,11 +1050,14 @@ class _BackupDatabaseCardState extends State<_BackupDatabaseCard> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _refreshRecoveryAvailability();
+    if (!DoseyAppScope.of(context).isDemo) {
+      _refreshRecoveryAvailability();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDemo = DoseyAppScope.of(context).isDemo;
     return _SettingsSectionCard(
       icon: Icons.storage_outlined,
       title: 'Backup and database',
@@ -1062,22 +1065,28 @@ class _BackupDatabaseCardState extends State<_BackupDatabaseCard> {
         const Text(
           'Backups are local JSON files. They contain sensitive medication, schedule, history, and profile data and are not encrypted.',
         ),
+        if (isDemo) ...[
+          const SizedBox(height: 8),
+          const Text(
+            'Backup and restore are unavailable while FAKE DATA is active.',
+          ),
+        ],
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             FilledButton.tonalIcon(
-              onPressed: _isBusy ? null : _exportBackup,
+              onPressed: _isBusy || isDemo ? null : _exportBackup,
               icon: const Icon(Icons.ios_share_outlined),
               label: const Text('Export backup'),
             ),
             FilledButton.tonalIcon(
-              onPressed: _isBusy ? null : _pickAndRestore,
+              onPressed: _isBusy || isDemo ? null : _pickAndRestore,
               icon: const Icon(Icons.restore_outlined),
               label: const Text('Restore backup'),
             ),
-            if (_hasRecovery)
+            if (_hasRecovery && !isDemo)
               OutlinedButton.icon(
                 onPressed: _isBusy ? null : _restoreRecovery,
                 icon: const Icon(Icons.history_outlined),
