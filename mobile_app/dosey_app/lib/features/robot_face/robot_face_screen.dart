@@ -1001,7 +1001,6 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
 
   List<Widget> _buildActionButtons(BuildContext context) {
     final buttons = <Widget>[];
-    final occurredAt = DoseyAppScope.of(context).appClock.now().toUtc();
 
     if (widget.state.availableActions.contains(
       RobotFaceActionKind.recognizeMissedDose,
@@ -1012,15 +1011,20 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           label: 'I saw this missed dose',
           isEnabled: _isActionEnabled(RobotFaceActionKind.recognizeMissedDose),
           isProminent: true,
-          onPressed: () => _logAction(
-            context,
-            actionKind: RobotFaceActionKind.recognizeMissedDose,
-            event: DoseLogEvent.doseMissedRecognized(
-              doseId: widget.state.actionDoseId!,
-              occurredAt: occurredAt,
-            ),
-            successMessage: 'Missed dose noted.',
-          ),
+          onPressed: () {
+            final occurredAt = DoseyAppScope.of(context).appClock.now().toUtc();
+            unawaited(
+              _logAction(
+                context,
+                actionKind: RobotFaceActionKind.recognizeMissedDose,
+                event: DoseLogEvent.doseMissedRecognized(
+                  doseId: widget.state.actionDoseId!,
+                  occurredAt: occurredAt,
+                ),
+                successMessage: 'Missed dose noted.',
+              ),
+            );
+          },
         ),
       );
     }
@@ -1033,15 +1037,20 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           key: RobotFaceScreen.confirmTakenButtonKey,
           label: 'Confirm taken',
           isEnabled: _isActionEnabled(RobotFaceActionKind.confirmTaken),
-          onPressed: () => _logAction(
-            context,
-            actionKind: RobotFaceActionKind.confirmTaken,
-            event: DoseLogEvent.doseTakenConfirmed(
-              doseId: widget.state.actionDoseId!,
-              occurredAt: occurredAt,
-            ),
-            successMessage: 'Taken logged.',
-          ),
+          onPressed: () {
+            final occurredAt = DoseyAppScope.of(context).appClock.now().toUtc();
+            unawaited(
+              _logAction(
+                context,
+                actionKind: RobotFaceActionKind.confirmTaken,
+                event: DoseLogEvent.doseTakenConfirmed(
+                  doseId: widget.state.actionDoseId!,
+                  occurredAt: occurredAt,
+                ),
+                successMessage: 'Taken logged.',
+              ),
+            );
+          },
         ),
       );
     }
@@ -1052,15 +1061,20 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           key: RobotFaceScreen.skipDoseButtonKey,
           label: 'Skip',
           isEnabled: _isActionEnabled(RobotFaceActionKind.skipDose),
-          onPressed: () => _logAction(
-            context,
-            actionKind: RobotFaceActionKind.skipDose,
-            event: DoseLogEvent.doseSkipped(
-              doseId: widget.state.actionDoseId!,
-              occurredAt: occurredAt,
-            ),
-            successMessage: 'Skip logged.',
-          ),
+          onPressed: () {
+            final occurredAt = DoseyAppScope.of(context).appClock.now().toUtc();
+            unawaited(
+              _logAction(
+                context,
+                actionKind: RobotFaceActionKind.skipDose,
+                event: DoseLogEvent.doseSkipped(
+                  doseId: widget.state.actionDoseId!,
+                  occurredAt: occurredAt,
+                ),
+                successMessage: 'Skip logged.',
+              ),
+            );
+          },
         ),
       );
     }
@@ -1073,15 +1087,20 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           key: RobotFaceScreen.needHelpButtonKey,
           label: 'Need help',
           isEnabled: _isActionEnabled(RobotFaceActionKind.askForHelp),
-          onPressed: () => _logAction(
-            context,
-            actionKind: RobotFaceActionKind.askForHelp,
-            event: DoseLogEvent.caregiverHelpRequested(
-              doseId: widget.state.actionDoseId!,
-              occurredAt: occurredAt,
-            ),
-            successMessage: 'Help request logged.',
-          ),
+          onPressed: () {
+            final occurredAt = DoseyAppScope.of(context).appClock.now().toUtc();
+            unawaited(
+              _logAction(
+                context,
+                actionKind: RobotFaceActionKind.askForHelp,
+                event: DoseLogEvent.caregiverHelpRequested(
+                  doseId: widget.state.actionDoseId!,
+                  occurredAt: occurredAt,
+                ),
+                successMessage: 'Help request logged.',
+              ),
+            );
+          },
         ),
       );
     }

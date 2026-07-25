@@ -30,18 +30,11 @@ class DoseActionLogger {
   }) async {
     try {
       final dependencies = DoseyAppScope.of(context);
-      final result =
-          await DoseActionService(
-            database: dependencies.database,
-            carouselSlots: dependencies.carouselSlots,
-            guidedCarouselLoads: dependencies.guidedCarouselLoads,
-            prescriptions: dependencies.prescriptions,
-            doseLog: dependencies.doseLog,
-          ).record(
-            event,
-            retireLoadedSlot: retireLoadedSlot,
-            inventoryPrescriptionId: inventoryPrescriptionId,
-          );
+      final result = await dependencies.doseActions.record(
+        event,
+        retireLoadedSlot: retireLoadedSlot,
+        inventoryPrescriptionId: inventoryPrescriptionId,
+      );
       if (!context.mounted) {
         return true;
       }

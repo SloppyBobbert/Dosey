@@ -164,6 +164,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     );
     final robotFaceSettings = RobotFaceSettingsRepository(_database);
     final scheduleProfiles = LocalScheduleProfileRepository(_database);
+    final prescriptions = LocalPrescriptionRepository(_database);
     final carouselSlots = LocalCarouselSlotRepository(_database);
     final guidedCarouselLoads = LocalGuidedCarouselLoadRepository(
       _database,
@@ -224,7 +225,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       database: _database,
       carouselSlots: carouselSlots,
       guidedCarouselLoads: guidedCarouselLoads,
-      prescriptions: LocalPrescriptionRepository(_database),
+      prescriptions: prescriptions,
       doseLog: doseLog,
     );
     final demoScenarios = _database.isDemo
@@ -255,7 +256,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
       appClock: _appClock,
       settings: settings,
       actionPinGate: actionPinGate,
-      prescriptions: LocalPrescriptionRepository(_database),
+      prescriptions: prescriptions,
+      doseActions: doseActions,
       scheduleProfiles: scheduleProfiles,
       reminders: reminders,
       reminderSchedules: reminderSchedules,
@@ -401,6 +403,7 @@ class DoseyAppDependencies {
     required this.settings,
     required this.actionPinGate,
     required this.prescriptions,
+    required this.doseActions,
     required this.scheduleProfiles,
     required this.reminders,
     required this.reminderSchedules,
@@ -435,6 +438,7 @@ class DoseyAppDependencies {
   final LocalAppSettingsRepository settings;
   final ActionPinGate actionPinGate;
   final LocalPrescriptionRepository prescriptions;
+  final DoseActionService doseActions;
   final LocalScheduleProfileRepository scheduleProfiles;
   final LocalReminderRepository reminders;
   final ReminderScheduleService reminderSchedules;

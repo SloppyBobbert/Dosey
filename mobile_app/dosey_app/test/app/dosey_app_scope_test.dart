@@ -83,6 +83,7 @@ void main() {
     expect(dependencies.permissions, same(permissionGateway));
     expect(dependencies.robotFaceSettings, isNotNull);
     expect(dependencies.robotFaceController, isNotNull);
+    expect(dependencies.doseActions, isNotNull);
 
     await tester.pumpWidget(const SizedBox());
   });

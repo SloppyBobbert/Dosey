@@ -480,14 +480,9 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     if (!mounted || state.isPresenting == _wasPresenting) {
       return;
     }
-    final wasPresenting = _wasPresenting;
     _wasPresenting = state.isPresenting;
     _selectTab(
-      state.isPresenting
-          ? _ShellTabId.robotFace
-          : wasPresenting
-          ? _ShellTabId.controller
-          : _selectedTabId ?? _ShellTabId.controller,
+      state.isPresenting ? _ShellTabId.robotFace : _ShellTabId.controller,
     );
   }
 

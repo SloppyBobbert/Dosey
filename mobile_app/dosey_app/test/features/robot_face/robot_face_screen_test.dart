@@ -1009,6 +1009,7 @@ void main() {
       );
       await tester.pump();
 
+      clock.value = DateTime(2040, 1, 2, 8, 55);
       await tester.tap(find.byKey(testCase.buttonKey));
       await tester.pump();
 
@@ -1498,9 +1499,9 @@ void main() {
 }
 
 class _RawAppClock implements AppClock {
-  const _RawAppClock(this.value);
+  _RawAppClock(this.value);
 
-  final DateTime value;
+  DateTime value;
 
   @override
   DateTime now() => value;
