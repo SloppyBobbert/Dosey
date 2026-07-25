@@ -72,6 +72,7 @@ class SimulatedControllerGateway
   @override
   Future<void> requestStagedDispense({
     required String doseId,
+    ControllerMovementCommand movement = ControllerMovementCommand.dispenseNext,
     required ControllerDispenseStageCallback onStage,
   }) async {
     if (!_snapshot.canRequestDispense) {

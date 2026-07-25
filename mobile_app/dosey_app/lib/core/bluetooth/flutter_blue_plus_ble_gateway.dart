@@ -1,17 +1,21 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/controller/d1_protocol.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
-class FlutterBluePlusBleGateway implements BleGateway {
+class FlutterBluePlusBleGateway implements DoseyBleGateway {
   FlutterBluePlusBleGateway({FlutterBluePlusPlugin? plugin})
     : _plugin = plugin ?? FlutterBluePlusPluginAdapter();
 
   final FlutterBluePlusPlugin _plugin;
   final _connectionController =
       StreamController<BleConnectionSnapshot>.broadcast();
+  final _protocolController = StreamController<List<int>>.broadcast();
 
   StreamSubscription<PluginBleConnectionState>? _connectionSubscription;
+  StreamSubscription<List<int>>? _protocolSubscription;
+  String? _protocolSetupDeviceId;
   BleConnectionSnapshot _connectionSnapshot =
       const BleConnectionSnapshot.disconnected();
 
@@ -25,6 +29,55 @@ class FlutterBluePlusBleGateway implements BleGateway {
   Stream<BleConnectionSnapshot> watchConnection() async* {
     yield _connectionSnapshot;
     yield* _connectionController.stream;
+  }
+
+  @override
+  Stream<List<int>> watchProtocolBytes() => _protocolController.stream;
+
+  @override
+  Future<void> connectToDosey() async {
+    final result = await _plugin.scanForService(
+      D1Protocol.serviceUuid,
+      const Duration(seconds: 10),
+    );
+    if (result == null) {
+      throw StateError('Dosey controller was not found.');
+    }
+
+    _protocolSetupDeviceId = result.deviceId;
+    try {
+      await connect(deviceId: result.deviceId, deviceName: result.deviceName);
+      if (!await _plugin.discoverDoseyProtocol(result.deviceId)) {
+        throw StateError('Dosey BLE protocol characteristics were not found.');
+      }
+      await _clearProtocolSubscription();
+      _protocolSubscription = _plugin
+          .protocolValuesFor(result.deviceId)
+          .listen(_protocolController.add);
+      await _plugin.setProtocolNotifications(result.deviceId, true);
+      _protocolSetupDeviceId = null;
+      _setConnection(
+        BleConnectionSnapshot.connected(
+          deviceId: result.deviceId,
+          deviceName: result.deviceName,
+        ),
+      );
+    } on Object {
+      _protocolSetupDeviceId = null;
+      await disconnect();
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> writeProtocolBytes(List<int> bytes) async {
+    final deviceId = _connectionSnapshot.deviceId;
+    if (deviceId == null || _protocolSubscription == null) {
+      throw StateError('Dosey BLE protocol is not connected.');
+    }
+    for (final chunk in D1Protocol.chunk(bytes)) {
+      await _plugin.writeProtocol(deviceId, chunk);
+    }
   }
 
   @override
@@ -46,7 +99,15 @@ class FlutterBluePlusBleGateway implements BleGateway {
       state,
     ) {
       // Mirror native connection changes into an app-owned snapshot stream.
-      _setConnection(_mapConnectionState(state, deviceId, deviceName));
+      _setConnection(
+        state == PluginBleConnectionState.connected &&
+                _protocolSetupDeviceId == deviceId
+            ? BleConnectionSnapshot.connecting(
+                deviceId: deviceId,
+                deviceName: deviceName,
+              )
+            : _mapConnectionState(state, deviceId, deviceName),
+      );
     });
     try {
       await _plugin.connect(deviceId);
@@ -63,6 +124,7 @@ class FlutterBluePlusBleGateway implements BleGateway {
     final deviceName = _connectionSnapshot.deviceName;
 
     if (deviceId == null) {
+      await _clearProtocolSubscription();
       _setConnection(const BleConnectionSnapshot.disconnected());
       return;
     }
@@ -74,6 +136,7 @@ class FlutterBluePlusBleGateway implements BleGateway {
       ),
     );
     try {
+      await _clearProtocolSubscription();
       await _plugin.disconnect(deviceId);
     } catch (_) {
       await _clearConnectionSubscription();
@@ -95,14 +158,23 @@ class FlutterBluePlusBleGateway implements BleGateway {
       }
     }
     await _clearConnectionSubscription();
+    await _clearProtocolSubscription();
     if (!_connectionController.isClosed) {
       await _connectionController.close();
+    }
+    if (!_protocolController.isClosed) {
+      await _protocolController.close();
     }
   }
 
   Future<void> _clearConnectionSubscription() async {
     await _connectionSubscription?.cancel();
     _connectionSubscription = null;
+  }
+
+  Future<void> _clearProtocolSubscription() async {
+    await _protocolSubscription?.cancel();
+    _protocolSubscription = null;
   }
 
   void _setConnection(BleConnectionSnapshot snapshot) {
@@ -157,6 +229,13 @@ enum PluginBleConnectionState {
   disconnecting,
 }
 
+class PluginBleScanResult {
+  const PluginBleScanResult({required this.deviceId, this.deviceName});
+
+  final String deviceId;
+  final String? deviceName;
+}
+
 abstract interface class FlutterBluePlusPlugin {
   Stream<PluginBleAdapterState> get adapterStates;
 
@@ -167,9 +246,25 @@ abstract interface class FlutterBluePlusPlugin {
   Future<void> connect(String deviceId);
 
   Future<void> disconnect(String deviceId);
+
+  Future<PluginBleScanResult?> scanForService(
+    String serviceUuid,
+    Duration timeout,
+  );
+
+  Future<bool> discoverDoseyProtocol(String deviceId);
+
+  Stream<List<int>> protocolValuesFor(String deviceId);
+
+  Future<void> setProtocolNotifications(String deviceId, bool enabled);
+
+  Future<void> writeProtocol(String deviceId, List<int> bytes);
 }
 
 class FlutterBluePlusPluginAdapter implements FlutterBluePlusPlugin {
+  final Map<String, BluetoothCharacteristic> _commandCharacteristics = {};
+  final Map<String, BluetoothCharacteristic> _eventCharacteristics = {};
+
   @override
   Stream<PluginBleAdapterState> get adapterStates {
     return FlutterBluePlus.adapterState.map(_mapAdapterState);
@@ -194,7 +289,89 @@ class FlutterBluePlusPluginAdapter implements FlutterBluePlusPlugin {
 
   @override
   Future<void> disconnect(String deviceId) {
+    _commandCharacteristics.remove(deviceId);
+    _eventCharacteristics.remove(deviceId);
     return BluetoothDevice.fromId(deviceId).disconnect();
+  }
+
+  @override
+  Future<PluginBleScanResult?> scanForService(
+    String serviceUuid,
+    Duration timeout,
+  ) async {
+    final result = Completer<PluginBleScanResult?>();
+    final subscription = FlutterBluePlus.onScanResults.listen((results) {
+      if (result.isCompleted || results.isEmpty) return;
+      final match = results.first;
+      final name = match.advertisementData.advName.isNotEmpty
+          ? match.advertisementData.advName
+          : match.device.platformName;
+      result.complete(
+        PluginBleScanResult(
+          deviceId: match.device.remoteId.str,
+          deviceName: name.isEmpty ? null : name,
+        ),
+      );
+    }, onError: result.completeError);
+    try {
+      await FlutterBluePlus.startScan(
+        withServices: [Guid(serviceUuid)],
+        timeout: timeout,
+      );
+      return await result.future.timeout(timeout, onTimeout: () => null);
+    } finally {
+      await subscription.cancel();
+      await FlutterBluePlus.stopScan();
+    }
+  }
+
+  @override
+  Future<bool> discoverDoseyProtocol(String deviceId) async {
+    final services = await BluetoothDevice.fromId(deviceId).discoverServices();
+    BluetoothCharacteristic? command;
+    BluetoothCharacteristic? events;
+    for (final service in services) {
+      if (service.uuid != Guid(D1Protocol.serviceUuid)) continue;
+      for (final characteristic in service.characteristics) {
+        if (characteristic.uuid == Guid(D1Protocol.commandCharacteristicUuid)) {
+          command = characteristic;
+        } else if (characteristic.uuid ==
+            Guid(D1Protocol.eventCharacteristicUuid)) {
+          events = characteristic;
+        }
+      }
+    }
+    if (command == null || events == null) return false;
+    _commandCharacteristics[deviceId] = command;
+    _eventCharacteristics[deviceId] = events;
+    return true;
+  }
+
+  @override
+  Stream<List<int>> protocolValuesFor(String deviceId) {
+    final characteristic = _eventCharacteristics[deviceId];
+    if (characteristic == null) {
+      throw StateError('Dosey event characteristic is not discovered.');
+    }
+    return characteristic.onValueReceived;
+  }
+
+  @override
+  Future<void> setProtocolNotifications(String deviceId, bool enabled) async {
+    final characteristic = _eventCharacteristics[deviceId];
+    if (characteristic == null) {
+      throw StateError('Dosey event characteristic is not discovered.');
+    }
+    await characteristic.setNotifyValue(enabled);
+  }
+
+  @override
+  Future<void> writeProtocol(String deviceId, List<int> bytes) async {
+    final characteristic = _commandCharacteristics[deviceId];
+    if (characteristic == null) {
+      throw StateError('Dosey command characteristic is not discovered.');
+    }
+    await characteristic.write(bytes, withoutResponse: false);
   }
 
   static PluginBleAdapterState _mapAdapterState(BluetoothAdapterState state) {

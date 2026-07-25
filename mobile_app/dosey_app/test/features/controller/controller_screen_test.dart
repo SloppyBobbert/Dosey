@@ -94,7 +94,7 @@ void main() {
     await tester.tap(find.text('Connect simulator'));
     await tester.pumpAndSettle();
 
-    final dispenseButton = find.text('Run simulated dispense');
+    final dispenseButton = find.text('Run dispense test');
     await tester.drag(find.byType(ListView), const Offset(0, -220));
     await tester.pump();
     await tester.tap(dispenseButton);

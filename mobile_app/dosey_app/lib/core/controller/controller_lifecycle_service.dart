@@ -168,6 +168,15 @@ class ControllerLifecycleService {
         if (_controller case final StagedControllerGateway stagedController) {
           await stagedController.requestStagedDispense(
             doseId: doseId,
+            movement: switch (commandType) {
+              ControllerCommandType.servoTest =>
+                ControllerMovementCommand.servoTest,
+              ControllerCommandType.dispenseTest =>
+                ControllerMovementCommand.dispenseTest,
+              ControllerCommandType.dispenseNext =>
+                ControllerMovementCommand.dispenseNext,
+              _ => throw StateError('Unsupported movement command type.'),
+            },
             onStage: recordStage,
           );
         } else {

@@ -1018,6 +1018,7 @@ class _TimeoutAfterAcceptanceControllerGateway
   @override
   Future<void> requestStagedDispense({
     required String doseId,
+    ControllerMovementCommand movement = ControllerMovementCommand.dispenseNext,
     required ControllerDispenseStageCallback onStage,
   }) async {
     await onStage(ControllerDispenseStage.accepted);

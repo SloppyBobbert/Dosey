@@ -81,3 +81,14 @@ abstract interface class BleGateway {
 
   Future<void> close();
 }
+
+abstract interface class DoseyBleTransport {
+  Stream<List<int>> watchProtocolBytes();
+
+  Future<void> connectToDosey();
+
+  Future<void> writeProtocolBytes(List<int> bytes);
+}
+
+abstract interface class DoseyBleGateway
+    implements BleGateway, DoseyBleTransport {}

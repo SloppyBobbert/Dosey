@@ -15,6 +15,7 @@ import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_plus_gateway.dart';
 import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/ble_controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_bench_service.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
@@ -174,19 +175,24 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     final demoIdGenerator = _database.isDemo
         ? DemoCommandSessionIdGenerator()
         : null;
+    final ble = _database.isDemo
+        ? const DemoBleGateway()
+        : widget.bleGateway ?? FlutterBluePlusBleGateway();
+    final permissions = _database.isDemo
+        ? const DemoPermissionGateway()
+        : widget.permissionGateway ?? PermissionHandlerGateway();
     final controller =
         widget.controllerGateway ??
-        SimulatedControllerGateway(
-          canHostRobot: () async {
-            final platform = currentAppDevicePlatform();
-            final storedRole = await settings.getDeviceRole();
-            final role = storedRole.isAllowedOn(platform)
-                ? storedRole
-                : AppDeviceRole.defaultFor(platform);
-            return role.canHostRobot;
-          },
-          delay: demoStageGate?.wait,
-        );
+        (!_database.isDemo && ble is DoseyBleGateway
+            ? BleControllerGateway(
+                transport: ble,
+                canHostRobot: () => _canHostRobot(settings),
+                prepareBleAccess: () => _prepareBleAccess(permissions),
+              )
+            : SimulatedControllerGateway(
+                canHostRobot: () => _canHostRobot(settings),
+                delay: demoStageGate?.wait,
+              ));
     final commandRepository = LocalControllerCommandRepository(
       _database,
       sessionIdGenerator: demoIdGenerator?.call,
@@ -240,7 +246,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
             ),
             database: _database,
             clock: _appClock as ControllableAppClock,
-            controller: controller,
+            controller: controller as SimulatedControllerGateway,
             stageGate: demoStageGate!,
             idGenerator: demoIdGenerator!,
             lifecycle: controllerLifecycle,
@@ -288,9 +294,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         clock: _appClock.ticks,
         now: _appClock.now,
       ),
-      ble: _database.isDemo
-          ? const DemoBleGateway()
-          : widget.bleGateway ?? FlutterBluePlusBleGateway(),
+      ble: ble,
       connectivity: _database.isDemo
           ? const DemoConnectivityGateway()
           : widget.connectivityGateway ?? ConnectivityPlusGateway(),
@@ -299,9 +303,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
           widget.voicePlayer ??
           DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway()),
       notificationTaps: notificationTaps,
-      permissions: _database.isDemo
-          ? const DemoPermissionGateway()
-          : widget.permissionGateway ?? PermissionHandlerGateway(),
+      permissions: permissions,
       // Keeping a mounted display awake is reversible device behavior, unlike
       // the network, notification, and backup effects disabled in demo mode.
       screenAwake:
@@ -313,6 +315,29 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     } else {
       unawaited(_runStartupMaintenance());
     }
+  }
+
+  Future<bool> _canHostRobot(LocalAppSettingsRepository settings) async {
+    final platform = currentAppDevicePlatform();
+    final storedRole = await settings.getDeviceRole();
+    final role = storedRole.isAllowedOn(platform)
+        ? storedRole
+        : AppDeviceRole.defaultFor(platform);
+    return role.canHostRobot;
+  }
+
+  Future<bool> _prepareBleAccess(AppPermissionGateway permissions) async {
+    for (final permission in const [
+      AppPermission.bluetoothScan,
+      AppPermission.bluetoothConnect,
+    ]) {
+      var state = await permissions.check(permission);
+      if (state != AppPermissionState.granted) {
+        state = await permissions.request(permission);
+      }
+      if (state != AppPermissionState.granted) return false;
+    }
+    return true;
   }
 
   Future<void> _connectDemoController() async {

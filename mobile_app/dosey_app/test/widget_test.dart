@@ -3838,8 +3838,8 @@ void main() {
     expect(find.text('Robot phone'), findsOneWidget);
     expect(find.text('Controller offline'), findsOneWidget);
     expect(find.text('Manual safety lock'), findsOneWidget);
-    expect(find.text('BLE protocol pending'), findsOneWidget);
-    expect(find.text('Simulator bridge'), findsOneWidget);
+    expect(find.text('D1 BLE protocol'), findsOneWidget);
+    expect(find.text('Physical controller'), findsOneWidget);
   });
 
   testWidgets('settings only offers iOS personal role on iOS', (

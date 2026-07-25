@@ -12,7 +12,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 | Local storage | Drift/SQLite on the phone app only |
 | Prescriptions and schedules | Local prescriptions, refill inventory tracking, schedule profiles, schedule editing, and enabled state |
 | Auth | Google + Apple wrappers, no backend yet |
-| Carousel and controller | Polished loading-bay and hardware-bench views, Daviky slot loading workflow, simulator, and BLE foundation only; real protocol incomplete |
+| Carousel and controller | Daviky loading workflow, simulator, and compile-tested D1 BLE bench path; physical BLE and movement tests pending |
 | Mounted Robot Mode | Face-first resume and Back behavior, configurable inactivity return, role-aware local notification routing, and screen-awake control only while Robot Face is active and the app is resumed |
 | Builds | Android debug APK and iOS no-codesign debug build run locally |
 
@@ -25,7 +25,7 @@ Current workspace-level status:
 - Android and iOS personal-phone support stay in scope. Robot Mode stays Android-only.
 - The app shell, local storage, refill tracking, reminder flows, Daviky carousel loading workflow, controller simulator, and fixed prerecorded Robot Mode voice prompts are in place.
 - Mounted Robot Mode returns to Robot Face on resume and after configurable inactivity, contains Back navigation inside the app, and keeps the display awake only while Robot Face is active and the app is resumed; it does not keep the display awake while backgrounded.
-- BLE remains foundation-only. The real controller protocol is still incomplete.
+- The D1 controller protocol now has a compile-tested Flutter BLE transport and staged gateway. Physical advertising, connection, and hardware behavior remain unverified.
 - Google sign-in and native iOS Apple sign-in are wired behind app-owned interfaces. No backend, cloud sync, or push notifications yet.
 - First physical test device: 2024 Moto G Play.
 
