@@ -22,18 +22,20 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Robot Face scaffolding with local face-state timing settings for wake-before-dose and stay-awake-after-dose behavior.
 - Mounted Robot Mode behavior that returns to Robot Face on resume, Back, or configurable inactivity; routes local notification taps by role and alert type; and keeps the Android display awake only while Robot Face is active and the app is resumed, never while backgrounded.
 - Fixed WAV voice catalog for the mounted Robot Mode phone, with app-owned asset playback wiring, previews, category toggles, quiet hours, configurable repetition cooldowns, and reminder repeat policy controls for normal reminder speech.
-- Controller simulator plus BLE foundation for app flow work; controller protocol is still incomplete.
+- Controller simulator plus a compile-tested D1 BLE transport and staged controller gateway; physical BLE behavior is still unverified.
 - Google and Apple sign-in through app-owned auth interfaces; no Firebase/Supabase backend yet.
 - App-owned interfaces for controller/BLE, connectivity, auth, reminders, permissions, notifications, and dose logging.
 - Drift/SQLite local database for device role settings, prescriptions, reminders, schedule profiles, carousel slots, cached auth state, refill records, dose log events, household/profile metadata, and admin audit events.
 
 Selected background packages:
 
-- `flutter_blue_plus` for BLE foundation only.
+- `flutter_blue_plus` for filtered Dosey discovery, GATT service discovery, notifications, and bounded D1 writes.
 - `connectivity_plus` for advisory connectivity/Wi-Fi status only, not provisioning.
 - `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
 - `flutter_local_notifications` for local reminder notifications and sounds.
-- `permission_handler` for runtime permission requests/checks.
+- `permission_handler` for runtime permission requests/checks. Android 12 and
+  newer request nearby Bluetooth scan/connect access; Android 11 and older map
+  the same scan gate to fine location, which Android requires for BLE scans.
 
 Notification channel IDs and sound IDs are intended to stay stable. Custom reminder sound assets may still need platform provisioning on Android/iOS.
 
@@ -58,7 +60,7 @@ Device role rules:
 
 - Create, edit, and delete local prescriptions and reminders.
 - Track remaining doses, refill thresholds, refill warnings, and refill-add history locally.
-- Assign reminders to Daviky carousel slots and exercise controller flows with a simulator before BLE exists.
+- Assign reminders to Daviky carousel slots and exercise controller flows with either the simulator or the compile-tested BLE bench path.
 - Log Today actions separately for dispense success, dose visible, taken confirmations, already taken, early/late taken, snooze, skip, missed, and caregiver help.
 - Prevent duplicate terminal Today actions from double-logging the same dose or spending inventory twice.
 - Store device role, safety acknowledgement, cached auth state, Action PIN state, refill data, carousel state, household/profile metadata, admin audit events, and dose log events locally.
@@ -70,7 +72,7 @@ The app must not mark a dose taken because the servo moved. Dispense logging req
 
 ## Near-term app work
 
-- Draft and test the Bluetooth command/status/heartbeat protocol against the simulator before hardware integration.
+- Physically verify BLE advertising, discovery, status, heartbeat, disconnect, and reconnect with the bare XIAO before attaching external hardware.
 - Run mounted-phone manual QA on the Android test device for resume, inactivity, Back, notification, screen-awake, and role-change behavior.
 - Keep Today dose actions and refill inventory behavior aligned with local-first safety rules.
 - Add heartbeat/offline detection for XIAO power loss, crash, disconnect, or missed responses.

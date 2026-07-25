@@ -97,12 +97,15 @@ abstract interface class ControllerGateway {
 
 enum ControllerDispenseStage { accepted, movementStarted }
 
+enum ControllerMovementCommand { servoTest, dispenseTest, dispenseNext }
+
 typedef ControllerDispenseStageCallback =
     Future<void> Function(ControllerDispenseStage stage);
 
 abstract interface class StagedControllerGateway implements ControllerGateway {
   Future<void> requestStagedDispense({
     required String doseId,
+    ControllerMovementCommand movement = ControllerMovementCommand.dispenseNext,
     required ControllerDispenseStageCallback onStage,
   });
 }

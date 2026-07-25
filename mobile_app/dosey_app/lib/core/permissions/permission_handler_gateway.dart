@@ -19,8 +19,10 @@ class PermissionHandlerGateway implements AppPermissionGateway {
 
   static PluginPermission _mapPermission(AppPermission permission) {
     return switch (permission) {
+      AppPermission.bluetooth => PluginPermission.bluetooth,
       AppPermission.bluetoothScan => PluginPermission.bluetoothScan,
       AppPermission.bluetoothConnect => PluginPermission.bluetoothConnect,
+      AppPermission.locationWhenInUse => PluginPermission.locationWhenInUse,
       AppPermission.notifications => PluginPermission.notification,
     };
   }
@@ -38,7 +40,13 @@ class PermissionHandlerGateway implements AppPermissionGateway {
   }
 }
 
-enum PluginPermission { bluetoothScan, bluetoothConnect, notification }
+enum PluginPermission {
+  bluetooth,
+  bluetoothScan,
+  bluetoothConnect,
+  locationWhenInUse,
+  notification,
+}
 
 enum PluginPermissionStatus {
   denied,
@@ -68,8 +76,10 @@ class PermissionHandlerPluginAdapter implements PermissionHandlerPlugin {
 
   static Permission _mapPermission(PluginPermission permission) {
     return switch (permission) {
+      PluginPermission.bluetooth => Permission.bluetooth,
       PluginPermission.bluetoothScan => Permission.bluetoothScan,
       PluginPermission.bluetoothConnect => Permission.bluetoothConnect,
+      PluginPermission.locationWhenInUse => Permission.locationWhenInUse,
       PluginPermission.notification => Permission.notification,
     };
   }

@@ -1,4 +1,10 @@
-enum AppPermission { bluetoothScan, bluetoothConnect, notifications }
+enum AppPermission {
+  bluetooth,
+  bluetoothScan,
+  bluetoothConnect,
+  locationWhenInUse,
+  notifications,
+}
 
 enum AppPermissionState { unknown, granted, denied }
 

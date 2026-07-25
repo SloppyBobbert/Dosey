@@ -1,58 +1,206 @@
 # Firmware
 
-Planned Arduino/PlatformIO C++ firmware for the Seeed Studio XIAO controller and Grove modules.
+Incremental Arduino/PlatformIO C++ bring-up firmware for the Seeed Studio XIAO ESP32-C6. The Grove Base for XIAO and all external modules remain unconfigured until their exact labels, ports, pins, and power paths can be checked in person.
 
-The confirmed controller is the Seeed Studio XIAO ESP32-C6. The confirmed Grove base is the Seeed Studio Grove Base for XIAO. Older ESP32S3 and XIAO Expansion Board references are historical notes.
+This is prototype firmware. Test only with candy, beads, dry beans, vitamins, or fake pills. Do not use real prescription medication during bring-up.
 
 ## Firmware role
 
-Keep firmware small and hardware-focused.
+The XIAO handles direct hardware actions and status: servo movement, PIR input, LEDs, buttons, basic sensors, heartbeat replies, and hardware error reporting. The phone owns medication names, schedules, dose decisions, refill logic, history, caregiver behavior, PIN logic, voice, and medical copy.
 
-The XIAO should handle:
+A servo completion event reports movement only. It never proves that a dose is visible, correct, or taken.
 
-- Servo movement.
-- PIR detection.
-- LED status.
-- Buzzer or vibration output.
-- Basic button input.
-- Basic sensor input.
-- Carousel movement commands.
-- Bluetooth communication.
-- Heartbeat/status replies.
-- Error codes for hardware faults.
+## Toolchain
 
-The XIAO should not handle medication names, medication schedules, dose decisions, caregiver logic, PIN logic, voice generation, AI conversation, or medical advice.
+`platformio.ini` pins Seeed's Arduino-capable PlatformIO platform to commit `9ba53b691fb007d9c1b8fd37600cc71d6702125a`:
 
-## Bring-up order
+```ini
+platform = https://github.com/Seeed-Studio/platform-seeedboards.git#9ba53b691fb007d9c1b8fd37600cc71d6702125a
+board = seeed-xiao-esp32-c6
+framework = arduino
+```
 
-Start with small Grove bring-up examples before combining modules into shared firmware:
+That platform currently resolves Arduino-ESP32 3.3.7 for the XIAO ESP32-C6. The servo-only environments pin `madhephaestus/ESP32Servo` 3.2.1.
 
-1. Blink/serial sanity check.
-2. Built-in buzzer and button checks if available on the chosen board/shield.
-3. Grove LED, vibration motor, and external buzzer output checks.
-4. Grove dual button and Mini PIR input checks.
-5. Analog light sensor and rotary angle sensor checks.
-6. I2C scanner for DHT20, accelerometer, and I2C hub.
-7. Grove servo sweep.
-8. Servo pusher test for one-slot Daviky carousel movement.
-9. Bluetooth command/status demo with acknowledgement messages.
-10. Heartbeat/offline behavior.
+Run commands from this directory with PlatformIO Core 6.1.19:
 
-## Early protocol commands
+```sh
+/tmp/dosey-platformio/bin/pio run -e 01_blink_serial
+/tmp/dosey-platformio/bin/pio test -e native_parser
+/tmp/dosey-platformio/bin/pio test -e native_state
+/tmp/dosey-platformio/bin/pio test -e native_protocol
+/tmp/dosey-platformio/bin/pio test -e native_config
+/tmp/dosey-platformio/bin/pio test -e native_config_defaults
+```
 
-Use `../docs/protocol.md` as the source of truth. Early test commands include:
+For a clean machine, install the same tool versions used by Firmware CI in an
+isolated Python environment:
 
-- `STATUS`
-- `HEARTBEAT`
-- `WAKE_FACE`
-- `MOVE_SERVO`
-- `DISPENSE_TEST`
-- `DISPENSE_NEXT`
-- `LED_TEST`
-- `PIR_STATUS`
+```sh
+python3 -m venv /tmp/dosey-platformio
+/tmp/dosey-platformio/bin/python -m pip install platformio==6.1.19 intelhex==2.3.0
+```
 
-Report movement completion separately from dose visibility and dose taken confirmation.
+The commands below use that pinned executable directly.
 
-## Current status
+## Layout
 
-No production firmware build is committed yet. Keep early work as small bring-up sketches or examples until the servo/carousel rig can advance one Daviky slot repeatably. Record wiring and protocol decisions in `../docs/wiring.md` and `../docs/protocol.md` as they become real.
+- `include/hardware_config.h`: centralized pins and explicit external-hardware enable flags.
+- `include/hardware_config.local.h.example`: safe template for ignored, bench-only configuration overrides.
+- `include/protocol_config.h`: protocol version and input bounds.
+- `include/ble_config.h`: fixed BLE device name, GATT UUIDs, and chunk size.
+- `include/safety_limits.h`: conservative timing, pulse, and travel limits.
+- `lib/dosey_core/`: host-testable framing, parser, protocol engine, line writer, and movement state.
+- `bringup/`: one independent program per bring-up step.
+- `test/test_native/`: native parser, protocol transcript, configuration, writer, and movement-state tests.
+
+## Bring-up environments
+
+| Environment | Purpose | Current hardware state |
+| --- | --- | --- |
+| `01_blink_serial` | USB serial and onboard user LED | Ready for XIAO-only physical test |
+| `02_digital_output` | One external digital output | Disabled; pin unconfirmed |
+| `03_button_input` | One button input | Disabled; module and pin unconfirmed |
+| `04_pir_input` | PIR input | Disabled; module and pin unconfirmed |
+| `05_analog_input` | One analog input | Disabled; module and pin unconfirmed |
+| `06_i2c_scanner` | Scan a verified Grove I2C path | Disabled; base and module unconfirmed |
+| `07_servo_sweep` | Commanded 10-degree servo test | Disabled; servo, pin, and power unconfirmed |
+| `08_serial_protocol` | Versioned USB serial command demo | Compiles; external commands stay disabled |
+| `09_ble_protocol` | Same D1 engine over BLE GATT | Compiles; radio behavior and external hardware unverified |
+
+Disabled programs print `CONFIGURATION_REQUIRED` and do not configure or drive their external pins. The servo is detached at boot and cannot move unless the local configuration enables it and assigns a pin after physical verification. `DISPENSE_NEXT` remains disabled regardless of that flag.
+
+## Local hardware configuration
+
+Committed builds always use safe defaults with every external path disabled.
+After identifying one disconnected module and its authoritative pin mapping,
+create `include/hardware_config.local.h` from the adjacent example and change
+only that module's enable flag and pin. Git ignores the local file.
+
+The build fails at compile time if an external path is enabled while a required
+pin remains `-1`. The local file does not bypass the physical test gates, power
+rules, conservative servo limits, or disabled `DISPENSE_NEXT` command. Remove
+the local file to return immediately to the committed safe configuration.
+
+## Reproduce Firmware CI
+
+Run the native suites sequentially:
+
+```sh
+/tmp/dosey-platformio/bin/pio test -e native_parser
+/tmp/dosey-platformio/bin/pio test -e native_state
+/tmp/dosey-platformio/bin/pio test -e native_protocol
+/tmp/dosey-platformio/bin/pio test -e native_config
+/tmp/dosey-platformio/bin/pio test -e native_config_defaults
+```
+
+Build every safe-default XIAO environment sequentially:
+
+```sh
+/tmp/dosey-platformio/bin/pio run -e 01_blink_serial
+/tmp/dosey-platformio/bin/pio run -e 02_digital_output
+/tmp/dosey-platformio/bin/pio run -e 03_button_input
+/tmp/dosey-platformio/bin/pio run -e 04_pir_input
+/tmp/dosey-platformio/bin/pio run -e 05_analog_input
+/tmp/dosey-platformio/bin/pio run -e 06_i2c_scanner
+/tmp/dosey-platformio/bin/pio run -e 07_servo_sweep
+/tmp/dosey-platformio/bin/pio run -e 08_serial_protocol
+/tmp/dosey-platformio/bin/pio run -e 09_ble_protocol
+/tmp/dosey-platformio/bin/pio check -e 08_serial_protocol --skip-packages
+/tmp/dosey-platformio/bin/pio check -e 09_ble_protocol --skip-packages
+```
+
+`.github/workflows/firmware-ci.yml` runs the same tests, builds, and protocol
+static check for pull requests and pushes to `main`. These checks prove that the
+code compiles and that host-side protocol transcripts match the contract. They
+do not prove BLE advertising, discovery, connection stability, wiring,
+electrical stability, sensor behavior, servo movement, or carousel movement.
+
+## First physical test
+
+Test the bare XIAO before attaching the Grove Base or any module:
+
+1. Disconnect every external wire and module. Do not connect the battery/JST port or SWD pins.
+2. Place the board on a nonconductive surface and connect it directly to the computer with a known USB data cable.
+3. Run `pio device list` and record the exact port without guessing.
+4. Run `/tmp/dosey-platformio/bin/pio run -e 01_blink_serial -t upload --upload-port <port>`.
+5. Run `pio device monitor --port <port> --baud 115200`.
+6. Confirm the serial header identifies `XIAO_ESP32_C6`, then confirm the onboard user LED changes with matching `LED ON` and `LED OFF` lines.
+7. Disconnect immediately if the board heats, smells unusual, repeatedly resets, or behaves unexpectedly.
+
+Do not record this test as passed until the LED and serial observations are made on the physical board. Identify the Grove Base and one module at a time only after this XIAO-only check passes.
+
+## USB protocol bench check
+
+After the bare-board blink/serial test passes, upload the safe-default protocol
+firmware with no external hardware connected:
+
+```sh
+/tmp/dosey-platformio/bin/pio run -e 08_serial_protocol -t upload --upload-port <port>
+pio device monitor --port <port> --baud 115200
+```
+
+Expected boot lines are:
+
+```text
+D1 EVT boot READY
+D1 EVT boot SERVO_UNCONFIGURED
+D1 EVT boot PIR_UNCONFIGURED
+```
+
+Enter `D1 CMD status-1 STATUS`. The safe-default build must return:
+
+```text
+D1 EVT status-1 COMMAND_RECEIVED
+D1 EVT status-1 STATUS_OK
+D1 EVT status-1 SERVO_UNCONFIGURED
+D1 EVT status-1 PIR_UNCONFIGURED
+D1 EVT status-1 MOVEMENT_IDLE
+```
+
+Enter `D1 CMD dose-1 DISPENSE_NEXT`. It must return
+`D1 NACK dose-1 COMMAND_DISABLED` and must not move or attach PWM. Stop if the
+board heats, smells unusual, resets repeatedly, emits unexpected output, or any
+external component moves.
+
+## BLE protocol bench check
+
+Run this only after the bare-XIAO and USB protocol checks pass. Keep the Grove
+Base, servo, battery/JST, SWD, and every external wire disconnected.
+
+1. Upload `09_ble_protocol` with `/tmp/dosey-platformio/bin/pio run -e 09_ble_protocol -t upload --upload-port <port>`.
+2. Keep the USB serial monitor open at 115200 baud and confirm `D1 EVT boot BLE_READY`.
+3. On an Android robot phone, open Controller, grant Bluetooth scan/connect access, and tap Connect.
+4. Confirm the app reports `Controller connected`; then run `STATUS` and confirm the history details include `STATUS_OK`, `SERVO_UNCONFIGURED`, `PIR_UNCONFIGURED`, and `MOVEMENT_IDLE`.
+5. Run `HEARTBEAT` and confirm `HEARTBEAT_OK`.
+6. Do not enable the servo yet. `SERVO_TEST` and `DISPENSE_TEST` must return `CONFIGURATION_REQUIRED`; `DISPENSE_NEXT` must return `COMMAND_DISABLED`.
+7. Disconnect from the app and confirm the controller advertises again before reconnecting once. The single-client limit is best-effort until this behavior is verified on the physical radio.
+
+The BLE service UUID is `8f3a1001-6f5b-4d4f-9c2a-5d6e7f801001`. The write
+characteristic ends in `1002`, and the notify characteristic ends in `1003`.
+Both transports use the same newline-delimited D1 messages. The app and firmware
+split BLE writes/notifications into conservative 20-byte chunks and reassemble
+complete bounded lines.
+
+The pinned Arduino-ESP32 3.3.7 NimBLE stack automatically creates the `0x2902`
+client configuration descriptor for a notify characteristic. Its `BLE2902`
+compatibility class is deprecated and warns against adding that descriptor
+manually.
+
+Stop on heat, smell, resets, repeated connection loss, malformed responses, or
+any unexpected output or movement. Record observed BLE behavior separately from
+compile/test evidence.
+
+## Safety behavior
+
+- External outputs start inactive; disabled paths never call their hardware initialization functions.
+- Servo programs never attach PWM or move at boot.
+- USB input is bounded to 96 characters; an oversized line is rejected and the next newline-delimited command can still be processed.
+- Servo movement is nonblocking, allows only one active movement, rejects busy or duplicate active command IDs, and has a 2.5-second deadline.
+- `CANCEL` detaches PWM and reports the movement as unresolved, not successful.
+- Timeout detaches PWM and emits `MOVEMENT_TIMEOUT`.
+- Servo attachment failure emits `SERVO_ATTACH_FAILED` before movement starts.
+- `DISPENSE_TEST` is movement-only. `DISPENSE_NEXT` returns `COMMAND_DISABLED` until carousel movement meets the mechanical test gate.
+- Motors must not be powered from the phone or directly from a XIAO GPIO pin. If servo power is unstable, use a suitable regulated 5 V path with shared ground after the wiring is verified.
+
+See `../docs/protocol.md` for the implemented serial demo and `../docs/wiring.md` for confirmed versus pending wiring.

@@ -96,7 +96,7 @@ void main() {
         ),
         (
           scenario: DemoScenarioId.preAcceptanceTimeout,
-          slotStatus: 'loaded',
+          slotStatus: 'needs_review',
           failure: ControllerCommandFailureReason.timeout,
         ),
         (

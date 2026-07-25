@@ -15,6 +15,7 @@ import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_plus_gateway.dart';
 import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/ble_controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_bench_service.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
@@ -30,6 +31,7 @@ import 'package:dosey_app/core/notifications/flutter_local_notification_schedule
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
+import 'package:dosey_app/core/permissions/ble_permission_preparer.dart';
 import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -55,6 +57,7 @@ class DoseyAppScope extends StatefulWidget {
     this.database,
     this.reminderScheduler,
     this.permissionGateway,
+    this.androidSdkGateway,
     this.notificationTapController,
     this.missedDoseReconciliationService,
     this.bleGateway,
@@ -70,6 +73,7 @@ class DoseyAppScope extends StatefulWidget {
   final DoseyDatabase? database;
   final ReminderScheduler? reminderScheduler;
   final AppPermissionGateway? permissionGateway;
+  final AndroidSdkGateway? androidSdkGateway;
   final ReminderNotificationTapController? notificationTapController;
   final MissedDoseReconciliationService? missedDoseReconciliationService;
   final BleGateway? bleGateway;
@@ -174,19 +178,30 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     final demoIdGenerator = _database.isDemo
         ? DemoCommandSessionIdGenerator()
         : null;
+    final ble = _database.isDemo
+        ? const DemoBleGateway()
+        : widget.bleGateway ?? FlutterBluePlusBleGateway();
+    final permissions = _database.isDemo
+        ? const DemoPermissionGateway()
+        : widget.permissionGateway ?? PermissionHandlerGateway();
     final controller =
         widget.controllerGateway ??
-        SimulatedControllerGateway(
-          canHostRobot: () async {
-            final platform = currentAppDevicePlatform();
-            final storedRole = await settings.getDeviceRole();
-            final role = storedRole.isAllowedOn(platform)
-                ? storedRole
-                : AppDeviceRole.defaultFor(platform);
-            return role.canHostRobot;
-          },
-          delay: demoStageGate?.wait,
-        );
+        (!_database.isDemo && ble is DoseyBleGateway
+            ? BleControllerGateway(
+                transport: ble,
+                canHostRobot: () => _canHostRobot(settings),
+                prepareBleAccess: () => BlePermissionPreparer(
+                  permissions: permissions,
+                  platform: currentAppDevicePlatform(),
+                  androidSdk:
+                      widget.androidSdkGateway ??
+                      const MethodChannelAndroidSdkGateway(),
+                ).prepare(),
+              )
+            : SimulatedControllerGateway(
+                canHostRobot: () => _canHostRobot(settings),
+                delay: demoStageGate?.wait,
+              ));
     final commandRepository = LocalControllerCommandRepository(
       _database,
       sessionIdGenerator: demoIdGenerator?.call,
@@ -240,7 +255,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
             ),
             database: _database,
             clock: _appClock as ControllableAppClock,
-            controller: controller,
+            controller: controller as SimulatedControllerGateway,
             stageGate: demoStageGate!,
             idGenerator: demoIdGenerator!,
             lifecycle: controllerLifecycle,
@@ -288,9 +303,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         clock: _appClock.ticks,
         now: _appClock.now,
       ),
-      ble: _database.isDemo
-          ? const DemoBleGateway()
-          : widget.bleGateway ?? FlutterBluePlusBleGateway(),
+      ble: ble,
       connectivity: _database.isDemo
           ? const DemoConnectivityGateway()
           : widget.connectivityGateway ?? ConnectivityPlusGateway(),
@@ -299,9 +312,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
           widget.voicePlayer ??
           DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway()),
       notificationTaps: notificationTaps,
-      permissions: _database.isDemo
-          ? const DemoPermissionGateway()
-          : widget.permissionGateway ?? PermissionHandlerGateway(),
+      permissions: permissions,
       // Keeping a mounted display awake is reversible device behavior, unlike
       // the network, notification, and backup effects disabled in demo mode.
       screenAwake:
@@ -313,6 +324,15 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     } else {
       unawaited(_runStartupMaintenance());
     }
+  }
+
+  Future<bool> _canHostRobot(LocalAppSettingsRepository settings) async {
+    final platform = currentAppDevicePlatform();
+    final storedRole = await settings.getDeviceRole();
+    final role = storedRole.isAllowedOn(platform)
+        ? storedRole
+        : AppDeviceRole.defaultFor(platform);
+    return role.canHostRobot;
   }
 
   Future<void> _connectDemoController() async {

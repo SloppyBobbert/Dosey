@@ -54,6 +54,7 @@ class ControllerScreen extends StatelessWidget {
                 _ControllerHeroCard(
                   controller: controller,
                   role: role,
+                  isDemo: dependencies.isDemo,
                   onConnect: () => _runControllerAction(
                     context,
                     dependencies.controller.connect,
@@ -116,7 +117,9 @@ class ControllerScreen extends StatelessWidget {
                           ),
                           label: Text(
                             canDispense
-                                ? 'Run simulated dispense'
+                                ? dependencies.isDemo
+                                      ? 'Run simulated dispense'
+                                      : 'Run dispense test'
                                 : 'Dispense disabled',
                           ),
                         ),
@@ -138,6 +141,18 @@ class ControllerScreen extends StatelessWidget {
                   _EnterDemoCard(
                     onEnter: () =>
                         _runControllerAction(context, demoMode.enter),
+                  ),
+                ],
+                if (!dependencies.isDemo) ...[
+                  const SizedBox(height: 12),
+                  _ControllerBenchCard(
+                    runCommand: (command) => _runControllerAction(
+                      context,
+                      () => dependencies.controllerBench.run(command),
+                      requiresPin:
+                          command == ControllerBenchCommand.servoTest ||
+                          command == ControllerBenchCommand.dispenseTest,
+                    ),
                   ),
                 ],
               ],
@@ -536,12 +551,14 @@ class _ControllerHeroCard extends StatelessWidget {
   const _ControllerHeroCard({
     required this.controller,
     required this.role,
+    required this.isDemo,
     required this.onConnect,
     required this.onDisconnect,
   });
 
   final ControllerSnapshot controller;
   final AppDeviceRole role;
+  final bool isDemo;
   final VoidCallback onConnect;
   final VoidCallback onDisconnect;
 
@@ -605,7 +622,9 @@ class _ControllerHeroCard extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Demo simulator only. Real BLE comes after protocol work.',
+              isDemo
+                  ? 'Demo simulator. No physical controller commands are sent.'
+                  : 'BLE D1 bench link. Movement still requires verified hardware configuration.',
               style: textTheme.bodySmall?.copyWith(
                 color: colorScheme.onPrimaryContainer,
               ),
@@ -629,13 +648,13 @@ class _ControllerHeroCard extends StatelessWidget {
                   icon: Icons.lock_outline,
                   label: 'Manual safety lock',
                 ),
-                const _ControllerHeroChip(
+                _ControllerHeroChip(
                   icon: Icons.schema_outlined,
-                  label: 'BLE protocol pending',
+                  label: isDemo ? 'Simulated protocol' : 'D1 BLE protocol',
                 ),
-                const _ControllerHeroChip(
+                _ControllerHeroChip(
                   icon: Icons.cable_outlined,
-                  label: 'Simulator bridge',
+                  label: isDemo ? 'Simulator bridge' : 'Physical controller',
                 ),
               ],
             ),
@@ -646,7 +665,9 @@ class _ControllerHeroCard extends StatelessWidget {
               children: [
                 OutlinedButton(
                   onPressed: onConnect,
-                  child: const Text('Connect simulator'),
+                  child: Text(
+                    isDemo ? 'Connect simulator' : 'Connect controller',
+                  ),
                 ),
                 OutlinedButton(
                   onPressed: onDisconnect,

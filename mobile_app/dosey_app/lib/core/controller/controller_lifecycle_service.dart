@@ -168,6 +168,15 @@ class ControllerLifecycleService {
         if (_controller case final StagedControllerGateway stagedController) {
           await stagedController.requestStagedDispense(
             doseId: doseId,
+            movement: switch (commandType) {
+              ControllerCommandType.servoTest =>
+                ControllerMovementCommand.servoTest,
+              ControllerCommandType.dispenseTest =>
+                ControllerMovementCommand.dispenseTest,
+              ControllerCommandType.dispenseNext =>
+                ControllerMovementCommand.dispenseNext,
+              _ => throw StateError('Unsupported movement command type.'),
+            },
             onStage: recordStage,
           );
         } else {
@@ -218,6 +227,8 @@ class ControllerLifecycleService {
       } on Object catch (error) {
         final failedAt = _current();
         if (error is ControllerCommandPreAcceptanceTimeoutException) {
+          // A missing acceptance event does not prove that firmware stayed
+          // idle: the response may have been lost after movement began.
           await _commandRepository.appendEvent(
             session.id,
             ControllerCommandEventType.controllerError,
@@ -230,9 +241,11 @@ class ControllerLifecycleService {
             failureReason: ControllerCommandFailureReason.timeout,
             updatedAt: failedAt,
           );
-          await _restoreReadyStateForFailedGuidedOrLegacySlot(
+          await _quarantineGuidedOrLegacySlotForReview(
             slotId: slotId,
             guidedTarget: guidedTarget,
+            occurredAt: failedAt,
+            reason: 'acceptance_timeout',
           );
         } else if (error is ControllerCommandRejectedException) {
           await _commandRepository.appendEvent(

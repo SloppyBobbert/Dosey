@@ -1,0 +1,61 @@
+name: Firmware CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  platformio-firmware:
+    name: Native tests, XIAO builds, static checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: firmware
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.4.0
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned tools
+        run: pip install platformio==6.1.19 intelhex==2.3.0
+
+      - name: Run native tests
+        run: |
+          pio test -e native_parser
+          pio test -e native_state
+          pio test -e native_protocol
+          pio test -e native_config
+          pio test -e native_config_defaults
+
+      - name: Build safe-default XIAO firmware
+        run: |
+          pio run -e 01_blink_serial
+          pio run -e 02_digital_output
+          pio run -e 03_button_input
+          pio run -e 04_pir_input
+          pio run -e 05_analog_input
+          pio run -e 06_i2c_scanner
+          pio run -e 07_servo_sweep
+          pio run -e 08_serial_protocol
+          pio run -e 09_ble_protocol
+
+      - name: Check protocol environment
+        run: |
+          pio check -e 08_serial_protocol --skip-packages
+          pio check -e 09_ble_protocol --skip-packages
