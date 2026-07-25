@@ -47,6 +47,7 @@ import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
+import 'package:dosey_app/features/robot_face/demo_face_lab_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/doses/dose_action_service.dart';
@@ -278,6 +279,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       prescriptions: prescriptions,
       doseLog: doseLog,
     );
+    final demoFaceLab = _database.isDemo ? DemoFaceLabController() : null;
     final demoScenarios = _database.isDemo
         ? DemoScenarioService(
             data: DemoDataRepository(
@@ -298,6 +300,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
             commandRepository: commandRepository,
             doseActions: doseActions,
             reconciliation: _missedDoseReconciliation,
+            onReset: demoFaceLab!.reset,
           )
         : null;
     final connectivity = _database.isDemo
@@ -327,6 +330,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       controllerCommands: commandRepository,
       controllerBench: controllerBench,
       demoScenarios: demoScenarios,
+      demoFaceLab: demoFaceLab,
       robotFaceSettings: robotFaceSettings,
       robotFaceController: RobotFaceController(
         settings: settings,
@@ -458,6 +462,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     if (_dependenciesInitialized) {
       unawaited(_dependencies.controller.close());
       unawaited(_dependencies.demoScenarios?.close());
+      unawaited(_dependencies.demoFaceLab?.close());
       unawaited(_dependencies.robotFaceController.close());
       unawaited(_dependencies.ble.close());
       unawaited(_dependencies.voicePlayer.dispose());
@@ -505,6 +510,7 @@ class DoseyAppDependencies {
     required this.controllerCommands,
     required this.controllerBench,
     required this.demoScenarios,
+    required this.demoFaceLab,
     required this.robotFaceSettings,
     required this.robotFaceController,
     required this.ble,
@@ -540,6 +546,7 @@ class DoseyAppDependencies {
   final ControllerCommandRepository controllerCommands;
   final ControllerBenchService controllerBench;
   final DemoScenarioService? demoScenarios;
+  final DemoFaceLabController? demoFaceLab;
   final RobotFaceSettingsRepository robotFaceSettings;
   final RobotFaceController robotFaceController;
   final BleGateway ble;

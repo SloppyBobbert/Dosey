@@ -8,6 +8,7 @@ import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/doses/dose_action_logger.dart';
+import 'package:dosey_app/features/robot_face/demo_face_lab_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
@@ -44,6 +45,24 @@ class RobotFaceScreen extends StatefulWidget {
   static const networkAdvisoryBadgeKey = ValueKey<String>(
     'robot-face-network-advisory-badge',
   );
+  static const faceLabButtonKey = ValueKey<String>('robot-face-lab-button');
+  static const faceLabPanelKey = ValueKey<String>('robot-face-lab-panel');
+  static const faceLabPreviewMarkerKey = ValueKey<String>(
+    'robot-face-lab-preview-marker',
+  );
+  static const faceLabFaceSelectorKey = ValueKey<String>(
+    'robot-face-lab-face-selector',
+  );
+  static const faceLabVoiceSpeakingKey = ValueKey<String>(
+    'robot-face-lab-voice-speaking',
+  );
+  static const faceLabVoiceInterruptKey = ValueKey<String>(
+    'robot-face-lab-voice-interrupt',
+  );
+  static const faceLabReducedMotionKey = ValueKey<String>(
+    'robot-face-lab-reduced-motion',
+  );
+  static const faceLabResetKey = ValueKey<String>('robot-face-lab-reset');
   static const actionPanelKey = ValueKey<String>('robot-face-action-panel');
   static const confirmTakenButtonKey = ValueKey<String>(
     'robot-face-confirm-taken-button',
@@ -156,6 +175,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.maybeOf(context);
     final scenarios = dependencies?.demoScenarios;
+    final faceLab = dependencies?.demoFaceLab;
     return Scaffold(
       backgroundColor: const Color(0xFF04070D),
       body: StreamBuilder<VoicePlaybackPhase>(
@@ -169,42 +189,290 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
             stream: _stateStream,
             initialData: _initialState ?? _fallbackState,
             builder: (context, snapshot) {
-              final state = snapshot.data ?? _fallbackState;
-              return Stack(
-                children: [
-                  ColoredBox(
-                    color: const Color(0xFF04070D),
-                    child: SafeArea(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final isPortraitFrame =
-                              constraints.maxHeight > constraints.maxWidth;
-                          Widget frame = _RobotFaceFrame(
-                            state: state,
-                            isActive: widget.isActive,
-                            voicePhase: voicePhase,
-                            onInteraction: _handleInteraction,
-                            doseActionLogger: widget.doseActionLogger,
-                          );
+              final liveState = snapshot.data ?? _fallbackState;
+              Widget buildFace(DemoFaceLabState labState) {
+                final state = labState.previewStateFor(liveState);
+                final effectiveVoicePhase = labState.voicePhase ?? voicePhase;
+                Widget content = Stack(
+                  children: [
+                    ColoredBox(
+                      color: const Color(0xFF04070D),
+                      child: SafeArea(
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isPortraitFrame =
+                                constraints.maxHeight > constraints.maxWidth;
+                            Widget frame = _RobotFaceFrame(
+                              state: state,
+                              isActive: widget.isActive,
+                              voicePhase: effectiveVoicePhase,
+                              onInteraction: _handleInteraction,
+                              doseActionLogger: widget.doseActionLogger,
+                            );
 
-                          if (isPortraitFrame) {
-                            frame = RotatedBox(quarterTurns: 1, child: frame);
-                          }
+                            if (isPortraitFrame) {
+                              frame = RotatedBox(quarterTurns: 1, child: frame);
+                            }
 
-                          return Center(child: frame);
-                        },
+                            return Center(child: frame);
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                  if (scenarios != null)
-                    _DemoPresenterControls(scenarios: scenarios),
-                ],
+                    if (scenarios != null)
+                      _DemoPresenterControls(scenarios: scenarios),
+                    if (faceLab != null)
+                      _DemoFaceLabControls(
+                        controller: faceLab,
+                        state: labState,
+                      ),
+                  ],
+                );
+                if (labState.reducedMotion) {
+                  content = MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(disableAnimations: true),
+                    child: content,
+                  );
+                }
+                return content;
+              }
+
+              if (faceLab == null) {
+                return buildFace(const DemoFaceLabState());
+              }
+              return StreamBuilder<DemoFaceLabState>(
+                stream: faceLab.states,
+                initialData: faceLab.state,
+                builder: (context, labSnapshot) {
+                  return buildFace(labSnapshot.requireData);
+                },
               );
             },
           );
         },
       ),
     );
+  }
+}
+
+class _DemoFaceLabControls extends StatelessWidget {
+  const _DemoFaceLabControls({required this.controller, required this.state});
+
+  final DemoFaceLabController controller;
+  final DemoFaceLabState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Stack(
+        children: [
+          if (state.isPreviewing)
+            Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Semantics(
+                  label: 'Face Lab preview active',
+                  child: DecoratedBox(
+                    key: RobotFaceScreen.faceLabPreviewMarkerKey,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF5B942),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      child: Text(
+                        'PREVIEW',
+                        style: TextStyle(
+                          color: Color(0xFF201500),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Align(
+            alignment: Alignment.topRight,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: state.isExpanded
+                  ? _DemoFaceLabPanel(controller: controller, state: state)
+                  : Tooltip(
+                      message: 'Open deterministic face preview controls',
+                      child: FloatingActionButton.small(
+                        key: RobotFaceScreen.faceLabButtonKey,
+                        heroTag: 'robot-face-lab',
+                        onPressed: controller.open,
+                        backgroundColor: const Color(0xFF172334),
+                        foregroundColor: const Color(0xFF9DE8FF),
+                        child: const Icon(Icons.face_retouching_natural),
+                      ),
+                    ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DemoFaceLabPanel extends StatelessWidget {
+  const _DemoFaceLabPanel({required this.controller, required this.state});
+
+  final DemoFaceLabController controller;
+  final DemoFaceLabState state;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      key: RobotFaceScreen.faceLabPanelKey,
+      color: const Color(0xF5111824),
+      elevation: 12,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360, maxHeight: 540),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'FACE LAB',
+                      style: TextStyle(
+                        color: Color(0xFF9DE8FF),
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.4,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close Face Lab and clear preview',
+                    onPressed: controller.closePanel,
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<DemoFacePreview>(
+                key: RobotFaceScreen.faceLabFaceSelectorKey,
+                initialValue: state.face,
+                isExpanded: true,
+                dropdownColor: const Color(0xFF172334),
+                decoration: const InputDecoration(
+                  labelText: 'Face state',
+                  border: OutlineInputBorder(),
+                ),
+                items: DemoFacePreview.values
+                    .map(
+                      (face) => DropdownMenuItem(
+                        value: face,
+                        child: Text(face.label),
+                      ),
+                    )
+                    .toList(growable: false),
+                onChanged: (face) {
+                  if (face != null) controller.selectFace(face);
+                },
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Voice lifecycle',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _FaceLabAction(
+                    label: 'Preparing',
+                    onPressed: controller.previewVoicePreparing,
+                  ),
+                  _FaceLabAction(
+                    key: RobotFaceScreen.faceLabVoiceSpeakingKey,
+                    label: 'Speaking',
+                    onPressed: controller.previewVoiceSpeaking,
+                  ),
+                  _FaceLabAction(
+                    label: 'Complete',
+                    onPressed: controller.completeVoice,
+                  ),
+                  _FaceLabAction(
+                    key: RobotFaceScreen.faceLabVoiceInterruptKey,
+                    label: 'Interrupt',
+                    onPressed: controller.interruptVoice,
+                  ),
+                  _FaceLabAction(
+                    label: 'Playback error',
+                    onPressed: controller.failVoice,
+                  ),
+                ],
+              ),
+              if (state.voiceResult case final result?) ...[
+                const SizedBox(height: 8),
+                Text(switch (result) {
+                  DemoFaceVoiceResult.completed => 'Voice completed',
+                  DemoFaceVoiceResult.interrupted => 'Voice interrupted',
+                  DemoFaceVoiceResult.failed => 'Voice playback failed',
+                }, style: const TextStyle(color: Color(0xFFF5B942))),
+              ],
+              const SizedBox(height: 10),
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Internet offline'),
+                subtitle: const Text('Local reminders remain available'),
+                value: state.internetOffline,
+                onChanged: controller.setInternetOffline,
+              ),
+              SwitchListTile.adaptive(
+                key: RobotFaceScreen.faceLabReducedMotionKey,
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Reduced motion preview'),
+                value: state.reducedMotion,
+                onChanged: controller.setReducedMotion,
+              ),
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                key: RobotFaceScreen.faceLabResetKey,
+                onPressed: controller.reset,
+                icon: const Icon(Icons.restart_alt),
+                label: const Text('Reset preview'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FaceLabAction extends StatelessWidget {
+  const _FaceLabAction({
+    super.key,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton(onPressed: onPressed, child: Text(label));
   }
 }
 

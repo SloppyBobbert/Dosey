@@ -86,6 +86,7 @@ void main() {
     expect(dependencies.permissions, same(permissionGateway));
     expect(dependencies.robotFaceSettings, isNotNull);
     expect(dependencies.robotFaceController, isNotNull);
+    expect(dependencies.demoFaceLab, isNull);
     expect(dependencies.doseActions, isNotNull);
 
     await tester.pumpWidget(const SizedBox());
@@ -185,6 +186,7 @@ void main() {
 
     expect(dependencies.isDemo, isTrue);
     expect(dependencies.demoScenarios, isNotNull);
+    expect(dependencies.demoFaceLab, isNotNull);
     expect(dependencies.reminderScheduler, isA<DemoReminderScheduler>());
     expect(dependencies.ble, isA<DemoBleGateway>());
     expect(dependencies.connectivity, isA<DemoConnectivityGateway>());

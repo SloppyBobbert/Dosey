@@ -562,8 +562,86 @@ void main() {
     final state = await fixture.controller.watchState().first;
 
     expect(state.mode, RobotFaceMode.offline);
+    expect(state.controllerCondition, RobotFaceControllerCondition.verifying);
     expect(state.statusLabel, 'Verifying controller heartbeat');
   });
+
+  for (final testCase
+      in <
+        ({ControllerSnapshot snapshot, RobotFaceControllerCondition condition})
+      >[
+        (
+          snapshot: const ControllerSnapshot.disconnected(),
+          condition: RobotFaceControllerCondition.disconnected,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.scanning,
+            canRequestDispense: false,
+            statusLabel: 'Connecting to controller',
+            healthState: ControllerHealthState.connecting,
+          ),
+          condition: RobotFaceControllerCondition.connecting,
+        ),
+        (
+          snapshot: const ControllerSnapshot.connected(),
+          condition: RobotFaceControllerCondition.verifying,
+        ),
+        (
+          snapshot: const ControllerSnapshot.online(),
+          condition: RobotFaceControllerCondition.online,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.disconnected,
+            canRequestDispense: false,
+            statusLabel: 'Controller heartbeat missed',
+            healthState: ControllerHealthState.offline,
+          ),
+          condition: RobotFaceControllerCondition.offline,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.scanning,
+            canRequestDispense: false,
+            statusLabel: 'Reconnecting to controller',
+            healthState: ControllerHealthState.reconnecting,
+          ),
+          condition: RobotFaceControllerCondition.reconnecting,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.error,
+            canRequestDispense: false,
+            statusLabel: 'Bluetooth is unavailable',
+            healthState: ControllerHealthState.error,
+          ),
+          condition: RobotFaceControllerCondition.bluetoothUnavailable,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.error,
+            canRequestDispense: false,
+            statusLabel: 'Controller reported a jam',
+            healthState: ControllerHealthState.error,
+          ),
+          condition: RobotFaceControllerCondition.fault,
+        ),
+      ]) {
+    test('maps ${testCase.condition.name} controller presentation', () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9),
+        scheduleHour: 10,
+        controllerSnapshot: testCase.snapshot,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final state = await fixture.controller.watchState().first;
+      expect(state.controllerCondition, testCase.condition);
+    });
+  }
 
   test(
     'surfaces happy confirmed for the current due dose before advancing',

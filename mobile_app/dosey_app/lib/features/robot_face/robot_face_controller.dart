@@ -235,6 +235,7 @@ class RobotFaceController {
       rampProgress: choreography.rampProgress,
       isInAwakeWindow: choreography.isInAwakeWindow,
       statusLabel: _statusFor(role, nextSchedule, dueDoseId, latestDoseEvent),
+      controllerCondition: _controllerConditionFor(_controllerSnapshot),
       networkAdvisory: _connectivityState == ConnectivityState.offline
           ? RobotFaceNetworkAdvisory.internetOffline
           : null,
@@ -264,6 +265,26 @@ class RobotFaceController {
       return baseState.copyWith(mode: RobotFaceMode.sleepy);
     }
     return baseState;
+  }
+
+  RobotFaceControllerCondition _controllerConditionFor(
+    ControllerSnapshot snapshot,
+  ) {
+    return switch (snapshot.healthState) {
+      ControllerHealthState.disconnected =>
+        RobotFaceControllerCondition.disconnected,
+      ControllerHealthState.connecting =>
+        RobotFaceControllerCondition.connecting,
+      ControllerHealthState.verifying => RobotFaceControllerCondition.verifying,
+      ControllerHealthState.online => RobotFaceControllerCondition.online,
+      ControllerHealthState.offline => RobotFaceControllerCondition.offline,
+      ControllerHealthState.reconnecting =>
+        RobotFaceControllerCondition.reconnecting,
+      ControllerHealthState.error =>
+        snapshot.statusLabel.toLowerCase().contains('bluetooth')
+            ? RobotFaceControllerCondition.bluetoothUnavailable
+            : RobotFaceControllerCondition.fault,
+    };
   }
 
   MedicationShortageAlertRow? _activeShortageAlert() {

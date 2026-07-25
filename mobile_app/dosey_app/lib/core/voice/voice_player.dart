@@ -41,7 +41,12 @@ class JustAudioVoicePlaybackGateway implements VoicePlaybackGateway {
     final clampedVolume = volume.clamp(0.0, 1.0).toDouble();
     await _player.setVolume(clampedVolume);
     if (requestId != _requestId) return;
-    await _player.setAsset(assetPath);
+    try {
+      await _player.setAsset(assetPath);
+    } on PlayerInterruptedException {
+      if (requestId != _requestId) return;
+      rethrow;
+    }
     // A replacement can arrive while just_audio is still loading the asset.
     if (requestId != _requestId) return;
     await _player.play();

@@ -20,6 +20,20 @@ import 'package:dosey_app/features/doses/dose_action_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('scenario resets clear presentation-only preview state', () async {
+    var resetCalls = 0;
+    final fixture = await _ScenarioFixture.create(
+      onReset: () => resetCalls += 1,
+    );
+    addTearDown(fixture.close);
+
+    await fixture.service.select(DemoScenarioId.missedRecognized);
+    await fixture.service.restart();
+    fixture.service.stopPresentation();
+
+    expect(resetCalls, 3);
+  });
+
   test(
     'happy path exposes each stage and never treats movement as taken',
     () async {
@@ -263,7 +277,10 @@ void main() {
   });
 
   test('failed reset blocks steps until a later reset succeeds', () async {
-    final fixture = await _ScenarioFixture.create();
+    var resetCalls = 0;
+    final fixture = await _ScenarioFixture.create(
+      onReset: () => resetCalls += 1,
+    );
     addTearDown(fixture.close);
     await fixture.service.next();
     expect(fixture.service.state.completedSteps, 1);
@@ -279,6 +296,7 @@ void main() {
       fixture.service.select(DemoScenarioId.missedRecognized),
       throwsA(anything),
     );
+    expect(resetCalls, 1);
     await expectLater(fixture.service.next(), throwsStateError);
     expect(fixture.service.state.completedSteps, 1);
 
@@ -379,6 +397,7 @@ class _ScenarioFixture {
 
   static Future<_ScenarioFixture> create({
     DemoPlaybackDelay? playbackDelay,
+    void Function()? onReset,
   }) async {
     final database = DoseyDatabase.inMemory(isDemo: true);
     final clock = ControllableAppClock(seedTime);
@@ -441,6 +460,7 @@ class _ScenarioFixture {
         now: clock.now,
       ),
       playbackDelay: playbackDelay,
+      onReset: onReset,
     );
     return _ScenarioFixture(
       database: database,

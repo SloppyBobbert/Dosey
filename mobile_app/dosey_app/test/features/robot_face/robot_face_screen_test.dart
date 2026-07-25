@@ -25,6 +25,7 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
+import 'package:dosey_app/features/robot_face/demo_face_lab_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
@@ -467,6 +468,102 @@ void main() {
       expect(canvasState.debugUsesNetworkAdvisoryPalette as bool, isFalse);
     },
   );
+
+  for (final testCase
+      in <
+        ({
+          RobotFaceControllerCondition condition,
+          RobotFaceMode mode,
+          Duration cadence,
+        })
+      >[
+        (
+          condition: RobotFaceControllerCondition.disconnected,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 5200),
+        ),
+        (
+          condition: RobotFaceControllerCondition.connecting,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 3600),
+        ),
+        (
+          condition: RobotFaceControllerCondition.verifying,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 2200),
+        ),
+        (
+          condition: RobotFaceControllerCondition.offline,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 5200),
+        ),
+        (
+          condition: RobotFaceControllerCondition.reconnecting,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 1800),
+        ),
+        (
+          condition: RobotFaceControllerCondition.bluetoothUnavailable,
+          mode: RobotFaceMode.error,
+          cadence: Duration(milliseconds: 2600),
+        ),
+        (
+          condition: RobotFaceControllerCondition.fault,
+          mode: RobotFaceMode.error,
+          cadence: Duration(milliseconds: 1600),
+        ),
+      ]) {
+    testWidgets('${testCase.condition.name} uses its controller face family', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          initialState: RobotFaceState(
+            mode: testCase.mode,
+            controllerCondition: testCase.condition,
+            nextEventLabel: 'No reminders scheduled',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 0,
+            isInAwakeWindow: false,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+      expect(canvasState.debugEffectiveControllerCondition, testCase.condition);
+      expect(canvasState.debugAnimationDuration, testCase.cadence);
+    });
+  }
+
+  testWidgets('dose and missed faces outrank stale controller presentation', (
+    WidgetTester tester,
+  ) async {
+    for (final mode in <RobotFaceMode>[
+      RobotFaceMode.doseReady,
+      RobotFaceMode.missed,
+    ]) {
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          key: ValueKey<RobotFaceMode>(mode),
+          initialState: RobotFaceState(
+            mode: mode,
+            controllerCondition: RobotFaceControllerCondition.reconnecting,
+            nextEventLabel: 'Now · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+      expect(canvasState.debugEffectiveControllerCondition, isNull);
+    }
+  });
 
   testWidgets('ramps compact urgency between soon and ready states', (
     WidgetTester tester,
@@ -1682,6 +1779,151 @@ void main() {
     await tester.pump();
 
     expect(doseActionLogger.events, hasLength(1));
+  });
+
+  testWidgets('Face Lab is available only in isolated demo mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(RobotFaceScreen.faceLabButtonKey), findsNothing);
+
+    final demoDatabase = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(demoDatabase.close);
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        key: const ValueKey<String>('demo-face-lab-app'),
+        database: demoDatabase,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(RobotFaceScreen.faceLabButtonKey), findsOneWidget);
+  });
+
+  testWidgets('Face Lab previews controller and voice states without actions', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(database.close);
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.waitingForConfirmation,
+          nextEventLabel: 'Taken? · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          actionDoseId: 'dose-123',
+          availableActions: {
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+            RobotFaceActionKind.askForHelp,
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabButtonKey));
+    await tester.pump();
+
+    expect(find.byKey(RobotFaceScreen.faceLabPanelKey), findsOneWidget);
+    final dropdown = tester.widget<DropdownButton<DemoFacePreview>>(
+      find.descendant(
+        of: find.byKey(RobotFaceScreen.faceLabFaceSelectorKey),
+        matching: find.byType(DropdownButton<DemoFacePreview>),
+      ),
+    );
+    dropdown.onChanged?.call(DemoFacePreview.reconnecting);
+    await tester.pump();
+
+    expect(find.byKey(RobotFaceScreen.faceLabPreviewMarkerKey), findsOneWidget);
+    expect(find.byKey(RobotFaceScreen.actionPanelKey), findsNothing);
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(
+      canvas.debugEffectiveControllerCondition,
+      RobotFaceControllerCondition.reconnecting,
+    );
+
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabVoiceSpeakingKey));
+    await tester.pump();
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isTrue,
+    );
+    await tester.ensureVisible(
+      find.byKey(RobotFaceScreen.faceLabVoiceInterruptKey),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabVoiceInterruptKey));
+    await tester.pump();
+    expect(find.text('Voice interrupted'), findsOneWidget);
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isFalse,
+    );
+  });
+
+  testWidgets('Face Lab reduced motion and reset are deterministic', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(database.close);
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabButtonKey));
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabVoiceSpeakingKey));
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabReducedMotionKey));
+    await tester.pump();
+
+    expect(
+      (tester.state(find.byType(RobotFaceCanvas)) as dynamic).debugIsAnimating,
+      isFalse,
+    );
+
+    await tester.ensureVisible(find.byKey(RobotFaceScreen.faceLabResetKey));
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabResetKey));
+    await tester.pump();
+    expect(find.byKey(RobotFaceScreen.faceLabPreviewMarkerKey), findsNothing);
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isFalse,
+    );
   });
 }
 

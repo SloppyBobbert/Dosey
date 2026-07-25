@@ -3,8 +3,11 @@ import 'dart:async';
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:just_audio/just_audio.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('voice player routes a phrase to its WAV asset', () async {
     final gateway = _FakeVoicePlaybackGateway();
     final player = DoseyVoicePlayer(playbackGateway: gateway);
@@ -130,6 +133,70 @@ void main() {
 
     expect(gateway.disposeCount, 1);
   });
+
+  test('stale asset interruption ends without starting playback', () async {
+    late JustAudioVoicePlaybackGateway gateway;
+    final audioPlayer = _InterruptingAudioPlayer(
+      onSetAsset: () async {
+        await gateway.stop();
+        throw PlayerInterruptedException('replaced');
+      },
+    );
+    gateway = JustAudioVoicePlaybackGateway(player: audioPlayer);
+
+    await gateway.playAsset('assets/voice/test.wav', volume: 1);
+
+    expect(audioPlayer.playCount, 0);
+  });
+
+  test('current asset interruption still reaches the caller', () async {
+    final audioPlayer = _InterruptingAudioPlayer(
+      onSetAsset: () async {
+        throw PlayerInterruptedException('load failed');
+      },
+    );
+    final gateway = JustAudioVoicePlaybackGateway(player: audioPlayer);
+
+    await expectLater(
+      gateway.playAsset('assets/voice/test.wav', volume: 1),
+      throwsA(isA<PlayerInterruptedException>()),
+    );
+
+    expect(audioPlayer.playCount, 0);
+  });
+}
+
+class _InterruptingAudioPlayer extends AudioPlayer {
+  _InterruptingAudioPlayer({required this.onSetAsset});
+
+  final Future<void> Function() onSetAsset;
+  int playCount = 0;
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<Duration?> setAsset(
+    String assetPath, {
+    String? package,
+    bool preload = true,
+    Duration? initialPosition,
+    dynamic tag,
+  }) async {
+    await onSetAsset();
+    return null;
+  }
+
+  @override
+  Future<void> play() async {
+    playCount += 1;
+  }
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
 }
 
 class _FakeVoicePlaybackGateway implements VoicePlaybackGateway {
