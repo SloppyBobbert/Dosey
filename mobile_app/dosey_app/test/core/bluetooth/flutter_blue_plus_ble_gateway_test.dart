@@ -200,6 +200,129 @@ void main() {
   });
 
   test(
+    'disconnect cancels an active scan and prevents a late connection',
+    () async {
+      final scanGate = Completer<void>();
+      final plugin = _FakeFlutterBluePlusPlugin(
+        adapterStates: const Stream.empty(),
+        currentAdapterState: PluginBleAdapterState.on,
+        connectionStatesByDeviceId: {'dosey-1': const Stream.empty()},
+        scanResult: const PluginBleScanResult(
+          deviceId: 'dosey-1',
+          deviceName: 'Dosey-XIAO-C6',
+        ),
+        scanGate: scanGate,
+      );
+      final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+
+      final connection = gateway.connectToDosey();
+      await Future<void>.delayed(Duration.zero);
+      await gateway.disconnect();
+      scanGate.complete();
+      await expectLater(connection, throwsStateError);
+
+      expect(plugin.cancelScanCalls, 1);
+      expect(plugin.connectCalls, isEmpty);
+      expect(
+        await gateway.watchConnection().first,
+        const BleConnectionSnapshot.disconnected(),
+      );
+
+      await gateway.close();
+    },
+  );
+
+  test('disconnect cleans up a physical connect that completes late', () async {
+    final connectGate = Completer<void>();
+    final plugin = _FakeFlutterBluePlusPlugin(
+      adapterStates: const Stream.empty(),
+      currentAdapterState: PluginBleAdapterState.on,
+      connectionStatesByDeviceId: {'dosey-1': const Stream.empty()},
+      scanResult: const PluginBleScanResult(
+        deviceId: 'dosey-1',
+        deviceName: 'Dosey-XIAO-C6',
+      ),
+      connectGate: connectGate,
+    );
+    final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+
+    final connection = gateway.connectToDosey();
+    await Future<void>.delayed(Duration.zero);
+    expect(plugin.connectCalls, ['dosey-1']);
+
+    await gateway.disconnect();
+    connectGate.complete();
+    await expectLater(connection, throwsStateError);
+
+    expect(plugin.connectedDeviceIds, isEmpty);
+    expect(plugin.disconnectCalls, ['dosey-1', 'dosey-1']);
+
+    await gateway.close();
+  });
+
+  test(
+    'cancelled protocol setup clears subscriptions and connection state',
+    () async {
+      final notificationSetup = Completer<void>();
+      final notifications = StreamController<List<int>>.broadcast();
+      final plugin = _FakeFlutterBluePlusPlugin(
+        adapterStates: const Stream.empty(),
+        currentAdapterState: PluginBleAdapterState.on,
+        connectionStatesByDeviceId: {'dosey-1': const Stream.empty()},
+        scanResult: const PluginBleScanResult(
+          deviceId: 'dosey-1',
+          deviceName: 'Dosey-XIAO-C6',
+        ),
+        protocolValues: notifications.stream,
+        notificationSetup: notificationSetup,
+      );
+      final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+
+      final connection = gateway.connectToDosey();
+      await Future<void>.delayed(Duration.zero);
+      expect(notifications.hasListener, isTrue);
+
+      await gateway.disconnect();
+      notificationSetup.complete();
+      await expectLater(connection, throwsStateError);
+
+      expect(notifications.hasListener, isFalse);
+      expect(
+        await gateway.watchConnection().first,
+        const BleConnectionSnapshot.disconnected(),
+      );
+      await expectLater(gateway.writeProtocolBytes([1]), throwsStateError);
+
+      await gateway.close();
+      await notifications.close();
+    },
+  );
+
+  test('close cancels an active scan and prevents a late connection', () async {
+    final scanGate = Completer<void>();
+    final plugin = _FakeFlutterBluePlusPlugin(
+      adapterStates: const Stream.empty(),
+      currentAdapterState: PluginBleAdapterState.on,
+      connectionStatesByDeviceId: {'dosey-1': const Stream.empty()},
+      scanResult: const PluginBleScanResult(
+        deviceId: 'dosey-1',
+        deviceName: 'Dosey-XIAO-C6',
+      ),
+      scanGate: scanGate,
+    );
+    final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+
+    final connection = gateway.connectToDosey();
+    await Future<void>.delayed(Duration.zero);
+    await gateway.close();
+    scanGate.complete();
+    await expectLater(connection, throwsStateError);
+
+    expect(plugin.cancelScanCalls, 1);
+    expect(plugin.connectCalls, isEmpty);
+  });
+
+  test(
     'Dosey connection is not ready before protocol setup completes',
     () async {
       final connectionStates =
@@ -276,6 +399,8 @@ class _FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {
     this.protocolValues = const Stream.empty(),
     this.protocolDiscovered = true,
     this.notificationSetup,
+    this.scanGate,
+    this.connectGate,
   });
 
   @override
@@ -292,13 +417,17 @@ class _FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {
   final Stream<List<int>> protocolValues;
   final bool protocolDiscovered;
   final Completer<void>? notificationSetup;
+  final Completer<void>? scanGate;
+  final Completer<void>? connectGate;
   final List<String> connectCalls = [];
   final List<String> disconnectCalls = [];
+  final Set<String> connectedDeviceIds = {};
   final List<String> scanServiceUuids = [];
   final List<String> scanDeviceNames = [];
   final List<String> discoveryCalls = [];
   final List<(String, bool)> notifyCalls = [];
   final List<(String, List<int>)> writes = [];
+  int cancelScanCalls = 0;
 
   @override
   Future<PluginBleScanResult?> scanForService(
@@ -308,7 +437,13 @@ class _FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {
   ) async {
     scanServiceUuids.add(serviceUuid);
     scanDeviceNames.add(deviceName);
+    await scanGate?.future;
     return scanResult;
+  }
+
+  @override
+  Future<void> cancelScan() async {
+    cancelScanCalls += 1;
   }
 
   @override
@@ -339,17 +474,20 @@ class _FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {
   @override
   Future<void> connect(String deviceId) async {
     connectCalls.add(deviceId);
+    await connectGate?.future;
     if (connectError case final Error error) {
       throw error;
     }
     if (connectError case final Exception exception) {
       throw exception;
     }
+    connectedDeviceIds.add(deviceId);
   }
 
   @override
   Future<void> disconnect(String deviceId) async {
     disconnectCalls.add(deviceId);
+    connectedDeviceIds.remove(deviceId);
     if (disconnectError case final Error error) {
       throw error;
     }

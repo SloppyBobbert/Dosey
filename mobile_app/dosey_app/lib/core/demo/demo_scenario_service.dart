@@ -310,7 +310,9 @@ class DemoScenarioService {
     switch (step) {
       case 0:
         try {
-          await controller.disconnect();
+          controller.queueNextHeartbeatOutcome(
+            SimulatedHeartbeatOutcome.disconnect,
+          );
           try {
             await bench.run(ControllerBenchCommand.heartbeat);
           } on ControllerTransportOfflineException {
@@ -320,6 +322,15 @@ class DemoScenarioService {
           stageGate.enabled = true;
         }
       case 1:
+        controller.queueNextConnectOutcome(SimulatedConnectOutcome.failure);
+        try {
+          await controller.connect();
+        } on ControllerTransportOfflineException {
+          _emit(_state.copyWith(lastMessage: 'Reconnect attempt failed'));
+        } finally {
+          stageGate.enabled = true;
+        }
+      case 2:
         try {
           await controller.connect();
           await bench.run(ControllerBenchCommand.heartbeat);
@@ -419,6 +430,8 @@ class DemoScenarioService {
     idGenerator.reset();
     clock.set(data.seedTime);
     controller.queueNextDispenseOutcome(SimulatedDispenseOutcome.success);
+    controller.queueNextHeartbeatOutcome(SimulatedHeartbeatOutcome.success);
+    controller.queueNextConnectOutcome(SimulatedConnectOutcome.success);
     await data.resetAndSeed();
     await controller.connect();
   }

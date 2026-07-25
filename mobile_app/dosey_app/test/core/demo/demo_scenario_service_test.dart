@@ -155,30 +155,35 @@ void main() {
     },
   );
 
-  test('offline scenario records missed heartbeat and reconnect', () async {
-    final fixture = await _ScenarioFixture.create();
-    addTearDown(fixture.close);
-    await fixture.service.select(DemoScenarioId.offlineReconnect);
+  test(
+    'offline scenario records missed heartbeat, failed retry, and recovery',
+    () async {
+      final fixture = await _ScenarioFixture.create();
+      addTearDown(fixture.close);
+      await fixture.service.select(DemoScenarioId.offlineReconnect);
 
-    await fixture.service.next();
-    await fixture.service.next();
+      await fixture.service.next();
+      await fixture.service.next();
+      expect(fixture.service.state.lastMessage, 'Reconnect attempt failed');
+      await fixture.service.next();
 
-    final history = await fixture.repository.watchRecentHistory().first;
-    expect(
-      history[1].events.map((event) => event.eventType),
-      containsAll([
-        ControllerCommandEventType.heartbeatMissed,
-        ControllerCommandEventType.offline,
-      ]),
-    );
-    expect(
-      history[0].events.map((event) => event.eventType),
-      containsAll([
-        ControllerCommandEventType.heartbeatOk,
-        ControllerCommandEventType.reconnected,
-      ]),
-    );
-  });
+      final history = await fixture.repository.watchRecentHistory().first;
+      expect(
+        history[1].events.map((event) => event.eventType),
+        containsAll([
+          ControllerCommandEventType.heartbeatMissed,
+          ControllerCommandEventType.offline,
+        ]),
+      );
+      expect(
+        history[0].events.map((event) => event.eventType),
+        containsAll([
+          ControllerCommandEventType.heartbeatOk,
+          ControllerCommandEventType.reconnected,
+        ]),
+      );
+    },
+  );
 
   test('serialization scenario rejects a second physical command', () async {
     final fixture = await _ScenarioFixture.create();

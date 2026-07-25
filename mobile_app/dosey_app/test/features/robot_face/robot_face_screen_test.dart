@@ -1173,6 +1173,7 @@ void main() {
       await tester.pumpWidget(
         DoseyAppScope(
           database: database,
+          bleGateway: _FakeBleGateway(),
           child: MaterialApp(
             home: RobotFaceScreen(
               initialState: RobotFaceState(
@@ -1260,6 +1261,7 @@ void main() {
     await tester.pumpWidget(
       DoseyAppScope(
         database: database,
+        bleGateway: _FakeBleGateway(),
         child: MaterialApp(
           home: RobotFaceScreen(
             initialState: RobotFaceState(
@@ -1656,7 +1658,7 @@ class _ConnectedControllerGateway implements ControllerGateway {
 
   @override
   Stream<ControllerSnapshot> watchController() {
-    return Stream.value(const ControllerSnapshot.connected());
+    return Stream.value(const ControllerSnapshot.online());
   }
 }
 

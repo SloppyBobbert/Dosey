@@ -166,17 +166,28 @@ Controller command sessions/events should also distinguish command sent, accepte
 
 ## Heartbeat and offline detection
 
-The robot phone should not connect to the XIAO only when dispensing. It should regularly check that the controller is alive.
+The robot phone does not connect to the XIAO only when dispensing. In the
+foreground Android Robot Mode session, after the user requests a connection,
+the app verifies the controller with `HEARTBEAT` before enabling movement and
+checks it every 10 seconds. Personal Mode, app backgrounding, deliberate
+disconnect, and Demo Mode stop this supervision and do not scan or send
+background BLE commands.
 
-Suggested behavior:
+Current app policy:
 
-- Send `HEARTBEAT` or `STATUS_CHECK` every 5 to 10 seconds while Robot Mode is active.
-- Mark the controller unstable after 2 missed responses.
-- Mark the controller offline after 3 to 5 missed responses.
-- Log when the XIAO goes offline and when it reconnects.
-- Disable dispensing while the controller is offline.
-- Keep medication schedules and reminders active on the phone.
-- If caregiver alerts are enabled, notify the caregiver when a due dose is affected by controller offline status.
+- A BLE connection alone is not healthy. Only `HEARTBEAT_OK` moves controller health from verifying to online.
+- One missed heartbeat, heartbeat timeout, or unexpected disconnect fails closed immediately and disables movement.
+- A heartbeat due while a user command or cancel is active is deferred; it is not counted as missed and never overlaps that work.
+- Eligible reconnect delays are 2, 5, 15, 30, then 60 seconds, capped at 60 seconds. The attempt count resets only after a successful heartbeat.
+- Permission denial, unavailable Bluetooth, app backgrounding, Personal Mode, and deliberate disconnect suppress automatic retries.
+- Recovery requires both a restored BLE connection and a successful heartbeat.
+- Transition-only health events are retained locally in a bounded journal. Routine successful heartbeats do not create history rows; an explicit manual heartbeat still creates a controller command session.
+- Medication schedules and reminders remain active on the phone while controller movement is unavailable.
+- Automatic health activity never changes dose, inventory, or carousel-slot state.
+
+This policy is covered by app and simulator tests. Physical BLE timing,
+disconnect behavior, and recovery still require the XIAO and Android phone bench
+check and are not yet verified.
 
 Offline states to represent:
 

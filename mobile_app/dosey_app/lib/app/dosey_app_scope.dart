@@ -17,8 +17,10 @@ import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.da
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/ble_controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_bench_service.dart';
+import 'package:dosey_app/core/controller/controller_health_supervisor.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
+import 'package:dosey_app/core/controller/local_controller_health_event_repository.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/demo/demo_data_repository.dart';
@@ -82,7 +84,7 @@ class DoseyAppScope extends StatefulWidget {
   final ScreenAwakeGateway? screenAwakeGateway;
   final BackupFileGateway? backupFileGateway;
   final AppClock? appClock;
-  final SimulatedControllerGateway? controllerGateway;
+  final StagedControllerGateway? controllerGateway;
 
   static DoseyAppDependencies of(BuildContext context) {
     final dependencies = maybeOf(context);
@@ -103,7 +105,8 @@ class DoseyAppScope extends StatefulWidget {
   State<DoseyAppScope> createState() => _DoseyAppScopeState();
 }
 
-class _DoseyAppScopeState extends State<DoseyAppScope> {
+class _DoseyAppScopeState extends State<DoseyAppScope>
+    with WidgetsBindingObserver {
   static const _missedDoseReconciliationInterval = Duration(minutes: 15);
   static final _demoSeedTime = DateTime.utc(2040, 1, 2, 8);
 
@@ -115,12 +118,26 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
   Timer? _missedDoseReconciliationTimer;
   late final MissedDoseReconciliationService _missedDoseReconciliation;
   late final DoseyAppDependencies _dependencies;
+  StreamSubscription<AppDeviceRole>? _controllerRoleSubscription;
+  ControllerHealthSupervisor? _controllerHealthSupervisor;
+  AppDeviceRole? _controllerRole;
+  bool _isForeground = true;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _isForeground =
+        WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     _database = widget.database ?? DoseyDatabase();
     _ownsDatabase = widget.database == null;
+    assert(
+      !_database.isDemo ||
+          widget.controllerGateway == null ||
+          widget.controllerGateway is SimulatedControllerGateway,
+      'Demo mode requires a SimulatedControllerGateway.',
+    );
     if (_database.isDemo &&
         widget.appClock != null &&
         widget.appClock is! ControllableAppClock) {
@@ -184,24 +201,41 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
     final permissions = _database.isDemo
         ? const DemoPermissionGateway()
         : widget.permissionGateway ?? PermissionHandlerGateway();
-    final controller =
-        widget.controllerGateway ??
-        (!_database.isDemo && ble is DoseyBleGateway
-            ? BleControllerGateway(
-                transport: ble,
-                canHostRobot: () => _canHostRobot(settings),
-                prepareBleAccess: () => BlePermissionPreparer(
-                  permissions: permissions,
-                  platform: currentAppDevicePlatform(),
-                  androidSdk:
-                      widget.androidSdkGateway ??
-                      const MethodChannelAndroidSdkGateway(),
-                ).prepare(),
-              )
-            : SimulatedControllerGateway(
-                canHostRobot: () => _canHostRobot(settings),
-                delay: demoStageGate?.wait,
-              ));
+    final StagedControllerGateway controller;
+    if (widget.controllerGateway != null) {
+      controller = widget.controllerGateway!;
+    } else if (_database.isDemo || ble is! DoseyBleGateway) {
+      controller = SimulatedControllerGateway(
+        canHostRobot: () => _canHostRobot(settings),
+        delay: demoStageGate?.wait,
+      );
+    } else {
+      final transportController = BleControllerGateway(
+        transport: ble,
+        canHostRobot: () => _canHostRobot(settings),
+        prepareBleAccess: () => BlePermissionPreparer(
+          permissions: permissions,
+          platform: currentAppDevicePlatform(),
+          androidSdk:
+              widget.androidSdkGateway ??
+              const MethodChannelAndroidSdkGateway(),
+        ).prepare(),
+        commandTimeout: const Duration(seconds: 5),
+      );
+      controller = ControllerHealthSupervisor(
+        delegate: transportController,
+        availability: ble.watchAvailability(),
+        eventSink: LocalControllerHealthEventRepository(_database),
+        now: _appClock.now,
+      );
+    }
+    if (!_database.isDemo && controller is ControllerHealthSupervisor) {
+      _controllerHealthSupervisor = controller;
+      _controllerRoleSubscription = settings.watchDeviceRole().listen((role) {
+        _controllerRole = role;
+        unawaited(_updateControllerMonitoring());
+      });
+    }
     final commandRepository = LocalControllerCommandRepository(
       _database,
       sessionIdGenerator: demoIdGenerator?.call,
@@ -383,7 +417,26 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _isForeground = state == AppLifecycleState.resumed;
+    unawaited(_updateControllerMonitoring());
+  }
+
+  Future<void> _updateControllerMonitoring() async {
+    final supervisor = _controllerHealthSupervisor;
+    final role = _controllerRole;
+    if (supervisor == null || role == null) return;
+    final eligible =
+        _isForeground &&
+        currentAppDevicePlatform() == AppDevicePlatform.android &&
+        role == AppDeviceRole.androidRobot;
+    await supervisor.setMonitoringEligible(eligible);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    unawaited(_controllerRoleSubscription?.cancel());
     _missedDoseReconciliationTimer?.cancel();
     if (_ownsAppClock) {
       if (_appClock case final SystemAppClock clock) {

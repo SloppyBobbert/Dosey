@@ -8304,6 +8304,326 @@ class ControllerCommandEventsCompanion
   }
 }
 
+class $ControllerHealthEventsTable extends ControllerHealthEvents
+    with TableInfo<$ControllerHealthEventsTable, ControllerHealthEventRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ControllerHealthEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _eventTypeMeta = const VerificationMeta(
+    'eventType',
+  );
+  @override
+  late final GeneratedColumn<String> eventType = GeneratedColumn<String>(
+    'event_type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _occurredAtMeta = const VerificationMeta(
+    'occurredAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> occurredAt = GeneratedColumn<DateTime>(
+    'occurred_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _detailsMeta = const VerificationMeta(
+    'details',
+  );
+  @override
+  late final GeneratedColumn<String> details = GeneratedColumn<String>(
+    'details',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, eventType, occurredAt, details];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'controller_health_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ControllerHealthEventRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('event_type')) {
+      context.handle(
+        _eventTypeMeta,
+        eventType.isAcceptableOrUnknown(data['event_type']!, _eventTypeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_eventTypeMeta);
+    }
+    if (data.containsKey('occurred_at')) {
+      context.handle(
+        _occurredAtMeta,
+        occurredAt.isAcceptableOrUnknown(data['occurred_at']!, _occurredAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_occurredAtMeta);
+    }
+    if (data.containsKey('details')) {
+      context.handle(
+        _detailsMeta,
+        details.isAcceptableOrUnknown(data['details']!, _detailsMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ControllerHealthEventRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ControllerHealthEventRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      eventType: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}event_type'],
+      )!,
+      occurredAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}occurred_at'],
+      )!,
+      details: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}details'],
+      ),
+    );
+  }
+
+  @override
+  $ControllerHealthEventsTable createAlias(String alias) {
+    return $ControllerHealthEventsTable(attachedDatabase, alias);
+  }
+}
+
+class ControllerHealthEventRow extends DataClass
+    implements Insertable<ControllerHealthEventRow> {
+  final String id;
+  final String eventType;
+  final DateTime occurredAt;
+  final String? details;
+  const ControllerHealthEventRow({
+    required this.id,
+    required this.eventType,
+    required this.occurredAt,
+    this.details,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['event_type'] = Variable<String>(eventType);
+    map['occurred_at'] = Variable<DateTime>(occurredAt);
+    if (!nullToAbsent || details != null) {
+      map['details'] = Variable<String>(details);
+    }
+    return map;
+  }
+
+  ControllerHealthEventsCompanion toCompanion(bool nullToAbsent) {
+    return ControllerHealthEventsCompanion(
+      id: Value(id),
+      eventType: Value(eventType),
+      occurredAt: Value(occurredAt),
+      details: details == null && nullToAbsent
+          ? const Value.absent()
+          : Value(details),
+    );
+  }
+
+  factory ControllerHealthEventRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ControllerHealthEventRow(
+      id: serializer.fromJson<String>(json['id']),
+      eventType: serializer.fromJson<String>(json['eventType']),
+      occurredAt: serializer.fromJson<DateTime>(json['occurredAt']),
+      details: serializer.fromJson<String?>(json['details']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'eventType': serializer.toJson<String>(eventType),
+      'occurredAt': serializer.toJson<DateTime>(occurredAt),
+      'details': serializer.toJson<String?>(details),
+    };
+  }
+
+  ControllerHealthEventRow copyWith({
+    String? id,
+    String? eventType,
+    DateTime? occurredAt,
+    Value<String?> details = const Value.absent(),
+  }) => ControllerHealthEventRow(
+    id: id ?? this.id,
+    eventType: eventType ?? this.eventType,
+    occurredAt: occurredAt ?? this.occurredAt,
+    details: details.present ? details.value : this.details,
+  );
+  ControllerHealthEventRow copyWithCompanion(
+    ControllerHealthEventsCompanion data,
+  ) {
+    return ControllerHealthEventRow(
+      id: data.id.present ? data.id.value : this.id,
+      eventType: data.eventType.present ? data.eventType.value : this.eventType,
+      occurredAt: data.occurredAt.present
+          ? data.occurredAt.value
+          : this.occurredAt,
+      details: data.details.present ? data.details.value : this.details,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ControllerHealthEventRow(')
+          ..write('id: $id, ')
+          ..write('eventType: $eventType, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('details: $details')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, eventType, occurredAt, details);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ControllerHealthEventRow &&
+          other.id == this.id &&
+          other.eventType == this.eventType &&
+          other.occurredAt == this.occurredAt &&
+          other.details == this.details);
+}
+
+class ControllerHealthEventsCompanion
+    extends UpdateCompanion<ControllerHealthEventRow> {
+  final Value<String> id;
+  final Value<String> eventType;
+  final Value<DateTime> occurredAt;
+  final Value<String?> details;
+  final Value<int> rowid;
+  const ControllerHealthEventsCompanion({
+    this.id = const Value.absent(),
+    this.eventType = const Value.absent(),
+    this.occurredAt = const Value.absent(),
+    this.details = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ControllerHealthEventsCompanion.insert({
+    required String id,
+    required String eventType,
+    required DateTime occurredAt,
+    this.details = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       eventType = Value(eventType),
+       occurredAt = Value(occurredAt);
+  static Insertable<ControllerHealthEventRow> custom({
+    Expression<String>? id,
+    Expression<String>? eventType,
+    Expression<DateTime>? occurredAt,
+    Expression<String>? details,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (eventType != null) 'event_type': eventType,
+      if (occurredAt != null) 'occurred_at': occurredAt,
+      if (details != null) 'details': details,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ControllerHealthEventsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? eventType,
+    Value<DateTime>? occurredAt,
+    Value<String?>? details,
+    Value<int>? rowid,
+  }) {
+    return ControllerHealthEventsCompanion(
+      id: id ?? this.id,
+      eventType: eventType ?? this.eventType,
+      occurredAt: occurredAt ?? this.occurredAt,
+      details: details ?? this.details,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (eventType.present) {
+      map['event_type'] = Variable<String>(eventType.value);
+    }
+    if (occurredAt.present) {
+      map['occurred_at'] = Variable<DateTime>(occurredAt.value);
+    }
+    if (details.present) {
+      map['details'] = Variable<String>(details.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ControllerHealthEventsCompanion(')
+          ..write('id: $id, ')
+          ..write('eventType: $eventType, ')
+          ..write('occurredAt: $occurredAt, ')
+          ..write('details: $details, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AdminAuditEventsTable extends AdminAuditEvents
     with TableInfo<$AdminAuditEventsTable, AdminAuditEventRow> {
   @override
@@ -9119,8 +9439,14 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
       $ControllerCommandSessionsTable(this);
   late final $ControllerCommandEventsTable controllerCommandEvents =
       $ControllerCommandEventsTable(this);
+  late final $ControllerHealthEventsTable controllerHealthEvents =
+      $ControllerHealthEventsTable(this);
   late final $AdminAuditEventsTable adminAuditEvents = $AdminAuditEventsTable(
     this,
+  );
+  late final Index controllerHealthEventsOccurredAtIdx = Index(
+    'controller_health_events_occurred_at_idx',
+    'CREATE INDEX controller_health_events_occurred_at_idx ON controller_health_events (occurred_at DESC)',
   );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
@@ -9141,7 +9467,9 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     doseLogEvents,
     controllerCommandSessions,
     controllerCommandEvents,
+    controllerHealthEvents,
     adminAuditEvents,
+    controllerHealthEventsOccurredAtIdx,
   ];
 }
 
@@ -13333,6 +13661,208 @@ typedef $$ControllerCommandEventsTableProcessedTableManager =
       ControllerCommandEventRow,
       PrefetchHooks Function()
     >;
+typedef $$ControllerHealthEventsTableCreateCompanionBuilder =
+    ControllerHealthEventsCompanion Function({
+      required String id,
+      required String eventType,
+      required DateTime occurredAt,
+      Value<String?> details,
+      Value<int> rowid,
+    });
+typedef $$ControllerHealthEventsTableUpdateCompanionBuilder =
+    ControllerHealthEventsCompanion Function({
+      Value<String> id,
+      Value<String> eventType,
+      Value<DateTime> occurredAt,
+      Value<String?> details,
+      Value<int> rowid,
+    });
+
+class $$ControllerHealthEventsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $ControllerHealthEventsTable> {
+  $$ControllerHealthEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get details => $composableBuilder(
+    column: $table.details,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ControllerHealthEventsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $ControllerHealthEventsTable> {
+  $$ControllerHealthEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get eventType => $composableBuilder(
+    column: $table.eventType,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get details => $composableBuilder(
+    column: $table.details,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ControllerHealthEventsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $ControllerHealthEventsTable> {
+  $$ControllerHealthEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get eventType =>
+      $composableBuilder(column: $table.eventType, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get occurredAt => $composableBuilder(
+    column: $table.occurredAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get details =>
+      $composableBuilder(column: $table.details, builder: (column) => column);
+}
+
+class $$ControllerHealthEventsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $ControllerHealthEventsTable,
+          ControllerHealthEventRow,
+          $$ControllerHealthEventsTableFilterComposer,
+          $$ControllerHealthEventsTableOrderingComposer,
+          $$ControllerHealthEventsTableAnnotationComposer,
+          $$ControllerHealthEventsTableCreateCompanionBuilder,
+          $$ControllerHealthEventsTableUpdateCompanionBuilder,
+          (
+            ControllerHealthEventRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $ControllerHealthEventsTable,
+              ControllerHealthEventRow
+            >,
+          ),
+          ControllerHealthEventRow,
+          PrefetchHooks Function()
+        > {
+  $$ControllerHealthEventsTableTableManager(
+    _$DoseyDatabase db,
+    $ControllerHealthEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ControllerHealthEventsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$ControllerHealthEventsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ControllerHealthEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> eventType = const Value.absent(),
+                Value<DateTime> occurredAt = const Value.absent(),
+                Value<String?> details = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ControllerHealthEventsCompanion(
+                id: id,
+                eventType: eventType,
+                occurredAt: occurredAt,
+                details: details,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String eventType,
+                required DateTime occurredAt,
+                Value<String?> details = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ControllerHealthEventsCompanion.insert(
+                id: id,
+                eventType: eventType,
+                occurredAt: occurredAt,
+                details: details,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ControllerHealthEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $ControllerHealthEventsTable,
+      ControllerHealthEventRow,
+      $$ControllerHealthEventsTableFilterComposer,
+      $$ControllerHealthEventsTableOrderingComposer,
+      $$ControllerHealthEventsTableAnnotationComposer,
+      $$ControllerHealthEventsTableCreateCompanionBuilder,
+      $$ControllerHealthEventsTableUpdateCompanionBuilder,
+      (
+        ControllerHealthEventRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $ControllerHealthEventsTable,
+          ControllerHealthEventRow
+        >,
+      ),
+      ControllerHealthEventRow,
+      PrefetchHooks Function()
+    >;
 typedef $$AdminAuditEventsTableCreateCompanionBuilder =
     AdminAuditEventsCompanion Function({
       required String id,
@@ -13754,6 +14284,11 @@ class $DoseyDatabaseManager {
       $$ControllerCommandEventsTableTableManager(
         _db,
         _db.controllerCommandEvents,
+      );
+  $$ControllerHealthEventsTableTableManager get controllerHealthEvents =>
+      $$ControllerHealthEventsTableTableManager(
+        _db,
+        _db.controllerHealthEvents,
       );
   $$AdminAuditEventsTableTableManager get adminAuditEvents =>
       $$AdminAuditEventsTableTableManager(_db, _db.adminAuditEvents);

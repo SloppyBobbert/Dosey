@@ -985,7 +985,7 @@ class _AcceptingControllerGateway implements ControllerGateway {
 
   @override
   Stream<ControllerSnapshot> watchController() {
-    return Stream.value(const ControllerSnapshot.connected());
+    return Stream.value(const ControllerSnapshot.online());
   }
 }
 

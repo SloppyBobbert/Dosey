@@ -3,6 +3,8 @@ import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
+import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_health_supervisor.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/demo/demo_data_repository.dart';
 import 'package:dosey_app/core/demo/demo_external_services.dart';
@@ -240,6 +242,111 @@ void main() {
     expect(controller.connectCalls, 1);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('demo scope rejects a non-simulated controller injection', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(database.close);
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          controllerGateway: _NonSimulatedControllerGateway(),
+          child: const SizedBox(),
+        ),
+      ),
+    );
+
+    expect(
+      tester.takeException(),
+      isA<AssertionError>().having(
+        (error) => error.message,
+        'message',
+        'Demo mode requires a SimulatedControllerGateway.',
+      ),
+    );
+  });
+
+  testWidgets(
+    'production supervisor runs only in foreground Android Robot Mode',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      await database.setAppSetting(
+        'device_role',
+        AppDeviceRole.androidRobot.storageValue,
+      );
+      final delegate = SimulatedControllerGateway(canHostRobot: () => true);
+      final supervisor = ControllerHealthSupervisor(
+        delegate: delegate,
+        availability: Stream.value(const BleAvailabilitySnapshot.available()),
+        eventSink: _DiscardHealthEvents(),
+      );
+      late DoseyAppDependencies dependencies;
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: DoseyAppScope(
+            database: database,
+            controllerGateway: supervisor,
+            child: Builder(
+              builder: (context) {
+                dependencies = DoseyAppScope.of(context);
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      await dependencies.controller.connect();
+      expect(
+        await dependencies.controller.watchController().first,
+        isA<ControllerSnapshot>().having(
+          (snapshot) => snapshot.healthState,
+          'healthState',
+          ControllerHealthState.online,
+        ),
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(
+        (await dependencies.controller.watchController().first).healthState,
+        ControllerHealthState.disconnected,
+      );
+
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(
+        (await dependencies.controller.watchController().first).healthState,
+        ControllerHealthState.online,
+      );
+
+      await dependencies.settings.setDeviceRole(AppDeviceRole.androidPersonal);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(
+        (await dependencies.controller.watchController().first).healthState,
+        ControllerHealthState.disconnected,
+      );
+
+      await tester.pumpWidget(const SizedBox());
+      await database.close();
+    },
+  );
+}
+
+class _DiscardHealthEvents implements ControllerHealthEventSink {
+  @override
+  Future<void> recordControllerHealthEvent(
+    ControllerHealthEventType type, {
+    required DateTime occurredAt,
+    String? details,
+  }) async {}
 }
 
 class _FailingConnectControllerGateway extends SimulatedControllerGateway {
@@ -249,6 +356,35 @@ class _FailingConnectControllerGateway extends SimulatedControllerGateway {
   Future<void> connect() async {
     connectCalls += 1;
     throw StateError('connect failed');
+  }
+}
+
+class _NonSimulatedControllerGateway implements StagedControllerGateway {
+  @override
+  Future<void> cancelActiveCommand() async {}
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  Future<void> connect() async {}
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> requestDispense({required String doseId}) async {}
+
+  @override
+  Future<void> requestStagedDispense({
+    required String doseId,
+    ControllerMovementCommand movement = ControllerMovementCommand.dispenseNext,
+    required ControllerDispenseStageCallback onStage,
+  }) async {}
+
+  @override
+  Stream<ControllerSnapshot> watchController() {
+    return Stream.value(const ControllerSnapshot.disconnected());
   }
 }
 

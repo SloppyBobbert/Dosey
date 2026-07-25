@@ -1,6 +1,7 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/demo/demo_data_repository.dart';
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
+import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
@@ -30,6 +31,96 @@ void main() {
     expect(find.text('No controller command yet.'), findsOneWidget);
     expect(
       find.text('Movement stays separate from dose taken confirmation.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('shows verified health and reconnect details separately', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    final controller = _SnapshotControllerGateway(
+      ControllerSnapshot(
+        connectionState: ControllerConnectionState.disconnected,
+        canRequestDispense: false,
+        statusLabel: 'Controller offline. Reconnect scheduled.',
+        healthState: ControllerHealthState.reconnecting,
+        lastSuccessfulHeartbeatAt: DateTime.utc(2026, 7, 24, 12, 34),
+        reconnectAttempt: 2,
+        nextReconnectAt: DateTime.utc(2026, 7, 24, 12, 35),
+      ),
+    );
+    addTearDown(controller.close);
+
+    await tester.pumpWidget(
+      _TestControllerApp(database: database, controller: controller),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Health: Reconnecting'), findsOneWidget);
+    expect(find.text('Transport disconnected'), findsOneWidget);
+    expect(find.text('Last heartbeat: 2026-07-24 12:34 UTC'), findsOneWidget);
+    expect(find.text('Reconnect attempt 2'), findsOneWidget);
+    expect(find.text('Next retry: 2026-07-24 12:35 UTC'), findsOneWidget);
+  });
+
+  testWidgets('bench movement waits for verified controller health', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    final controller = _SnapshotControllerGateway(
+      const ControllerSnapshot.connected(),
+    );
+    addTearDown(controller.close);
+
+    await tester.pumpWidget(
+      _TestControllerApp(database: database, controller: controller),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Bench commands'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'STATUS'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'HEARTBEAT'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'SERVO_TEST'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'DISPENSE_TEST'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(
+      find.text(
+        'Locked until Android robot mode is active and controller health is verified.',
+      ),
       findsOneWidget,
     );
   });
@@ -239,14 +330,16 @@ Future<void> _setDeviceRole(DoseyDatabase database, AppDeviceRole role) async {
 }
 
 class _TestControllerApp extends StatelessWidget {
-  const _TestControllerApp({required this.database});
+  const _TestControllerApp({required this.database, this.controller});
 
   final DoseyDatabase database;
+  final StagedControllerGateway? controller;
 
   @override
   Widget build(BuildContext context) {
     return DoseyAppScope(
       database: database,
+      controllerGateway: controller,
       bleGateway: FakeBleGateway(),
       connectivityGateway: FakeConnectivityGateway(),
       permissionGateway: const _FakePermissionGateway(),
@@ -261,6 +354,41 @@ class _TestControllerApp extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SnapshotControllerGateway
+    implements StagedControllerGateway, ControllerBenchGateway {
+  _SnapshotControllerGateway(this.snapshot);
+
+  final ControllerSnapshot snapshot;
+
+  @override
+  Future<void> cancelActiveCommand() async {}
+
+  @override
+  Future<void> close() async {}
+
+  @override
+  Future<void> connect() async {}
+
+  @override
+  Future<void> disconnect() async {}
+
+  @override
+  Future<void> requestDispense({required String doseId}) async {}
+
+  @override
+  Future<void> requestStagedDispense({
+    required String doseId,
+    ControllerMovementCommand movement = ControllerMovementCommand.dispenseNext,
+    required ControllerDispenseStageCallback onStage,
+  }) async {}
+
+  @override
+  Future<String> runBenchCommand(ControllerBenchCommand command) async => 'OK';
+
+  @override
+  Stream<ControllerSnapshot> watchController() => Stream.value(snapshot);
 }
 
 class _TestControllerHost extends StatelessWidget {

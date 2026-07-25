@@ -228,4 +228,57 @@ void main() {
       throwsA(isA<ControllerTransportOfflineException>()),
     );
   });
+
+  test('simulator can miss a heartbeat without reporting recovery', () async {
+    final gateway = SimulatedControllerGateway(canHostRobot: () => true);
+    addTearDown(gateway.close);
+    await gateway.connect();
+    gateway.queueNextHeartbeatOutcome(SimulatedHeartbeatOutcome.missed);
+
+    await expectLater(
+      gateway.runBenchCommand(ControllerBenchCommand.heartbeat),
+      throwsA(isA<ControllerCommandPreAcceptanceTimeoutException>()),
+    );
+    expect(
+      (await gateway.watchController().first).connectionState,
+      ControllerConnectionState.connected,
+    );
+  });
+
+  test('simulator can disconnect immediately during heartbeat', () async {
+    final gateway = SimulatedControllerGateway(canHostRobot: () => true);
+    addTearDown(gateway.close);
+    await gateway.connect();
+    gateway.queueNextHeartbeatOutcome(SimulatedHeartbeatOutcome.disconnect);
+
+    await expectLater(
+      gateway.runBenchCommand(ControllerBenchCommand.heartbeat),
+      throwsA(isA<ControllerTransportOfflineException>()),
+    );
+    expect(
+      (await gateway.watchController().first).connectionState,
+      ControllerConnectionState.disconnected,
+    );
+  });
+
+  test('simulator can fail reconnect then verify recovery', () async {
+    final gateway = SimulatedControllerGateway(canHostRobot: () => true);
+    addTearDown(gateway.close);
+    gateway.queueNextConnectOutcome(SimulatedConnectOutcome.failure);
+
+    await expectLater(
+      gateway.connect(),
+      throwsA(isA<ControllerTransportOfflineException>()),
+    );
+    expect(
+      (await gateway.watchController().first).connectionState,
+      ControllerConnectionState.disconnected,
+    );
+
+    await gateway.connect();
+    expect(
+      await gateway.runBenchCommand(ControllerBenchCommand.heartbeat),
+      'Heartbeat OK',
+    );
+  });
 }

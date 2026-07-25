@@ -16,7 +16,9 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
   StreamSubscription<PluginBleConnectionState>? _connectionSubscription;
   StreamSubscription<List<int>>? _protocolSubscription;
   Future<void>? _activeConnectAttempt;
+  int _connectGeneration = 0;
   String? _protocolSetupDeviceId;
+  int? _protocolSetupGeneration;
   BleConnectionSnapshot _connectionSnapshot =
       const BleConnectionSnapshot.disconnected();
 
@@ -41,7 +43,8 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
     if (activeAttempt != null) return activeAttempt;
 
     late final Future<void> attempt;
-    attempt = _connectToDosey().whenComplete(() {
+    final generation = _connectGeneration;
+    attempt = _connectToDosey(generation).whenComplete(() {
       if (identical(_activeConnectAttempt, attempt)) {
         _activeConnectAttempt = null;
       }
@@ -50,28 +53,40 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
     return attempt;
   }
 
-  Future<void> _connectToDosey() async {
+  Future<void> _connectToDosey(int generation) async {
     final result = await _plugin.scanForService(
       D1Protocol.serviceUuid,
       D1Protocol.deviceName,
       const Duration(seconds: 10),
     );
+    if (generation != _connectGeneration) {
+      throw StateError('Dosey controller connection was cancelled.');
+    }
     if (result == null) {
       throw StateError('Dosey controller was not found.');
     }
 
     _protocolSetupDeviceId = result.deviceId;
+    _protocolSetupGeneration = generation;
     try {
       await connect(deviceId: result.deviceId, deviceName: result.deviceName);
+      if (generation != _connectGeneration) {
+        throw StateError('Dosey controller connection was cancelled.');
+      }
       if (!await _plugin.discoverDoseyProtocol(result.deviceId)) {
         throw StateError('Dosey BLE protocol characteristics were not found.');
+      }
+      if (generation != _connectGeneration) {
+        throw StateError('Dosey controller connection was cancelled.');
       }
       await _clearProtocolSubscription();
       _protocolSubscription = _plugin
           .protocolValuesFor(result.deviceId)
           .listen(_protocolController.add);
       await _plugin.setProtocolNotifications(result.deviceId, true);
-      _protocolSetupDeviceId = null;
+      if (generation != _connectGeneration) {
+        throw StateError('Dosey controller connection was cancelled.');
+      }
       _setConnection(
         BleConnectionSnapshot.connected(
           deviceId: result.deviceId,
@@ -79,10 +94,32 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
         ),
       );
     } on Object {
-      _protocolSetupDeviceId = null;
-      await disconnect();
+      if (generation != _connectGeneration) {
+        await _cleanupCancelledSetup(generation, result.deviceId);
+      } else {
+        await disconnect();
+      }
       rethrow;
+    } finally {
+      if (_protocolSetupGeneration == generation) {
+        _protocolSetupDeviceId = null;
+        _protocolSetupGeneration = null;
+      }
     }
+  }
+
+  Future<void> _cleanupCancelledSetup(int generation, String deviceId) async {
+    if (_protocolSetupGeneration != generation) return;
+    try {
+      await _plugin.disconnect(deviceId);
+    } on Object {
+      // Cancellation cleanup is best effort; the connection attempt still
+      // reports its original cancellation.
+    }
+    if (_protocolSetupGeneration != generation) return;
+    await _clearConnectionSubscription();
+    await _clearProtocolSubscription();
+    _setConnection(const BleConnectionSnapshot.disconnected());
   }
 
   @override
@@ -136,6 +173,10 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
 
   @override
   Future<void> disconnect() async {
+    _connectGeneration += 1;
+    if (_activeConnectAttempt != null) {
+      await _plugin.cancelScan();
+    }
     final deviceId = _connectionSnapshot.deviceId;
     final deviceName = _connectionSnapshot.deviceName;
 
@@ -165,6 +206,10 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
 
   @override
   Future<void> close() async {
+    _connectGeneration += 1;
+    if (_activeConnectAttempt != null) {
+      await _plugin.cancelScan();
+    }
     final activeDeviceId = _connectionSnapshot.deviceId;
     if (activeDeviceId != null) {
       try {
@@ -195,7 +240,9 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
 
   void _setConnection(BleConnectionSnapshot snapshot) {
     _connectionSnapshot = snapshot;
-    _connectionController.add(snapshot);
+    if (!_connectionController.isClosed) {
+      _connectionController.add(snapshot);
+    }
   }
 
   static BleAvailabilitySnapshot _mapAvailability(PluginBleAdapterState state) {
@@ -268,6 +315,8 @@ abstract interface class FlutterBluePlusPlugin {
     String deviceName,
     Duration timeout,
   );
+
+  Future<void> cancelScan();
 
   Future<bool> discoverDoseyProtocol(String deviceId);
 
@@ -342,6 +391,9 @@ class FlutterBluePlusPluginAdapter implements FlutterBluePlusPlugin {
       await FlutterBluePlus.stopScan();
     }
   }
+
+  @override
+  Future<void> cancelScan() => FlutterBluePlus.stopScan();
 
   @override
   Future<bool> discoverDoseyProtocol(String deviceId) async {
