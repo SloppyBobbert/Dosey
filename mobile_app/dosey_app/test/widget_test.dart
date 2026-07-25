@@ -2800,11 +2800,17 @@ void main() {
     await tester.ensureVisible(find.text('Skip dose'));
     await tester.tap(find.text('Skip dose'));
     await _pumpAppFrame(tester);
+
+    final events = await database.select(database.doseLogEvents).get();
+    final skippedEvent = events.singleWhere(
+      (event) => event.kind == DoseLogEventKind.doseSkipped.name,
+    );
+
     await tester.tap(find.text('Log'));
     await _pumpAppFrame(tester);
 
     expect(find.text('Dose skipped'), findsOneWidget);
-    expect(find.text(_todayDoseId('vitamin-d')), findsOneWidget);
+    expect(find.text(skippedEvent.doseId), findsOneWidget);
   });
 
   testWidgets(
