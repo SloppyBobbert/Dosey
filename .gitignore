@@ -40,6 +40,7 @@ mobile_app/dosey_app/android/local.properties
 .piolibdeps/
 firmware/**/.pio/
 firmware/**/build/
+firmware/include/hardware_config.local.h
 
 # Generated media exports
 media/exports/
