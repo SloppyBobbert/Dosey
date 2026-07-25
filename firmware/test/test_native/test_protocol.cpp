@@ -18,8 +18,15 @@ void tearDown() {}
 
 class CapturingOutput final : public ProtocolOutput {
 public:
-  void writeLine(const char *line) override { lines.emplace_back(line); }
+  bool writeLine(const char *line) override {
+    if (!acceptWrites) {
+      return false;
+    }
+    lines.emplace_back(line);
+    return true;
+  }
 
+  bool acceptWrites = true;
   std::vector<std::string> lines;
 };
 
@@ -122,6 +129,21 @@ void test_line_accumulator_can_discard_partial_transport_input() {
   TEST_ASSERT_EQUAL(LineResult::lineReady, input.push('\n'));
 
   TEST_ASSERT_EQUAL_STRING("OK", input.line());
+}
+
+void test_line_accumulator_rejects_invalid_bytes_and_recovers() {
+  for (const char invalid : {'\0', '\t', static_cast<char>(0x80)}) {
+    LineAccumulator input;
+    TEST_ASSERT_EQUAL(LineResult::pending, input.push('D'));
+    TEST_ASSERT_EQUAL(LineResult::pending, input.push(invalid));
+    TEST_ASSERT_EQUAL(LineResult::pending, input.push('1'));
+    TEST_ASSERT_EQUAL(LineResult::lineInvalid, input.push('\n'));
+
+    TEST_ASSERT_EQUAL(LineResult::pending, input.push('O'));
+    TEST_ASSERT_EQUAL(LineResult::pending, input.push('K'));
+    TEST_ASSERT_EQUAL(LineResult::lineReady, input.push('\n'));
+    TEST_ASSERT_EQUAL_STRING("OK", input.line());
+  }
 }
 
 void test_byte_queue_preserves_fragmented_input_order() {
@@ -270,6 +292,22 @@ void test_movement_rejects_duplicate_and_overlapping_commands() {
   TEST_ASSERT_EQUAL(1, hardware.movementStarts);
 }
 
+void test_movement_does_not_start_when_acceptance_cannot_be_written() {
+  FakeHardware hardware;
+  hardware.servoIsConfigured = true;
+  CapturingOutput output;
+  output.acceptWrites = false;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD move-1 SERVO_TEST", 100);
+
+  TEST_ASSERT_EQUAL(0, hardware.movementStarts);
+  TEST_ASSERT_EQUAL(1, hardware.movementStops);
+  output.acceptWrites = true;
+  engine.handleLine("D1 CMD move-2 SERVO_TEST", 101);
+  TEST_ASSERT_EQUAL(1, hardware.movementStarts);
+}
+
 void test_cancel_stops_active_movement_as_unresolved() {
   FakeHardware hardware;
   hardware.servoIsConfigured = true;
@@ -364,6 +402,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_reports_oversized_line_and_recovers_at_newline);
   RUN_TEST(test_keeps_carriage_return_for_parser_validation);
   RUN_TEST(test_line_accumulator_can_discard_partial_transport_input);
+  RUN_TEST(test_line_accumulator_rejects_invalid_bytes_and_recovers);
   RUN_TEST(test_byte_queue_preserves_fragmented_input_order);
   RUN_TEST(test_byte_queue_rejects_overflow_without_partial_write);
   RUN_TEST(test_status_reports_capabilities_and_idle_state);
@@ -374,6 +413,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_unconfigured_commands_and_dispense_next_are_rejected);
   RUN_TEST(test_pir_reports_current_input_when_configured);
   RUN_TEST(test_movement_rejects_duplicate_and_overlapping_commands);
+  RUN_TEST(test_movement_does_not_start_when_acceptance_cannot_be_written);
   RUN_TEST(test_cancel_stops_active_movement_as_unresolved);
   RUN_TEST(test_transport_disconnect_stops_active_movement_without_completion);
   RUN_TEST(test_hardware_completion_reports_servo_done);

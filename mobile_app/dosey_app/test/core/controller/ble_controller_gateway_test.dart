@@ -146,6 +146,7 @@ void main() {
     final request = gateway.runBenchCommand(ControllerBenchCommand.status);
     final id = _commandId(transport.writes.single);
     transport.emit('D1 EVT $id COMMAND_RECEIVED\n');
+    transport.emit('D1 EVT $id MOVEMENT_STARTED\n');
     transport.emit('D1 EVT $id STATUS_OK\n');
     transport.emit('D1 EVT $id SERVO_UNCONFIGURED\n');
     transport.emit('D1 EVT $id PIR_UNCONFIGURED\n');
@@ -153,7 +154,7 @@ void main() {
 
     expect(
       await request,
-      'STATUS_OK, SERVO_UNCONFIGURED, PIR_UNCONFIGURED, MOVEMENT_IDLE',
+      'MOVEMENT_STARTED, STATUS_OK, SERVO_UNCONFIGURED, PIR_UNCONFIGURED, MOVEMENT_IDLE',
     );
   });
 

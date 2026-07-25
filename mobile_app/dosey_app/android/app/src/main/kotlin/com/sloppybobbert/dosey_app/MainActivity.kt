@@ -1,5 +1,6 @@
 package com.sloppybobbert.dosey_app
 
+import android.os.Build
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -9,6 +10,15 @@ import java.util.TimeZone
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "com.sloppybobbert.dosey_app/android_platform"
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "getSdkVersion" -> result.success(Build.VERSION.SDK_INT)
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "com.sloppybobbert.dosey_app/timezone"

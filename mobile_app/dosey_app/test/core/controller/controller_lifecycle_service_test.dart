@@ -159,7 +159,7 @@ void main() {
   );
 
   test(
-    'timeout before acceptance keeps slot loaded without acceptance history',
+    'timeout without acceptance quarantines slot without acceptance history',
     () async {
       final fixture = await _LifecycleFixture.create(
         gateway: _TimeoutBeforeAcceptanceControllerGateway(),
@@ -186,7 +186,7 @@ void main() {
       );
       expect(
         (await fixture.slotRow('slot-1')).status,
-        CarouselSlotStatus.loaded.storageValue,
+        CarouselSlotStatus.needsReview.storageValue,
       );
       expect(
         await fixture.database.select(fixture.database.doseLogEvents).get(),

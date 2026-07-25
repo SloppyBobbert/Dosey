@@ -7,8 +7,10 @@ void main() {
     'app permissions clearly cover bluetooth scan connect and notifications',
     () {
       expect(AppPermission.values, [
+        AppPermission.bluetooth,
         AppPermission.bluetoothScan,
         AppPermission.bluetoothConnect,
+        AppPermission.locationWhenInUse,
         AppPermission.notifications,
       ]);
     },
@@ -19,8 +21,10 @@ void main() {
     () async {
       final plugin = _FakePermissionHandlerPlugin(
         checkResponses: {
+          PluginPermission.bluetooth: PluginPermissionStatus.granted,
           PluginPermission.bluetoothScan: PluginPermissionStatus.granted,
           PluginPermission.bluetoothConnect: PluginPermissionStatus.denied,
+          PluginPermission.locationWhenInUse: PluginPermissionStatus.granted,
           PluginPermission.notification: PluginPermissionStatus.provisional,
         },
         requestResponses: {
@@ -32,12 +36,20 @@ void main() {
       final gateway = PermissionHandlerGateway(plugin: plugin);
 
       expect(
+        await gateway.check(AppPermission.bluetooth),
+        AppPermissionState.granted,
+      );
+      expect(
         await gateway.check(AppPermission.bluetoothScan),
         AppPermissionState.granted,
       );
       expect(
         await gateway.check(AppPermission.bluetoothConnect),
         AppPermissionState.denied,
+      );
+      expect(
+        await gateway.check(AppPermission.locationWhenInUse),
+        AppPermissionState.granted,
       );
       expect(
         await gateway.check(AppPermission.notifications),
@@ -54,8 +66,10 @@ void main() {
       );
 
       expect(plugin.checkedPermissions, [
+        PluginPermission.bluetooth,
         PluginPermission.bluetoothScan,
         PluginPermission.bluetoothConnect,
+        PluginPermission.locationWhenInUse,
         PluginPermission.notification,
       ]);
       expect(plugin.requestedPermissions, [

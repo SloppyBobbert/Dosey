@@ -162,6 +162,7 @@ void main() {
 
       expect(await received, [1, 2, 3]);
       expect(plugin.scanServiceUuids, [D1Protocol.serviceUuid]);
+      expect(plugin.scanDeviceNames, [D1Protocol.deviceName]);
       expect(plugin.discoveryCalls, ['dosey-1']);
       expect(plugin.notifyCalls, [('dosey-1', true)]);
       expect(plugin.writes.map((write) => write.$2.length), [20, 20, 3]);
@@ -170,6 +171,33 @@ void main() {
       await notifications.close();
     },
   );
+
+  test('overlapping Dosey connects share one protocol setup attempt', () async {
+    final notificationSetup = Completer<void>();
+    final plugin = _FakeFlutterBluePlusPlugin(
+      adapterStates: const Stream.empty(),
+      currentAdapterState: PluginBleAdapterState.on,
+      connectionStatesByDeviceId: {'dosey-1': const Stream.empty()},
+      scanResult: const PluginBleScanResult(
+        deviceId: 'dosey-1',
+        deviceName: 'Dosey-XIAO-C6',
+      ),
+      notificationSetup: notificationSetup,
+    );
+    final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+
+    final first = gateway.connectToDosey();
+    final second = gateway.connectToDosey();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(plugin.scanServiceUuids, [D1Protocol.serviceUuid]);
+    expect(plugin.connectCalls, ['dosey-1']);
+
+    notificationSetup.complete();
+    await Future.wait([first, second]);
+
+    await gateway.close();
+  });
 
   test(
     'Dosey connection is not ready before protocol setup completes',
@@ -267,6 +295,7 @@ class _FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {
   final List<String> connectCalls = [];
   final List<String> disconnectCalls = [];
   final List<String> scanServiceUuids = [];
+  final List<String> scanDeviceNames = [];
   final List<String> discoveryCalls = [];
   final List<(String, bool)> notifyCalls = [];
   final List<(String, List<int>)> writes = [];
@@ -274,9 +303,11 @@ class _FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {
   @override
   Future<PluginBleScanResult?> scanForService(
     String serviceUuid,
+    String deviceName,
     Duration timeout,
   ) async {
     scanServiceUuids.add(serviceUuid);
+    scanDeviceNames.add(deviceName);
     return scanResult;
   }
 

@@ -91,7 +91,7 @@ void main() {
 
     await tester.pumpWidget(_TestControllerApp(database: database));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Connect simulator'));
+    await tester.tap(find.text('Connect controller'));
     await tester.pumpAndSettle();
 
     final dispenseButton = find.text('Run dispense test');

@@ -1,6 +1,6 @@
 #include <Arduino.h>
-#include <ESP32Servo.h>
 
+#include "arduino_protocol_hardware.h"
 #include "hardware_config.h"
 #include "line_accumulator.h"
 #include "protocol_engine.h"
@@ -8,100 +8,14 @@
 
 namespace {
 
-enum class ServoPhase { idle, homeSettling, testSettling, returnSettling };
-
-int inactiveLedLevel() {
-  return dosey::hardware::kOnboardLedActiveLow ? HIGH : LOW;
-}
-
-int activeLedLevel() {
-  return dosey::hardware::kOnboardLedActiveLow ? LOW : HIGH;
-}
-
 class SerialProtocolOutput final : public dosey::ProtocolOutput {
 public:
-  void writeLine(const char *line) override { Serial.println(line); }
-};
-
-class ArduinoProtocolHardware final : public dosey::ProtocolHardware {
-public:
-  bool servoConfigured() const override {
-    return dosey::hardware::kServoEnabled;
-  }
-
-  bool pirConfigured() const override {
-    return dosey::hardware::kPirConfigured;
-  }
-
-  bool pirMotion() const override {
-    if constexpr (!dosey::hardware::kPirConfigured) {
-      return false;
-    }
-    return digitalRead(dosey::hardware::kPirPin);
-  }
-
-  void setLedActive(bool active) override {
-    digitalWrite(dosey::hardware::kOnboardLedPin,
-                 active ? activeLedLevel() : inactiveLedLevel());
-  }
-
-  bool startMovement(std::uint32_t nowMs) override {
-    if constexpr (!dosey::hardware::kServoEnabled) {
-      return false;
-    }
-
-    servo_.setPeriodHertz(50);
-    servo_.attach(dosey::hardware::kServoPin,
-                  dosey::safety::kServoMinimumPulseUs,
-                  dosey::safety::kServoMaximumPulseUs);
-    if (!servo_.attached()) {
-      return false;
-    }
-    servo_.write(dosey::safety::kServoHomeDegrees);
-    phase_ = ServoPhase::homeSettling;
-    phaseDeadlineMs_ = nowMs + dosey::safety::kServoStepSettleMs;
-    return true;
-  }
-
-  void stopMovement() override {
-    servo_.detach();
-    phase_ = ServoPhase::idle;
-  }
-
-  dosey::HardwareMovementUpdate updateMovement(std::uint32_t nowMs) override {
-    if constexpr (!dosey::hardware::kServoEnabled) {
-      return dosey::HardwareMovementUpdate::none;
-    }
-
-    if (phase_ == ServoPhase::idle ||
-        static_cast<std::int32_t>(nowMs - phaseDeadlineMs_) < 0) {
-      return dosey::HardwareMovementUpdate::none;
-    }
-
-    if (phase_ == ServoPhase::homeSettling) {
-      servo_.write(dosey::safety::kServoTestDegrees);
-      phase_ = ServoPhase::testSettling;
-      phaseDeadlineMs_ = nowMs + dosey::safety::kServoStepSettleMs;
-      return dosey::HardwareMovementUpdate::none;
-    }
-    if (phase_ == ServoPhase::testSettling) {
-      servo_.write(dosey::safety::kServoHomeDegrees);
-      phase_ = ServoPhase::returnSettling;
-      phaseDeadlineMs_ = nowMs + dosey::safety::kServoStepSettleMs;
-      return dosey::HardwareMovementUpdate::none;
-    }
-    return dosey::HardwareMovementUpdate::completed;
-  }
-
-private:
-  Servo servo_;
-  ServoPhase phase_ = ServoPhase::idle;
-  std::uint32_t phaseDeadlineMs_ = 0;
+  bool writeLine(const char *line) override { return Serial.println(line) > 0; }
 };
 
 dosey::LineAccumulator input;
 SerialProtocolOutput output;
-ArduinoProtocolHardware hardware;
+dosey::ArduinoProtocolHardware hardware;
 dosey::ProtocolEngine protocol(hardware, output);
 
 void readSerial() {
@@ -112,6 +26,8 @@ void readSerial() {
       protocol.handleLine(input.line(), millis());
     } else if (result == dosey::LineResult::lineTooLong) {
       protocol.handleLineTooLong();
+    } else if (result == dosey::LineResult::lineInvalid) {
+      protocol.handleLineInvalid();
     }
   }
 }
@@ -119,7 +35,7 @@ void readSerial() {
 } // namespace
 
 void setup() {
-  digitalWrite(dosey::hardware::kOnboardLedPin, inactiveLedLevel());
+  digitalWrite(dosey::hardware::kOnboardLedPin, dosey::inactiveLedLevel());
   pinMode(dosey::hardware::kOnboardLedPin, OUTPUT);
   if constexpr (dosey::hardware::kPirConfigured) {
     pinMode(dosey::hardware::kPirPin, INPUT);

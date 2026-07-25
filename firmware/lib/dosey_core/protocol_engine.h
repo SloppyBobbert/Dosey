@@ -13,7 +13,7 @@ enum class HardwareMovementUpdate { none, completed };
 class ProtocolOutput {
 public:
   virtual ~ProtocolOutput() = default;
-  virtual void writeLine(const char *line) = 0;
+  virtual bool writeLine(const char *line) = 0;
 };
 
 class ProtocolHardware {
@@ -35,13 +35,14 @@ public:
 
   void handleLine(const char *line, std::uint32_t nowMs);
   void handleLineTooLong();
+  void handleLineInvalid();
   void handleTransportDisconnect();
   void update(std::uint32_t nowMs);
 
 private:
   void handleCommand(const Command &command, std::uint32_t nowMs);
   void startMovement(const Command &command, std::uint32_t nowMs);
-  void sendEvent(const char *id, const char *code);
+  bool sendEvent(const char *id, const char *code);
   void sendNack(const char *id, const char *code);
   void sendError(const char *id, const char *code);
 

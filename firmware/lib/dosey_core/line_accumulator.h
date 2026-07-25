@@ -6,7 +6,7 @@
 
 namespace dosey {
 
-enum class LineResult { pending, lineReady, lineTooLong };
+enum class LineResult { pending, lineReady, lineTooLong, lineInvalid };
 
 class LineAccumulator {
 public:
@@ -18,6 +18,7 @@ private:
   char line_[kMaxProtocolLineLength + 1] = {};
   std::size_t length_ = 0;
   bool overflow_ = false;
+  bool invalid_ = false;
 };
 
 } // namespace dosey

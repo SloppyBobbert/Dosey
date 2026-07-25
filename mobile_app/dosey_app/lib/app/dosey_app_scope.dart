@@ -31,6 +31,7 @@ import 'package:dosey_app/core/notifications/flutter_local_notification_schedule
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
+import 'package:dosey_app/core/permissions/ble_permission_preparer.dart';
 import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -56,6 +57,7 @@ class DoseyAppScope extends StatefulWidget {
     this.database,
     this.reminderScheduler,
     this.permissionGateway,
+    this.androidSdkGateway,
     this.notificationTapController,
     this.missedDoseReconciliationService,
     this.bleGateway,
@@ -71,6 +73,7 @@ class DoseyAppScope extends StatefulWidget {
   final DoseyDatabase? database;
   final ReminderScheduler? reminderScheduler;
   final AppPermissionGateway? permissionGateway;
+  final AndroidSdkGateway? androidSdkGateway;
   final ReminderNotificationTapController? notificationTapController;
   final MissedDoseReconciliationService? missedDoseReconciliationService;
   final BleGateway? bleGateway;
@@ -187,7 +190,13 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
             ? BleControllerGateway(
                 transport: ble,
                 canHostRobot: () => _canHostRobot(settings),
-                prepareBleAccess: () => _prepareBleAccess(permissions),
+                prepareBleAccess: () => BlePermissionPreparer(
+                  permissions: permissions,
+                  platform: currentAppDevicePlatform(),
+                  androidSdk:
+                      widget.androidSdkGateway ??
+                      const MethodChannelAndroidSdkGateway(),
+                ).prepare(),
               )
             : SimulatedControllerGateway(
                 canHostRobot: () => _canHostRobot(settings),
@@ -324,20 +333,6 @@ class _DoseyAppScopeState extends State<DoseyAppScope> {
         ? storedRole
         : AppDeviceRole.defaultFor(platform);
     return role.canHostRobot;
-  }
-
-  Future<bool> _prepareBleAccess(AppPermissionGateway permissions) async {
-    for (final permission in const [
-      AppPermission.bluetoothScan,
-      AppPermission.bluetoothConnect,
-    ]) {
-      var state = await permissions.check(permission);
-      if (state != AppPermissionState.granted) {
-        state = await permissions.request(permission);
-      }
-      if (state != AppPermissionState.granted) return false;
-    }
-    return true;
   }
 
   Future<void> _connectDemoController() async {

@@ -250,13 +250,17 @@ class BleControllerGateway
           }
         }
       case 'MOVEMENT_STARTED':
-        if (!pending.accepted) {
-          pending.accepted = true;
-          await pending.onStage!(ControllerDispenseStage.accepted);
-        }
-        if (!pending.movementStarted) {
-          pending.movementStarted = true;
-          await pending.onStage!(ControllerDispenseStage.movementStarted);
+        if (pending.isMovement) {
+          if (!pending.accepted) {
+            pending.accepted = true;
+            await pending.onStage!(ControllerDispenseStage.accepted);
+          }
+          if (!pending.movementStarted) {
+            pending.movementStarted = true;
+            await pending.onStage!(ControllerDispenseStage.movementStarted);
+          }
+        } else {
+          pending.details.add(response.code);
         }
       case 'SERVO_DONE':
         _completePending();
@@ -267,10 +271,7 @@ class BleControllerGateway
           ),
         );
       default:
-        if (response.code != 'COMMAND_RECEIVED' &&
-            response.code != 'MOVEMENT_STARTED') {
-          pending.details.add(response.code);
-        }
+        pending.details.add(response.code);
         if (_isDiagnosticTerminal(pending.command, response.code)) {
           _completePending();
         }

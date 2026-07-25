@@ -3,6 +3,7 @@
 
 #include "controller_state.h"
 #include "hardware_config.h"
+#include "line_accumulator.h"
 #include "safety_limits.h"
 
 namespace {
@@ -13,6 +14,7 @@ Servo servo;
 dosey::ControllerState controller;
 ServoPhase phase = ServoPhase::idle;
 std::uint32_t phaseDeadlineMs = 0;
+dosey::LineAccumulator serialInput;
 
 void stopServo() {
   servo.detach();
@@ -42,6 +44,30 @@ void startTest() {
   Serial.println("MOVEMENT_STARTED");
 }
 
+void handleSerialInput() {
+  while (Serial.available()) {
+    const dosey::LineResult result =
+        serialInput.push(static_cast<char>(Serial.read()));
+    if (result == dosey::LineResult::lineReady) {
+      String input(serialInput.line());
+      input.trim();
+      if (input == "CANCEL") {
+        if (controller.cancelMovement() == dosey::MovementResult::cancelled) {
+          stopServo();
+          Serial.println("MOVEMENT_CANCELLED_UNRESOLVED");
+        } else {
+          Serial.println("NACK NOT_MOVING");
+        }
+      } else if (input == "RUN") {
+        startTest();
+      }
+    } else if (result == dosey::LineResult::lineTooLong ||
+               result == dosey::LineResult::lineInvalid) {
+      Serial.println("NACK MALFORMED_COMMAND");
+    }
+  }
+}
+
 } // namespace
 
 void setup() {
@@ -63,20 +89,7 @@ void loop() {
     return;
   }
 
-  if (Serial.available()) {
-    String input = Serial.readStringUntil('\n');
-    input.trim();
-    if (input == "CANCEL") {
-      if (controller.cancelMovement() == dosey::MovementResult::cancelled) {
-        stopServo();
-        Serial.println("MOVEMENT_CANCELLED_UNRESOLVED");
-      } else {
-        Serial.println("NACK NOT_MOVING");
-      }
-    } else if (input == "RUN") {
-      startTest();
-    }
-  }
+  handleSerialInput();
 
   if (controller.update(millis()) == dosey::MovementResult::timedOut) {
     stopServo();

@@ -665,7 +665,9 @@ class _ControllerHeroCard extends StatelessWidget {
               children: [
                 OutlinedButton(
                   onPressed: onConnect,
-                  child: const Text('Connect simulator'),
+                  child: Text(
+                    isDemo ? 'Connect simulator' : 'Connect controller',
+                  ),
                 ),
                 OutlinedButton(
                   onPressed: onDisconnect,

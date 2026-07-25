@@ -15,6 +15,7 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
 
   StreamSubscription<PluginBleConnectionState>? _connectionSubscription;
   StreamSubscription<List<int>>? _protocolSubscription;
+  Future<void>? _activeConnectAttempt;
   String? _protocolSetupDeviceId;
   BleConnectionSnapshot _connectionSnapshot =
       const BleConnectionSnapshot.disconnected();
@@ -35,9 +36,24 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
   Stream<List<int>> watchProtocolBytes() => _protocolController.stream;
 
   @override
-  Future<void> connectToDosey() async {
+  Future<void> connectToDosey() {
+    final activeAttempt = _activeConnectAttempt;
+    if (activeAttempt != null) return activeAttempt;
+
+    late final Future<void> attempt;
+    attempt = _connectToDosey().whenComplete(() {
+      if (identical(_activeConnectAttempt, attempt)) {
+        _activeConnectAttempt = null;
+      }
+    });
+    _activeConnectAttempt = attempt;
+    return attempt;
+  }
+
+  Future<void> _connectToDosey() async {
     final result = await _plugin.scanForService(
       D1Protocol.serviceUuid,
+      D1Protocol.deviceName,
       const Duration(seconds: 10),
     );
     if (result == null) {
@@ -249,6 +265,7 @@ abstract interface class FlutterBluePlusPlugin {
 
   Future<PluginBleScanResult?> scanForService(
     String serviceUuid,
+    String deviceName,
     Duration timeout,
   );
 
@@ -297,21 +314,22 @@ class FlutterBluePlusPluginAdapter implements FlutterBluePlusPlugin {
   @override
   Future<PluginBleScanResult?> scanForService(
     String serviceUuid,
+    String deviceName,
     Duration timeout,
   ) async {
     final result = Completer<PluginBleScanResult?>();
     final subscription = FlutterBluePlus.onScanResults.listen((results) {
-      if (result.isCompleted || results.isEmpty) return;
-      final match = results.first;
-      final name = match.advertisementData.advName.isNotEmpty
-          ? match.advertisementData.advName
-          : match.device.platformName;
-      result.complete(
-        PluginBleScanResult(
-          deviceId: match.device.remoteId.str,
-          deviceName: name.isEmpty ? null : name,
-        ),
-      );
+      if (result.isCompleted) return;
+      for (final match in results) {
+        if (match.advertisementData.advName != deviceName) continue;
+        result.complete(
+          PluginBleScanResult(
+            deviceId: match.device.remoteId.str,
+            deviceName: deviceName,
+          ),
+        );
+        return;
+      }
     }, onError: result.completeError);
     try {
       await FlutterBluePlus.startScan(

@@ -18,6 +18,10 @@ void ProtocolEngine::handleLine(const char *line, std::uint32_t nowMs) {
 
 void ProtocolEngine::handleLineTooLong() { sendNack("none", "LINE_TOO_LONG"); }
 
+void ProtocolEngine::handleLineInvalid() {
+  sendNack("none", "MALFORMED_COMMAND");
+}
+
 void ProtocolEngine::handleTransportDisconnect() {
   if (!controller_.isMoving()) {
     return;
@@ -123,7 +127,11 @@ void ProtocolEngine::startMovement(const Command &command,
     return;
   }
 
-  sendEvent(command.id, "COMMAND_RECEIVED");
+  if (!sendEvent(command.id, "COMMAND_RECEIVED")) {
+    controller_.cancelMovement();
+    hardware_.stopMovement();
+    return;
+  }
   if (!hardware_.startMovement(nowMs)) {
     controller_.cancelMovement();
     hardware_.stopMovement();
@@ -133,10 +141,11 @@ void ProtocolEngine::startMovement(const Command &command,
   sendEvent(command.id, "MOVEMENT_STARTED");
 }
 
-void ProtocolEngine::sendEvent(const char *id, const char *code) {
+bool ProtocolEngine::sendEvent(const char *id, const char *code) {
   if (writeEvent(outputLine_, sizeof(outputLine_), id, code)) {
-    output_.writeLine(outputLine_);
+    return output_.writeLine(outputLine_);
   }
+  return false;
 }
 
 void ProtocolEngine::sendNack(const char *id, const char *code) {

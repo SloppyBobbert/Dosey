@@ -22,14 +22,15 @@ framework = arduino
 
 That platform currently resolves Arduino-ESP32 3.3.7 for the XIAO ESP32-C6. The servo-only environments pin `madhephaestus/ESP32Servo` 3.2.1.
 
-Run commands from this directory with PlatformIO Core 6.1 or later:
+Run commands from this directory with PlatformIO Core 6.1.19:
 
 ```sh
-pio run -e 01_blink_serial
-pio test -e native_parser
-pio test -e native_state
-pio test -e native_protocol
-pio test -e native_config
+/tmp/dosey-platformio/bin/pio run -e 01_blink_serial
+/tmp/dosey-platformio/bin/pio test -e native_parser
+/tmp/dosey-platformio/bin/pio test -e native_state
+/tmp/dosey-platformio/bin/pio test -e native_protocol
+/tmp/dosey-platformio/bin/pio test -e native_config
+/tmp/dosey-platformio/bin/pio test -e native_config_defaults
 ```
 
 For a clean machine, install the same tool versions used by Firmware CI in an
@@ -40,7 +41,7 @@ python3 -m venv /tmp/dosey-platformio
 /tmp/dosey-platformio/bin/python -m pip install platformio==6.1.19 intelhex==2.3.0
 ```
 
-Use `/tmp/dosey-platformio/bin/pio` in place of `pio` in the commands below.
+The commands below use that pinned executable directly.
 
 ## Layout
 
@@ -86,26 +87,27 @@ the local file to return immediately to the committed safe configuration.
 Run the native suites sequentially:
 
 ```sh
-pio test -e native_parser
-pio test -e native_state
-pio test -e native_protocol
-pio test -e native_config
+/tmp/dosey-platformio/bin/pio test -e native_parser
+/tmp/dosey-platformio/bin/pio test -e native_state
+/tmp/dosey-platformio/bin/pio test -e native_protocol
+/tmp/dosey-platformio/bin/pio test -e native_config
+/tmp/dosey-platformio/bin/pio test -e native_config_defaults
 ```
 
 Build every safe-default XIAO environment sequentially:
 
 ```sh
-pio run -e 01_blink_serial
-pio run -e 02_digital_output
-pio run -e 03_button_input
-pio run -e 04_pir_input
-pio run -e 05_analog_input
-pio run -e 06_i2c_scanner
-pio run -e 07_servo_sweep
-pio run -e 08_serial_protocol
-pio run -e 09_ble_protocol
-pio check -e 08_serial_protocol --skip-packages
-pio check -e 09_ble_protocol --skip-packages
+/tmp/dosey-platformio/bin/pio run -e 01_blink_serial
+/tmp/dosey-platformio/bin/pio run -e 02_digital_output
+/tmp/dosey-platformio/bin/pio run -e 03_button_input
+/tmp/dosey-platformio/bin/pio run -e 04_pir_input
+/tmp/dosey-platformio/bin/pio run -e 05_analog_input
+/tmp/dosey-platformio/bin/pio run -e 06_i2c_scanner
+/tmp/dosey-platformio/bin/pio run -e 07_servo_sweep
+/tmp/dosey-platformio/bin/pio run -e 08_serial_protocol
+/tmp/dosey-platformio/bin/pio run -e 09_ble_protocol
+/tmp/dosey-platformio/bin/pio check -e 08_serial_protocol --skip-packages
+/tmp/dosey-platformio/bin/pio check -e 09_ble_protocol --skip-packages
 ```
 
 `.github/workflows/firmware-ci.yml` runs the same tests, builds, and protocol
@@ -121,7 +123,7 @@ Test the bare XIAO before attaching the Grove Base or any module:
 1. Disconnect every external wire and module. Do not connect the battery/JST port or SWD pins.
 2. Place the board on a nonconductive surface and connect it directly to the computer with a known USB data cable.
 3. Run `pio device list` and record the exact port without guessing.
-4. Run `pio run -e 01_blink_serial -t upload --upload-port <port>`.
+4. Run `/tmp/dosey-platformio/bin/pio run -e 01_blink_serial -t upload --upload-port <port>`.
 5. Run `pio device monitor --port <port> --baud 115200`.
 6. Confirm the serial header identifies `XIAO_ESP32_C6`, then confirm the onboard user LED changes with matching `LED ON` and `LED OFF` lines.
 7. Disconnect immediately if the board heats, smells unusual, repeatedly resets, or behaves unexpectedly.
@@ -134,7 +136,7 @@ After the bare-board blink/serial test passes, upload the safe-default protocol
 firmware with no external hardware connected:
 
 ```sh
-pio run -e 08_serial_protocol -t upload --upload-port <port>
+/tmp/dosey-platformio/bin/pio run -e 08_serial_protocol -t upload --upload-port <port>
 pio device monitor --port <port> --baud 115200
 ```
 
@@ -166,19 +168,24 @@ external component moves.
 Run this only after the bare-XIAO and USB protocol checks pass. Keep the Grove
 Base, servo, battery/JST, SWD, and every external wire disconnected.
 
-1. Upload `09_ble_protocol` with `pio run -e 09_ble_protocol -t upload --upload-port <port>`.
+1. Upload `09_ble_protocol` with `/tmp/dosey-platformio/bin/pio run -e 09_ble_protocol -t upload --upload-port <port>`.
 2. Keep the USB serial monitor open at 115200 baud and confirm `D1 EVT boot BLE_READY`.
 3. On an Android robot phone, open Controller, grant Bluetooth scan/connect access, and tap Connect.
 4. Confirm the app reports `Controller connected`; then run `STATUS` and confirm the history details include `STATUS_OK`, `SERVO_UNCONFIGURED`, `PIR_UNCONFIGURED`, and `MOVEMENT_IDLE`.
 5. Run `HEARTBEAT` and confirm `HEARTBEAT_OK`.
 6. Do not enable the servo yet. `SERVO_TEST` and `DISPENSE_TEST` must return `CONFIGURATION_REQUIRED`; `DISPENSE_NEXT` must return `COMMAND_DISABLED`.
-7. Disconnect from the app and confirm the controller advertises again before reconnecting once.
+7. Disconnect from the app and confirm the controller advertises again before reconnecting once. The single-client limit is best-effort until this behavior is verified on the physical radio.
 
 The BLE service UUID is `8f3a1001-6f5b-4d4f-9c2a-5d6e7f801001`. The write
 characteristic ends in `1002`, and the notify characteristic ends in `1003`.
 Both transports use the same newline-delimited D1 messages. The app and firmware
 split BLE writes/notifications into conservative 20-byte chunks and reassemble
 complete bounded lines.
+
+The pinned Arduino-ESP32 3.3.7 NimBLE stack automatically creates the `0x2902`
+client configuration descriptor for a notify characteristic. Its `BLE2902`
+compatibility class is deprecated and warns against adding that descriptor
+manually.
 
 Stop on heat, smell, resets, repeated connection loss, malformed responses, or
 any unexpected output or movement. Record observed BLE behavior separately from
