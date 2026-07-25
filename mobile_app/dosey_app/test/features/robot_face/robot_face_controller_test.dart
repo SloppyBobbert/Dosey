@@ -6,6 +6,7 @@ import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
+import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -39,6 +40,49 @@ void main() {
       expect(state.nextEventLabel, '10:00 · Morning meds');
       expect(state.rampProgress, 0);
       expect(state.isInAwakeWindow, isFalse);
+    },
+  );
+
+  test('internet loss adds a non-blocking Robot Face advisory', () async {
+    final fixture = await _RobotFaceControllerFixture.create(
+      now: DateTime(2026, 7, 8, 9),
+      scheduleHour: 10,
+      connectivity: Stream<ConnectivityState>.value(ConnectivityState.offline),
+    );
+    addTearDown(fixture.close);
+
+    await fixture.settle();
+    final state = await fixture.controller.watchState().first;
+
+    expect(state.mode, RobotFaceMode.idle);
+    expect(state.networkAdvisory, RobotFaceNetworkAdvisory.internetOffline);
+    expect(state.availableActions, isEmpty);
+  });
+
+  test(
+    'internet advisory does not replace a blocking controller error',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9),
+        scheduleHour: 10,
+        connectivity: Stream<ConnectivityState>.value(
+          ConnectivityState.offline,
+        ),
+        controllerSnapshot: const ControllerSnapshot(
+          connectionState: ControllerConnectionState.disconnected,
+          healthState: ControllerHealthState.error,
+          statusLabel: 'Bluetooth is unavailable',
+          canRequestDispense: false,
+        ),
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+      final state = await fixture.controller.watchState().first;
+
+      expect(state.mode, RobotFaceMode.error);
+      expect(state.statusLabel, 'Bluetooth is unavailable');
+      expect(state.networkAdvisory, RobotFaceNetworkAdvisory.internetOffline);
     },
   );
 
@@ -1419,6 +1463,7 @@ class _RobotFaceControllerFixture {
     ScheduleProfile? activeProfile,
     bool emitDefaultActiveProfile = true,
     Stream<DateTime>? clock,
+    Stream<ConnectivityState>? connectivity,
     Stream<List<MedicationShortageAlertRow>>? shortageAlerts,
     CarouselSlotRepository? carouselSlots,
     ControllerSnapshot controllerSnapshot = const ControllerSnapshot.online(),
@@ -1476,6 +1521,7 @@ class _RobotFaceControllerFixture {
       doseLog: doseLog,
       carouselSlots: slotRepository,
       shortageAlerts: shortageAlerts,
+      connectivity: connectivity,
       clock: clock,
       now: () => currentNow,
     );

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
+import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'dart:convert';
 
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -29,6 +30,7 @@ class RobotFaceController {
     required this._doseLog,
     this.carouselSlots,
     Stream<List<MedicationShortageAlertRow>>? shortageAlerts,
+    Stream<ConnectivityState>? connectivity,
     Stream<DateTime>? clock,
     DateTime Function()? now,
     this.sleepyAfter = const Duration(minutes: 30),
@@ -64,6 +66,14 @@ class RobotFaceController {
       _subscriptions.add(
         shortageAlerts.listen((value) {
           _shortageAlerts = value;
+          _emit();
+        }),
+      );
+    }
+    if (connectivity != null) {
+      _subscriptions.add(
+        connectivity.listen((value) {
+          _connectivityState = value;
           _emit();
         }),
       );
@@ -105,6 +115,7 @@ class RobotFaceController {
   String? _dispensingDoseId;
   late DateTime _lastInteractionAt;
   DateTime? _currentTime;
+  ConnectivityState? _connectivityState;
   RobotFaceState? _latestState;
 
   Stream<RobotFaceState> watchState() async* {
@@ -224,6 +235,9 @@ class RobotFaceController {
       rampProgress: choreography.rampProgress,
       isInAwakeWindow: choreography.isInAwakeWindow,
       statusLabel: _statusFor(role, nextSchedule, dueDoseId, latestDoseEvent),
+      networkAdvisory: _connectivityState == ConnectivityState.offline
+          ? RobotFaceNetworkAdvisory.internetOffline
+          : null,
       actionDoseId: actionDoseId,
       voiceOccurrenceKey: voiceOccurrenceKey,
       isAwaitingControllerConfirmation:

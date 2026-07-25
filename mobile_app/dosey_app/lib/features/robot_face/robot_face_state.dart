@@ -13,6 +13,8 @@ enum RobotFaceMode {
 
 enum RobotFaceTone { calm, ready, attention, warning, offline }
 
+enum RobotFaceNetworkAdvisory { internetOffline }
+
 enum RobotFaceActionKind {
   confirmTaken,
   skipDose,
@@ -63,6 +65,7 @@ class RobotFaceState {
     required this.rampProgress,
     required this.isInAwakeWindow,
     this.statusLabel,
+    this.networkAdvisory,
     this.actionDoseId,
     this.voiceOccurrenceKey,
     this.isAwaitingControllerConfirmation = false,
@@ -81,6 +84,7 @@ class RobotFaceState {
   final double rampProgress;
   final bool isInAwakeWindow;
   final String? statusLabel;
+  final RobotFaceNetworkAdvisory? networkAdvisory;
   final String? actionDoseId;
   final String? voiceOccurrenceKey;
   final bool isAwaitingControllerConfirmation;
@@ -100,6 +104,7 @@ class RobotFaceState {
     double? rampProgress,
     bool? isInAwakeWindow,
     String? statusLabel,
+    RobotFaceNetworkAdvisory? networkAdvisory,
     Object? actionDoseId = _unset,
     Object? voiceOccurrenceKey = _unset,
     bool? isAwaitingControllerConfirmation,
@@ -118,6 +123,7 @@ class RobotFaceState {
       rampProgress: rampProgress ?? this.rampProgress,
       isInAwakeWindow: isInAwakeWindow ?? this.isInAwakeWindow,
       statusLabel: statusLabel ?? this.statusLabel,
+      networkAdvisory: networkAdvisory ?? this.networkAdvisory,
       actionDoseId: identical(actionDoseId, _unset)
           ? this.actionDoseId
           : actionDoseId as String?,
@@ -161,6 +167,7 @@ class RobotFaceState {
         other.rampProgress == rampProgress &&
         other.isInAwakeWindow == isInAwakeWindow &&
         other.statusLabel == statusLabel &&
+        other.networkAdvisory == networkAdvisory &&
         other.actionDoseId == actionDoseId &&
         other.voiceOccurrenceKey == voiceOccurrenceKey &&
         other.isAwaitingControllerConfirmation ==
@@ -182,6 +189,7 @@ class RobotFaceState {
     rampProgress,
     isInAwakeWindow,
     statusLabel,
+    networkAdvisory,
     actionDoseId,
     voiceOccurrenceKey,
     isAwaitingControllerConfirmation,

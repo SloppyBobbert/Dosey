@@ -118,6 +118,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
   Timer? _missedDoseReconciliationTimer;
   late final MissedDoseReconciliationService _missedDoseReconciliation;
   late final DoseyAppDependencies _dependencies;
+  bool _dependenciesInitialized = false;
   StreamSubscription<AppDeviceRole>? _controllerRoleSubscription;
   ControllerHealthSupervisor? _controllerHealthSupervisor;
   AppDeviceRole? _controllerRole;
@@ -299,6 +300,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
             reconciliation: _missedDoseReconciliation,
           )
         : null;
+    final connectivity = _database.isDemo
+        ? const DemoConnectivityGateway()
+        : widget.connectivityGateway ?? ConnectivityPlusGateway();
     _dependencies = DoseyAppDependencies(
       database: _database,
       isDemo: _database.isDemo,
@@ -334,13 +338,14 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
         doseLog: doseLog,
         carouselSlots: carouselSlots,
         shortageAlerts: guidedCarouselLoads.watchAllActiveShortageAlerts(),
+        connectivity: _database.isDemo
+            ? null
+            : connectivity.watchConnectivity(),
         clock: _appClock.ticks,
         now: _appClock.now,
       ),
       ble: ble,
-      connectivity: _database.isDemo
-          ? const DemoConnectivityGateway()
-          : widget.connectivityGateway ?? ConnectivityPlusGateway(),
+      connectivity: connectivity,
       reminderScheduler: reminderScheduler,
       voicePlayer:
           widget.voicePlayer ??
@@ -353,6 +358,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
           widget.screenAwakeGateway ?? const MethodChannelScreenAwakeGateway(),
       runMissedDoseReconciliation: _runMissedDoseReconciliation,
     );
+    _dependenciesInitialized = true;
     if (_database.isDemo) {
       unawaited(_connectDemoController());
     } else {
@@ -419,6 +425,10 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _isForeground = state == AppLifecycleState.resumed;
+    if (!_dependenciesInitialized) return;
+    if (!_isForeground) {
+      unawaited(_dependencies.voicePlayer.stop());
+    }
     unawaited(_updateControllerMonitoring());
   }
 
@@ -445,16 +455,18 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
         unawaited(clock.close());
       }
     }
-    unawaited(_dependencies.controller.close());
-    unawaited(_dependencies.demoScenarios?.close());
-    unawaited(_dependencies.robotFaceController.close());
-    unawaited(_dependencies.ble.close());
-    unawaited(_dependencies.voicePlayer.dispose());
+    if (_dependenciesInitialized) {
+      unawaited(_dependencies.controller.close());
+      unawaited(_dependencies.demoScenarios?.close());
+      unawaited(_dependencies.robotFaceController.close());
+      unawaited(_dependencies.ble.close());
+      unawaited(_dependencies.voicePlayer.dispose());
+      if (_ownsNotificationTapController) {
+        _dependencies.notificationTaps.dispose();
+      }
+    }
     if (_ownsDatabase) {
       unawaited(_database.close());
-    }
-    if (_ownsNotificationTapController) {
-      _dependencies.notificationTaps.dispose();
     }
     super.dispose();
   }

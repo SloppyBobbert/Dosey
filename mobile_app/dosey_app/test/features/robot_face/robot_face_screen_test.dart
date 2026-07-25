@@ -23,6 +23,8 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
+import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
+import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
@@ -282,6 +284,189 @@ void main() {
     final loopedPhase = state.debugPhase as double;
     expect(loopedPhase, closeTo(0.04, 0.03));
   });
+
+  testWidgets('animates the face only while voice playback is active', (
+    WidgetTester tester,
+  ) async {
+    final gateway = _ControllableVoicePlaybackGateway();
+    final voicePlayer = DoseyVoicePlayer(playbackGateway: gateway);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        voicePlayer: voicePlayer,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isFalse,
+    );
+
+    gateway.setPlaying(true);
+    await tester.pump();
+
+    final speakingCanvas = tester.widget<RobotFaceCanvas>(
+      find.byType(RobotFaceCanvas),
+    );
+    final dynamic speakingState = tester.state(find.byType(RobotFaceCanvas));
+    expect(speakingCanvas.isSpeaking, isTrue);
+    expect(
+      speakingState.debugAnimationDuration as Duration,
+      const Duration(milliseconds: 920),
+    );
+    expect(find.bySemanticsLabel('Robot is speaking'), findsOneWidget);
+
+    gateway.setPlaying(false);
+    await tester.pump();
+
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isFalse,
+    );
+  });
+
+  testWidgets('shows a focused preparing face before playback starts', (
+    WidgetTester tester,
+  ) async {
+    final gateway = _ControllableVoicePlaybackGateway(blockPreparation: true);
+    final voicePlayer = DoseyVoicePlayer(playbackGateway: gateway);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        voicePlayer: voicePlayer,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final playback = voicePlayer.speak(DoseyVoicePhrase.doseSoon);
+    await tester.pump();
+
+    final preparingCanvas = tester.widget<RobotFaceCanvas>(
+      find.byType(RobotFaceCanvas),
+    );
+    final dynamic preparingState = tester.state(find.byType(RobotFaceCanvas));
+    expect(preparingCanvas.isPreparing, isTrue);
+    expect(preparingCanvas.isSpeaking, isFalse);
+    expect(
+      preparingState.debugAnimationDuration as Duration,
+      const Duration(milliseconds: 5200),
+    );
+    expect(find.bySemanticsLabel('Robot is speaking'), findsNothing);
+
+    gateway.completePreparation();
+    await playback;
+    await tester.pump();
+
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isPreparing,
+      isFalse,
+    );
+  });
+
+  testWidgets('reduced motion uses a static speaking indication', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: const SizedBox(
+            width: 800,
+            height: 400,
+            child: RobotFaceCanvas(
+              isSpeaking: true,
+              state: RobotFaceState(
+                mode: RobotFaceMode.missed,
+                nextEventLabel: '8:00 PM · Evening meds',
+                isFlipped: false,
+                isLandscapeOnly: true,
+                rampProgress: 1,
+                isInAwakeWindow: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvasState.debugIsAnimating as bool, isFalse);
+    expect(find.bySemanticsLabel('Robot is speaking'), findsOneWidget);
+  });
+
+  testWidgets('shows an amber local-first advisory while internet is offline', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: '10:00 · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+          networkAdvisory: RobotFaceNetworkAdvisory.internetOffline,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.text('Internet offline. Local reminders still work.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(RobotFaceScreen.networkAdvisoryBadgeKey), findsOneWidget);
+    final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvasState.debugUsesNetworkAdvisoryPalette as bool, isTrue);
+  });
+
+  testWidgets(
+    'controller failure stays red while network advisory is badge only',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          initialState: const RobotFaceState(
+            mode: RobotFaceMode.error,
+            nextEventLabel: '10:00 · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 0,
+            isInAwakeWindow: false,
+            statusLabel: 'Bluetooth is unavailable',
+            networkAdvisory: RobotFaceNetworkAdvisory.internetOffline,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Bluetooth is unavailable'), findsOneWidget);
+      expect(
+        find.text('Internet offline. Local reminders still work.'),
+        findsOneWidget,
+      );
+      final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+      expect(canvasState.debugUsesNetworkAdvisoryPalette as bool, isFalse);
+    },
+  );
 
   testWidgets('ramps compact urgency between soon and ready states', (
     WidgetTester tester,
@@ -1522,6 +1707,7 @@ class _RobotFaceTestApp extends StatefulWidget {
     this.isActive = true,
     this.doseActionLogger,
     this.appClock,
+    this.voicePlayer,
   });
 
   final DoseyDatabase? database;
@@ -1531,6 +1717,7 @@ class _RobotFaceTestApp extends StatefulWidget {
   final bool isActive;
   final RobotFaceDoseActionLogger? doseActionLogger;
   final AppClock? appClock;
+  final DoseyVoicePlayer? voicePlayer;
 
   @override
   State<_RobotFaceTestApp> createState() => _RobotFaceTestAppState();
@@ -1558,6 +1745,7 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
       permissionGateway: _FakePermissionGateway(),
       reminderScheduler: _FakeReminderScheduler(),
       missedDoseReconciliationService: _FakeMissedDoseReconciliationService(),
+      voicePlayer: widget.voicePlayer,
       child: MaterialApp(
         home: RobotFaceScreen(
           controller: widget.controller,
@@ -1568,6 +1756,48 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
         ),
       ),
     );
+  }
+}
+
+class _ControllableVoicePlaybackGateway implements VoicePlaybackGateway {
+  _ControllableVoicePlaybackGateway({
+    bool initiallyPlaying = false,
+    this.blockPreparation = false,
+  }) : _isPlaying = initiallyPlaying;
+
+  final StreamController<bool> _playing = StreamController<bool>.broadcast();
+  bool _isPlaying;
+  final bool blockPreparation;
+  Completer<void>? _preparationCompleter;
+
+  @override
+  bool get isPlaying => _isPlaying;
+
+  @override
+  Stream<bool> get playing => _playing.stream;
+
+  @override
+  Future<void> dispose() => _playing.close();
+
+  @override
+  Future<void> playAsset(String assetPath, {required double volume}) async {
+    if (blockPreparation) {
+      _preparationCompleter = Completer<void>();
+      await _preparationCompleter!.future;
+    }
+  }
+
+  @override
+  Future<void> stop() async => setPlaying(false);
+
+  void setPlaying(bool value) {
+    _isPlaying = value;
+    _playing.add(value);
+  }
+
+  void completePreparation() {
+    _preparationCompleter?.complete();
+    _preparationCompleter = null;
   }
 }
 

@@ -4,10 +4,18 @@ import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:flutter/material.dart';
 
 class RobotFaceCanvas extends StatefulWidget {
-  const RobotFaceCanvas({super.key, required this.state, this.isActive = true});
+  const RobotFaceCanvas({
+    super.key,
+    required this.state,
+    this.isActive = true,
+    this.isPreparing = false,
+    this.isSpeaking = false,
+  });
 
   final RobotFaceState state;
   final bool isActive;
+  final bool isPreparing;
+  final bool isSpeaking;
 
   @override
   State<RobotFaceCanvas> createState() => _RobotFaceCanvasState();
@@ -17,21 +25,41 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   int _resumeGeneration = 0;
+  bool _disableAnimations = false;
+
+  static const _ambientDuration = Duration(milliseconds: 5200);
+  static const _speakingDuration = Duration(milliseconds: 920);
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 5200),
+      duration: widget.isSpeaking ? _speakingDuration : _ambientDuration,
     );
+    _syncAnimationActivity();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    if (_disableAnimations == disableAnimations) return;
+    _disableAnimations = disableAnimations;
     _syncAnimationActivity();
   }
 
   @override
   void didUpdateWidget(covariant RobotFaceCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isActive != widget.isActive) {
+    if (oldWidget.isSpeaking != widget.isSpeaking) {
+      _controller.duration = widget.isSpeaking
+          ? _speakingDuration
+          : _ambientDuration;
+      _controller.stop(canceled: false);
+      _controller.value = _controller.lowerBound;
+      _syncAnimationActivity();
+    } else if (oldWidget.isActive != widget.isActive) {
       _syncAnimationActivity();
     }
   }
@@ -39,7 +67,7 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
   void _syncAnimationActivity() {
     _resumeGeneration += 1;
 
-    if (widget.isActive) {
+    if (widget.isActive && !_disableAnimations) {
       if (_controller.isAnimating) {
         return;
       }
@@ -89,6 +117,11 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
   }
 
   double get debugPhase => _controller.value;
+  Duration get debugAnimationDuration => _controller.duration!;
+  bool get debugIsAnimating => _controller.isAnimating;
+  bool get debugUsesNetworkAdvisoryPalette =>
+      widget.state.mode == RobotFaceMode.idle &&
+      widget.state.networkAdvisory == RobotFaceNetworkAdvisory.internetOffline;
 
   @override
   void dispose() {
@@ -98,42 +131,69 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return CustomPaint(
-          painter: _RobotFacePainter(
-            state: widget.state,
-            phase: _controller.value,
-          ),
-          child: const SizedBox.expand(),
-        );
-      },
+    return Semantics(
+      label: widget.isSpeaking ? 'Robot is speaking' : null,
+      liveRegion: widget.isSpeaking,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return CustomPaint(
+            painter: _RobotFacePainter(
+              state: widget.state,
+              phase: _controller.value,
+              isPreparing: widget.isPreparing,
+              isSpeaking: widget.isSpeaking,
+              reducedMotion: _disableAnimations,
+            ),
+            child: const SizedBox.expand(),
+          );
+        },
+      ),
     );
   }
 }
 
 class _RobotFacePainter extends CustomPainter {
-  const _RobotFacePainter({required this.state, required this.phase});
+  const _RobotFacePainter({
+    required this.state,
+    required this.phase,
+    required this.isPreparing,
+    required this.isSpeaking,
+    required this.reducedMotion,
+  });
 
   final RobotFaceState state;
   final double phase;
+  final bool isPreparing;
+  final bool isSpeaking;
+  final bool reducedMotion;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final motion = _motionProfileFor(state, size);
+    final speakingPulse = isSpeaking
+        ? reducedMotion
+              ? 0.55
+              : (math.sin(phase * math.pi * 2) + 1) / 2
+        : 0.0;
     final breathing =
-        1 + math.sin(phase * math.pi * 2) * motion.breathingAmplitude;
+        1 +
+        math.sin(phase * math.pi * 2) * motion.breathingAmplitude +
+        (speakingPulse * 0.035);
     final pulse = _pulseValue();
     final blink = _blinkValue();
 
-    final palette = _paletteFor(state.mode);
+    final palette = _usesNetworkAdvisoryPalette
+        ? _networkAdvisoryPalette
+        : _paletteFor(state.mode);
     final concernTilt = _concernTiltFor(state.mode);
     // Keep expression changes in the eyes only. Robot Mode intentionally has no
     // mouth so status color, tilt, blink, and glow carry the state.
     final eyelidOpen = _eyelidOpenFor(state, blink, phase);
-    final pupilOffset = _pupilOffsetFor(state, size, phase);
+    final pupilOffset = isPreparing
+        ? Offset.zero
+        : _pupilOffsetFor(state, size, phase);
 
     final backgroundPaint = Paint()
       ..shader = LinearGradient(
@@ -196,20 +256,28 @@ class _RobotFacePainter extends CustomPainter {
       eyeRadius,
     );
 
-    if (motion.attentionRingStrength > 0) {
+    final attentionRingStrength = math.max(
+      motion.attentionRingStrength,
+      isSpeaking
+          ? 0.38 + (speakingPulse * 0.34)
+          : isPreparing
+          ? 0.28
+          : 0.0,
+    );
+    if (attentionRingStrength > 0) {
       _paintAttentionRing(
         canvas,
         leftEye.outerRect,
         palette,
         pulse,
-        motion.attentionRingStrength,
+        attentionRingStrength,
       );
       _paintAttentionRing(
         canvas,
         rightEye.outerRect,
         palette,
         pulse,
-        motion.attentionRingStrength,
+        attentionRingStrength,
       );
     }
 
@@ -219,7 +287,7 @@ class _RobotFacePainter extends CustomPainter {
       palette,
       pupilOffset,
       concernTilt * -1,
-      motion.glowBoost,
+      motion.glowBoost + (isPreparing ? 0.08 : 0) + (speakingPulse * 0.14),
     );
     _paintEye(
       canvas,
@@ -227,7 +295,7 @@ class _RobotFacePainter extends CustomPainter {
       palette,
       pupilOffset,
       concernTilt,
-      motion.glowBoost,
+      motion.glowBoost + (isPreparing ? 0.08 : 0) + (speakingPulse * 0.14),
     );
 
     _paintDisplayVignette(canvas, rect, state);
@@ -717,9 +785,27 @@ class _RobotFacePainter extends CustomPainter {
     };
   }
 
+  bool get _usesNetworkAdvisoryPalette =>
+      state.mode == RobotFaceMode.idle &&
+      state.networkAdvisory == RobotFaceNetworkAdvisory.internetOffline;
+
+  static const _networkAdvisoryPalette = _FacePalette(
+    backgroundTop: Color(0xFF211A0D),
+    backgroundBottom: Color(0xFF0A0804),
+    eyeTop: Color(0xFFFFE0A1),
+    eyeBottom: Color(0xFFD99428),
+    pupil: Color(0xFF3B2404),
+    glow: Color(0xFFFFB84D),
+    accent: Color(0xFFFFCC73),
+  );
+
   @override
   bool shouldRepaint(covariant _RobotFacePainter oldDelegate) {
-    return oldDelegate.state != state || oldDelegate.phase != phase;
+    return oldDelegate.state != state ||
+        oldDelegate.phase != phase ||
+        oldDelegate.isPreparing != isPreparing ||
+        oldDelegate.isSpeaking != isSpeaking ||
+        oldDelegate.reducedMotion != reducedMotion;
   }
 }
 

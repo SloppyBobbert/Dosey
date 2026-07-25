@@ -18,6 +18,7 @@ import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
+import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -187,6 +188,10 @@ void main() {
     expect(dependencies.reminderScheduler, isA<DemoReminderScheduler>());
     expect(dependencies.ble, isA<DemoBleGateway>());
     expect(dependencies.connectivity, isA<DemoConnectivityGateway>());
+    final robotFaceState = await dependencies.robotFaceController
+        .watchState()
+        .first;
+    expect(robotFaceState.networkAdvisory, isNull);
     expect(dependencies.permissions, isA<DemoPermissionGateway>());
     expect(dependencies.screenAwake, same(screenAwake));
 
@@ -284,6 +289,7 @@ void main() {
         availability: Stream.value(const BleAvailabilitySnapshot.available()),
         eventSink: _DiscardHealthEvents(),
       );
+      final voiceGateway = _StoppingVoicePlaybackGateway();
       late DoseyAppDependencies dependencies;
 
       await tester.pumpWidget(
@@ -292,6 +298,7 @@ void main() {
           child: DoseyAppScope(
             database: database,
             controllerGateway: supervisor,
+            voicePlayer: DoseyVoicePlayer(playbackGateway: voiceGateway),
             child: Builder(
               builder: (context) {
                 dependencies = DoseyAppScope.of(context);
@@ -315,6 +322,7 @@ void main() {
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       await tester.pump(const Duration(milliseconds: 1));
+      expect(voiceGateway.stopCount, 1);
       expect(
         (await dependencies.controller.watchController().first).healthState,
         ControllerHealthState.disconnected,
@@ -338,6 +346,27 @@ void main() {
       await database.close();
     },
   );
+}
+
+class _StoppingVoicePlaybackGateway implements VoicePlaybackGateway {
+  int stopCount = 0;
+
+  @override
+  bool get isPlaying => false;
+
+  @override
+  Stream<bool> get playing => const Stream<bool>.empty();
+
+  @override
+  Future<void> dispose() async {}
+
+  @override
+  Future<void> playAsset(String assetPath, {required double volume}) async {}
+
+  @override
+  Future<void> stop() async {
+    stopCount += 1;
+  }
 }
 
 class _DiscardHealthEvents implements ControllerHealthEventSink {

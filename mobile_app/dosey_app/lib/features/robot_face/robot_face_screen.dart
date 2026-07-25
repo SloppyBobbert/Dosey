@@ -6,6 +6,7 @@ import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/demo/demo_scenario.dart';
 import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
+import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/doses/dose_action_logger.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
@@ -40,6 +41,9 @@ class RobotFaceScreen extends StatefulWidget {
     'robot-face-urgent-prompt-scale',
   );
   static const statusBadgeKey = ValueKey<String>('robot-face-status-badge');
+  static const networkAdvisoryBadgeKey = ValueKey<String>(
+    'robot-face-network-advisory-badge',
+  );
   static const actionPanelKey = ValueKey<String>('robot-face-action-panel');
   static const confirmTakenButtonKey = ValueKey<String>(
     'robot-face-confirm-taken-button',
@@ -90,6 +94,9 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
   @override
   void didUpdateWidget(covariant RobotFaceScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _voiceCoordinator?.setActive(widget.isActive);
+    }
     if (oldWidget.controller != widget.controller ||
         oldWidget.controllerResolver != widget.controllerResolver ||
         oldWidget.stateStream != widget.stateStream ||
@@ -131,6 +138,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
       settingsStream: dependencies.robotFaceSettings.watchSettings(),
       roleStream: dependencies.settings.watchDeviceRole(),
       voicePlayer: dependencies.voicePlayer,
+      isActive: widget.isActive,
     );
   }
 
@@ -146,42 +154,53 @@ class _RobotFaceScreenState extends State<RobotFaceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final scenarios = DoseyAppScope.maybeOf(context)?.demoScenarios;
+    final dependencies = DoseyAppScope.maybeOf(context);
+    final scenarios = dependencies?.demoScenarios;
     return Scaffold(
       backgroundColor: const Color(0xFF04070D),
-      body: StreamBuilder<RobotFaceState>(
-        stream: _stateStream,
-        initialData: _initialState ?? _fallbackState,
-        builder: (context, snapshot) {
-          final state = snapshot.data ?? _fallbackState;
-          return Stack(
-            children: [
-              ColoredBox(
-                color: const Color(0xFF04070D),
-                child: SafeArea(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final isPortraitFrame =
-                          constraints.maxHeight > constraints.maxWidth;
-                      Widget frame = _RobotFaceFrame(
-                        state: state,
-                        isActive: widget.isActive,
-                        onInteraction: _handleInteraction,
-                        doseActionLogger: widget.doseActionLogger,
-                      );
+      body: StreamBuilder<VoicePlaybackPhase>(
+        stream: dependencies?.voicePlayer.phases,
+        initialData: dependencies?.voicePlayer.phase ?? VoicePlaybackPhase.idle,
+        builder: (context, voiceSnapshot) {
+          final voicePhase = widget.isActive
+              ? voiceSnapshot.data ?? VoicePlaybackPhase.idle
+              : VoicePlaybackPhase.idle;
+          return StreamBuilder<RobotFaceState>(
+            stream: _stateStream,
+            initialData: _initialState ?? _fallbackState,
+            builder: (context, snapshot) {
+              final state = snapshot.data ?? _fallbackState;
+              return Stack(
+                children: [
+                  ColoredBox(
+                    color: const Color(0xFF04070D),
+                    child: SafeArea(
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final isPortraitFrame =
+                              constraints.maxHeight > constraints.maxWidth;
+                          Widget frame = _RobotFaceFrame(
+                            state: state,
+                            isActive: widget.isActive,
+                            voicePhase: voicePhase,
+                            onInteraction: _handleInteraction,
+                            doseActionLogger: widget.doseActionLogger,
+                          );
 
-                      if (isPortraitFrame) {
-                        frame = RotatedBox(quarterTurns: 1, child: frame);
-                      }
+                          if (isPortraitFrame) {
+                            frame = RotatedBox(quarterTurns: 1, child: frame);
+                          }
 
-                      return Center(child: frame);
-                    },
+                          return Center(child: frame);
+                        },
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              if (scenarios != null)
-                _DemoPresenterControls(scenarios: scenarios),
-            ],
+                  if (scenarios != null)
+                    _DemoPresenterControls(scenarios: scenarios),
+                ],
+              );
+            },
           );
         },
       ),
@@ -444,12 +463,14 @@ class _RobotFaceFrame extends StatelessWidget {
   const _RobotFaceFrame({
     required this.state,
     required this.isActive,
+    required this.voicePhase,
     required this.onInteraction,
     this.doseActionLogger,
   });
 
   final RobotFaceState state;
   final bool isActive;
+  final VoicePlaybackPhase voicePhase;
   final VoidCallback onInteraction;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
@@ -515,6 +536,10 @@ class _RobotFaceFrame extends StatelessWidget {
                               child: RobotFaceCanvas(
                                 state: state,
                                 isActive: isActive,
+                                isPreparing:
+                                    voicePhase == VoicePlaybackPhase.preparing,
+                                isSpeaking:
+                                    voicePhase == VoicePlaybackPhase.speaking,
                               ),
                             ),
                           ),
@@ -778,6 +803,11 @@ class _RobotFaceStatusCard extends StatelessWidget {
                 ],
               ],
             ),
+            if (state.networkAdvisory ==
+                RobotFaceNetworkAdvisory.internetOffline) ...<Widget>[
+              const SizedBox(height: 10),
+              const _RobotFaceNetworkAdvisoryBadge(),
+            ],
             if (state.hasPinnedShortageAlert) ...<Widget>[
               const SizedBox(height: 12),
               _RobotFaceShortageCard(state: state),
@@ -830,7 +860,7 @@ class _RobotFaceStatusCard extends StatelessWidget {
       RobotFaceMode.doseApproaching => 'Coming up',
       RobotFaceMode.happyConfirmed => 'Dose logged',
       RobotFaceMode.sleepy => 'Sleep mode',
-      RobotFaceMode.error => 'Check robot',
+      RobotFaceMode.error => statusLabel,
       RobotFaceMode.missed => 'Missed dose',
       RobotFaceMode.offline => 'Reconnect needed',
       _ => statusLabel,
@@ -848,6 +878,47 @@ class _RobotFaceStatusCard extends StatelessWidget {
       RobotFaceMode.idle when state.isInAwakeWindow => 0.24,
       _ => 0,
     };
+  }
+}
+
+class _RobotFaceNetworkAdvisoryBadge extends StatelessWidget {
+  const _RobotFaceNetworkAdvisoryBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Internet offline. Local reminders still work.',
+      child: DecoratedBox(
+        key: RobotFaceScreen.networkAdvisoryBadgeKey,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFB84D).withValues(alpha: 0.09),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: const Color(0xFFFFC765).withValues(alpha: 0.3),
+          ),
+        ),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Icon(Icons.wifi_off_rounded, size: 16, color: Color(0xFFFFCC73)),
+              SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  'Internet offline. Local reminders still work.',
+                  style: TextStyle(
+                    color: Color(0xFFFFD99A),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
