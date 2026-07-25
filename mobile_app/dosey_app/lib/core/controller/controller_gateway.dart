@@ -1,5 +1,15 @@
 enum ControllerConnectionState { disconnected, scanning, connected, error }
 
+enum ControllerHealthState {
+  disconnected,
+  connecting,
+  verifying,
+  online,
+  offline,
+  reconnecting,
+  error,
+}
+
 abstract class ControllerGatewayException implements Exception {
   const ControllerGatewayException(this.message);
 
@@ -59,21 +69,37 @@ class ControllerSnapshot {
     required this.connectionState,
     required this.canRequestDispense,
     required this.statusLabel,
+    this.healthState = ControllerHealthState.disconnected,
+    this.lastSuccessfulHeartbeatAt,
+    this.reconnectAttempt = 0,
+    this.nextReconnectAt,
   });
 
   const ControllerSnapshot.disconnected()
     : connectionState = ControllerConnectionState.disconnected,
       canRequestDispense = false,
-      statusLabel = 'Controller disconnected';
+      statusLabel = 'Controller disconnected',
+      healthState = ControllerHealthState.disconnected,
+      lastSuccessfulHeartbeatAt = null,
+      reconnectAttempt = 0,
+      nextReconnectAt = null;
 
   const ControllerSnapshot.connected()
     : connectionState = ControllerConnectionState.connected,
       canRequestDispense = true,
-      statusLabel = 'Controller connected';
+      statusLabel = 'Controller connected',
+      healthState = ControllerHealthState.online,
+      lastSuccessfulHeartbeatAt = null,
+      reconnectAttempt = 0,
+      nextReconnectAt = null;
 
   final ControllerConnectionState connectionState;
   final bool canRequestDispense;
   final String statusLabel;
+  final ControllerHealthState healthState;
+  final DateTime? lastSuccessfulHeartbeatAt;
+  final int reconnectAttempt;
+  final DateTime? nextReconnectAt;
 }
 
 abstract interface class ControllerGateway {

@@ -402,12 +402,10 @@ class RobotFaceController {
     if (role == null || !role.canHostRobot) {
       return RobotFaceMode.offline;
     }
-    if (_controllerSnapshot.connectionState ==
-        ControllerConnectionState.error) {
+    if (_controllerSnapshot.healthState == ControllerHealthState.error) {
       return RobotFaceMode.error;
     }
-    if (_controllerSnapshot.connectionState !=
-        ControllerConnectionState.connected) {
+    if (_controllerSnapshot.healthState != ControllerHealthState.online) {
       return RobotFaceMode.offline;
     }
     if (nextSchedule == null) {
@@ -462,8 +460,7 @@ class RobotFaceController {
     if (role == null || !role.canHostRobot) {
       return 'Robot Face is only available in Robot Mode';
     }
-    if (_controllerSnapshot.connectionState !=
-        ControllerConnectionState.connected) {
+    if (_controllerSnapshot.healthState != ControllerHealthState.online) {
       return _controllerSnapshot.statusLabel;
     }
     if (latestDoseEvent?.kind == DoseLogEventKind.doseMissedRecognized) {

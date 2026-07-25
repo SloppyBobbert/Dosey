@@ -314,6 +314,25 @@ class ControllerCommandEvents extends Table {
   ];
 }
 
+@DataClassName('ControllerHealthEventRow')
+class ControllerHealthEvents extends Table {
+  TextColumn get id => text()();
+  TextColumn get eventType => text()();
+  DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get details => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  List<Index> get indexes => [
+    Index(
+      'controller_health_events_occurred_at_idx',
+      'CREATE INDEX controller_health_events_occurred_at_idx '
+          'ON controller_health_events (occurred_at DESC)',
+    ),
+  ];
+}
+
 @DataClassName('AdminAuditEventRow')
 class AdminAuditEvents extends Table {
   TextColumn get id => text()();
@@ -350,6 +369,7 @@ class AdminAuditEvents extends Table {
     DoseLogEvents,
     ControllerCommandSessions,
     ControllerCommandEvents,
+    ControllerHealthEvents,
     AdminAuditEvents,
   ],
 )
@@ -374,7 +394,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   final bool isDemo;
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -451,6 +471,9 @@ class DoseyDatabase extends _$DoseyDatabase {
       }
       if (from >= 13 && from < 14) {
         await _rebuildCarouselLoadSlotSnapshotsTableWithRetainedStatus();
+      }
+      if (from < 15) {
+        await migrator.createTable(controllerHealthEvents);
       }
     },
   );

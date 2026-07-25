@@ -16,6 +16,10 @@ enum SimulatedDispenseOutcome {
   disconnectAfterAcceptance,
 }
 
+enum SimulatedHeartbeatOutcome { success, missed, disconnect }
+
+enum SimulatedConnectOutcome { success, failure }
+
 class SimulatedControllerGateway
     implements StagedControllerGateway, ControllerBenchGateway {
   SimulatedControllerGateway({
@@ -44,6 +48,9 @@ class SimulatedControllerGateway
   final SimulatorDelay _delay;
   final SimulatorDelay _benchDelay;
   SimulatedDispenseOutcome _nextDispenseOutcome;
+  SimulatedHeartbeatOutcome _nextHeartbeatOutcome =
+      SimulatedHeartbeatOutcome.success;
+  SimulatedConnectOutcome _nextConnectOutcome = SimulatedConnectOutcome.success;
   final _controller = StreamController<ControllerSnapshot>.broadcast();
 
   ControllerSnapshot _snapshot = const ControllerSnapshot.disconnected();
@@ -56,6 +63,14 @@ class SimulatedControllerGateway
 
   @override
   Future<void> connect() async {
+    final outcome = _nextConnectOutcome;
+    _nextConnectOutcome = SimulatedConnectOutcome.success;
+    if (outcome == SimulatedConnectOutcome.failure) {
+      _setSnapshot(const ControllerSnapshot.disconnected());
+      throw const ControllerTransportOfflineException(
+        'Simulator connection failed.',
+      );
+    }
     _setSnapshot(const ControllerSnapshot.connected());
   }
 
@@ -131,12 +146,37 @@ class SimulatedControllerGateway
     _nextDispenseOutcome = outcome;
   }
 
+  void queueNextHeartbeatOutcome(SimulatedHeartbeatOutcome outcome) {
+    _nextHeartbeatOutcome = outcome;
+  }
+
+  void queueNextConnectOutcome(SimulatedConnectOutcome outcome) {
+    _nextConnectOutcome = outcome;
+  }
+
   @override
   Future<String> runBenchCommand(ControllerBenchCommand command) async {
     if (!_snapshot.canRequestDispense) {
       throw const ControllerTransportOfflineException();
     }
     await _benchDelay(const Duration(milliseconds: 150));
+    if (command == ControllerBenchCommand.heartbeat) {
+      final outcome = _nextHeartbeatOutcome;
+      _nextHeartbeatOutcome = SimulatedHeartbeatOutcome.success;
+      switch (outcome) {
+        case SimulatedHeartbeatOutcome.success:
+          break;
+        case SimulatedHeartbeatOutcome.missed:
+          throw const ControllerCommandPreAcceptanceTimeoutException(
+            'Simulator heartbeat timed out.',
+          );
+        case SimulatedHeartbeatOutcome.disconnect:
+          _setSnapshot(const ControllerSnapshot.disconnected());
+          throw const ControllerTransportOfflineException(
+            'Simulator disconnected during heartbeat.',
+          );
+      }
+    }
     return switch (command) {
       ControllerBenchCommand.status => 'Simulator connected',
       ControllerBenchCommand.heartbeat => 'Heartbeat OK',

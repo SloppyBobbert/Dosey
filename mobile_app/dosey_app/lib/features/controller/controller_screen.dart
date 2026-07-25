@@ -566,11 +566,23 @@ class _ControllerHeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
-    final isConnected =
+    final transportConnected =
         controller.connectionState == ControllerConnectionState.connected;
-    final connectionLabel = isConnected
-        ? 'Controller connected'
-        : 'Controller offline';
+    final transportLabel = transportConnected
+        ? 'Transport connected'
+        : 'Transport disconnected';
+    final healthLabel = switch (controller.healthState) {
+      ControllerHealthState.disconnected => 'Disconnected',
+      ControllerHealthState.connecting => 'Connecting',
+      ControllerHealthState.verifying => 'Verifying',
+      ControllerHealthState.online => 'Online',
+      ControllerHealthState.offline => 'Offline',
+      ControllerHealthState.reconnecting => 'Reconnecting',
+      ControllerHealthState.error => 'Error',
+    };
+    final heartbeatLabel = controller.lastSuccessfulHeartbeatAt == null
+        ? 'Last heartbeat: Not verified'
+        : 'Last heartbeat: ${_formatControllerTime(controller.lastSuccessfulHeartbeatAt!)}';
     final roleLabel = role.canHostRobot ? 'Robot phone' : 'Personal phone';
 
     return Card(
@@ -635,10 +647,20 @@ class _ControllerHeroCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 _ControllerHeroChip(
-                  icon: isConnected
+                  icon: transportConnected
                       ? Icons.bluetooth_connected
                       : Icons.bluetooth_disabled,
-                  label: connectionLabel,
+                  label: transportLabel,
+                ),
+                _ControllerHeroChip(
+                  icon: controller.healthState == ControllerHealthState.online
+                      ? Icons.verified_outlined
+                      : Icons.health_and_safety_outlined,
+                  label: 'Health: $healthLabel',
+                ),
+                _ControllerHeroChip(
+                  icon: Icons.monitor_heart_outlined,
+                  label: heartbeatLabel,
                 ),
                 _ControllerHeroChip(
                   icon: Icons.smartphone_outlined,
@@ -656,6 +678,17 @@ class _ControllerHeroCard extends StatelessWidget {
                   icon: Icons.cable_outlined,
                   label: isDemo ? 'Simulator bridge' : 'Physical controller',
                 ),
+                if (controller.reconnectAttempt > 0)
+                  _ControllerHeroChip(
+                    icon: Icons.sync_outlined,
+                    label: 'Reconnect attempt ${controller.reconnectAttempt}',
+                  ),
+                if (controller.nextReconnectAt != null)
+                  _ControllerHeroChip(
+                    icon: Icons.schedule_outlined,
+                    label:
+                        'Next retry: ${_formatControllerTime(controller.nextReconnectAt!)}',
+                  ),
               ],
             ),
             const SizedBox(height: 12),
@@ -680,6 +713,14 @@ class _ControllerHeroCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatControllerTime(DateTime value) {
+  final utc = value.toUtc();
+  String twoDigits(int part) => part.toString().padLeft(2, '0');
+  return '${utc.year.toString().padLeft(4, '0')}-'
+      '${twoDigits(utc.month)}-${twoDigits(utc.day)} '
+      '${twoDigits(utc.hour)}:${twoDigits(utc.minute)} UTC';
 }
 
 class _ControllerHeroChip extends StatelessWidget {

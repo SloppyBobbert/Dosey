@@ -1173,6 +1173,7 @@ void main() {
       await tester.pumpWidget(
         DoseyAppScope(
           database: database,
+          bleGateway: _FakeBleGateway(),
           child: MaterialApp(
             home: RobotFaceScreen(
               initialState: RobotFaceState(
@@ -1260,6 +1261,7 @@ void main() {
     await tester.pumpWidget(
       DoseyAppScope(
         database: database,
+        bleGateway: _FakeBleGateway(),
         child: MaterialApp(
           home: RobotFaceScreen(
             initialState: RobotFaceState(

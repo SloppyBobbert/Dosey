@@ -3836,7 +3836,8 @@ void main() {
     expect(find.text('Hardware bench'), findsOneWidget);
     expect(find.text('XIAO ESP32-C6'), findsOneWidget);
     expect(find.text('Robot phone'), findsOneWidget);
-    expect(find.text('Controller offline'), findsOneWidget);
+    expect(find.text('Transport disconnected'), findsOneWidget);
+    expect(find.text('Health: Disconnected'), findsOneWidget);
     expect(find.text('Manual safety lock'), findsOneWidget);
     expect(find.text('D1 BLE protocol'), findsOneWidget);
     expect(find.text('Physical controller'), findsOneWidget);

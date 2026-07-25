@@ -10,6 +10,8 @@ import 'package:dosey_app/features/today/today_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_app_scope_dependencies.dart';
+
 void main() {
   testWidgets('Today derives the current dose date from the app clock', (
     tester,
@@ -41,6 +43,7 @@ void main() {
       DoseyAppScope(
         database: database,
         appClock: clock,
+        bleGateway: FakeBleGateway(),
         child: const MaterialApp(home: Scaffold(body: TodayScreen())),
       ),
     );
@@ -81,6 +84,7 @@ void main() {
       DoseyAppScope(
         database: database,
         appClock: clock,
+        bleGateway: FakeBleGateway(),
         child: const MaterialApp(home: Scaffold(body: TodayScreen())),
       ),
     );

@@ -60,6 +60,7 @@ const demoScenarioCatalog = <DemoScenarioDefinition>[
     description: 'A missed heartbeat followed by a healthy reconnect.',
     steps: [
       DemoScenarioStep('Controller offline'),
+      DemoScenarioStep('Reconnect attempt failed'),
       DemoScenarioStep('Controller reconnected'),
     ],
   ),

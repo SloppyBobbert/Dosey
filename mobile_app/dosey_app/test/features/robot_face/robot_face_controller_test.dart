@@ -502,6 +502,25 @@ void main() {
     },
   );
 
+  test('connected transport stays offline until health is verified', () async {
+    final fixture = await _RobotFaceControllerFixture.create(
+      now: DateTime(2026, 7, 8, 9),
+      controllerSnapshot: const ControllerSnapshot(
+        connectionState: ControllerConnectionState.connected,
+        canRequestDispense: false,
+        statusLabel: 'Verifying controller heartbeat',
+        healthState: ControllerHealthState.verifying,
+      ),
+    );
+    addTearDown(fixture.close);
+
+    await fixture.settle();
+    final state = await fixture.controller.watchState().first;
+
+    expect(state.mode, RobotFaceMode.offline);
+    expect(state.statusLabel, 'Verifying controller heartbeat');
+  });
+
   test(
     'surfaces happy confirmed for the current due dose before advancing',
     () async {
@@ -577,6 +596,7 @@ void main() {
           connectionState: ControllerConnectionState.error,
           canRequestDispense: false,
           statusLabel: 'Controller error',
+          healthState: ControllerHealthState.error,
         ),
       );
       addTearDown(fixture.close);
