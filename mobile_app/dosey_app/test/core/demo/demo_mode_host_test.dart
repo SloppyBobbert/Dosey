@@ -59,13 +59,13 @@ void main() {
       );
 
       expect(find.text('production database'), findsOneWidget);
-      expect(find.text('FAKE DATA'), findsNothing);
+      expect(find.text('GUIDED TRIAL - FAKE DATA'), findsNothing);
 
       await tester.tap(find.text('Enter demo'));
       await tester.pumpAndSettle();
 
       expect(find.text('demo database'), findsOneWidget);
-      expect(find.text('FAKE DATA'), findsOneWidget);
+      expect(find.text('GUIDED TRIAL - FAKE DATA'), findsOneWidget);
       final role = await LocalAppSettingsRepository(
         demo,
         defaultRole: AppDeviceRole.androidPersonal,
@@ -76,7 +76,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('production database'), findsOneWidget);
-      expect(find.text('FAKE DATA'), findsNothing);
+      expect(find.text('GUIDED TRIAL - FAKE DATA'), findsNothing);
       expect(
         await (production.select(production.appSettings)
               ..where((row) => row.key.equals('production-only')))
@@ -116,5 +116,59 @@ void main() {
       defaultRole: AppDeviceRole.androidRobot,
     ).getDeviceRole();
     expect(role, AppDeviceRole.iosPersonal);
+  });
+
+  testWidgets('trial completion writes metadata only to production settings', (
+    tester,
+  ) async {
+    final production = DoseyDatabase.inMemory();
+    final demo = DoseyDatabase.inMemory(isDemo: true);
+    final completedAt = DateTime.utc(2041, 2, 3, 4, 5);
+    addTearDown(production.close);
+    addTearDown(demo.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DemoModeHost(
+          productionDatabase: production,
+          productionClock: ControllableAppClock(DateTime.utc(2039)),
+          demoDatabaseFactory: () => demo,
+          devicePlatform: AppDevicePlatform.android,
+          appVersionResolver: () async => '1.2.3+4',
+          now: () => completedAt,
+          builder: (context, session) => Column(
+            children: [
+              FilledButton(
+                onPressed: DemoModeHost.of(context).startGuidedTrial,
+                child: const Text('Start trial'),
+              ),
+              FilledButton(
+                onPressed: DemoModeHost.of(context).completeGuidedTrial,
+                child: const Text('Complete trial'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Start trial'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Complete trial'));
+    await tester.pumpAndSettle();
+
+    final productionCompletion = await LocalAppSettingsRepository(
+      production,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).getGuidedTrialCompletion();
+    final demoCompletion = await LocalAppSettingsRepository(
+      demo,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).getGuidedTrialCompletion();
+    expect(
+      productionCompletion,
+      GuidedTrialCompletion(completedAt: completedAt, appVersion: '1.2.3+4'),
+    );
+    expect(demoCompletion, isNull);
   });
 }

@@ -70,6 +70,7 @@ class DoseyAppScope extends StatefulWidget {
     this.backupFileGateway,
     this.appClock,
     this.controllerGateway,
+    this.enableDemoFaceLab = false,
   });
 
   final Widget child;
@@ -86,6 +87,7 @@ class DoseyAppScope extends StatefulWidget {
   final BackupFileGateway? backupFileGateway;
   final AppClock? appClock;
   final StagedControllerGateway? controllerGateway;
+  final bool enableDemoFaceLab;
 
   static DoseyAppDependencies of(BuildContext context) {
     final dependencies = maybeOf(context);
@@ -279,7 +281,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       prescriptions: prescriptions,
       doseLog: doseLog,
     );
-    final demoFaceLab = _database.isDemo ? DemoFaceLabController() : null;
+    final demoFaceLab = _database.isDemo && widget.enableDemoFaceLab
+        ? DemoFaceLabController()
+        : null;
     final demoScenarios = _database.isDemo
         ? DemoScenarioService(
             data: DemoDataRepository(
@@ -300,7 +304,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
             commandRepository: commandRepository,
             doseActions: doseActions,
             reconciliation: _missedDoseReconciliation,
-            onReset: demoFaceLab!.reset,
+            onReset: demoFaceLab?.reset,
           )
         : null;
     final connectivity = _database.isDemo

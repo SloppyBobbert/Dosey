@@ -5,6 +5,25 @@ import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 
+class GuidedTrialCompletion {
+  const GuidedTrialCompletion({
+    required this.completedAt,
+    required this.appVersion,
+  });
+
+  final DateTime completedAt;
+  final String appVersion;
+
+  @override
+  bool operator ==(Object other) =>
+      other is GuidedTrialCompletion &&
+      other.completedAt == completedAt &&
+      other.appVersion == appVersion;
+
+  @override
+  int get hashCode => Object.hash(completedAt, appVersion);
+}
+
 class LocalAppSettingsRepository {
   LocalAppSettingsRepository(this._database, {required this.defaultRole});
 
@@ -13,6 +32,9 @@ class LocalAppSettingsRepository {
   static const _safetyAcknowledgedKey = 'safety_acknowledged';
   static const _actionPinHashKey = 'action_pin_hash';
   static const _actionPinSaltKey = 'action_pin_salt';
+  static const _guidedTrialCompletedKey = 'guided_trial_completed';
+  static const _guidedTrialCompletedAtKey = 'guided_trial_completed_at';
+  static const _guidedTrialAppVersionKey = 'guided_trial_app_version';
 
   final DoseyDatabase _database;
   final AppDeviceRole defaultRole;
@@ -77,6 +99,47 @@ class LocalAppSettingsRepository {
       // Keep device role intact; setup reset only replays safety/onboarding.
       await _setValue(_safetyAcknowledgedKey, false.toString());
       await _setValue(_onboardingCompletedKey, false.toString());
+    });
+  }
+
+  Future<GuidedTrialCompletion?> getGuidedTrialCompletion() async {
+    final settings = await _database.getAppSettings({
+      _guidedTrialCompletedKey,
+      _guidedTrialCompletedAtKey,
+      _guidedTrialAppVersionKey,
+    });
+    final valuesByKey = {
+      for (final setting in settings) setting.key: setting.value,
+    };
+    if (valuesByKey[_guidedTrialCompletedKey] != 'true') return null;
+
+    final completedAt = DateTime.tryParse(
+      valuesByKey[_guidedTrialCompletedAtKey] ?? '',
+    );
+    final appVersion = valuesByKey[_guidedTrialAppVersionKey]?.trim() ?? '';
+    if (completedAt == null || appVersion.isEmpty) return null;
+
+    return GuidedTrialCompletion(
+      completedAt: completedAt.toUtc(),
+      appVersion: appVersion,
+    );
+  }
+
+  Future<void> setGuidedTrialCompleted({
+    required DateTime completedAt,
+    required String appVersion,
+  }) {
+    final normalizedVersion = appVersion.trim();
+    if (normalizedVersion.isEmpty) {
+      throw ArgumentError.value(appVersion, 'appVersion', 'must not be empty');
+    }
+    return _database.transaction(() async {
+      await _setValue(_guidedTrialCompletedKey, true.toString());
+      await _setValue(
+        _guidedTrialCompletedAtKey,
+        completedAt.toUtc().toIso8601String(),
+      );
+      await _setValue(_guidedTrialAppVersionKey, normalizedVersion);
     });
   }
 

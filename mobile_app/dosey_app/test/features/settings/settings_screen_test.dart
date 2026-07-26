@@ -1188,6 +1188,70 @@ void main() {
       expect(find.text(option), findsWidgets);
     }
   });
+
+  testWidgets('guided trial section shows saved completion status', (
+    tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    await settings.setGuidedTrialCompleted(
+      completedAt: DateTime.utc(2026, 7, 26),
+      appVersion: '1.2.3+4',
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.guidedTrial,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Guided Trial Run'), findsOneWidget);
+    expect(
+      find.text('Last completed 2026-07-26 UTC with app 1.2.3+4'),
+      findsOneWidget,
+    );
+    expect(find.text('Run guided trial again'), findsOneWidget);
+  });
+
+  testWidgets('guided trial section disables start while trial is active', (
+    tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+    addTearDown(database.close);
+    addTearDown(clock.close);
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        appClock: clock,
+        sectionTarget: SettingsSection.guidedTrial,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Guided Trial Run'),
+      500,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Trial in progress'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Trial in progress'),
+          )
+          .onPressed,
+      isNull,
+    );
+  });
 }
 
 Finder _findRichTextContaining(String text) {

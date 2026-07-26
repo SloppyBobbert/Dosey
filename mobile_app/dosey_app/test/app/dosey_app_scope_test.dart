@@ -174,6 +174,7 @@ void main() {
           database: database,
           appClock: clock,
           screenAwakeGateway: screenAwake,
+          enableDemoFaceLab: true,
           child: Builder(
             builder: (context) {
               dependencies = DoseyAppScope.of(context);

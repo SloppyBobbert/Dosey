@@ -5,6 +5,69 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('guided trial is incomplete by default', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    expect(await repository.getGuidedTrialCompletion(), isNull);
+  });
+
+  test('guided trial completion stores time and app version', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    final completedAt = DateTime.utc(2026, 7, 26, 12, 30);
+
+    await repository.setGuidedTrialCompleted(
+      completedAt: completedAt,
+      appVersion: '1.0.0+1',
+    );
+
+    expect(
+      await repository.getGuidedTrialCompletion(),
+      GuidedTrialCompletion(completedAt: completedAt, appVersion: '1.0.0+1'),
+    );
+  });
+
+  test('guided trial ignores malformed or incomplete metadata', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    await database.setAppSetting('guided_trial_completed', 'true');
+    await database.setAppSetting('guided_trial_completed_at', 'not-a-date');
+    await database.setAppSetting('guided_trial_app_version', '');
+
+    expect(await repository.getGuidedTrialCompletion(), isNull);
+  });
+
+  test('guided trial completion rejects a blank app version', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    expect(
+      () => repository.setGuidedTrialCompleted(
+        completedAt: DateTime.utc(2026, 7, 26),
+        appVersion: '   ',
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('local app settings persist safety acknowledgement', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);

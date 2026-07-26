@@ -434,6 +434,14 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
         ),
       ),
       const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(SettingsSection.guidedTrial),
+        child: ListTile(
+          leading: Icon(Icons.fact_check_outlined),
+          title: Text('Guided Trial Run'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuItem(
         value: _SettingsMenuAction.openSection(SettingsSection.setup),
         child: ListTile(
           leading: Icon(Icons.restart_alt),
@@ -645,7 +653,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
 
   bool get _shouldRunInactivityTimer {
     final role = _currentRole;
-    if (role == null || !role.canHostRobot) {
+    if (_dependencies?.isDemo == true || role == null || !role.canHostRobot) {
       return false;
     }
     if (_lifecycleState != null &&
@@ -718,7 +726,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     }
 
     unawaited(dependencies.runMissedDoseReconciliation());
-    if (preserveNotificationDestination) {
+    if (preserveNotificationDestination || dependencies.isDemo) {
       return;
     }
 
