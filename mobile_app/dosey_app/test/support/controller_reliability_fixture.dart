@@ -221,11 +221,17 @@ class ControllerReliabilityFixture {
 
   Future<void> elapse(Duration duration) => scheduler.elapse(duration);
 
-  Future<void> releaseDispenseStages() async {
-    for (var stage = 0; stage < 3; stage++) {
+  Future<void> releaseDispenseStagesUntilComplete(Future<void> dispense) async {
+    final completed = Completer<void>();
+    dispense.then(
+      (_) => completed.complete(),
+      onError: (Object _, StackTrace _) => completed.complete(),
+    );
+    while (!completed.isCompleted) {
+      await Future.any([dispenseGate.waitUntilBlocked(), completed.future]);
+      if (completed.isCompleted) break;
       dispenseGate.releaseNext();
       await settle();
-      if (stage < 2) await dispenseGate.waitUntilBlocked();
     }
   }
 

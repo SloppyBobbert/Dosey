@@ -220,11 +220,14 @@ void main() {
     await fixture.connect();
 
     for (final scenario in [
-      SimulatedDiagnosticsScenario.commandFailure,
-      SimulatedDiagnosticsScenario.incompleteReport,
+      (
+        SimulatedDiagnosticsScenario.commandFailure,
+        isA<ControllerCommandRejectedException>(),
+      ),
+      (SimulatedDiagnosticsScenario.incompleteReport, isA<FormatException>()),
     ]) {
-      fixture.simulator.queueNextDiagnosticsScenario(scenario);
-      await expectLater(fixture.bench.runDiagnostics(), throwsA(anything));
+      fixture.simulator.queueNextDiagnosticsScenario(scenario.$1);
+      await expectLater(fixture.bench.runDiagnostics(), throwsA(scenario.$2));
     }
 
     final history = await fixture.commandHistory();
@@ -256,7 +259,7 @@ void main() {
       isNot(contains(ControllerHealthEventType.heartbeatMissed)),
     );
 
-    await fixture.releaseDispenseStages();
+    await fixture.releaseDispenseStagesUntilComplete(dispense);
     await dispense;
     await fixture.elapse(Duration.zero);
 
