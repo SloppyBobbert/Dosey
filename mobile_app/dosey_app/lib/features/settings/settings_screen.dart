@@ -234,6 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               dependencies.settings)
                           .getGuidedTrialCompletion(),
                   onStart: DemoModeHost.maybeOf(context)?.startGuidedTrial,
+                  isActive: dependencies.isDemo,
                 ),
                 const SizedBox(height: 12),
                 _SettingsSectionCard(
@@ -318,10 +319,12 @@ class _GuidedTrialSettingsCard extends StatelessWidget {
     super.key,
     required this.completion,
     required this.onStart,
+    required this.isActive,
   });
 
   final Future<GuidedTrialCompletion?> completion;
   final Future<void> Function()? onStart;
+  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
@@ -360,10 +363,12 @@ class _GuidedTrialSettingsCard extends StatelessWidget {
                 Text(status),
                 const SizedBox(height: 12),
                 FilledButton.tonalIcon(
-                  onPressed: onStart,
+                  onPressed: isActive ? null : onStart,
                   icon: const Icon(Icons.play_arrow),
                   label: Text(
-                    value == null
+                    isActive
+                        ? 'Trial in progress'
+                        : value == null
                         ? 'Start guided trial'
                         : 'Run guided trial again',
                   ),

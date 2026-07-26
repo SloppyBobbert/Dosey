@@ -124,6 +124,33 @@ void main() {
     );
     expect(find.text('Return to Dosey'), findsOneWidget);
   });
+
+  testWidgets('history step requires an explicit reviewed-data continue', (
+    tester,
+  ) async {
+    final controller = GuidedTrialController(
+      scenarios: _FakeRunner(),
+      completeTrial: () async {},
+    );
+    addTearDown(controller.dispose);
+    for (var index = 0; index < 10; index += 1) {
+      await controller.next();
+    }
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: GuidedTrialScreen(
+            controller: controller,
+            exitTrial: () async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('History and inventory'), findsOneWidget);
+    expect(find.text('Continue after review'), findsOneWidget);
+  });
 }
 
 class _FakeRunner implements GuidedTrialScenarioRunner {

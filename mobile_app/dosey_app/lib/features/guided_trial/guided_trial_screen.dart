@@ -91,7 +91,11 @@ class GuidedTrialScreen extends StatelessWidget {
                       )
                     : const Icon(Icons.arrow_forward),
                 label: Text(
-                  state.failureReason == null ? 'Next step' : 'Retry step',
+                  state.failureReason != null
+                      ? 'Retry step'
+                      : state.step == GuidedTrialStep.historyAndInventory
+                      ? 'Continue after review'
+                      : 'Next step',
                 ),
               ),
             const SizedBox(height: 8),

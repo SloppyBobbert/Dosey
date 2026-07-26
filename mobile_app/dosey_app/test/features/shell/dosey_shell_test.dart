@@ -242,6 +242,36 @@ void main() {
     expect(_appBarTitle('Robot Face'), findsOneWidget);
   });
 
+  testWidgets('guided trial stays on Controller after inactivity', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+    addTearDown(database.close);
+    addTearDown(clock.close);
+    await DemoDataRepository(
+      database,
+      seedTime: clock.now(),
+      deviceRole: AppDeviceRole.androidRobot,
+    ).resetAndSeed();
+    await RobotFaceSettingsRepository(database).saveSettings(
+      const RobotFaceSettings(returnToFaceAfterInactivityMinutes: 1),
+    );
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        appClock: clock,
+        startOnController: true,
+      ),
+    );
+    await tester.pump(const Duration(minutes: 2));
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Controller'), findsOneWidget);
+  });
+
   testWidgets('Robot Mode interaction restarts the inactivity timeout', (
     WidgetTester tester,
   ) async {
@@ -664,6 +694,44 @@ void main() {
     await _pumpShellFrame(tester);
 
     expect(_appBarTitle('Robot Face'), findsOneWidget);
+    expect(reconciliation.reconcileCalls, baselineCalls + 1);
+  });
+
+  testWidgets('guided trial stays on Controller and reconciles on resume', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+    final reconciliation = FakeMissedDoseReconciliationService();
+    addTearDown(database.close);
+    addTearDown(clock.close);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    await DemoDataRepository(
+      database,
+      seedTime: clock.now(),
+      deviceRole: AppDeviceRole.androidRobot,
+    ).resetAndSeed();
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        appClock: clock,
+        missedDoseReconciliationService: reconciliation,
+        startOnController: true,
+      ),
+    );
+    final baselineCalls = reconciliation.reconcileCalls;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Controller'), findsOneWidget);
     expect(reconciliation.reconcileCalls, baselineCalls + 1);
   });
 

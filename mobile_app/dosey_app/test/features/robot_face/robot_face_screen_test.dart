@@ -2177,7 +2177,7 @@ void main() {
     expect(doseActionLogger.events, hasLength(1));
   });
 
-  testWidgets('Face Lab is available only in isolated demo mode', (
+  testWidgets('Face Lab stays hidden during the guided trial', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -2213,7 +2213,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byKey(RobotFaceScreen.faceLabButtonKey), findsOneWidget);
+    expect(find.byKey(RobotFaceScreen.faceLabButtonKey), findsNothing);
   });
 
   testWidgets('Face Lab previews controller and voice states without actions', (
@@ -2224,6 +2224,7 @@ void main() {
     await tester.pumpWidget(
       _RobotFaceTestApp(
         database: database,
+        enableDemoFaceLab: true,
         initialState: const RobotFaceState(
           mode: RobotFaceMode.waitingForConfirmation,
           nextEventLabel: 'Taken? · Morning meds',
@@ -2289,6 +2290,7 @@ void main() {
     await tester.pumpWidget(
       _RobotFaceTestApp(
         database: database,
+        enableDemoFaceLab: true,
         initialState: const RobotFaceState(
           mode: RobotFaceMode.idle,
           nextEventLabel: 'No reminders scheduled',
@@ -2335,6 +2337,7 @@ void main() {
     await tester.pumpWidget(
       _RobotFaceTestApp(
         database: database,
+        enableDemoFaceLab: true,
         initialState: const RobotFaceState(
           mode: RobotFaceMode.idle,
           nextEventLabel: 'No reminders scheduled',
@@ -2393,6 +2396,7 @@ class _RobotFaceTestApp extends StatefulWidget {
     this.doseActionLogger,
     this.appClock,
     this.voicePlayer,
+    this.enableDemoFaceLab = false,
   });
 
   final DoseyDatabase? database;
@@ -2404,6 +2408,7 @@ class _RobotFaceTestApp extends StatefulWidget {
   final RobotFaceDoseActionLogger? doseActionLogger;
   final AppClock? appClock;
   final DoseyVoicePlayer? voicePlayer;
+  final bool enableDemoFaceLab;
 
   @override
   State<_RobotFaceTestApp> createState() => _RobotFaceTestAppState();
@@ -2436,6 +2441,7 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
     final stateStreamNotifier = widget.stateStreamNotifier;
     return DoseyAppScope(
       database: _database,
+      enableDemoFaceLab: widget.enableDemoFaceLab,
       appClock: widget.appClock,
       bleGateway: _FakeBleGateway(),
       connectivityGateway: _FakeConnectivityGateway(),
