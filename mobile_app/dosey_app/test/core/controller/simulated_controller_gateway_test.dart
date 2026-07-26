@@ -4,6 +4,36 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('baseline simulator rejects debug commands', () async {
+    final gateway = SimulatedControllerGateway();
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    await expectLater(
+      gateway.runBenchCommand(ControllerBenchCommand.debugOn),
+      throwsA(isA<ControllerCommandRejectedException>()),
+    );
+    await expectLater(
+      gateway.runBenchCommand(ControllerBenchCommand.debugOff),
+      throwsA(isA<ControllerCommandRejectedException>()),
+    );
+  });
+
+  test('debug simulator accepts debug commands', () async {
+    final gateway = SimulatedControllerGateway(debugAvailable: true);
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    expect(
+      await gateway.runBenchCommand(ControllerBenchCommand.debugOn),
+      'DEBUG_ON',
+    );
+    expect(
+      await gateway.runBenchCommand(ControllerBenchCommand.debugOff),
+      'DEBUG_OFF',
+    );
+  });
+
   test('simulated controller reports accepted then movement started', () async {
     final stages = <ControllerDispenseStage>[];
     final gateway = SimulatedControllerGateway(

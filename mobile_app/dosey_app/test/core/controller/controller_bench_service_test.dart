@@ -114,6 +114,7 @@ class _BenchFixture {
     final gateway = SimulatedControllerGateway(
       canHostRobot: () => true,
       delay: (_) async {},
+      debugAvailable: true,
     );
     await gateway.connect();
     var id = 0;

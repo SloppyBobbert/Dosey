@@ -26,11 +26,13 @@ class SimulatedControllerGateway
     RobotModeAccess? canHostRobot,
     SimulatedDispenseOutcome nextDispenseOutcome =
         SimulatedDispenseOutcome.success,
+    bool debugAvailable = false,
     SimulatorDelay? delay,
     SimulatorDelay? benchDelay,
   }) : this._internal(
          canHostRobot: canHostRobot,
          nextDispenseOutcome: nextDispenseOutcome,
+         debugAvailable: debugAvailable,
          delay: delay,
          benchDelay: benchDelay,
        );
@@ -38,6 +40,7 @@ class SimulatedControllerGateway
   SimulatedControllerGateway._internal({
     RobotModeAccess? canHostRobot,
     required this._nextDispenseOutcome,
+    required this._debugAvailable,
     SimulatorDelay? delay,
     SimulatorDelay? benchDelay,
   }) : _canHostRobot = canHostRobot ?? _denyRobotMode,
@@ -47,6 +50,7 @@ class SimulatedControllerGateway
   final RobotModeAccess _canHostRobot;
   final SimulatorDelay _delay;
   final SimulatorDelay _benchDelay;
+  final bool _debugAvailable;
   SimulatedDispenseOutcome _nextDispenseOutcome;
   SimulatedHeartbeatOutcome _nextHeartbeatOutcome =
       SimulatedHeartbeatOutcome.success;
@@ -186,8 +190,18 @@ class SimulatedControllerGateway
         'SERVO_DISABLED, PIR_DISABLED, UART_RESERVED_SERVO_D6_PROFILE',
       ControllerBenchCommand.safetyStatus =>
         'MOVEMENT_TIMEOUT_MS_2500, DISPENSE_NEXT_DISABLED',
-      ControllerBenchCommand.debugOn => 'DEBUG_ON',
-      ControllerBenchCommand.debugOff => 'DEBUG_OFF',
+      ControllerBenchCommand.debugOn =>
+        _debugAvailable
+            ? 'DEBUG_ON'
+            : throw const ControllerCommandRejectedException(
+                'COMMAND_DISABLED',
+              ),
+      ControllerBenchCommand.debugOff =>
+        _debugAvailable
+            ? 'DEBUG_OFF'
+            : throw const ControllerCommandRejectedException(
+                'COMMAND_DISABLED',
+              ),
       ControllerBenchCommand.pirStatus => 'PIR idle',
       ControllerBenchCommand.ledTest => 'LED test complete',
       ControllerBenchCommand.servoTest ||
