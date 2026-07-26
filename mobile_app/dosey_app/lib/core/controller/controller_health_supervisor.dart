@@ -27,7 +27,10 @@ typedef ControllerHealthTimerFactory =
     ControllerHealthTimer Function(Duration delay, void Function() callback);
 
 class ControllerHealthSupervisor
-    implements StagedControllerGateway, ControllerBenchGateway {
+    implements
+        StagedControllerGateway,
+        ControllerBenchGateway,
+        ControllerEventGateway {
   ControllerHealthSupervisor({
     required StagedControllerGateway delegate,
     required Stream<BleAvailabilitySnapshot> availability,
@@ -56,6 +59,12 @@ class ControllerHealthSupervisor
       },
     );
     _availabilitySubscription = availability.listen(_handleAvailability);
+    final eventDelegate = _delegate is ControllerEventGateway
+        ? _delegate as ControllerEventGateway
+        : null;
+    _delegateEventSubscription = eventDelegate?.watchControllerEvents().listen(
+      _controllerEvents.add,
+    );
   }
 
   final StagedControllerGateway _delegate;
@@ -65,10 +74,12 @@ class ControllerHealthSupervisor
   final Duration heartbeatInterval;
   final List<Duration> reconnectBackoff;
   final _controller = StreamController<ControllerSnapshot>.broadcast();
+  final _controllerEvents = StreamController<ControllerEvent>.broadcast();
 
   late final StreamSubscription<ControllerSnapshot> _delegateSubscription;
   late final StreamSubscription<BleAvailabilitySnapshot>
   _availabilitySubscription;
+  StreamSubscription<ControllerEvent>? _delegateEventSubscription;
   ControllerSnapshot _snapshot = const ControllerSnapshot.disconnected();
   ControllerHealthTimer? _timer;
   Future<void>? _activeConnection;
@@ -96,6 +107,9 @@ class ControllerHealthSupervisor
     yield _snapshot;
     yield* _controller.stream;
   }
+
+  @override
+  Stream<ControllerEvent> watchControllerEvents() => _controllerEvents.stream;
 
   Future<void> setMonitoringEligible(bool eligible) async {
     if (_closed || _eligible == eligible) return;
@@ -618,10 +632,12 @@ class ControllerHealthSupervisor
     _cancelTimer();
     await _disconnectDelegate();
     await _delegateSubscription.cancel();
+    await _delegateEventSubscription?.cancel();
     await _availabilitySubscription.cancel();
     await _delegate.close();
     await _eventChain;
     await _controller.close();
+    await _controllerEvents.close();
   }
 
   static ControllerHealthTimer _scheduleTimer(

@@ -38,6 +38,7 @@ class RobotFaceSettings {
     int stayAwakeAfterDoseMinutes = defaultStayAwakeAfterDoseMinutes,
     int returnToFaceAfterInactivityMinutes =
         defaultReturnToFaceAfterInactivityMinutes,
+    int pirWakeDurationSeconds = defaultPirWakeDurationSeconds,
   }) : wakeBeforeDoseMinutes = wakeBeforeDoseMinutes < 0
            ? defaultWakeBeforeDoseMinutes
            : wakeBeforeDoseMinutes,
@@ -58,6 +59,13 @@ class RobotFaceSettings {
                returnToFaceAfterInactivityMinutes == 15
            ? returnToFaceAfterInactivityMinutes
            : defaultReturnToFaceAfterInactivityMinutes,
+       pirWakeDurationSeconds =
+           pirWakeDurationSeconds == 30 ||
+               pirWakeDurationSeconds == 60 ||
+               pirWakeDurationSeconds == 120 ||
+               pirWakeDurationSeconds == 300
+           ? pirWakeDurationSeconds
+           : defaultPirWakeDurationSeconds,
        voiceQuietHoursStartMinutes =
            voiceQuietHoursStartMinutes < 0 ||
                voiceQuietHoursStartMinutes >= 24 * 60
@@ -73,6 +81,8 @@ class RobotFaceSettings {
   static const int defaultIdleChatterCooldownMinutes = 10;
   static const int defaultReminderRepeatCooldownMinutes = 5;
   static const int defaultReturnToFaceAfterInactivityMinutes = 2;
+  static const int defaultPirWakeDurationSeconds = 60;
+  static const List<int> pirWakeDurationSecondOptions = [30, 60, 120, 300];
   static const List<int> returnToFaceAfterInactivityMinuteOptions = [
     1,
     2,
@@ -104,6 +114,7 @@ class RobotFaceSettings {
   final int wakeBeforeDoseMinutes;
   final int stayAwakeAfterDoseMinutes;
   final int returnToFaceAfterInactivityMinutes;
+  final int pirWakeDurationSeconds;
 
   RobotFaceSettings copyWith({
     bool? isFlipped,
@@ -127,6 +138,7 @@ class RobotFaceSettings {
     int? wakeBeforeDoseMinutes,
     int? stayAwakeAfterDoseMinutes,
     int? returnToFaceAfterInactivityMinutes,
+    int? pirWakeDurationSeconds,
   }) {
     return RobotFaceSettings(
       isFlipped: isFlipped ?? this.isFlipped,
@@ -166,6 +178,8 @@ class RobotFaceSettings {
       returnToFaceAfterInactivityMinutes:
           returnToFaceAfterInactivityMinutes ??
           this.returnToFaceAfterInactivityMinutes,
+      pirWakeDurationSeconds:
+          pirWakeDurationSeconds ?? this.pirWakeDurationSeconds,
     );
   }
 
@@ -199,7 +213,8 @@ class RobotFaceSettings {
         other.wakeBeforeDoseMinutes == wakeBeforeDoseMinutes &&
         other.stayAwakeAfterDoseMinutes == stayAwakeAfterDoseMinutes &&
         other.returnToFaceAfterInactivityMinutes ==
-            returnToFaceAfterInactivityMinutes;
+            returnToFaceAfterInactivityMinutes &&
+        other.pirWakeDurationSeconds == pirWakeDurationSeconds;
   }
 
   @override
@@ -225,5 +240,6 @@ class RobotFaceSettings {
     wakeBeforeDoseMinutes,
     stayAwakeAfterDoseMinutes,
     returnToFaceAfterInactivityMinutes,
+    pirWakeDurationSeconds,
   ]);
 }

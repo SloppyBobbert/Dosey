@@ -278,7 +278,7 @@ void main() {
   });
 
   testWidgets(
-    'production supervisor runs only in foreground Android Robot Mode',
+    'production supervisor stays active while Android Robot Mode is paused',
     (WidgetTester tester) async {
       final database = DoseyDatabase.inMemory();
       await database.setAppSetting(
@@ -327,7 +327,7 @@ void main() {
       expect(voiceGateway.stopCount, 1);
       expect(
         (await dependencies.controller.watchController().first).healthState,
-        ControllerHealthState.disconnected,
+        ControllerHealthState.online,
       );
 
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
@@ -519,4 +519,7 @@ class _FakePermissionGateway implements AppPermissionGateway {
 class _FakeScreenAwakeGateway implements ScreenAwakeGateway {
   @override
   Future<void> setKeepScreenAwake(bool enabled) async {}
+
+  @override
+  Future<void> wakeScreen() async {}
 }

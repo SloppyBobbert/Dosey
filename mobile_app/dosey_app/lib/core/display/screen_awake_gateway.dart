@@ -2,6 +2,8 @@ import 'package:flutter/services.dart';
 
 abstract interface class ScreenAwakeGateway {
   Future<void> setKeepScreenAwake(bool enabled);
+
+  Future<void> wakeScreen();
 }
 
 class MethodChannelScreenAwakeGateway implements ScreenAwakeGateway {
@@ -16,5 +18,10 @@ class MethodChannelScreenAwakeGateway implements ScreenAwakeGateway {
     return _channel.invokeMethod<void>('setKeepScreenAwake', <String, Object>{
       'enabled': enabled,
     });
+  }
+
+  @override
+  Future<void> wakeScreen() {
+    return _channel.invokeMethod<void>('wakeScreen');
   }
 }

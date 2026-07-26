@@ -1413,6 +1413,19 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+                _RobotFaceEnumDropdown<int>(
+                  label: 'PIR wake duration',
+                  helperText:
+                      'Motion or touch keeps Robot Face awake for this long. Android controls when the display turns off afterward.',
+                  value: settings.pirWakeDurationSeconds,
+                  enabled: !_isSaving,
+                  options: RobotFaceSettings.pirWakeDurationSecondOptions,
+                  labelBuilder: _pirWakeDurationLabel,
+                  onChanged: (value) => _saveSettings(
+                    settings.copyWith(pirWakeDurationSeconds: value),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 _SettingsSwitchTile(
                   value: settings.voiceEnabled,
@@ -1903,6 +1916,15 @@ String _robotFaceTimingLabel(int minutes) {
   }
 
   return '$minutes minutes';
+}
+
+String _pirWakeDurationLabel(int seconds) {
+  if (seconds < 60) {
+    return '$seconds seconds';
+  }
+
+  final minutes = seconds ~/ 60;
+  return minutes == 1 ? '1 minute' : '$minutes minutes';
 }
 
 String _robotVoiceVolumePresetLabel(RobotVoiceVolumePreset preset) {

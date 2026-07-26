@@ -137,6 +137,12 @@ abstract interface class ControllerGateway {
   Future<void> close();
 }
 
+enum ControllerEvent { wakeFace }
+
+abstract interface class ControllerEventGateway {
+  Stream<ControllerEvent> watchControllerEvents();
+}
+
 enum ControllerDispenseStage { accepted, movementStarted }
 
 enum ControllerMovementCommand { servoTest, dispenseTest, dispenseNext }

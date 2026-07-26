@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/demo/demo_scenario.dart';
 import 'package:dosey_app/core/demo/demo_scenario_service.dart';
@@ -15,6 +16,7 @@ import 'package:dosey_app/features/prescriptions/prescriptions_screen.dart';
 import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
+import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/today/today_screen.dart';
 import 'package:flutter/material.dart';
@@ -44,6 +46,10 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   StreamSubscription<AppDeviceRole>? _deviceRoleSubscription;
   Object? _robotFaceSettingsSource;
   StreamSubscription<RobotFaceSettings>? _robotFaceSettingsSubscription;
+  Object? _controllerEventSource;
+  StreamSubscription<ControllerEvent>? _controllerEventSubscription;
+  Object? _robotFaceStateSource;
+  StreamSubscription<RobotFaceState>? _robotFaceStateSubscription;
   DemoScenarioService? _demoScenarios;
   StreamSubscription<DemoScenarioState>? _demoScenarioSubscription;
   bool _wasPresenting = false;
@@ -53,6 +59,10 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   int _returnToFaceAfterInactivityMinutes =
       RobotFaceSettings.defaultReturnToFaceAfterInactivityMinutes;
   Timer? _inactivityTimer;
+  int _pirWakeDurationSeconds = RobotFaceSettings.defaultPirWakeDurationSeconds;
+  Timer? _faceAwakeTimer;
+  bool _faceAwakeWindowActive = false;
+  bool _scheduledDoseAwake = false;
   ScreenAwakeGateway? _screenAwake;
   bool? _screenAwakeRequested;
   Future<void> _screenAwakeUpdate = Future<void>.value();
@@ -88,6 +98,22 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
           .watchSettings()
           .listen(_handleRobotFaceSettingsChanged);
     }
+    if (!identical(dependencies.controller, _controllerEventSource)) {
+      unawaited(_controllerEventSubscription?.cancel());
+      _controllerEventSource = dependencies.controller;
+      _controllerEventSubscription = switch (dependencies.controller) {
+        final ControllerEventGateway eventGateway =>
+          eventGateway.watchControllerEvents().listen(_handleControllerEvent),
+        _ => null,
+      };
+    }
+    if (!identical(dependencies.robotFaceController, _robotFaceStateSource)) {
+      unawaited(_robotFaceStateSubscription?.cancel());
+      _robotFaceStateSource = dependencies.robotFaceController;
+      _robotFaceStateSubscription = dependencies.robotFaceController
+          .watchState()
+          .listen(_handleRobotFaceStateChanged);
+    }
     if (!identical(dependencies.demoScenarios, _demoScenarios)) {
       unawaited(_demoScenarioSubscription?.cancel());
       _demoScenarios = dependencies.demoScenarios;
@@ -111,9 +137,12 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _inactivityTimer?.cancel();
+    _faceAwakeTimer?.cancel();
     _requestScreenAwake(false);
     unawaited(_deviceRoleSubscription?.cancel());
     unawaited(_robotFaceSettingsSubscription?.cancel());
+    unawaited(_controllerEventSubscription?.cancel());
+    unawaited(_robotFaceStateSubscription?.cancel());
     unawaited(_demoScenarioSubscription?.cancel());
     unawaited(_notificationTapSubscription?.cancel());
     super.dispose();
@@ -125,6 +154,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     if (state != AppLifecycleState.resumed) {
       _inactivityTimer?.cancel();
       _inactivityTimer = null;
+      _stopFaceAwakeWindow();
       _syncScreenAwake();
       return;
     }
@@ -132,6 +162,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     final preserveNotificationDestination =
         _handledNotificationWhileBackgrounded;
     _handledNotificationWhileBackgrounded = false;
+    _restartFaceAwakeWindow();
     _syncScreenAwake();
     unawaited(_handleResume(preserveNotificationDestination));
   }
@@ -459,12 +490,23 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     setState(() {
       _selectedTabId = nextTabId;
     });
+    if (nextTabId == _ShellTabId.robotFace) {
+      _restartFaceAwakeWindow();
+    } else {
+      _stopFaceAwakeWindow();
+    }
     _restartInactivityTimer();
     _syncScreenAwake();
   }
 
   void _handleDeviceRoleChanged(AppDeviceRole storedRole) {
+    final wasRobot = _currentRole?.canHostRobot == true;
     _currentRole = _resolvedRole(storedRole, currentAppDevicePlatform());
+    if (_currentRole?.canHostRobot == true && !wasRobot) {
+      _restartFaceAwakeWindow();
+    } else if (_currentRole?.canHostRobot != true) {
+      _stopFaceAwakeWindow();
+    }
     _restartInactivityTimer();
     _syncScreenAwake();
   }
@@ -472,8 +514,41 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   void _handleRobotFaceSettingsChanged(RobotFaceSettings settings) {
     _returnToFaceAfterInactivityMinutes =
         settings.returnToFaceAfterInactivityMinutes;
+    _pirWakeDurationSeconds = settings.pirWakeDurationSeconds;
+    if (_faceAwakeWindowActive) {
+      _restartFaceAwakeWindow();
+    }
     _restartInactivityTimer();
     _syncScreenAwake();
+  }
+
+  void _handleControllerEvent(ControllerEvent event) {
+    if (event != ControllerEvent.wakeFace ||
+        _currentRole?.canHostRobot != true) {
+      return;
+    }
+    _selectTab(_ShellTabId.robotFace);
+    _restartFaceAwakeWindow();
+    final gateway = _screenAwake;
+    if (gateway != null) {
+      unawaited(_wakeScreen(gateway));
+    }
+  }
+
+  void _handleRobotFaceStateChanged(RobotFaceState state) {
+    if (_scheduledDoseAwake == state.isInAwakeWindow) {
+      return;
+    }
+    _scheduledDoseAwake = state.isInAwakeWindow;
+    _syncScreenAwake();
+  }
+
+  Future<void> _wakeScreen(ScreenAwakeGateway gateway) async {
+    try {
+      await gateway.wakeScreen();
+    } on Object {
+      // Waking the mounted display is best-effort and must not block routing.
+    }
   }
 
   void _handleDemoScenarioChanged(DemoScenarioState state) {
@@ -496,7 +571,8 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     _requestScreenAwake(
       role?.canHostRobot == true &&
           selectedTabId == _ShellTabId.robotFace &&
-          isResumed,
+          isResumed &&
+          (_faceAwakeWindowActive || _scheduledDoseAwake),
     );
   }
 
@@ -516,9 +592,53 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   }
 
   void _recordInteraction() {
+    final role = _currentRole;
+    final selectedTabId = role == null
+        ? _selectedTabId
+        : _selectedTabId ?? _defaultTabIdFor(role);
+    if (role?.canHostRobot == true && selectedTabId == _ShellTabId.robotFace) {
+      _restartFaceAwakeWindow();
+      return;
+    }
     if (_shouldRunInactivityTimer) {
       _restartInactivityTimer();
     }
+  }
+
+  void _restartFaceAwakeWindow() {
+    _faceAwakeTimer?.cancel();
+    _faceAwakeTimer = null;
+    final role = _currentRole;
+    final selectedTabId = role == null
+        ? _selectedTabId
+        : _selectedTabId ?? _defaultTabIdFor(role);
+    final isResumed =
+        _lifecycleState == null || _lifecycleState == AppLifecycleState.resumed;
+    if (role?.canHostRobot != true ||
+        selectedTabId != _ShellTabId.robotFace ||
+        !isResumed) {
+      _faceAwakeWindowActive = false;
+      _syncScreenAwake();
+      return;
+    }
+    _faceAwakeWindowActive = true;
+    _faceAwakeTimer = Timer(
+      Duration(seconds: _pirWakeDurationSeconds),
+      _handleFaceAwakeTimeout,
+    );
+    _syncScreenAwake();
+  }
+
+  void _stopFaceAwakeWindow() {
+    _faceAwakeTimer?.cancel();
+    _faceAwakeTimer = null;
+    _faceAwakeWindowActive = false;
+  }
+
+  void _handleFaceAwakeTimeout() {
+    _faceAwakeTimer = null;
+    _faceAwakeWindowActive = false;
+    _syncScreenAwake();
   }
 
   bool get _shouldRunInactivityTimer {

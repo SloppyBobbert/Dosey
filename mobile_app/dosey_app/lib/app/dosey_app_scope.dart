@@ -441,7 +441,6 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     final role = _controllerRole;
     if (supervisor == null || role == null) return;
     final eligible =
-        _isForeground &&
         currentAppDevicePlatform() == AppDevicePlatform.android &&
         role == AppDeviceRole.androidRobot;
     await supervisor.setMonitoringEligible(eligible);

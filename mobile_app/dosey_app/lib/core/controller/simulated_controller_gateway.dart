@@ -21,7 +21,10 @@ enum SimulatedHeartbeatOutcome { success, missed, disconnect }
 enum SimulatedConnectOutcome { success, failure }
 
 class SimulatedControllerGateway
-    implements StagedControllerGateway, ControllerBenchGateway {
+    implements
+        StagedControllerGateway,
+        ControllerBenchGateway,
+        ControllerEventGateway {
   SimulatedControllerGateway({
     RobotModeAccess? canHostRobot,
     SimulatedDispenseOutcome nextDispenseOutcome =
@@ -56,6 +59,7 @@ class SimulatedControllerGateway
       SimulatedHeartbeatOutcome.success;
   SimulatedConnectOutcome _nextConnectOutcome = SimulatedConnectOutcome.success;
   final _controller = StreamController<ControllerSnapshot>.broadcast();
+  final _controllerEvents = StreamController<ControllerEvent>.broadcast();
 
   ControllerSnapshot _snapshot = const ControllerSnapshot.disconnected();
 
@@ -64,6 +68,11 @@ class SimulatedControllerGateway
     yield _snapshot;
     yield* _controller.stream;
   }
+
+  @override
+  Stream<ControllerEvent> watchControllerEvents() => _controllerEvents.stream;
+
+  void emitWakeFace() => _controllerEvents.add(ControllerEvent.wakeFace);
 
   @override
   Future<void> connect() async {
@@ -185,9 +194,9 @@ class SimulatedControllerGateway
       ControllerBenchCommand.status => 'Simulator connected',
       ControllerBenchCommand.heartbeat => 'Heartbeat OK',
       ControllerBenchCommand.deviceInfo =>
-        'FIRMWARE_DOSEY_CONTROLLER, BUILD_BASELINE',
+        'FIRMWARE_DOSEY_CONTROLLER, BOARD_XIAO_ESP32_C6_GROVE_BASE, BUILD_BASELINE',
       ControllerBenchCommand.configStatus =>
-        'SERVO_DISABLED, PIR_DISABLED, UART_RESERVED_SERVO_D6_PROFILE',
+        'SERVO_DISABLED, PIR_DISABLED, GROVE_BASE_D8_SERVO_PROFILE',
       ControllerBenchCommand.safetyStatus =>
         'MOVEMENT_TIMEOUT_MS_2500, DISPENSE_NEXT_DISABLED',
       ControllerBenchCommand.debugOn =>
@@ -215,7 +224,10 @@ class SimulatedControllerGateway
   Future<void> cancelActiveCommand() async {}
 
   @override
-  Future<void> close() => _controller.close();
+  Future<void> close() async {
+    await _controller.close();
+    await _controllerEvents.close();
+  }
 
   void _setSnapshot(ControllerSnapshot snapshot) {
     _snapshot = snapshot;

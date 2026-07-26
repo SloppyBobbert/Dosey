@@ -521,6 +521,20 @@ void main() {
     expect(harness.scheduler.hasPendingTimer, isFalse);
     await harness.availability.close();
   });
+
+  test('forwards spontaneous controller events from its delegate', () async {
+    final delegate = _FakeControllerGateway();
+    final harness = _Harness(delegate);
+    addTearDown(harness.close);
+    final event = expectLater(
+      harness.supervisor.watchControllerEvents(),
+      emits(ControllerEvent.wakeFace),
+    );
+
+    delegate.emitEvent(ControllerEvent.wakeFace);
+
+    await event;
+  });
 }
 
 Future<void> _flushEvents() async {
@@ -576,8 +590,12 @@ class _EventSink implements ControllerHealthEventSink {
 }
 
 class _FakeControllerGateway
-    implements StagedControllerGateway, ControllerBenchGateway {
+    implements
+        StagedControllerGateway,
+        ControllerBenchGateway,
+        ControllerEventGateway {
   final _snapshots = StreamController<ControllerSnapshot>.broadcast();
+  final _controllerEvents = StreamController<ControllerEvent>.broadcast();
   final heartbeatResults = <Future<String>>[];
   final connectErrors = <Object>[];
   Future<void> movementResult = Future<void>.value();
@@ -596,6 +614,11 @@ class _FakeControllerGateway
     yield snapshot;
     yield* _snapshots.stream;
   }
+
+  @override
+  Stream<ControllerEvent> watchControllerEvents() => _controllerEvents.stream;
+
+  void emitEvent(ControllerEvent event) => _controllerEvents.add(event);
 
   @override
   Future<void> connect() async {
@@ -654,6 +677,7 @@ class _FakeControllerGateway
   Future<void> close() async {
     closeCount += 1;
     await _snapshots.close();
+    await _controllerEvents.close();
   }
 }
 

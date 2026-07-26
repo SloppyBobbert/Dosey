@@ -33,4 +33,20 @@ void main() {
       <String, Object>{'enabled': false},
     ]);
   });
+
+  test('method channel requests a best-effort screen wake', () async {
+    final calls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          calls.add(call);
+          return null;
+        });
+    const gateway = MethodChannelScreenAwakeGateway();
+
+    await gateway.wakeScreen();
+
+    expect(calls, [isA<MethodCall>()]);
+    expect(calls.single.method, 'wakeScreen');
+    expect(calls.single.arguments, isNull);
+  });
 }
