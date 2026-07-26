@@ -5,7 +5,30 @@ import 'package:dosey_app/core/bluetooth/flutter_blue_plus_ble_gateway.dart';
 import 'package:dosey_app/core/controller/d1_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_flutter_blue_plus_plugin.dart';
+
 void main() {
+  test('shared fake exposes Dosey protocol notifications and writes', () async {
+    final plugin = FakeFlutterBluePlusPlugin();
+    final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+    addTearDown(() async {
+      await gateway.close();
+      await plugin.close();
+    });
+
+    await gateway.connectToDosey();
+    final received = gateway.watchProtocolBytes().first;
+    plugin.emitProtocolBytes('D1 EVT app-1 HEARTBEAT_OK\n'.codeUnits);
+    await gateway.writeProtocolBytes(
+      D1Protocol.encodeCommand('app-2', D1Command.status),
+    );
+
+    expect(await received, 'D1 EVT app-1 HEARTBEAT_OK\n'.codeUnits);
+    expect(plugin.scanServiceUuids, [D1Protocol.serviceUuid]);
+    expect(plugin.scanDeviceNames, [D1Protocol.deviceName]);
+    expect(plugin.writtenLines, ['D1 CMD app-2 STATUS']);
+  });
+
   test('ble availability and connection snapshots expose safe defaults', () {
     const availability = BleAvailabilitySnapshot.unavailable();
     const connection = BleConnectionSnapshot.disconnected();
@@ -386,6 +409,29 @@ void main() {
       await gateway.close();
     },
   );
+
+  test('cleanup after native disconnect does not emit a duplicate', () async {
+    final plugin = FakeFlutterBluePlusPlugin();
+    final gateway = FlutterBluePlusBleGateway(plugin: plugin);
+    final snapshots = <BleConnectionSnapshot>[];
+    final subscription = gateway.watchConnection().listen(snapshots.add);
+    addTearDown(() async {
+      await subscription.cancel();
+      await gateway.close();
+      await plugin.close();
+    });
+    await gateway.connectToDosey();
+    await pumpEventQueue();
+
+    plugin.emitDisconnected();
+    await pumpEventQueue();
+    final countAfterNativeDisconnect = snapshots.length;
+    await gateway.disconnect();
+    await pumpEventQueue();
+
+    expect(snapshots, hasLength(countAfterNativeDisconnect));
+    expect(snapshots.last.state, BleConnectionState.disconnected);
+  });
 }
 
 class _FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {

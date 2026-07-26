@@ -498,7 +498,8 @@ class ControllerHealthSupervisor
         if (_suppressDelegateDisconnect) return;
         if (_canMonitor &&
             _snapshot.healthState != ControllerHealthState.connecting &&
-            _snapshot.healthState != ControllerHealthState.reconnecting) {
+            _snapshot.healthState != ControllerHealthState.reconnecting &&
+            _snapshot.healthState != ControllerHealthState.offline) {
           unawaited(_markOffline('Controller connection was lost.'));
         }
       case ControllerConnectionState.scanning:

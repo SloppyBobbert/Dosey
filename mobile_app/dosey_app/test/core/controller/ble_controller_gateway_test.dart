@@ -1,13 +1,44 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/bluetooth/flutter_blue_plus_ble_gateway.dart';
 import 'package:dosey_app/core/controller/ble_controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/d1_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../support/fake_flutter_blue_plus_plugin.dart';
+
 void main() {
+  test('native disconnect fails a pending pre-acceptance command', () async {
+    final plugin = FakeFlutterBluePlusPlugin();
+    final transport = FlutterBluePlusBleGateway(plugin: plugin);
+    final gateway = BleControllerGateway(
+      transport: transport,
+      canHostRobot: () => true,
+    );
+    addTearDown(() async {
+      await gateway.close();
+      await transport.close();
+      await plugin.close();
+    });
+    await gateway.connect();
+
+    final request = gateway.requestStagedDispense(
+      doseId: 'manual-test',
+      movement: ControllerMovementCommand.dispenseNext,
+      onStage: (_) async {},
+    );
+    final expectation = expectLater(
+      request,
+      throwsA(isA<ControllerTransportOfflineException>()),
+    );
+    plugin.emitDisconnected();
+
+    await expectation;
+  });
+
   test('forwards unsolicited PIR wake events while idle', () async {
     final transport = _FakeDoseyBleGateway();
     final gateway = BleControllerGateway(

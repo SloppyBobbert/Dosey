@@ -322,6 +322,9 @@ class ManualControllerHealthScheduler {
 
   DateTime get now => _start.add(_elapsed);
 
+  int get pendingTimerCount =>
+      _timers.where((timer) => !timer.isCancelled).length;
+
   ControllerHealthTimer schedule(Duration delay, void Function() callback) {
     final timer = _ManualControllerHealthTimer(_elapsed + delay, callback);
     _timers.add(timer);
