@@ -10,6 +10,7 @@ enum class CommandType {
   deviceInfo,
   configStatus,
   safetyStatus,
+  groveDiagnostics,
   ledTest,
   pirStatus,
   servoTest,

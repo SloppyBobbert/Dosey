@@ -368,6 +368,13 @@ void main() {
     expect(find.text('For upside-down mounts.'), findsOneWidget);
     expect(find.text('Dim after inactivity'), findsOneWidget);
     expect(find.text('Return to Robot Face'), findsOneWidget);
+    expect(find.text('PIR wake duration'), findsOneWidget);
+    expect(
+      find.text(
+        'Motion or touch keeps Robot Face awake for this long. Android controls when the display turns off afterward.',
+      ),
+      findsOneWidget,
+    );
     expect(
       find.text(
         'When Robot Mode is open on another tab, return to the face after this much inactivity.',
@@ -524,6 +531,11 @@ void main() {
       key: const ValueKey<String>('Return to Robot Face:2'),
       value: 5,
     );
+    await _setDropdownValue<int>(
+      tester,
+      key: const ValueKey<String>('PIR wake duration:60'),
+      value: 120,
+    );
     await tester.tap(find.text('Robot voice'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Voice variety'));
@@ -582,6 +594,7 @@ void main() {
         isFlipped: true,
         dimAfterInactivity: false,
         returnToFaceAfterInactivityMinutes: 5,
+        pirWakeDurationSeconds: 120,
         voiceEnabled: true,
         voiceVarietyEnabled: true,
         voiceVolumePreset: RobotVoiceVolumePreset.loud,
@@ -662,6 +675,7 @@ void main() {
     );
     expect(updatedSettings.wakeBeforeDoseMinutes, 15);
     expect(updatedSettings.stayAwakeAfterDoseMinutes, 30);
+    expect(updatedSettings.pirWakeDurationSeconds, 120);
 
     final switches = tester.widgetList<SwitchListTile>(
       find.byType(SwitchListTile),

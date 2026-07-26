@@ -1,5 +1,6 @@
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/controller/controller_bench_service.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
@@ -45,6 +46,23 @@ void main() {
       ControllerCommandEventType.heartbeatOk,
     );
     expect(history[8].events.last.details, 'Simulator connected');
+  });
+
+  test('typed diagnostics persist their complete raw report', () async {
+    final fixture = await _BenchFixture.create();
+    addTearDown(fixture.close);
+
+    final report = await fixture.service.runDiagnostics();
+
+    expect(report, isA<ControllerDiagnosticReport>());
+    expect(report.reading('lightRaw')?.value, '2048 ADC');
+    final history = await fixture.repository.watchRecentHistory().first;
+    expect(
+      history.single.session.commandType,
+      ControllerCommandType.diagnostics,
+    );
+    expect(history.single.events.last.details, contains('DIAGNOSTICS_BEGIN'));
+    expect(history.single.events.last.details, contains('DIAGNOSTICS_DONE'));
   });
 
   test(

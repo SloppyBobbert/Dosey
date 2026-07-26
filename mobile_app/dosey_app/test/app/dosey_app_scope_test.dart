@@ -519,4 +519,7 @@ class _FakePermissionGateway implements AppPermissionGateway {
 class _FakeScreenAwakeGateway implements ScreenAwakeGateway {
   @override
   Future<void> setKeepScreenAwake(bool enabled) async {}
+
+  @override
+  Future<void> wakeScreen() async {}
 }

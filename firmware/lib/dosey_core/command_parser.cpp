@@ -33,6 +33,7 @@ bool parseType(const char *name, CommandType &type) {
       {"DEVICE_INFO", CommandType::deviceInfo},
       {"CONFIG_STATUS", CommandType::configStatus},
       {"SAFETY_STATUS", CommandType::safetyStatus},
+      {"GROVE_DIAGNOSTICS", CommandType::groveDiagnostics},
       {"LED_TEST", CommandType::ledTest},
       {"PIR_STATUS", CommandType::pirStatus},
       {"SERVO_TEST", CommandType::servoTest},
@@ -146,6 +147,8 @@ const char *commandName(CommandType type) {
     return "CONFIG_STATUS";
   case CommandType::safetyStatus:
     return "SAFETY_STATUS";
+  case CommandType::groveDiagnostics:
+    return "GROVE_DIAGNOSTICS";
   case CommandType::ledTest:
     return "LED_TEST";
   case CommandType::pirStatus:

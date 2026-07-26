@@ -1,8 +1,13 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
+import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/demo/demo_data_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
+import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
@@ -507,7 +512,7 @@ void main() {
     );
   });
 
-  testWidgets('Robot Face keeps screen awake only while active and resumed', (
+  testWidgets('Robot Face awake window expires and restarts on resume', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -525,6 +530,10 @@ void main() {
       _TestShellApp(database: database, screenAwakeGateway: screenAwake),
     );
     expect(screenAwake.states.last, isTrue);
+
+    await tester.pump(const Duration(seconds: 60));
+    await _pumpShellFrame(tester);
+    expect(screenAwake.states.last, isFalse);
 
     await tester.tap(find.text('Controller').hitTestable());
     await _pumpShellFrame(tester);
@@ -547,6 +556,148 @@ void main() {
     ).settings.setDeviceRole(AppDeviceRole.androidPersonal);
     await _pumpShellFrame(tester);
     expect(screenAwake.states.last, isFalse);
+  });
+
+  testWidgets('PIR wake routes Robot Mode to face for configured duration', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final screenAwake = _FakeScreenAwakeGateway();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await RobotFaceSettingsRepository(
+      database,
+    ).saveSettings(const RobotFaceSettings(pirWakeDurationSeconds: 30));
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, screenAwakeGateway: screenAwake),
+    );
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+    final controller =
+        DoseyAppScope.of(tester.element(find.byType(DoseyShell))).controller
+            as SimulatedControllerGateway;
+
+    controller.emitWakeFace();
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    expect(screenAwake.wakeCalls, 1);
+    expect(screenAwake.states.last, isTrue);
+
+    await tester.pump(const Duration(seconds: 30));
+    await _pumpShellFrame(tester);
+    expect(screenAwake.states.last, isFalse);
+  });
+
+  testWidgets('PIR wake is ignored while Robot Mode is paused', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final screenAwake = _FakeScreenAwakeGateway();
+    addTearDown(database.close);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, screenAwakeGateway: screenAwake),
+    );
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+    final controller =
+        DoseyAppScope.of(tester.element(find.byType(DoseyShell))).controller
+            as SimulatedControllerGateway;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await _pumpShellFrame(tester);
+    controller.emitWakeFace();
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(screenAwake.wakeCalls, 0);
+    expect(screenAwake.states.last, isFalse);
+  });
+
+  testWidgets('touch on Robot Face restarts the awake window', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final screenAwake = _FakeScreenAwakeGateway();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await RobotFaceSettingsRepository(
+      database,
+    ).saveSettings(const RobotFaceSettings(pirWakeDurationSeconds: 30));
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, screenAwakeGateway: screenAwake),
+    );
+    await tester.pump(const Duration(seconds: 20));
+    await tester.tap(find.byType(RobotFaceScreen));
+    await _pumpShellFrame(tester);
+
+    await tester.pump(const Duration(seconds: 11));
+    await _pumpShellFrame(tester);
+    expect(screenAwake.states.last, isTrue);
+
+    await tester.pump(const Duration(seconds: 19));
+    await _pumpShellFrame(tester);
+    expect(screenAwake.states.last, isFalse);
+  });
+
+  testWidgets('scheduled-dose awake window outlives PIR window', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final screenAwake = _FakeScreenAwakeGateway();
+    final now = DateTime.utc(2040, 1, 2, 10);
+    final clock = ControllableAppClock(now);
+    addTearDown(database.close);
+    addTearDown(clock.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await RobotFaceSettingsRepository(
+      database,
+    ).saveSettings(const RobotFaceSettings(pirWakeDurationSeconds: 30));
+    await LocalScheduleProfileRepository(database).upsertProfile(
+      ScheduleProfile(
+        id: ScheduleProfile.defaultProfileId,
+        name: 'Home',
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+    await LocalReminderRepository(database).upsertSchedule(
+      ReminderSchedule(
+        id: 'due-dose',
+        label: 'Morning dose',
+        hour: now.hour,
+        minute: now.minute,
+        isEnabled: true,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        appClock: clock,
+        screenAwakeGateway: screenAwake,
+      ),
+    );
+    await tester.pump(const Duration(seconds: 30));
+    await _pumpShellFrame(tester);
+
+    expect(screenAwake.states.last, isTrue);
   });
 
   testWidgets('Personal Mode never requests the screen stay awake', (
@@ -1032,6 +1183,12 @@ class _FakeScreenAwakeGateway implements ScreenAwakeGateway {
 
   final bool throwOnSet;
   final List<bool> states = <bool>[];
+  int wakeCalls = 0;
+
+  @override
+  Future<void> wakeScreen() async {
+    wakeCalls += 1;
+  }
 
   @override
   Future<void> setKeepScreenAwake(bool enabled) async {

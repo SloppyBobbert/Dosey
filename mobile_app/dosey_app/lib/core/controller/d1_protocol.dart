@@ -11,6 +11,7 @@ enum D1Command {
   debugOff('DEBUG_OFF'),
   ledTest('LED_TEST'),
   pirStatus('PIR_STATUS'),
+  groveDiagnostics('GROVE_DIAGNOSTICS'),
   servoTest('SERVO_TEST'),
   dispenseTest('DISPENSE_TEST'),
   dispenseNext('DISPENSE_NEXT'),

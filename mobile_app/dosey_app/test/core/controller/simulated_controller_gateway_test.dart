@@ -4,6 +4,19 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('simulator can emit a PIR wake event', () async {
+    final gateway = SimulatedControllerGateway();
+    addTearDown(gateway.close);
+    final event = expectLater(
+      gateway.watchControllerEvents(),
+      emits(ControllerEvent.wakeFace),
+    );
+
+    gateway.emitWakeFace();
+
+    await event;
+  });
+
   test('baseline simulator rejects debug commands', () async {
     final gateway = SimulatedControllerGateway();
     addTearDown(gateway.close);
@@ -17,6 +30,45 @@ void main() {
       gateway.runBenchCommand(ControllerBenchCommand.debugOff),
       throwsA(isA<ControllerCommandRejectedException>()),
     );
+  });
+
+  test('simulator reports the Grove Base controller profile', () async {
+    final gateway = SimulatedControllerGateway();
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    expect(
+      await gateway.runBenchCommand(ControllerBenchCommand.deviceInfo),
+      contains('BOARD_XIAO_ESP32_C6_GROVE_BASE'),
+    );
+    expect(
+      await gateway.runBenchCommand(ControllerBenchCommand.configStatus),
+      contains('GROVE_BASE_D8_SERVO_PROFILE'),
+    );
+  });
+
+  test('simulator provides deterministic diagnostics scenarios', () async {
+    final gateway = SimulatedControllerGateway(delay: (_) async {});
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    final healthy = await gateway.readControllerDiagnostics();
+    expect(healthy.reading('dht20Presence')?.value, 'Detected');
+    expect(healthy.reading('movement')?.value, 'Idle');
+    expect(healthy.reading('pirWake')?.value, 'Disabled');
+
+    gateway.queueNextDiagnosticsScenario(
+      SimulatedDiagnosticsScenario.missingHardware,
+    );
+    final missing = await gateway.readControllerDiagnostics();
+    expect(missing.reading('dht20Presence')?.value, 'Not found');
+
+    gateway.queueNextDiagnosticsScenario(
+      SimulatedDiagnosticsScenario.abnormalSignals,
+    );
+    final abnormal = await gateway.readControllerDiagnostics();
+    expect(abnormal.reading('pirRaw')?.value, '1 (raw HIGH)');
+    expect(abnormal.reading('movement')?.value, 'Active');
   });
 
   test('debug simulator accepts debug commands', () async {

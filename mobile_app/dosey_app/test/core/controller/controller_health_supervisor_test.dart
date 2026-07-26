@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_health_supervisor.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -521,6 +522,55 @@ void main() {
     expect(harness.scheduler.hasPendingTimer, isFalse);
     await harness.availability.close();
   });
+
+  test('forwards spontaneous controller events from its delegate', () async {
+    final delegate = _FakeControllerGateway();
+    final harness = _Harness(delegate);
+    addTearDown(harness.close);
+    await harness.supervisor.setMonitoringEligible(true);
+    final event = expectLater(
+      harness.supervisor.watchControllerEvents(),
+      emits(ControllerEvent.wakeFace),
+    );
+
+    delegate.emitEvent(ControllerEvent.wakeFace);
+
+    await event;
+  });
+
+  test(
+    'drops spontaneous controller events while monitoring is ineligible',
+    () async {
+      final delegate = _FakeControllerGateway();
+      final harness = _Harness(delegate);
+      addTearDown(harness.close);
+      await harness.supervisor.setMonitoringEligible(true);
+      final events = <ControllerEvent>[];
+      final subscription = harness.supervisor.watchControllerEvents().listen(
+        events.add,
+      );
+      addTearDown(subscription.cancel);
+
+      await harness.supervisor.setMonitoringEligible(false);
+      delegate.emitEvent(ControllerEvent.wakeFace);
+      await _flushEvents();
+
+      expect(events, isEmpty);
+    },
+  );
+
+  test('forwards typed diagnostics reports from its delegate', () async {
+    final delegate = _FakeControllerGateway();
+    final harness = _Harness(delegate);
+    addTearDown(harness.close);
+    await harness.supervisor.setMonitoringEligible(true);
+    await harness.supervisor.connect();
+
+    final report = await harness.supervisor.readControllerDiagnostics();
+
+    expect(report.reading('pirRaw')?.value, '0 (raw LOW)');
+    expect(delegate.diagnosticsReadCount, 1);
+  });
 }
 
 Future<void> _flushEvents() async {
@@ -576,8 +626,13 @@ class _EventSink implements ControllerHealthEventSink {
 }
 
 class _FakeControllerGateway
-    implements StagedControllerGateway, ControllerBenchGateway {
+    implements
+        StagedControllerGateway,
+        ControllerBenchGateway,
+        ControllerDiagnosticsGateway,
+        ControllerEventGateway {
   final _snapshots = StreamController<ControllerSnapshot>.broadcast();
+  final _controllerEvents = StreamController<ControllerEvent>.broadcast();
   final heartbeatResults = <Future<String>>[];
   final connectErrors = <Object>[];
   Future<void> movementResult = Future<void>.value();
@@ -589,6 +644,7 @@ class _FakeControllerGateway
   int disconnectCount = 0;
   int heartbeatCount = 0;
   int closeCount = 0;
+  int diagnosticsReadCount = 0;
   Object? nextBenchError;
 
   @override
@@ -596,6 +652,11 @@ class _FakeControllerGateway
     yield snapshot;
     yield* _snapshots.stream;
   }
+
+  @override
+  Stream<ControllerEvent> watchControllerEvents() => _controllerEvents.stream;
+
+  void emitEvent(ControllerEvent event) => _controllerEvents.add(event);
 
   @override
   Future<void> connect() async {
@@ -638,6 +699,16 @@ class _FakeControllerGateway
   }
 
   @override
+  Future<ControllerDiagnosticReport> readControllerDiagnostics() async {
+    diagnosticsReadCount += 1;
+    return ControllerDiagnosticsRegistry.standard.parse(const [
+      'DIAGNOSTICS_BEGIN',
+      'PIR_RAW_0',
+      'DIAGNOSTICS_DONE',
+    ]);
+  }
+
+  @override
   Future<void> requestDispense({required String doseId}) => movementResult;
 
   @override
@@ -654,6 +725,7 @@ class _FakeControllerGateway
   Future<void> close() async {
     closeCount += 1;
     await _snapshots.close();
+    await _controllerEvents.close();
   }
 }
 

@@ -2,11 +2,53 @@ import 'dart:async';
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/controller/ble_controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/d1_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('forwards unsolicited PIR wake events while idle', () async {
+    final transport = _FakeDoseyBleGateway();
+    final gateway = BleControllerGateway(
+      transport: transport,
+      canHostRobot: () => true,
+    );
+    addTearDown(gateway.close);
+    final event = expectLater(
+      gateway.watchControllerEvents(),
+      emits(ControllerEvent.wakeFace),
+    );
+
+    transport.emit('D1 EVT pir WAKE_FACE\n');
+
+    await event;
+  });
+
+  test('forwards PIR wake without disturbing a pending command', () async {
+    final transport = _FakeDoseyBleGateway();
+    final gateway = BleControllerGateway(
+      transport: transport,
+      canHostRobot: () => true,
+      commandTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(gateway.close);
+    await gateway.connect();
+    final event = expectLater(
+      gateway.watchControllerEvents(),
+      emits(ControllerEvent.wakeFace),
+    );
+
+    final heartbeat = gateway.runBenchCommand(ControllerBenchCommand.heartbeat);
+    final id = _commandId(transport.writes.single);
+    transport.emit('D1 EVT pir WAKE_FACE\n');
+    transport.emit('D1 EVT $id COMMAND_RECEIVED\n');
+    transport.emit('D1 EVT $id HEARTBEAT_OK\n');
+
+    await event;
+    expect(await heartbeat, 'HEARTBEAT_OK');
+  });
+
   test('dispense test reports accepted and movement stages', () async {
     final transport = _FakeDoseyBleGateway();
     final gateway = BleControllerGateway(
@@ -158,6 +200,38 @@ void main() {
     );
   });
 
+  test('reads a framed typed diagnostics report through BLE', () async {
+    final transport = _FakeDoseyBleGateway();
+    final gateway = BleControllerGateway(
+      transport: transport,
+      canHostRobot: () => true,
+      commandTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    final request = gateway.readControllerDiagnostics();
+    expect(_commandName(transport.writes.single), 'GROVE_DIAGNOSTICS');
+    final id = _commandId(transport.writes.single);
+    for (final code in const [
+      'COMMAND_RECEIVED',
+      'GROVE_DIAGNOSTICS_OK',
+      'DIAGNOSTICS_BEGIN',
+      'PIR_RAW_1',
+      'DHT20_PRESENT',
+      'DIAGNOSTICS_DONE',
+    ]) {
+      transport.emit('D1 EVT $id $code\n');
+    }
+
+    final report = await request;
+    expect(report.reading('pirRaw')?.value, '1 (raw HIGH)');
+    expect(
+      report.reading('dht20Presence')?.status,
+      ControllerDiagnosticStatus.ok,
+    );
+  });
+
   test('readiness commands complete on their terminal events', () async {
     final transport = _FakeDoseyBleGateway();
     final gateway = BleControllerGateway(
@@ -170,7 +244,7 @@ void main() {
 
     for (final scenario in [
       (ControllerBenchCommand.deviceInfo, 'BUILD_BASELINE'),
-      (ControllerBenchCommand.configStatus, 'UART_RESERVED_SERVO_D6_PROFILE'),
+      (ControllerBenchCommand.configStatus, 'GROVE_BASE_D8_SERVO_PROFILE'),
       (ControllerBenchCommand.safetyStatus, 'DISPENSE_NEXT_DISABLED'),
       (ControllerBenchCommand.debugOn, 'DEBUG_ON'),
       (ControllerBenchCommand.debugOff, 'DEBUG_OFF'),

@@ -4,6 +4,7 @@ import 'dart:async';
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/d1_protocol.dart';
 
@@ -11,7 +12,11 @@ typedef RobotModeAccess = FutureOr<bool> Function();
 typedef PrepareBleAccess = Future<bool> Function();
 
 class BleControllerGateway
-    implements StagedControllerGateway, ControllerBenchGateway {
+    implements
+        StagedControllerGateway,
+        ControllerBenchGateway,
+        ControllerDiagnosticsGateway,
+        ControllerEventGateway {
   BleControllerGateway({
     required DoseyBleGateway transport,
     required RobotModeAccess canHostRobot,
@@ -37,6 +42,7 @@ class BleControllerGateway
   final Duration _commandTimeout;
   final D1LineDecoder _decoder = D1LineDecoder();
   final _controller = StreamController<ControllerSnapshot>.broadcast();
+  final _controllerEvents = StreamController<ControllerEvent>.broadcast();
 
   late final StreamSubscription<BleConnectionSnapshot> _connectionSubscription;
   late final StreamSubscription<List<int>> _protocolSubscription;
@@ -51,6 +57,9 @@ class BleControllerGateway
     yield _snapshot;
     yield* _controller.stream;
   }
+
+  @override
+  Stream<ControllerEvent> watchControllerEvents() => _controllerEvents.stream;
 
   @override
   Future<void> connect() async {
@@ -139,6 +148,12 @@ class BleControllerGateway
   }
 
   @override
+  Future<ControllerDiagnosticReport> readControllerDiagnostics() async {
+    final details = await _send(D1Command.groveDiagnostics);
+    return ControllerDiagnosticsRegistry.standard.parse(details.split(', '));
+  }
+
+  @override
   Future<void> cancelActiveCommand() async {
     final active = _pending;
     if (active == null || !active.isMovement) return;
@@ -199,14 +214,14 @@ class BleControllerGateway
   }
 
   Future<void> _handleFrame(D1Frame frame) async {
-    final pending = _pending;
-    if (pending == null) return;
     if (frame is D1InvalidFrame) {
-      _failPending(
-        const ControllerCommandInterruptedException(
-          'Controller sent an invalid protocol frame.',
-        ),
-      );
+      if (_pending != null) {
+        _failPending(
+          const ControllerCommandInterruptedException(
+            'Controller sent an invalid protocol frame.',
+          ),
+        );
+      }
       return;
     }
     final line = (frame as D1LineFrame).line;
@@ -214,13 +229,22 @@ class BleControllerGateway
     try {
       response = D1Protocol.parseResponse(line);
     } on FormatException {
-      _failPending(
-        const ControllerCommandInterruptedException(
-          'Controller sent a malformed protocol response.',
-        ),
-      );
+      if (_pending != null) {
+        _failPending(
+          const ControllerCommandInterruptedException(
+            'Controller sent a malformed protocol response.',
+          ),
+        );
+      }
       return;
     }
+    if (response ==
+        const D1Response(D1ResponseKind.event, 'pir', 'WAKE_FACE')) {
+      if (!_closed) _controllerEvents.add(ControllerEvent.wakeFace);
+      return;
+    }
+    final pending = _pending;
+    if (pending == null) return;
     if (response.id != pending.id) return;
 
     if (response.kind == D1ResponseKind.nack) {
@@ -288,12 +312,13 @@ class BleControllerGateway
       D1Command.status => code == 'MOVEMENT_ACTIVE' || code == 'MOVEMENT_IDLE',
       D1Command.heartbeat => code == 'HEARTBEAT_OK',
       D1Command.deviceInfo => code == 'BUILD_BASELINE' || code == 'BUILD_DEBUG',
-      D1Command.configStatus => code == 'UART_RESERVED_SERVO_D6_PROFILE',
+      D1Command.configStatus => code == 'GROVE_BASE_D8_SERVO_PROFILE',
       D1Command.safetyStatus => code == 'DISPENSE_NEXT_DISABLED',
       D1Command.debugOn => code == 'DEBUG_ON',
       D1Command.debugOff => code == 'DEBUG_OFF',
       D1Command.ledTest => code == 'LED_TEST_DONE',
       D1Command.pirStatus => code == 'PIR_MOTION' || code == 'PIR_CLEAR',
+      D1Command.groveDiagnostics => code == 'DIAGNOSTICS_DONE',
       D1Command.servoTest ||
       D1Command.dispenseTest ||
       D1Command.dispenseNext ||
@@ -371,6 +396,7 @@ class BleControllerGateway
     await _connectionSubscription.cancel();
     await _protocolSubscription.cancel();
     await _controller.close();
+    await _controllerEvents.close();
   }
 }
 

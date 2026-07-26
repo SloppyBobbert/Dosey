@@ -313,6 +313,68 @@ void main() {
     expect(settings.returnToFaceAfterInactivityMinutes, 2);
   });
 
+  test('robot face PIR wake duration defaults to 60 seconds', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = RobotFaceSettingsRepository(database);
+
+    final settings = await repository.getSettings();
+
+    expect(
+      settings.pirWakeDurationSeconds,
+      RobotFaceSettings.defaultPirWakeDurationSeconds,
+    );
+    expect(settings.pirWakeDurationSeconds, 60);
+  });
+
+  test('robot face PIR wake duration persists a custom value', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = RobotFaceSettingsRepository(database);
+
+    await repository.saveSettings(
+      const RobotFaceSettings(pirWakeDurationSeconds: 120),
+    );
+
+    expect((await repository.getSettings()).pirWakeDurationSeconds, 120);
+  });
+
+  test(
+    'robot face PIR wake duration falls back for malformed storage',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = RobotFaceSettingsRepository(database);
+      await database.setAppSetting(
+        'robot_face_pir_wake_duration_seconds',
+        'not-a-number',
+      );
+
+      expect(
+        (await repository.getSettings()).pirWakeDurationSeconds,
+        RobotFaceSettings.defaultPirWakeDurationSeconds,
+      );
+    },
+  );
+
+  test(
+    'robot face PIR wake duration falls back for unsupported storage',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = RobotFaceSettingsRepository(database);
+      await database.setAppSetting(
+        'robot_face_pir_wake_duration_seconds',
+        '90',
+      );
+
+      expect(
+        (await repository.getSettings()).pirWakeDurationSeconds,
+        RobotFaceSettings.defaultPirWakeDurationSeconds,
+      );
+    },
+  );
+
   test('robot face return timeout persists a custom value', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);

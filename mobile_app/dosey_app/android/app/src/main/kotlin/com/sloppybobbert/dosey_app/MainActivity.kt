@@ -55,6 +55,20 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
+                "wakeScreen" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                        setTurnScreenOn(true)
+                        window.decorView.post { setTurnScreenOn(false) }
+                    } else {
+                        @Suppress("DEPRECATION")
+                        window.addFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+                        window.decorView.post {
+                            @Suppress("DEPRECATION")
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON)
+                        }
+                    }
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
