@@ -44,15 +44,29 @@ public:
   bool servoConfigured() const override { return servoIsConfigured; }
   bool pirConfigured() const override { return pirIsConfigured; }
   bool pirMotion() const override { return pirHasMotion; }
+  bool pirWakeConfigured() const override { return pirWakeIsConfigured; }
+  bool pirWakeActive() const override { return pirWakeIsActive; }
+  bool groveDiagnosticsConfigured() const override {
+    return groveDiagnosticsAreConfigured;
+  }
+  int grovePirRaw() const override { return grovePirRawValue; }
+  int groveLightRaw() const override { return groveLightRawValue; }
+  int groveButtonRaw(std::uint8_t index) const override {
+    return groveButtonRawValues[index];
+  }
+  bool groveDht20Present() override { return dht20IsPresent; }
 
   void setLedActive(bool active) override { ledActive = active; }
 
-  bool startMovement(std::uint32_t) override {
+  HardwareMovementStartResult startMovement(std::uint32_t) override {
     ++movementStarts;
-    return movementStartsSuccessfully;
+    return nextMovementStartResult;
   }
 
-  void stopMovement() override { ++movementStops; }
+  HardwareMovementStopResult stopMovement() override {
+    ++movementStops;
+    return nextMovementStopResult;
+  }
 
   HardwareMovementUpdate updateMovement(std::uint32_t) override {
     const HardwareMovementUpdate result = nextMovementUpdate;
@@ -63,11 +77,21 @@ public:
   bool servoIsConfigured = false;
   bool pirIsConfigured = false;
   bool pirHasMotion = false;
+  bool pirWakeIsConfigured = false;
+  bool pirWakeIsActive = false;
+  bool groveDiagnosticsAreConfigured = false;
+  int grovePirRawValue = 0;
+  int groveLightRawValue = 0;
+  int groveButtonRawValues[4] = {};
+  bool dht20IsPresent = false;
   bool ledActive = false;
-  bool movementStartsSuccessfully = true;
   int movementStarts = 0;
   int movementStops = 0;
+  HardwareMovementStartResult nextMovementStartResult =
+      HardwareMovementStartResult::started;
   HardwareMovementUpdate nextMovementUpdate = HardwareMovementUpdate::none;
+  HardwareMovementStopResult nextMovementStopResult =
+      HardwareMovementStopResult::stopped;
 };
 
 void assertLines(const CapturingOutput &output,
@@ -253,7 +277,7 @@ void test_device_info_reports_stable_identity() {
                        "D1 EVT info-1 DEVICE_INFO_OK",
                        "D1 EVT info-1 FIRMWARE_DOSEY_CONTROLLER",
                        "D1 EVT info-1 PROTOCOL_D1",
-                       "D1 EVT info-1 BOARD_XIAO_ESP32_C6_EXPANSION",
+                        "D1 EVT info-1 BOARD_XIAO_ESP32_C6_GROVE_BASE",
 #if defined(DOSEY_TEST_PROTOCOL_DEBUG)
                        "D1 EVT info-1 BUILD_DEBUG"});
 #else
@@ -271,10 +295,23 @@ void test_config_status_reports_safe_default_profile() {
   assertLines(output, {"D1 EVT config-1 COMMAND_RECEIVED",
                        "D1 EVT config-1 CONFIG_STATUS_OK",
                        "D1 EVT config-1 SERVO_DISABLED",
-                       "D1 EVT config-1 PIR_DISABLED",
-                       "D1 EVT config-1 I2C_DISABLED",
-                       "D1 EVT config-1 BUTTON_DISABLED",
-                       "D1 EVT config-1 UART_RESERVED_SERVO_D6_PROFILE"});
+                        "D1 EVT config-1 PIR_DISABLED",
+                        "D1 EVT config-1 I2C_DISABLED",
+                        "D1 EVT config-1 BUTTON_DISABLED",
+                        "D1 EVT config-1 GROVE_DIAGNOSTICS_DISABLED",
+                        "D1 EVT config-1 GROVE_BASE_D8_SERVO_PROFILE"});
+}
+
+void test_config_status_reports_grove_diagnostics_capability() {
+  FakeHardware hardware;
+  hardware.groveDiagnosticsAreConfigured = true;
+  CapturingOutput output;
+  ProtocolEngine protocol(hardware, output);
+
+  protocol.handleLine("D1 CMD config-1 CONFIG_STATUS", 0);
+
+  TEST_ASSERT_EQUAL_STRING("D1 EVT config-1 GROVE_DIAGNOSTICS_ENABLED",
+                           output.lines[6].c_str());
 }
 
 void test_safety_status_reports_compiled_limits_and_disabled_dispense() {
@@ -388,6 +425,98 @@ void test_pir_reports_current_input_when_configured() {
               {"D1 EVT pir-1 COMMAND_RECEIVED", "D1 EVT pir-1 PIR_MOTION"});
 }
 
+void test_pir_wake_is_silent_when_disabled() {
+  FakeHardware hardware;
+  hardware.pirWakeIsActive = true;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.update(100);
+
+  TEST_ASSERT_TRUE(output.lines.empty());
+}
+
+void test_pir_wake_emits_on_activation_and_repeats_after_cooldown() {
+  FakeHardware hardware;
+  hardware.pirWakeIsConfigured = true;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.update(100);
+  hardware.pirWakeIsActive = true;
+  engine.update(101);
+  engine.update(101 + safety::kPirWakeRepeatIntervalMs - 1);
+  engine.update(101 + safety::kPirWakeRepeatIntervalMs);
+
+  assertLines(output, {"D1 EVT pir WAKE_FACE", "D1 EVT pir WAKE_FACE"});
+}
+
+void test_pir_wake_rearms_after_motion_clears() {
+  FakeHardware hardware;
+  hardware.pirWakeIsConfigured = true;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.update(100);
+  hardware.pirWakeIsActive = true;
+  engine.update(101);
+  hardware.pirWakeIsActive = false;
+  engine.update(102);
+  hardware.pirWakeIsActive = true;
+  engine.update(103);
+
+  assertLines(output, {"D1 EVT pir WAKE_FACE", "D1 EVT pir WAKE_FACE"});
+}
+
+void test_grove_diagnostics_rejects_unconfigured_profile() {
+  FakeHardware hardware;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD grove-1 GROVE_DIAGNOSTICS", 100);
+
+  assertLines(output, {"D1 NACK grove-1 CONFIGURATION_REQUIRED"});
+}
+
+void test_grove_diagnostics_reports_raw_snapshot_without_interpretation() {
+  FakeHardware hardware;
+  hardware.groveDiagnosticsAreConfigured = true;
+  hardware.grovePirRawValue = 1;
+  hardware.groveLightRawValue = 2048;
+  hardware.groveButtonRawValues[0] = 1;
+  hardware.groveButtonRawValues[1] = 0;
+  hardware.groveButtonRawValues[2] = 0;
+  hardware.groveButtonRawValues[3] = 1;
+  hardware.dht20IsPresent = true;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD grove-1 GROVE_DIAGNOSTICS", 100);
+
+  assertLines(output,
+              {"D1 EVT grove-1 COMMAND_RECEIVED",
+               "D1 EVT grove-1 GROVE_DIAGNOSTICS_OK",
+               "D1 EVT grove-1 PIR_RAW_1",
+               "D1 EVT grove-1 LIGHT_RAW_2048",
+               "D1 EVT grove-1 BUTTON_1A_RAW_1",
+               "D1 EVT grove-1 BUTTON_1B_RAW_0",
+               "D1 EVT grove-1 BUTTON_2A_RAW_0",
+               "D1 EVT grove-1 BUTTON_2B_RAW_1",
+               "D1 EVT grove-1 DHT20_PRESENT"});
+}
+
+void test_grove_diagnostics_reports_missing_dht20() {
+  FakeHardware hardware;
+  hardware.groveDiagnosticsAreConfigured = true;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD grove-1 GROVE_DIAGNOSTICS", 100);
+
+  TEST_ASSERT_EQUAL_STRING("D1 EVT grove-1 DHT20_NOT_FOUND",
+                           output.lines.back().c_str());
+}
+
 void test_movement_rejects_duplicate_and_overlapping_commands() {
   FakeHardware hardware;
   hardware.servoIsConfigured = true;
@@ -485,7 +614,7 @@ void test_movement_timeout_stops_hardware_and_remains_unresolved() {
 void test_failed_servo_start_reports_error_without_movement_started() {
   FakeHardware hardware;
   hardware.servoIsConfigured = true;
-  hardware.movementStartsSuccessfully = false;
+  hardware.nextMovementStartResult = HardwareMovementStartResult::attachFailed;
   CapturingOutput output;
   ProtocolEngine engine(hardware, output);
 
@@ -493,6 +622,51 @@ void test_failed_servo_start_reports_error_without_movement_started() {
 
   assertLines(output, {"D1 EVT move-1 COMMAND_RECEIVED",
                        "D1 ERROR move-1 SERVO_ATTACH_FAILED"});
+  TEST_ASSERT_EQUAL(1, hardware.movementStops);
+}
+
+void test_failed_initial_servo_write_reports_error_without_movement_started() {
+  FakeHardware hardware;
+  hardware.servoIsConfigured = true;
+  hardware.nextMovementStartResult = HardwareMovementStartResult::writeFailed;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD move-1 SERVO_TEST", 100);
+
+  assertLines(output, {"D1 EVT move-1 COMMAND_RECEIVED",
+                       "D1 ERROR move-1 SERVO_WRITE_FAILED"});
+  TEST_ASSERT_EQUAL(1, hardware.movementStops);
+}
+
+void test_failed_servo_write_during_movement_reports_error_not_completion() {
+  FakeHardware hardware;
+  hardware.servoIsConfigured = true;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD move-1 SERVO_TEST", 100);
+  hardware.nextMovementUpdate = HardwareMovementUpdate::writeFailed;
+  engine.update(101);
+
+  TEST_ASSERT_EQUAL_STRING("D1 ERROR move-1 SERVO_WRITE_FAILED",
+                           output.lines.back().c_str());
+  TEST_ASSERT_EQUAL(1, hardware.movementStops);
+}
+
+void test_failed_servo_detach_reports_error_not_completion() {
+  FakeHardware hardware;
+  hardware.servoIsConfigured = true;
+  hardware.nextMovementStopResult = HardwareMovementStopResult::detachFailed;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD move-1 SERVO_TEST", 100);
+  hardware.nextMovementUpdate = HardwareMovementUpdate::completed;
+  engine.update(101);
+
+  TEST_ASSERT_EQUAL_STRING("D1 ERROR move-1 SERVO_DETACH_FAILED",
+                           output.lines.back().c_str());
   TEST_ASSERT_EQUAL(1, hardware.movementStops);
 }
 
@@ -524,6 +698,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_heartbeat_has_exact_transcript);
   RUN_TEST(test_device_info_reports_stable_identity);
   RUN_TEST(test_config_status_reports_safe_default_profile);
+  RUN_TEST(test_config_status_reports_grove_diagnostics_capability);
   RUN_TEST(test_safety_status_reports_compiled_limits_and_disabled_dispense);
 #if defined(DOSEY_TEST_PROTOCOL_DEBUG)
   RUN_TEST(test_debug_commands_toggle_volatile_debug_state);
@@ -534,6 +709,12 @@ int main(int argc, char **argv) {
   RUN_TEST(test_led_deadline_handles_timer_wraparound);
   RUN_TEST(test_unconfigured_commands_and_dispense_next_are_rejected);
   RUN_TEST(test_pir_reports_current_input_when_configured);
+  RUN_TEST(test_pir_wake_is_silent_when_disabled);
+  RUN_TEST(test_pir_wake_emits_on_activation_and_repeats_after_cooldown);
+  RUN_TEST(test_pir_wake_rearms_after_motion_clears);
+  RUN_TEST(test_grove_diagnostics_rejects_unconfigured_profile);
+  RUN_TEST(test_grove_diagnostics_reports_raw_snapshot_without_interpretation);
+  RUN_TEST(test_grove_diagnostics_reports_missing_dht20);
   RUN_TEST(test_movement_rejects_duplicate_and_overlapping_commands);
   RUN_TEST(test_movement_does_not_start_when_acceptance_cannot_be_written);
   RUN_TEST(test_cancel_stops_active_movement_as_unresolved);
@@ -541,6 +722,11 @@ int main(int argc, char **argv) {
   RUN_TEST(test_hardware_completion_reports_servo_done);
   RUN_TEST(test_movement_timeout_stops_hardware_and_remains_unresolved);
   RUN_TEST(test_failed_servo_start_reports_error_without_movement_started);
+  RUN_TEST(
+      test_failed_initial_servo_write_reports_error_without_movement_started);
+  RUN_TEST(
+      test_failed_servo_write_during_movement_reports_error_not_completion);
+  RUN_TEST(test_failed_servo_detach_reports_error_not_completion);
   RUN_TEST(test_malformed_and_oversized_input_use_untrusted_id);
   return UNITY_END();
 }

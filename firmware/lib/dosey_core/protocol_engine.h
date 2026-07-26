@@ -8,7 +8,9 @@
 
 namespace dosey {
 
-enum class HardwareMovementUpdate { none, completed };
+enum class HardwareMovementStartResult { started, attachFailed, writeFailed };
+enum class HardwareMovementUpdate { none, completed, writeFailed };
+enum class HardwareMovementStopResult { stopped, detachFailed };
 
 class ProtocolOutput {
 public:
@@ -22,9 +24,16 @@ public:
   virtual bool servoConfigured() const = 0;
   virtual bool pirConfigured() const = 0;
   virtual bool pirMotion() const = 0;
+  virtual bool pirWakeConfigured() const = 0;
+  virtual bool pirWakeActive() const = 0;
+  virtual bool groveDiagnosticsConfigured() const = 0;
+  virtual int grovePirRaw() const = 0;
+  virtual int groveLightRaw() const = 0;
+  virtual int groveButtonRaw(std::uint8_t index) const = 0;
+  virtual bool groveDht20Present() = 0;
   virtual void setLedActive(bool active) = 0;
-  virtual bool startMovement(std::uint32_t nowMs) = 0;
-  virtual void stopMovement() = 0;
+  virtual HardwareMovementStartResult startMovement(std::uint32_t nowMs) = 0;
+  virtual HardwareMovementStopResult stopMovement() = 0;
   virtual HardwareMovementUpdate updateMovement(std::uint32_t nowMs) = 0;
 };
 
@@ -43,6 +52,7 @@ private:
   void handleCommand(const Command &command, std::uint32_t nowMs);
   void startMovement(const Command &command, std::uint32_t nowMs);
   bool sendEvent(const char *id, const char *code);
+  bool sendRawValue(const char *id, const char *label, int value);
   void sendNack(const char *id, const char *code);
   void sendError(const char *id, const char *code);
 
@@ -53,6 +63,8 @@ private:
   bool ledTestActive_ = false;
   std::uint32_t ledDeadlineMs_ = 0;
   char ledCommandId_[kMaxCommandIdLength + 1] = {};
+  bool pirWakeWasActive_ = false;
+  std::uint32_t pirWakeRepeatAtMs_ = 0;
   char outputLine_[kMaxProtocolLineLength + 1] = {};
 };
 

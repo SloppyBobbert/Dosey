@@ -1,6 +1,6 @@
 # Firmware
 
-Incremental Arduino/PlatformIO C++ bring-up firmware for the Seeed Studio XIAO ESP32-C6. The current no-solder hardware layout uses the XIAO Expansion Board, but external paths remain disabled until their pins, active levels, and physical behavior are verified.
+Incremental Arduino/PlatformIO C++ bring-up firmware for the Seeed Studio XIAO ESP32-C6. The current no-solder layout uses [Grove Base SKU 103020312](https://www.seeedstudio.com/Grove-Shield-for-Seeeduino-XIAO-p-4621.html), but external paths remain disabled until their pins, active levels, power paths, and physical behavior are verified.
 
 This is prototype firmware. Test only with candy, beads, dry beans, vitamins, or fake pills. Do not use real prescription medication during bring-up.
 
@@ -47,7 +47,7 @@ The commands below use that pinned executable directly.
 ## Layout
 
 - `include/hardware_config.h`: centralized pins and explicit external-hardware enable flags.
-- `include/expansion_board_pins.h`: named ESP32-C6 GPIO assignments for the selected Expansion Board layout.
+- `include/grove_base_pins.h`: named ESP32-C6 GPIO assignments for the selected Grove Base layout.
 - `include/hardware_config.local.h.example`: safe template for ignored, bench-only configuration overrides.
 - `include/protocol_config.h`: protocol version and input bounds.
 - `include/debug_config.h`: compile-time availability for volatile USB diagnostics.
@@ -64,11 +64,11 @@ The commands below use that pinned executable directly.
 | --- | --- | --- |
 | `01_blink_serial` | USB serial and onboard user LED | Ready for XIAO-only physical test |
 | `02_digital_output` | One external digital output | Disabled; pin unconfirmed |
-| `03_button_input` | One button input | Disabled; onboard D1 button selected but combined behavior unverified |
+| `03_button_input` | One button input | Disabled; Dual Button integration remains pending |
 | `04_pir_input` | PIR input | Disabled; Mini PIR selected for `D0/A0` but pin behavior unverified |
-| `05_analog_input` | One analog input | Disabled; module and pin unconfirmed |
-| `06_i2c_scanner` | Scan a verified Grove I2C path | Disabled; DHT20 and LIS3DHTR selected but combined bus not scanned |
-| `07_servo_sweep` | Commanded 10-degree servo test | Disabled; SG90 selected for the D6/5 V/GND header but orientation and loaded power remain unverified |
+| `05_analog_input` | One analog input | Disabled; Light Sensor selected for `D1/A1` but 3.3 V behavior remains to be verified |
+| `06_i2c_scanner` | Scan a verified Grove I2C path | Disabled; DHT20 selected but the Grove Base bus has not been scanned |
+| `07_servo_sweep` | Commanded 10-degree servo test | Disabled; Grove Servo selected for `D8/A8`; repeated one-slot behavior remains unverified |
 | `08_serial_protocol` | Versioned USB serial command demo | Compiles; external commands stay disabled |
 | `09_ble_protocol` | Same D1 engine over BLE GATT | Compiles; radio behavior and external hardware unverified |
 | `controller_baseline` | Primary flash target using the BLE D1 engine | Safe defaults compile; physical radio and hardware behavior remain unverified |
@@ -83,7 +83,7 @@ After identifying one disconnected module and its authoritative pin mapping,
 create `include/hardware_config.local.h` from the adjacent example and change
 only that module's enable flag and pin. Git ignores the local file.
 
-The template already names the selected Expansion Board pins but leaves every
+The template already names the selected Grove Base pins but leaves every
 external path disabled. The build fails at compile time if an enabled path has
 no pin or if the servo shares a configured signal pin with another firmware
 path. The local file does not bypass the physical test gates, power rules,
@@ -131,7 +131,7 @@ electrical stability, sensor behavior, servo movement, or carousel movement.
 
 ## First physical test
 
-Test the bare XIAO before attaching the Expansion Board or any module:
+Test the bare XIAO before attaching the Grove Base or any module:
 
 1. Disconnect every external wire and module. Do not connect the battery/JST port or SWD pins.
 2. Place the board on a nonconductive surface and connect it directly to the computer with a known USB data cable.
@@ -141,7 +141,7 @@ Test the bare XIAO before attaching the Expansion Board or any module:
 6. Confirm the serial header identifies `XIAO_ESP32_C6`, then confirm the onboard user LED changes with matching `LED ON` and `LED OFF` lines.
 7. Disconnect immediately if the board heats, smells unusual, repeatedly resets, or behaves unexpectedly.
 
-Do not record this test as passed until the LED and serial observations are made on the physical board. Attach the Expansion Board and identify one module at a time only after this XIAO-only check passes.
+Do not record this test as passed until the LED and serial observations are made on the physical board. Attach the Grove Base and identify one module at a time only after this XIAO-only check passes.
 
 ## USB protocol bench check
 
@@ -190,9 +190,9 @@ and the compiled configuration snapshot to USB serial. Send
 BLE notifications and does not enable any external path.
 
 The read-only `DEVICE_INFO` command reports the firmware name, D1 protocol,
-XIAO ESP32-C6 Expansion Board profile, and baseline/debug build flavor.
+XIAO ESP32-C6 Grove Base profile, and baseline/debug build flavor.
 `CONFIG_STATUS` reports compiled servo, PIR, I2C, and button states plus the
-reserved D6/UART profile. `SAFETY_STATUS` reports the 2.5-second movement
+selected Grove Base D8 servo profile. `SAFETY_STATUS` reports the 2.5-second movement
 timeout, 1000-2000 us pulse range, 90-100 degree test range, and disabled
 `DISPENSE_NEXT` command. Run all three before enabling hardware and confirm all
 external paths report disabled in a committed build. See
@@ -201,7 +201,7 @@ external paths report disabled in a committed build. See
 ## BLE protocol bench check
 
 Run this only after the bare-XIAO and USB protocol checks pass. Keep the Grove
-Expansion Board, servo, battery/JST, SWD, and every external wire disconnected.
+Base, servo, battery pads, and every external wire disconnected.
 
 1. Upload `controller_baseline` with `/tmp/dosey-platformio/bin/pio run -e controller_baseline -t upload --upload-port <port>`.
 2. Keep the USB serial monitor open at 115200 baud and confirm `D1 EVT boot BLE_READY`.
@@ -236,6 +236,6 @@ compile/test evidence.
 - Timeout detaches PWM and emits `MOVEMENT_TIMEOUT`.
 - Servo attachment failure emits `SERVO_ATTACH_FAILED` before movement starts.
 - `DISPENSE_TEST` is movement-only. `DISPENSE_NEXT` returns `COMMAND_DISABLED` until carousel movement meets the mechanical test gate.
-- Motors must not be powered from the phone, a XIAO GPIO pin, or a 3.3 V Grove socket. Use the SG90 on the Expansion Board's D6/5 V/GND header for initial tests. Keep the UART Grove socket empty because it shares D6. If loaded power is unstable, use a suitable regulated 5 V path with shared ground after the wiring is verified.
+- Motors must not be powered from the phone or a XIAO GPIO pin. Prior loaded movement on the Expansion Board's 3.3 V Grove socket is accepted as compatibility evidence for the Grove Servo on the Grove Base's `D8/A8` socket. Continue supervised testing and stop on weak movement, jitter, resets, disconnects, or heat.
 
 See `../docs/protocol.md` for the implemented serial demo and `../docs/wiring.md` for confirmed versus pending wiring.

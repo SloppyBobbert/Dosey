@@ -1,29 +1,37 @@
 #pragma once
 
-#include "expansion_board_pins.h"
+#include "grove_base_pins.h"
 
 // Copy this file to hardware_config.local.h only during supervised bench work.
 // Keep each path disabled until its module, pin, and power path are physically
 // verified while USB is disconnected. The local file is ignored by Git.
 
 #define DOSEY_DIGITAL_OUTPUT_CONFIGURED 0
-#define DOSEY_DIGITAL_OUTPUT_PIN -1
+#define DOSEY_DIGITAL_OUTPUT_PIN dosey::hardware::grove_base::kActiveBuzzerPin
 #define DOSEY_DIGITAL_OUTPUT_ACTIVE_HIGH 1
 
 #define DOSEY_BUTTON_CONFIGURED 0
-#define DOSEY_BUTTON_PIN dosey::hardware::expansion_board::kOnboardButtonPin
+#define DOSEY_BUTTON_PIN dosey::hardware::grove_base::kFirstButtonFirstPin
 #define DOSEY_BUTTON_USE_INTERNAL_PULLUP 1
 
 #define DOSEY_PIR_CONFIGURED 0
-#define DOSEY_PIR_PIN dosey::hardware::expansion_board::kMiniPirPin
+#define DOSEY_PIR_PIN dosey::hardware::grove_base::kMiniPirPin
+// Set only after raw diagnostics establish the module's active level.
+#define DOSEY_PIR_WAKE_ENABLED 0
+#define DOSEY_PIR_ACTIVE_HIGH 1
 
 #define DOSEY_ANALOG_INPUT_CONFIGURED 0
-#define DOSEY_ANALOG_INPUT_PIN -1
+#define DOSEY_ANALOG_INPUT_PIN dosey::hardware::grove_base::kLightSensorPin
 
 #define DOSEY_I2C_CONFIGURED 0
-#define DOSEY_I2C_SDA_PIN dosey::hardware::expansion_board::kI2cSdaPin
-#define DOSEY_I2C_SCL_PIN dosey::hardware::expansion_board::kI2cSclPin
+#define DOSEY_I2C_SDA_PIN dosey::hardware::grove_base::kI2cSdaPin
+#define DOSEY_I2C_SCL_PIN dosey::hardware::grove_base::kI2cSclPin
 
-// Enabling this reserves D6. Keep the D6/D7 UART Grove socket empty.
+// Read-only final-port snapshot for PIR, light, both Dual Button modules, and
+// DHT20 presence. Keep disabled until those modules are installed unpowered.
+#define DOSEY_GROVE_DIAGNOSTICS_ENABLED 0
+
+// Prior loaded movement supports this 3.3 V Grove path; enable it only during
+// supervised final-rig testing for repeatability and failure behavior.
 #define DOSEY_SERVO_ENABLED 0
-#define DOSEY_SERVO_PIN dosey::hardware::expansion_board::kServoPin
+#define DOSEY_SERVO_PIN dosey::hardware::grove_base::kServoPin

@@ -65,7 +65,7 @@ Implemented commands while external hardware remains unconfigured:
 | `STATUS` | `COMMAND_RECEIVED`, `STATUS_OK`, servo configuration, PIR configuration, debug availability/state, then movement state |
 | `HEARTBEAT` | `COMMAND_RECEIVED`, then `HEARTBEAT_OK` |
 | `DEVICE_INFO` | Stable firmware, protocol, board profile, and build flavor events |
-| `CONFIG_STATUS` | Read-only compiled hardware states and D6/UART reservation |
+| `CONFIG_STATUS` | Read-only compiled hardware states and selected Grove Base D8 servo profile |
 | `SAFETY_STATUS` | Read-only movement timeout, servo limits, and scheduled-dispense lockout |
 | `DEBUG_ON` / `DEBUG_OFF` | Disabled in baseline; in the debug build, toggle volatile USB-only diagnostics |
 | `LED_TEST` | `COMMAND_RECEIVED`, `LED_TEST_STARTED`, then `LED_TEST_DONE` |

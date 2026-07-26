@@ -9,6 +9,7 @@ inline constexpr std::uint32_t kSerialStartupWaitMs = 1500;
 inline constexpr std::uint32_t kInputReportIntervalMs = 250;
 inline constexpr std::uint32_t kOutputTestDurationMs = 300;
 inline constexpr std::uint32_t kLedTestDurationMs = 250;
+inline constexpr std::uint32_t kPirWakeRepeatIntervalMs = 10000;
 
 inline constexpr int kServoMinimumPulseUs = 1000;
 inline constexpr int kServoMaximumPulseUs = 2000;

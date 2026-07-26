@@ -186,9 +186,7 @@ void sendNextOutputChunk() {
 void setup() {
   digitalWrite(dosey::hardware::kOnboardLedPin, dosey::inactiveLedLevel());
   pinMode(dosey::hardware::kOnboardLedPin, OUTPUT);
-  if constexpr (dosey::hardware::kPirConfigured) {
-    pinMode(dosey::hardware::kPirPin, INPUT);
-  }
+  hardware.begin();
 
   Serial.begin(dosey::safety::kSerialBaud);
   delay(dosey::safety::kSerialStartupWaitMs);

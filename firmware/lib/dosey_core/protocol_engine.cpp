@@ -1,5 +1,6 @@
 #include "protocol_engine.h"
 
+#include <cstdio>
 #include <cstring>
 
 #include "debug_config.h"
@@ -40,6 +41,17 @@ void ProtocolEngine::handleTransportDisconnect() {
 }
 
 void ProtocolEngine::update(std::uint32_t nowMs) {
+  if (hardware_.pirWakeConfigured()) {
+    const bool active = hardware_.pirWakeActive();
+    if (active &&
+        (!pirWakeWasActive_ ||
+         static_cast<std::int32_t>(nowMs - pirWakeRepeatAtMs_) >= 0)) {
+      sendEvent("pir", "WAKE_FACE");
+      pirWakeRepeatAtMs_ = nowMs + safety::kPirWakeRepeatIntervalMs;
+    }
+    pirWakeWasActive_ = active;
+  }
+
   if (ledTestActive_ &&
       static_cast<std::int32_t>(nowMs - ledDeadlineMs_) >= 0) {
     hardware_.setLedActive(false);
@@ -53,9 +65,24 @@ void ProtocolEngine::update(std::uint32_t nowMs) {
     return;
   }
 
-  if (controller_.isMoving() &&
-      hardware_.updateMovement(nowMs) == HardwareMovementUpdate::completed) {
+  if (!controller_.isMoving()) {
+    return;
+  }
+
+  const HardwareMovementUpdate movementUpdate =
+      hardware_.updateMovement(nowMs);
+  if (movementUpdate == HardwareMovementUpdate::writeFailed) {
     hardware_.stopMovement();
+    controller_.cancelMovement();
+    sendError(controller_.activeCommandId(), "SERVO_WRITE_FAILED");
+    return;
+  }
+  if (movementUpdate == HardwareMovementUpdate::completed) {
+    if (hardware_.stopMovement() == HardwareMovementStopResult::detachFailed) {
+      controller_.cancelMovement();
+      sendError(controller_.activeCommandId(), "SERVO_DETACH_FAILED");
+      return;
+    }
     controller_.completeMovement();
     sendEvent(controller_.activeCommandId(), "SERVO_DONE");
   }
@@ -100,7 +127,11 @@ void ProtocolEngine::handleCommand(const Command &command,
               hardware::kI2cConfigured ? "I2C_ENABLED" : "I2C_DISABLED");
     sendEvent(command.id, hardware::kButtonConfigured ? "BUTTON_ENABLED"
                                                        : "BUTTON_DISABLED");
-    sendEvent(command.id, "UART_RESERVED_SERVO_D6_PROFILE");
+    sendEvent(command.id,
+              hardware_.groveDiagnosticsConfigured()
+                  ? "GROVE_DIAGNOSTICS_ENABLED"
+                  : "GROVE_DIAGNOSTICS_DISABLED");
+    sendEvent(command.id, "GROVE_BASE_D8_SERVO_PROFILE");
     return;
   case CommandType::safetyStatus:
     sendEvent(command.id, "COMMAND_RECEIVED");
@@ -110,6 +141,25 @@ void ProtocolEngine::handleCommand(const Command &command,
     sendEvent(command.id, "SERVO_ANGLES_DEG_90_100");
     sendEvent(command.id, "DISPENSE_NEXT_DISABLED");
     return;
+  case CommandType::groveDiagnostics: {
+    if (!hardware_.groveDiagnosticsConfigured()) {
+      sendNack(command.id, "CONFIGURATION_REQUIRED");
+      return;
+    }
+    sendEvent(command.id, "COMMAND_RECEIVED");
+    sendEvent(command.id, "GROVE_DIAGNOSTICS_OK");
+    sendRawValue(command.id, "PIR_RAW", hardware_.grovePirRaw());
+    sendRawValue(command.id, "LIGHT_RAW", hardware_.groveLightRaw());
+    constexpr const char *kButtonLabels[] = {
+        "BUTTON_1A_RAW", "BUTTON_1B_RAW", "BUTTON_2A_RAW", "BUTTON_2B_RAW"};
+    for (std::uint8_t index = 0; index < 4; ++index) {
+      sendRawValue(command.id, kButtonLabels[index],
+                   hardware_.groveButtonRaw(index));
+    }
+    sendEvent(command.id, hardware_.groveDht20Present() ? "DHT20_PRESENT"
+                                                        : "DHT20_NOT_FOUND");
+    return;
+  }
   case CommandType::ledTest:
     if (ledTestActive_) {
       sendNack(command.id, "BUSY");
@@ -191,10 +241,15 @@ void ProtocolEngine::startMovement(const Command &command,
     hardware_.stopMovement();
     return;
   }
-  if (!hardware_.startMovement(nowMs)) {
+  const HardwareMovementStartResult movementStart =
+      hardware_.startMovement(nowMs);
+  if (movementStart != HardwareMovementStartResult::started) {
     controller_.cancelMovement();
     hardware_.stopMovement();
-    sendError(command.id, "SERVO_ATTACH_FAILED");
+    sendError(command.id,
+              movementStart == HardwareMovementStartResult::attachFailed
+                  ? "SERVO_ATTACH_FAILED"
+                  : "SERVO_WRITE_FAILED");
     return;
   }
   sendEvent(command.id, "MOVEMENT_STARTED");
@@ -205,6 +260,15 @@ bool ProtocolEngine::sendEvent(const char *id, const char *code) {
     return output_.writeLine(outputLine_);
   }
   return false;
+}
+
+bool ProtocolEngine::sendRawValue(const char *id, const char *label, int value) {
+  char code[32] = {};
+  const int written = std::snprintf(code, sizeof(code), "%s_%d", label, value);
+  if (written < 0 || static_cast<std::size_t>(written) >= sizeof(code)) {
+    return false;
+  }
+  return sendEvent(id, code);
 }
 
 void ProtocolEngine::sendNack(const char *id, const char *code) {

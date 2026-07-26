@@ -1,13 +1,13 @@
 # Controller Bench Runbook
 
 Use this sequence to verify the safe-default XIAO ESP32-C6 controller build
-before connecting the Expansion Board, SG90, or any Grove module. This runbook
+before connecting the Grove Base, Grove Servo, or any Grove module. This runbook
 does not authorize real medication testing.
 
 ## Preconditions
 
 - Use candy, beads, dry beans, vitamins, or fake pills only in later mechanical tests.
-- Disconnect the Expansion Board, servo, battery/JST, SWD, and every external wire.
+- Disconnect the Grove Base, servo, battery pads, and every external wire.
 - Confirm `firmware/include/hardware_config.local.h` does not exist.
 - Build `controller_baseline` for normal checks or `controller_debug` only when USB diagnostics are needed.
 - Stop immediately for heat, smell, repeated resets, malformed output, connection instability, or unexpected movement.
@@ -24,7 +24,7 @@ COMMAND_RECEIVED
 DEVICE_INFO_OK
 FIRMWARE_DOSEY_CONTROLLER
 PROTOCOL_D1
-BOARD_XIAO_ESP32_C6_EXPANSION
+BOARD_XIAO_ESP32_C6_GROVE_BASE
 BUILD_BASELINE
 ```
 
@@ -39,7 +39,7 @@ SERVO_DISABLED
 PIR_DISABLED
 I2C_DISABLED
 BUTTON_DISABLED
-UART_RESERVED_SERVO_D6_PROFILE
+GROVE_BASE_D8_SERVO_PROFILE
 ```
 
 Do not continue if any external path reports enabled in a committed build.

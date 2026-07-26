@@ -1,24 +1,38 @@
 #include <Arduino.h>
-#include <ESP32Servo.h>
 
+#include "arduino_servo_pwm.h"
 #include "controller_state.h"
 #include "hardware_config.h"
 #include "line_accumulator.h"
 #include "safety_limits.h"
+#include "servo_pwm_driver.h"
 
 namespace {
 
 enum class ServoPhase { idle, homeSettling, testSettling, returnSettling };
 
-Servo servo;
+dosey::hardware::ArduinoServoPwm servoPwm;
+dosey::hardware::ServoPwmDriver<dosey::hardware::ArduinoServoPwm> servo(
+    servoPwm);
 dosey::ControllerState controller;
 ServoPhase phase = ServoPhase::idle;
 std::uint32_t phaseDeadlineMs = 0;
 dosey::LineAccumulator serialInput;
 
-void stopServo() {
-  servo.detach();
+bool stopServo() {
+  const bool detached = servo.detach();
   phase = ServoPhase::idle;
+  return detached;
+}
+
+void failMovement(const char *errorCode) {
+  controller.cancelMovement();
+  const bool detached = stopServo();
+  Serial.print("ERROR ");
+  Serial.println(errorCode);
+  if (!detached) {
+    Serial.println("ERROR SERVO_DETACH_FAILED");
+  }
 }
 
 void startTest() {
@@ -29,16 +43,16 @@ void startTest() {
     return;
   }
 
-  servo.setPeriodHertz(50);
-  servo.attach(dosey::hardware::kServoPin, dosey::safety::kServoMinimumPulseUs,
-               dosey::safety::kServoMaximumPulseUs);
-  if (!servo.attached()) {
-    controller.cancelMovement();
-    stopServo();
-    Serial.println("ERROR SERVO_ATTACH_FAILED");
+  if (!servo.attach(dosey::hardware::kServoPin)) {
+    failMovement("SERVO_ATTACH_FAILED");
     return;
   }
-  servo.write(dosey::safety::kServoHomeDegrees);
+  if (!servo.writeDegrees(dosey::safety::kServoHomeDegrees,
+                          dosey::safety::kServoMinimumPulseUs,
+                          dosey::safety::kServoMaximumPulseUs)) {
+    failMovement("SERVO_WRITE_FAILED");
+    return;
+  }
   phase = ServoPhase::homeSettling;
   phaseDeadlineMs = millis() + dosey::safety::kServoStepSettleMs;
   Serial.println("MOVEMENT_STARTED");
@@ -53,8 +67,11 @@ void handleSerialInput() {
       input.trim();
       if (input == "CANCEL") {
         if (controller.cancelMovement() == dosey::MovementResult::cancelled) {
-          stopServo();
+          const bool detached = stopServo();
           Serial.println("MOVEMENT_CANCELLED_UNRESOLVED");
+          if (!detached) {
+            Serial.println("ERROR SERVO_DETACH_FAILED");
+          }
         } else {
           Serial.println("NACK NOT_MOVING");
         }
@@ -92,8 +109,11 @@ void loop() {
   handleSerialInput();
 
   if (controller.update(millis()) == dosey::MovementResult::timedOut) {
-    stopServo();
+    const bool detached = stopServo();
     Serial.println("ERROR MOVEMENT_TIMEOUT");
+    if (!detached) {
+      Serial.println("ERROR SERVO_DETACH_FAILED");
+    }
     return;
   }
 
@@ -103,15 +123,29 @@ void loop() {
   }
 
   if (phase == ServoPhase::homeSettling) {
-    servo.write(dosey::safety::kServoTestDegrees);
+    if (!servo.writeDegrees(dosey::safety::kServoTestDegrees,
+                            dosey::safety::kServoMinimumPulseUs,
+                            dosey::safety::kServoMaximumPulseUs)) {
+      failMovement("SERVO_WRITE_FAILED");
+      return;
+    }
     phase = ServoPhase::testSettling;
     phaseDeadlineMs = millis() + dosey::safety::kServoStepSettleMs;
   } else if (phase == ServoPhase::testSettling) {
-    servo.write(dosey::safety::kServoHomeDegrees);
+    if (!servo.writeDegrees(dosey::safety::kServoHomeDegrees,
+                            dosey::safety::kServoMinimumPulseUs,
+                            dosey::safety::kServoMaximumPulseUs)) {
+      failMovement("SERVO_WRITE_FAILED");
+      return;
+    }
     phase = ServoPhase::returnSettling;
     phaseDeadlineMs = millis() + dosey::safety::kServoStepSettleMs;
   } else {
-    stopServo();
+    if (!stopServo()) {
+      controller.cancelMovement();
+      Serial.println("ERROR SERVO_DETACH_FAILED");
+      return;
+    }
     controller.completeMovement();
     Serial.println("SERVO_DONE MOVEMENT_ONLY");
   }

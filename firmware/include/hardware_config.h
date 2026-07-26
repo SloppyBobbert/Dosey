@@ -28,6 +28,12 @@
 #ifndef DOSEY_PIR_PIN
 #define DOSEY_PIR_PIN -1
 #endif
+#ifndef DOSEY_PIR_WAKE_ENABLED
+#define DOSEY_PIR_WAKE_ENABLED 0
+#endif
+#ifndef DOSEY_PIR_ACTIVE_HIGH
+#define DOSEY_PIR_ACTIVE_HIGH 1
+#endif
 #ifndef DOSEY_ANALOG_INPUT_CONFIGURED
 #define DOSEY_ANALOG_INPUT_CONFIGURED 0
 #endif
@@ -42,6 +48,9 @@
 #endif
 #ifndef DOSEY_I2C_SCL_PIN
 #define DOSEY_I2C_SCL_PIN -1
+#endif
+#ifndef DOSEY_GROVE_DIAGNOSTICS_ENABLED
+#define DOSEY_GROVE_DIAGNOSTICS_ENABLED 0
 #endif
 #ifndef DOSEY_SERVO_ENABLED
 #define DOSEY_SERVO_ENABLED 0
@@ -78,6 +87,8 @@ inline constexpr bool kButtonUseInternalPullup =
 
 inline constexpr bool kPirConfigured = DOSEY_PIR_CONFIGURED;
 inline constexpr int kPirPin = DOSEY_PIR_PIN;
+inline constexpr bool kPirWakeEnabled = DOSEY_PIR_WAKE_ENABLED;
+inline constexpr bool kPirActiveHigh = DOSEY_PIR_ACTIVE_HIGH;
 
 inline constexpr bool kAnalogInputConfigured = DOSEY_ANALOG_INPUT_CONFIGURED;
 inline constexpr int kAnalogInputPin = DOSEY_ANALOG_INPUT_PIN;
@@ -85,6 +96,11 @@ inline constexpr int kAnalogInputPin = DOSEY_ANALOG_INPUT_PIN;
 inline constexpr bool kI2cConfigured = DOSEY_I2C_CONFIGURED;
 inline constexpr int kI2cSdaPin = DOSEY_I2C_SDA_PIN;
 inline constexpr int kI2cSclPin = DOSEY_I2C_SCL_PIN;
+
+// Enables a read-only snapshot of the fixed Grove Base input layout. Sensor
+// meaning stays unclassified until the physical active levels are observed.
+inline constexpr bool kGroveDiagnosticsEnabled =
+    DOSEY_GROVE_DIAGNOSTICS_ENABLED;
 
 inline constexpr bool kServoEnabled = DOSEY_SERVO_ENABLED;
 inline constexpr int kServoPin = DOSEY_SERVO_PIN;
@@ -96,6 +112,8 @@ static_assert(!kButtonConfigured || kButtonPin != kUnconfiguredPin,
               "Button input cannot be enabled without a verified pin");
 static_assert(!kPirConfigured || kPirPin != kUnconfiguredPin,
               "PIR input cannot be enabled without a verified pin");
+static_assert(!kPirWakeEnabled || kPirConfigured,
+              "PIR wake cannot be enabled before PIR input is configured");
 static_assert(!kAnalogInputConfigured || kAnalogInputPin != kUnconfiguredPin,
               "Analog input cannot be enabled without a verified pin");
 static_assert(!kI2cConfigured || (kI2cSdaPin != kUnconfiguredPin &&
@@ -132,10 +150,13 @@ static_assert(!enabledPinsConflict(kServoEnabled, kServoPin, kI2cConfigured,
 #undef DOSEY_BUTTON_USE_INTERNAL_PULLUP
 #undef DOSEY_PIR_CONFIGURED
 #undef DOSEY_PIR_PIN
+#undef DOSEY_PIR_WAKE_ENABLED
+#undef DOSEY_PIR_ACTIVE_HIGH
 #undef DOSEY_ANALOG_INPUT_CONFIGURED
 #undef DOSEY_ANALOG_INPUT_PIN
 #undef DOSEY_I2C_CONFIGURED
 #undef DOSEY_I2C_SDA_PIN
 #undef DOSEY_I2C_SCL_PIN
+#undef DOSEY_GROVE_DIAGNOSTICS_ENABLED
 #undef DOSEY_SERVO_ENABLED
 #undef DOSEY_SERVO_PIN

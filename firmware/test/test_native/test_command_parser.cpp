@@ -105,6 +105,16 @@ void test_parses_read_only_readiness_commands() {
   TEST_ASSERT_EQUAL(CommandType::safetyStatus, safetyStatus.command.type);
 }
 
+void test_parses_read_only_grove_diagnostics_command() {
+  const ParseResult result =
+      parseCommand("D1 CMD grove-1 GROVE_DIAGNOSTICS");
+
+  TEST_ASSERT_TRUE(result.ok);
+  TEST_ASSERT_EQUAL(CommandType::groveDiagnostics, result.command.type);
+  TEST_ASSERT_EQUAL_STRING("GROVE_DIAGNOSTICS",
+                           commandName(result.command.type));
+}
+
 void test_writes_event_line() {
   char line[kMaxProtocolLineLength + 1];
 
@@ -149,6 +159,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_recognizes_disabled_dispense_next);
   RUN_TEST(test_parses_debug_toggle_commands);
   RUN_TEST(test_parses_read_only_readiness_commands);
+  RUN_TEST(test_parses_read_only_grove_diagnostics_command);
   RUN_TEST(test_writes_event_line);
   RUN_TEST(test_writes_nack_line);
   RUN_TEST(test_writes_error_line);
