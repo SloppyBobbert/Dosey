@@ -3,11 +3,14 @@ import 'dart:async';
 import 'package:dosey_app/core/demo/demo_data_repository.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 typedef DemoDatabaseFactory = DoseyDatabase Function();
+typedef AppVersionResolver = Future<String> Function();
 typedef DemoModeBuilder =
     Widget Function(BuildContext context, DemoModeSession session);
 
@@ -28,11 +31,19 @@ class DemoModeController {
     required this.isDemo,
     required this.enter,
     required this.exit,
+    required this.completeGuidedTrial,
+    required this.productionSettings,
   });
 
   final bool isDemo;
   final Future<void> Function() enter;
   final Future<void> Function() exit;
+  final Future<void> Function() completeGuidedTrial;
+  final LocalAppSettingsRepository productionSettings;
+
+  bool get isGuidedTrial => isDemo;
+  Future<void> startGuidedTrial() => enter();
+  Future<void> exitGuidedTrial() => exit();
 }
 
 class DemoModeHost extends StatefulWidget {
@@ -43,6 +54,8 @@ class DemoModeHost extends StatefulWidget {
     this.productionClock,
     this.demoDatabaseFactory,
     this.devicePlatform,
+    this.appVersionResolver,
+    this.now,
   });
 
   final DemoModeBuilder builder;
@@ -50,6 +63,8 @@ class DemoModeHost extends StatefulWidget {
   final AppClock? productionClock;
   final DemoDatabaseFactory? demoDatabaseFactory;
   final AppDevicePlatform? devicePlatform;
+  final AppVersionResolver? appVersionResolver;
+  final DateTime Function()? now;
 
   static DemoModeController of(BuildContext context) {
     final host = context
@@ -79,6 +94,14 @@ class _DemoModeHostState extends State<DemoModeHost> {
   ControllableAppClock? _demoClock;
   bool _isDemo = false;
   bool _switching = false;
+
+  LocalAppSettingsRepository get _productionSettings =>
+      LocalAppSettingsRepository(
+        _productionDatabase,
+        defaultRole: AppDeviceRole.defaultFor(
+          widget.devicePlatform ?? currentAppDevicePlatform(),
+        ),
+      );
 
   @override
   void initState() {
@@ -123,6 +146,20 @@ class _DemoModeHostState extends State<DemoModeHost> {
     }
   }
 
+  Future<void> _completeGuidedTrial() async {
+    if (!_isDemo) return;
+    final version = await (widget.appVersionResolver ?? _resolveAppVersion)();
+    await _productionSettings.setGuidedTrialCompleted(
+      completedAt: (widget.now ?? DateTime.now)().toUtc(),
+      appVersion: version,
+    );
+  }
+
+  static Future<String> _resolveAppVersion() async {
+    final info = await PackageInfo.fromPlatform();
+    return '${info.version}+${info.buildNumber}';
+  }
+
   @override
   void dispose() {
     if (_ownsProductionClock && _productionClock is SystemAppClock) {
@@ -158,19 +195,21 @@ class _DemoModeHostState extends State<DemoModeHost> {
           isDemo: _isDemo,
           enter: _enter,
           exit: _exit,
+          completeGuidedTrial: _completeGuidedTrial,
+          productionSettings: _productionSettings,
         ),
         child: Column(
           children: [
             if (_isDemo)
               Semantics(
                 container: true,
-                label: 'Fake demo data is active',
+                label: 'Guided trial fake data is active',
                 child: Container(
                   width: double.infinity,
                   color: const Color(0xFFFFD54F),
                   padding: const EdgeInsets.symmetric(vertical: 5),
                   child: const Text(
-                    'FAKE DATA',
+                    'GUIDED TRIAL - FAKE DATA',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Color(0xFF3E2723),

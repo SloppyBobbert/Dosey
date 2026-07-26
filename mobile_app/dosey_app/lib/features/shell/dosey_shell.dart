@@ -434,6 +434,14 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
         ),
       ),
       const PopupMenuItem(
+        value: _SettingsMenuAction.openSection(SettingsSection.guidedTrial),
+        child: ListTile(
+          leading: Icon(Icons.fact_check_outlined),
+          title: Text('Guided Trial Run'),
+          contentPadding: EdgeInsets.zero,
+        ),
+      ),
+      const PopupMenuItem(
         value: _SettingsMenuAction.openSection(SettingsSection.setup),
         child: ListTile(
           leading: Icon(Icons.restart_alt),

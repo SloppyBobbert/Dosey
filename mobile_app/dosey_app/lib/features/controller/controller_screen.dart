@@ -2,12 +2,13 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
-import 'package:dosey_app/core/demo/demo_scenario.dart';
 import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/controller/controller_diagnostics_card.dart';
+import 'package:dosey_app/features/guided_trial/guided_trial.dart';
+import 'package:dosey_app/features/guided_trial/guided_trial_screen.dart';
 import 'package:flutter/material.dart';
 
 class ControllerScreen extends StatelessWidget {
@@ -28,6 +29,13 @@ class ControllerScreen extends StatelessWidget {
         final role = storedRole != null && storedRole.isAllowedOn(platform)
             ? storedRole
             : fallbackRole;
+        if (dependencies.isDemo && dependencies.demoScenarios != null) {
+          return _ActiveGuidedTrialScreen(
+            scenarios: dependencies.demoScenarios!,
+            completeTrial: demoMode?.completeGuidedTrial ?? () async {},
+            exitTrial: demoMode?.exitGuidedTrial ?? () async {},
+          );
+        }
         return StreamBuilder<ControllerSnapshot>(
           stream: dependencies.controller.watchController(),
           builder: (context, controllerSnapshot) {
@@ -41,17 +49,6 @@ class ControllerScreen extends StatelessWidget {
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
               children: [
-                if (dependencies.isDemo &&
-                    dependencies.demoScenarios != null) ...[
-                  _DemoScenarioCard(
-                    scenarios: dependencies.demoScenarios!,
-                    canPresent: role.canHostRobot,
-                    onExit: demoMode?.exit,
-                    runAction: (action) =>
-                        _runControllerAction(context, action),
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 _ControllerHeroCard(
                   controller: controller,
                   role: role,
@@ -75,17 +72,6 @@ class ControllerScreen extends StatelessWidget {
                   },
                 ),
                 const SizedBox(height: 12),
-                if (dependencies.isDemo) ...[
-                  _ControllerBenchCard(
-                    canRunSupervisedAction: canDispense,
-                    runCommand: (command) => _runControllerAction(
-                      context,
-                      () => dependencies.controllerBench.run(command),
-                      requiresPin: _isSupervisedBenchCommand(command),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -141,9 +127,11 @@ class ControllerScreen extends StatelessWidget {
                 ),
                 if (!dependencies.isDemo && demoMode != null) ...[
                   const SizedBox(height: 12),
-                  _EnterDemoCard(
-                    onEnter: () =>
-                        _runControllerAction(context, demoMode.enter),
+                  _GuidedTrialEntryCard(
+                    onEnter: () => _runControllerAction(
+                      context,
+                      demoMode.startGuidedTrial,
+                    ),
                   ),
                 ],
                 if (!dependencies.isDemo) ...[
@@ -191,8 +179,8 @@ class ControllerScreen extends StatelessWidget {
   }
 }
 
-class _EnterDemoCard extends StatelessWidget {
-  const _EnterDemoCard({required this.onEnter});
+class _GuidedTrialEntryCard extends StatelessWidget {
+  const _GuidedTrialEntryCard({required this.onEnter});
 
   final VoidCallback onEnter;
 
@@ -205,18 +193,18 @@ class _EnterDemoCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Deterministic demo',
+              'Guided Trial Run',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             const Text(
-              'Run fake controller and dose scenarios in a separate database. Your real local data is not changed.',
+              'Practice the complete dose flow with fake medication and a simulated controller. Your real data will not change.',
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: onEnter,
-              icon: const Icon(Icons.science_outlined),
-              label: const Text('Enter demo mode'),
+              icon: const Icon(Icons.fact_check_outlined),
+              label: const Text('Start guided trial'),
             ),
           ],
         ),
@@ -225,121 +213,45 @@ class _EnterDemoCard extends StatelessWidget {
   }
 }
 
-class _DemoScenarioCard extends StatelessWidget {
-  const _DemoScenarioCard({
+class _ActiveGuidedTrialScreen extends StatefulWidget {
+  const _ActiveGuidedTrialScreen({
     required this.scenarios,
-    required this.canPresent,
-    required this.onExit,
-    required this.runAction,
+    required this.completeTrial,
+    required this.exitTrial,
   });
 
   final DemoScenarioService scenarios;
-  final bool canPresent;
-  final Future<void> Function(Future<void> Function() action) runAction;
-  final Future<void> Function()? onExit;
+  final Future<void> Function() completeTrial;
+  final Future<void> Function() exitTrial;
+
+  @override
+  State<_ActiveGuidedTrialScreen> createState() =>
+      _ActiveGuidedTrialScreenState();
+}
+
+class _ActiveGuidedTrialScreenState extends State<_ActiveGuidedTrialScreen> {
+  late final GuidedTrialController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = GuidedTrialController(
+      scenarios: DemoGuidedTrialScenarioRunner(widget.scenarios),
+      completeTrial: widget.completeTrial,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<DemoScenarioState>(
-      stream: scenarios.states,
-      initialData: scenarios.state,
-      builder: (context, snapshot) {
-        final state = snapshot.requireData;
-        return Card(
-          color: Theme.of(context).colorScheme.tertiaryContainer,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Demo scenario runner',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 4),
-                Text(state.scenario.description),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<DemoScenarioId>(
-                  initialValue: state.scenario.id,
-                  decoration: const InputDecoration(labelText: 'Scenario'),
-                  items: [
-                    for (final scenario in demoScenarioCatalog)
-                      DropdownMenuItem(
-                        value: scenario.id,
-                        child: Text(scenario.title),
-                      ),
-                  ],
-                  onChanged: state.isPlaying
-                      ? null
-                      : (id) {
-                          if (id != null) {
-                            runAction(() => scenarios.select(id));
-                          }
-                        },
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  '${state.completedSteps} of ${state.scenario.steps.length} steps complete',
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  state.nextStep == null
-                      ? 'Scenario complete'
-                      : 'Next: ${state.nextStep!.label}',
-                ),
-                if (state.lastMessage != null) ...[
-                  const SizedBox(height: 4),
-                  Text(state.lastMessage!),
-                ],
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (canPresent)
-                      FilledButton.icon(
-                        onPressed: state.isPlaying
-                            ? null
-                            : () => runAction(scenarios.startPresentation),
-                        icon: const Icon(Icons.present_to_all_outlined),
-                        label: const Text('Start presentation'),
-                      ),
-                    FilledButton.icon(
-                      onPressed: state.isPlaying || state.isComplete
-                          ? null
-                          : () => runAction(scenarios.next),
-                      icon: const Icon(Icons.skip_next_outlined),
-                      label: const Text('Next step'),
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed: state.isComplete
-                          ? null
-                          : state.isPlaying
-                          ? scenarios.pause
-                          : () => runAction(scenarios.play),
-                      icon: Icon(
-                        state.isPlaying ? Icons.pause : Icons.play_arrow,
-                      ),
-                      label: Text(state.isPlaying ? 'Pause' : 'Auto-play'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => runAction(scenarios.restart),
-                      icon: const Icon(Icons.restart_alt),
-                      label: const Text('Restart'),
-                    ),
-                    if (onExit != null)
-                      OutlinedButton.icon(
-                        onPressed: () => runAction(onExit!),
-                        icon: const Icon(Icons.exit_to_app),
-                        label: const Text('Exit demo mode'),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+    return GuidedTrialScreen(
+      controller: _controller,
+      exitTrial: widget.exitTrial,
     );
   }
 }

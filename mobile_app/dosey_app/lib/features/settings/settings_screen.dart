@@ -6,10 +6,12 @@ import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/backup/local_backup_service.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
 import 'package:dosey_app/core/household/household_account_state.dart';
+import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
@@ -28,6 +30,7 @@ enum SettingsSection {
   notifications,
   safety,
   helpAbout,
+  guidedTrial,
   setup,
 }
 
@@ -118,7 +121,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection.notifications => 1660,
       SettingsSection.safety => 1840,
       SettingsSection.helpAbout => 2020,
-      SettingsSection.setup => 2220,
+      SettingsSection.guidedTrial => 2220,
+      SettingsSection.setup => 2440,
     };
   }
 
@@ -223,6 +227,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 _HelpAboutCard(key: _sectionKeys[SettingsSection.helpAbout]),
                 const SizedBox(height: 12),
+                _GuidedTrialSettingsCard(
+                  key: _sectionKeys[SettingsSection.guidedTrial],
+                  completion: dependencies.settings.getGuidedTrialCompletion(),
+                  onStart: DemoModeHost.maybeOf(context)?.startGuidedTrial,
+                ),
+                const SizedBox(height: 12),
                 _SettingsSectionCard(
                   key: _sectionKeys[SettingsSection.setup],
                   icon: Icons.restart_alt,
@@ -297,6 +307,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text('Setup reset failed: $error')));
     }
+  }
+}
+
+class _GuidedTrialSettingsCard extends StatelessWidget {
+  const _GuidedTrialSettingsCard({
+    super.key,
+    required this.completion,
+    required this.onStart,
+  });
+
+  final Future<GuidedTrialCompletion?> completion;
+  final Future<void> Function()? onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsSectionCard(
+      icon: Icons.fact_check_outlined,
+      title: 'Guided Trial Run',
+      children: [
+        const Text(
+          'Practice reminders, simulated dispensing, dose confirmation, missed-dose handling, and reconnect recovery. Real medication data is not changed.',
+        ),
+        const SizedBox(height: 8),
+        FutureBuilder<GuidedTrialCompletion?>(
+          future: completion,
+          builder: (context, snapshot) {
+            final value = snapshot.data;
+            if (snapshot.connectionState != ConnectionState.done) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Checking trial status...'),
+                  const SizedBox(height: 12),
+                  FilledButton.tonalIcon(
+                    onPressed: null,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Start guided trial'),
+                  ),
+                ],
+              );
+            }
+            final status = value == null
+                ? 'Not completed yet'
+                : 'Last completed ${value.completedAt.toUtc().toIso8601String().split('T').first} UTC with app ${value.appVersion}';
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(status),
+                const SizedBox(height: 12),
+                FilledButton.tonalIcon(
+                  onPressed: onStart,
+                  icon: const Icon(Icons.play_arrow),
+                  label: Text(
+                    value == null
+                        ? 'Start guided trial'
+                        : 'Run guided trial again',
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ],
+    );
   }
 }
 

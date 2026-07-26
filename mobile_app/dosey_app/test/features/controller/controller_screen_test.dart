@@ -306,7 +306,7 @@ void main() {
     expect(session!.commandType, ControllerCommandType.debugOn);
   });
 
-  testWidgets('enters and exits isolated demo mode from Controller', (
+  testWidgets('enters and exits isolated guided trial from Controller', (
     WidgetTester tester,
   ) async {
     final production = DoseyDatabase.inMemory();
@@ -329,26 +329,26 @@ void main() {
 
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pumpAndSettle();
-    expect(find.text('Enter demo mode'), findsOneWidget);
-    await tester.tap(find.text('Enter demo mode'));
+    expect(find.text('Start guided trial'), findsOneWidget);
+    await tester.tap(find.text('Start guided trial'));
     await tester.pumpAndSettle();
 
-    expect(find.text('FAKE DATA'), findsOneWidget);
-    expect(find.text('Demo scenario runner'), findsOneWidget);
-    expect(find.text('Exit demo mode'), findsOneWidget);
+    expect(find.text('GUIDED TRIAL - FAKE DATA'), findsOneWidget);
+    expect(find.text('Guided Trial Run'), findsOneWidget);
+    expect(find.text('Exit trial'), findsOneWidget);
+    expect(find.text('Bench commands'), findsNothing);
+    expect(find.text('Manual dispense test'), findsNothing);
 
-    await tester.ensureVisible(find.text('Exit demo mode'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Exit demo mode'));
+    await tester.tap(find.text('Exit trial'));
     await tester.pumpAndSettle();
 
-    expect(find.text('FAKE DATA'), findsNothing);
+    expect(find.text('GUIDED TRIAL - FAKE DATA'), findsNothing);
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pumpAndSettle();
-    expect(find.text('Enter demo mode'), findsOneWidget);
+    expect(find.text('Start guided trial'), findsOneWidget);
   });
 
-  testWidgets('steps a scenario and records bench command history', (
+  testWidgets('guided trial advances without exposing developer controls', (
     WidgetTester tester,
   ) async {
     final production = DoseyDatabase.inMemory();
@@ -370,28 +370,17 @@ void main() {
     await tester.pumpAndSettle();
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Enter demo mode'));
+    await tester.tap(find.text('Start guided trial'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Next: Dose approaching'), findsOneWidget);
+    expect(find.text('Step 1 of 16'), findsOneWidget);
     await tester.tap(find.text('Next step'));
     await tester.pumpAndSettle();
-    expect(find.text('1 of 8 steps complete'), findsOneWidget);
-    expect(find.text('Next: Dose ready'), findsOneWidget);
-
-    await tester.drag(find.byType(ListView), const Offset(0, -500));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('STATUS'));
-    await tester.pumpAndSettle();
-
-    await tester.fling(find.byType(ListView), const Offset(0, -1000), 1000);
-    await tester.pumpAndSettle();
-    expect(find.text('Command history'), findsOneWidget);
-    expect(find.text('STATUS'), findsWidgets);
-    await tester.tap(find.widgetWithText(ExpansionTile, 'STATUS'));
-    await tester.pumpAndSettle();
-    expect(find.text('ACK'), findsOneWidget);
-    expect(find.text('Simulator connected'), findsOneWidget);
+    expect(find.text('Step 2 of 16'), findsOneWidget);
+    expect(find.text('Demo scenario runner'), findsNothing);
+    expect(find.text('Auto-play'), findsNothing);
+    expect(find.text('Start presentation'), findsNothing);
+    expect(find.text('Bench commands'), findsNothing);
   });
 
   testWidgets('iOS demo does not offer Robot Face presentation', (
@@ -410,7 +399,7 @@ void main() {
       await tester.pumpWidget(_TestControllerApp(database: database));
       await tester.pumpAndSettle();
 
-      expect(find.text('Demo scenario runner'), findsOneWidget);
+      expect(find.text('Guided Trial Run'), findsOneWidget);
       expect(find.text('Start presentation'), findsNothing);
     } finally {
       debugDefaultTargetPlatformOverride = null;
