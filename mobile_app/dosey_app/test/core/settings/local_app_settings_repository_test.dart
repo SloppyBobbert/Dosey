@@ -51,6 +51,23 @@ void main() {
     expect(await repository.getGuidedTrialCompletion(), isNull);
   });
 
+  test('guided trial completion rejects a blank app version', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    expect(
+      () => repository.setGuidedTrialCompleted(
+        completedAt: DateTime.utc(2026, 7, 26),
+        appVersion: '   ',
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('local app settings persist safety acknowledgement', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);

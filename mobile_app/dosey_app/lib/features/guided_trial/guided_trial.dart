@@ -91,6 +91,7 @@ class GuidedTrialController extends ChangeNotifier {
 
   final GuidedTrialScenarioRunner _scenarios;
   final Future<void> Function() _completeTrial;
+  bool _isDisposed = false;
   GuidedTrialState _state = const GuidedTrialState(
     step: GuidedTrialStep.introduction,
   );
@@ -98,7 +99,12 @@ class GuidedTrialController extends ChangeNotifier {
   GuidedTrialState get state => _state;
 
   Future<void> next() async {
-    if (_state.isRunning || _state.isPaused || _state.isComplete) return;
+    if (_isDisposed ||
+        _state.isRunning ||
+        _state.isPaused ||
+        _state.isComplete) {
+      return;
+    }
     _setState(_state.copyWith(isRunning: true, clearFailure: true));
     try {
       await _runCurrentStep();
@@ -115,17 +121,18 @@ class GuidedTrialController extends ChangeNotifier {
   Future<void> retry() => next();
 
   void pause() {
-    if (_state.isRunning || _state.isComplete) return;
+    if (_isDisposed || _state.isRunning || _state.isComplete) return;
     _scenarios.pause();
     _setState(_state.copyWith(isPaused: true));
   }
 
   void resume() {
-    if (!_state.isPaused) return;
+    if (_isDisposed || !_state.isPaused) return;
     _setState(_state.copyWith(isPaused: false));
   }
 
   Future<void> restart() async {
+    if (_isDisposed || _state.isRunning) return;
     _scenarios.pause();
     await _scenarios.restart();
     _setState(const GuidedTrialState(step: GuidedTrialStep.introduction));
@@ -165,8 +172,15 @@ class GuidedTrialController extends ChangeNotifier {
   }
 
   void _setState(GuidedTrialState state) {
+    if (_isDisposed) return;
     _state = state;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    super.dispose();
   }
 }
 

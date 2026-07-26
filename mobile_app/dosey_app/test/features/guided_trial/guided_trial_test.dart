@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dosey_app/core/demo/demo_scenario.dart';
 import 'package:dosey_app/features/guided_trial/guided_trial.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,15 +74,46 @@ void main() {
     await controller.next();
     expect(controller.state.step, GuidedTrialStep.reminderPreview);
   });
+
+  test('restart does nothing while a step is running', () async {
+    await controller.next();
+    scenarios.blockNext();
+    final pendingNext = controller.next();
+
+    await controller.restart();
+
+    expect(scenarios.restartCalls, 0);
+    scenarios.releaseNext();
+    await pendingNext;
+    expect(controller.state.step, GuidedTrialStep.doseReady);
+  });
+
+  test('async completion does not update state after disposal', () async {
+    await controller.next();
+    scenarios.blockNext();
+    final pendingNext = controller.next();
+
+    controller.dispose();
+    scenarios.releaseNext();
+
+    await expectLater(pendingNext, completes);
+  });
 }
 
 class _FakeScenarioRunner implements GuidedTrialScenarioRunner {
   final selected = <DemoScenarioId>[];
   Object? failure;
   int restartCalls = 0;
+  Completer<void>? _nextCompleter;
+
+  void blockNext() => _nextCompleter = Completer<void>();
+
+  void releaseNext() => _nextCompleter?.complete();
 
   @override
   Future<void> next() async {
+    await _nextCompleter?.future;
+    _nextCompleter = null;
     final error = failure;
     if (error != null) throw error;
   }

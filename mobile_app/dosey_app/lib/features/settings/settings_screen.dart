@@ -229,7 +229,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 _GuidedTrialSettingsCard(
                   key: _sectionKeys[SettingsSection.guidedTrial],
-                  completion: dependencies.settings.getGuidedTrialCompletion(),
+                  completion:
+                      (DemoModeHost.maybeOf(context)?.productionSettings ??
+                              dependencies.settings)
+                          .getGuidedTrialCompletion(),
                   onStart: DemoModeHost.maybeOf(context)?.startGuidedTrial,
                 ),
                 const SizedBox(height: 12),
