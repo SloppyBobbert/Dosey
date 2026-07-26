@@ -42,7 +42,7 @@ The project is intended to explore whether an inexpensive, expressive, and repai
 | Personal app | Flutter app for Android and iOS personal phones |
 | Controller | Seeed Studio XIAO ESP32-C6 controller |
 | Expansion hardware | Seeed Studio Grove Base for XIAO with battery management, SKU 103020312 |
-| Mechanism | Grove Servo pusher with a ratchet or physical stop; Grove-socket compatibility is accepted from prior loaded movement, but repeatability remains unverified |
+| Mechanism | Grove Servo pusher with a ratchet or physical stop; prior movement from a different 3.3 V Grove board is preliminary evidence only, and the final Grove Base `D8/A8` path remains unverified |
 | Shell | Fully LEGO body around the carousel, phone, electronics, cup opening, and service panels |
 | App data | Drift/SQLite on the phone only; no backend or cloud sync yet |
 | App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus a face-first mounted experience in Android Robot Mode |
@@ -83,7 +83,7 @@ Dosey is built around four main systems:
    - The confirmed controller is the Seeed Studio XIAO ESP32-C6.
    - The current base is the [Seeed Studio Grove Base for XIAO with battery management](https://www.seeedstudio.com/Grove-Shield-for-Seeeduino-XIAO-p-4621.html), SKU `103020312`. Keep the XIAO Expansion Board as fallback hardware rather than combining the boards.
    - The selected layout uses Mini PIR on `D0/A0`, Light Sensor on `D1/A1`, Active Buzzer on `D2/A2`, DHT20 on one I2C socket, a Grove Servo on `D8/A8`, and Dual Button modules on UART and `D9/A9`. The second I2C socket stays reserved.
-   - The Grove Servo previously moved the carousel from the Expansion Board's 3.3 V `A0-D0` Grove socket. The project accepts that result as sufficient compatibility evidence for the Grove Base's 3.3 V sockets; repeated one-slot movement, resets, disconnects, and heat still require observation on the final rig.
+    - The Grove Servo previously moved the carousel from the Expansion Board's 3.3 V `A0-D0` Grove socket. That is preliminary cross-board evidence only, not validation of the Grove Base's `D8/A8` path. Power behavior, repeated one-slot movement, resets, disconnects, and heat still require observation on the final rig.
 
 4. **LEGO shell**
    - The shell direction is now fully LEGO, not a temporary placeholder before 3D printing.
@@ -204,7 +204,7 @@ The first mechanism to build is a servo pusher for the Daviky carousel:
 4. The servo returns to its starting position.
 5. The next preloaded dose aligns with the Daviky chute and cup.
 
-The Grove Servo previously moved the actual carousel from a 3.3 V Grove socket, and that result is accepted for the Grove Base selection. The next work is repeatable Grove Base movement testing, mounting, indexing, rollback prevention, and cup/chute alignment. Keep the LEGO shell serviceable and do not hide the mechanism before the one-slot movement test passes repeatedly.
+The Grove Servo previously moved the actual carousel from a 3.3 V socket on a different Grove board. Treat that as preliminary evidence only: the Grove Base `D8/A8` power and signal path still requires final-rig testing. The next work is repeatable Grove Base movement testing, mounting, indexing, rollback prevention, and cup/chute alignment. Keep the LEGO shell serviceable and do not hide the mechanism before the one-slot movement test passes repeatedly.
 
 ## Project status
 

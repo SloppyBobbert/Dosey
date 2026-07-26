@@ -64,9 +64,13 @@ class ControllerHealthSupervisor
     final eventDelegate = _delegate is ControllerEventGateway
         ? _delegate as ControllerEventGateway
         : null;
-    _delegateEventSubscription = eventDelegate?.watchControllerEvents().listen(
-      _controllerEvents.add,
-    );
+    _delegateEventSubscription = eventDelegate?.watchControllerEvents().listen((
+      event,
+    ) {
+      if (_eligible && !_closed) {
+        _controllerEvents.add(event);
+      }
+    });
   }
 
   final StagedControllerGateway _delegate;

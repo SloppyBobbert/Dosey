@@ -244,6 +244,7 @@ void main() {
       database,
       defaultRole: AppDeviceRole.androidPersonal,
     ).setActionPin('1234');
+    final repository = LocalControllerCommandRepository(database);
 
     await tester.pumpWidget(_TestControllerApp(database: database));
     await tester.pumpAndSettle();
@@ -260,6 +261,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Enter Action PIN'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    final session = await repository.getLatestRelevantSession();
+    expect(session, isNotNull);
+    expect(session!.commandType, ControllerCommandType.ledTest);
   });
 
   testWidgets('bench debug toggle requires action PIN when enabled', (
@@ -272,6 +280,7 @@ void main() {
       database,
       defaultRole: AppDeviceRole.androidPersonal,
     ).setActionPin('1234');
+    final repository = LocalControllerCommandRepository(database);
 
     await tester.pumpWidget(_TestControllerApp(database: database));
     await tester.pumpAndSettle();
@@ -288,6 +297,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Enter Action PIN'), findsOneWidget);
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    final session = await repository.getLatestRelevantSession();
+    expect(session, isNotNull);
+    expect(session!.commandType, ControllerCommandType.debugOn);
   });
 
   testWidgets('enters and exits isolated demo mode from Controller', (

@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 
 #include "debug_config.h"
 #include "firmware_identity.h"
@@ -161,7 +162,7 @@ void ProtocolEngine::handleCommand(const Command &command,
     sendRawValue(command.id, "LIGHT_RAW", hardware_.groveLightRaw());
     constexpr const char *kButtonLabels[] = {
         "BUTTON_1A_RAW", "BUTTON_1B_RAW", "BUTTON_2A_RAW", "BUTTON_2B_RAW"};
-    for (std::uint8_t index = 0; index < 4; ++index) {
+    for (std::uint8_t index = 0; index < std::size(kButtonLabels); ++index) {
       sendRawValue(command.id, kButtonLabels[index],
                    hardware_.groveButtonRaw(index));
     }

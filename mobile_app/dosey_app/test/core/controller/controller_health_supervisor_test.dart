@@ -527,6 +527,7 @@ void main() {
     final delegate = _FakeControllerGateway();
     final harness = _Harness(delegate);
     addTearDown(harness.close);
+    await harness.supervisor.setMonitoringEligible(true);
     final event = expectLater(
       harness.supervisor.watchControllerEvents(),
       emits(ControllerEvent.wakeFace),
@@ -536,6 +537,27 @@ void main() {
 
     await event;
   });
+
+  test(
+    'drops spontaneous controller events while monitoring is ineligible',
+    () async {
+      final delegate = _FakeControllerGateway();
+      final harness = _Harness(delegate);
+      addTearDown(harness.close);
+      await harness.supervisor.setMonitoringEligible(true);
+      final events = <ControllerEvent>[];
+      final subscription = harness.supervisor.watchControllerEvents().listen(
+        events.add,
+      );
+      addTearDown(subscription.cancel);
+
+      await harness.supervisor.setMonitoringEligible(false);
+      delegate.emitEvent(ControllerEvent.wakeFace);
+      await _flushEvents();
+
+      expect(events, isEmpty);
+    },
+  );
 
   test('forwards typed diagnostics reports from its delegate', () async {
     final delegate = _FakeControllerGateway();

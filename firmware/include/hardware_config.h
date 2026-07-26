@@ -2,6 +2,8 @@
 
 #include <cstddef>
 
+#include "grove_base_pins.h"
+
 #if __has_include("hardware_config.local.h")
 #include "hardware_config.local.h"
 #endif
@@ -130,9 +132,17 @@ inline constexpr EnabledPin kExternalSignalPins[] = {
     {kButtonConfigured, kButtonPin},
     {kPirConfigured, kPirPin},
     {kAnalogInputConfigured, kAnalogInputPin},
-    {kI2cConfigured, kI2cSdaPin},
-    {kI2cConfigured, kI2cSclPin},
+    {kI2cConfigured && !kGroveDiagnosticsEnabled, kI2cSdaPin},
+    {kI2cConfigured && !kGroveDiagnosticsEnabled, kI2cSclPin},
     {kServoEnabled, kServoPin},
+    {kGroveDiagnosticsEnabled, grove_base::kMiniPirPin},
+    {kGroveDiagnosticsEnabled, grove_base::kLightSensorPin},
+    {kGroveDiagnosticsEnabled, grove_base::kFirstButtonFirstPin},
+    {kGroveDiagnosticsEnabled, grove_base::kFirstButtonSecondPin},
+    {kGroveDiagnosticsEnabled, grove_base::kSecondButtonFirstPin},
+    {kGroveDiagnosticsEnabled, grove_base::kSecondButtonSecondPin},
+    {kGroveDiagnosticsEnabled, grove_base::kI2cSdaPin},
+    {kGroveDiagnosticsEnabled, grove_base::kI2cSclPin},
 };
 
 static_assert(!kDigitalOutputConfigured ||
@@ -149,6 +159,10 @@ static_assert(!kAnalogInputConfigured || kAnalogInputPin != kUnconfiguredPin,
 static_assert(!kI2cConfigured || (kI2cSdaPin != kUnconfiguredPin &&
                                   kI2cSclPin != kUnconfiguredPin),
               "I2C cannot be enabled without verified SDA and SCL pins");
+static_assert(!kGroveDiagnosticsEnabled || !kI2cConfigured ||
+                  (kI2cSdaPin == grove_base::kI2cSdaPin &&
+                   kI2cSclPin == grove_base::kI2cSclPin),
+              "Configured I2C must use the Grove diagnostics bus pins");
 static_assert(!kServoEnabled || kServoPin != kUnconfiguredPin,
               "Servo cannot be enabled without a verified pin");
 static_assert(enabledPinsAreUnique(kExternalSignalPins),

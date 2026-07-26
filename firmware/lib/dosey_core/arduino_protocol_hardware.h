@@ -4,6 +4,7 @@
 #include <Wire.h>
 
 #include <cstdint>
+#include <iterator>
 
 #include "arduino_servo_pwm.h"
 #include "grove_base_pins.h"
@@ -80,7 +81,7 @@ public:
     if constexpr (!hardware::kGroveDiagnosticsEnabled) {
       return 0;
     }
-    if (index >= 4) {
+    if (index >= std::size(hardware::grove_base::kDiagnosticButtonPins)) {
       return 0;
     }
     return digitalRead(hardware::grove_base::kDiagnosticButtonPins[index]);

@@ -2,6 +2,8 @@
 
 #include <unity.h>
 
+#include <iterator>
+
 #include "grove_base_pins.h"
 #include "hardware_config.h"
 #include "servo_pwm_driver.h"
@@ -140,23 +142,48 @@ void test_all_enabled_paths_must_have_unique_signal_pins() {
       dosey::hardware::enabledPinsAreUnique(conflictingNonServoPins));
 }
 
+void test_grove_diagnostics_reserve_fixed_signal_pins() {
+  const auto hasEnabledPin = [](int pin) {
+    for (const auto &entry : dosey::hardware::kExternalSignalPins) {
+      if (entry.enabled && entry.pin == pin) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  TEST_ASSERT_EQUAL(15, std::size(dosey::hardware::kExternalSignalPins));
+  TEST_ASSERT_TRUE(
+      hasEnabledPin(dosey::hardware::grove_base::kMiniPirPin));
+  TEST_ASSERT_TRUE(
+      hasEnabledPin(dosey::hardware::grove_base::kLightSensorPin));
+  for (const int pin : dosey::hardware::grove_base::kDiagnosticButtonPins) {
+    TEST_ASSERT_TRUE(hasEnabledPin(pin));
+  }
+  TEST_ASSERT_TRUE(hasEnabledPin(dosey::hardware::grove_base::kI2cSdaPin));
+  TEST_ASSERT_TRUE(hasEnabledPin(dosey::hardware::grove_base::kI2cSclPin));
+}
+
 void test_compile_time_overrides_populate_hardware_configuration() {
   TEST_ASSERT_TRUE(dosey::hardware::kDigitalOutputConfigured);
-  TEST_ASSERT_EQUAL(1, dosey::hardware::kDigitalOutputPin);
+  TEST_ASSERT_EQUAL(2, dosey::hardware::kDigitalOutputPin);
   TEST_ASSERT_TRUE(dosey::hardware::kButtonConfigured);
-  TEST_ASSERT_EQUAL(2, dosey::hardware::kButtonPin);
+  TEST_ASSERT_EQUAL(3, dosey::hardware::kButtonPin);
   TEST_ASSERT_TRUE(dosey::hardware::kPirConfigured);
-  TEST_ASSERT_EQUAL(3, dosey::hardware::kPirPin);
+  TEST_ASSERT_EQUAL(4, dosey::hardware::kPirPin);
   TEST_ASSERT_TRUE(dosey::hardware::kPirWakeEnabled);
   TEST_ASSERT_FALSE(dosey::hardware::kPirActiveHigh);
   TEST_ASSERT_TRUE(dosey::hardware::kAnalogInputConfigured);
-  TEST_ASSERT_EQUAL(4, dosey::hardware::kAnalogInputPin);
+  TEST_ASSERT_EQUAL(5, dosey::hardware::kAnalogInputPin);
   TEST_ASSERT_TRUE(dosey::hardware::kI2cConfigured);
-  TEST_ASSERT_EQUAL(5, dosey::hardware::kI2cSdaPin);
-  TEST_ASSERT_EQUAL(6, dosey::hardware::kI2cSclPin);
+  TEST_ASSERT_EQUAL(dosey::hardware::grove_base::kI2cSdaPin,
+                    dosey::hardware::kI2cSdaPin);
+  TEST_ASSERT_EQUAL(dosey::hardware::grove_base::kI2cSclPin,
+                    dosey::hardware::kI2cSclPin);
   TEST_ASSERT_TRUE(dosey::hardware::kGroveDiagnosticsEnabled);
   TEST_ASSERT_TRUE(dosey::hardware::kServoEnabled);
-  TEST_ASSERT_EQUAL(7, dosey::hardware::kServoPin);
+  TEST_ASSERT_EQUAL(dosey::hardware::grove_base::kServoPin,
+                    dosey::hardware::kServoPin);
 }
 #endif
 
@@ -191,6 +218,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_grove_base_profile_matches_selected_hardware_layout);
   RUN_TEST(test_enabled_paths_detect_shared_signal_pins);
   RUN_TEST(test_all_enabled_paths_must_have_unique_signal_pins);
+  RUN_TEST(test_grove_diagnostics_reserve_fixed_signal_pins);
   RUN_TEST(test_compile_time_overrides_populate_hardware_configuration);
 #else
   RUN_TEST(test_external_hardware_defaults_remain_disabled);

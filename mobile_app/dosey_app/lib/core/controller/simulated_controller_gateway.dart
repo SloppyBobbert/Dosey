@@ -194,7 +194,7 @@ class SimulatedControllerGateway
         'BUTTON_2A_RAW_0',
         'BUTTON_2B_RAW_0',
         'DHT20_PRESENT',
-        'PIR_WAKE_ENABLED',
+        'PIR_WAKE_DISABLED',
         'SERVO_ENABLED',
         'MOVEMENT_IDLE',
       ],

@@ -55,6 +55,7 @@ void main() {
     final healthy = await gateway.readControllerDiagnostics();
     expect(healthy.reading('dht20Presence')?.value, 'Detected');
     expect(healthy.reading('movement')?.value, 'Idle');
+    expect(healthy.reading('pirWake')?.value, 'Disabled');
 
     gateway.queueNextDiagnosticsScenario(
       SimulatedDiagnosticsScenario.missingHardware,
