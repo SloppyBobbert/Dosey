@@ -4,8 +4,8 @@ import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('fixed phrase catalog matches the approved 60 phrases verbatim', () {
-    expect(FixedPhraseCatalog.phrases, hasLength(60));
+  test('fixed phrase catalog matches the approved 72 phrases verbatim', () {
+    expect(FixedPhraseCatalog.phrases, hasLength(72));
     expect(FixedPhraseCatalog.phrases.map((phrase) => phrase.text).toList(), <
       String
     >[
@@ -69,6 +69,18 @@ void main() {
       'The dispenser needs attention.',
       'Stop and check the dispenser before continuing.',
       'The controller is ready again.',
+      'Your next dose time is getting closer.',
+      'A scheduled dose is coming up.',
+      'I will let you know when your dose is ready.',
+      'Your dose is ready. Please check the cup.',
+      'It is dose time. Look in the cup before taking anything.',
+      'Please check that the scheduled dose looks right.',
+      'I am starting the carousel now.',
+      'The carousel is moving. Please wait.',
+      'The dispenser is moving your next dose.',
+      'The carousel has stopped. Please check the cup.',
+      'Check the cup and make sure the dose looks right.',
+      'Only confirm taken after you have taken the dose.',
     ]);
   });
 
@@ -129,6 +141,40 @@ void main() {
         DoseyVoicePhrase.safetyNoAutoConfirm,
       ]),
     );
+  });
+
+  test('common event categories include the new wording variants', () {
+    final expectedByCategory = {
+      DoseyVoicePhraseCategory.reminderApproaching: <DoseyVoicePhrase>{
+        DoseyVoicePhrase.nextDoseGettingCloser,
+        DoseyVoicePhrase.scheduledDoseComingUp,
+        DoseyVoicePhrase.notifyWhenDoseReady,
+      },
+      DoseyVoicePhraseCategory.doseReadyCupCheck: <DoseyVoicePhrase>{
+        DoseyVoicePhrase.doseReadyCheckCup,
+        DoseyVoicePhrase.doseTimeLookInCup,
+        DoseyVoicePhrase.scheduledDoseLooksRight,
+      },
+      DoseyVoicePhraseCategory.dispensingMovement: <DoseyVoicePhrase>{
+        DoseyVoicePhrase.startingCarouselNow,
+        DoseyVoicePhrase.carouselMovingPleaseWait,
+        DoseyVoicePhrase.movingNextDose,
+      },
+      DoseyVoicePhraseCategory.confirmationSafety: <DoseyVoicePhrase>{
+        DoseyVoicePhrase.carouselStoppedCheckCup,
+        DoseyVoicePhrase.checkCupDoseLooksRight,
+        DoseyVoicePhrase.confirmOnlyAfterTaken,
+      },
+    };
+
+    for (final entry in expectedByCategory.entries) {
+      expect(
+        FixedPhraseCatalog.phrasesForCategory(
+          entry.key,
+        ).map((phrase) => phrase.phrase),
+        containsAll(entry.value),
+      );
+    }
   });
 
   test('missed category does not contain unsafe double-dose advice', () {
