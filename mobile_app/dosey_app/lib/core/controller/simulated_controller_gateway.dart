@@ -21,7 +21,13 @@ enum SimulatedHeartbeatOutcome { success, missed, disconnect }
 
 enum SimulatedConnectOutcome { success, failure }
 
-enum SimulatedDiagnosticsScenario { healthy, missingHardware, abnormalSignals }
+enum SimulatedDiagnosticsScenario {
+  healthy,
+  missingHardware,
+  abnormalSignals,
+  commandFailure,
+  incompleteReport,
+}
 
 class SimulatedControllerGateway
     implements
@@ -185,8 +191,14 @@ class SimulatedControllerGateway
     await _benchDelay(const Duration(milliseconds: 150));
     final scenario = _nextDiagnosticsScenario;
     _nextDiagnosticsScenario = SimulatedDiagnosticsScenario.healthy;
+    if (scenario == SimulatedDiagnosticsScenario.commandFailure) {
+      throw const ControllerCommandRejectedException(
+        'Simulator diagnostics command failed.',
+      );
+    }
     final signalCodes = switch (scenario) {
-      SimulatedDiagnosticsScenario.healthy => const [
+      SimulatedDiagnosticsScenario.healthy ||
+      SimulatedDiagnosticsScenario.incompleteReport => const [
         'PIR_RAW_0',
         'LIGHT_RAW_2048',
         'BUTTON_1A_RAW_0',
@@ -222,6 +234,9 @@ class SimulatedControllerGateway
         'SERVO_DISABLED',
         'MOVEMENT_ACTIVE',
       ],
+      SimulatedDiagnosticsScenario.commandFailure => throw StateError(
+        'Diagnostics command failure passed failure handling.',
+      ),
     };
     return ControllerDiagnosticsRegistry.standard.parse([
       'DIAGNOSTICS_BEGIN',
@@ -241,7 +256,8 @@ class SimulatedControllerGateway
       'BUZZER_TEST_DISABLED',
       'LED_TEST_AVAILABLE',
       'RELIABILITY_SESSION_NOT_STARTED',
-      'DIAGNOSTICS_DONE',
+      if (scenario != SimulatedDiagnosticsScenario.incompleteReport)
+        'DIAGNOSTICS_DONE',
     ]);
   }
 

@@ -71,6 +71,42 @@ void main() {
     expect(abnormal.reading('movement')?.value, 'Active');
   });
 
+  test('simulator can fail one diagnostics command', () async {
+    final gateway = SimulatedControllerGateway();
+    addTearDown(gateway.close);
+    await gateway.connect();
+    gateway.queueNextDiagnosticsScenario(
+      SimulatedDiagnosticsScenario.commandFailure,
+    );
+
+    await expectLater(
+      gateway.readControllerDiagnostics(),
+      throwsA(isA<ControllerCommandRejectedException>()),
+    );
+    expect(await gateway.readControllerDiagnostics(), isNotNull);
+  });
+
+  test('simulator can return one incomplete diagnostics report', () async {
+    final gateway = SimulatedControllerGateway();
+    addTearDown(gateway.close);
+    await gateway.connect();
+    gateway.queueNextDiagnosticsScenario(
+      SimulatedDiagnosticsScenario.incompleteReport,
+    );
+
+    await expectLater(
+      gateway.readControllerDiagnostics(),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Incomplete controller diagnostics report.',
+        ),
+      ),
+    );
+    expect(await gateway.readControllerDiagnostics(), isNotNull);
+  });
+
   test('debug simulator accepts debug commands', () async {
     final gateway = SimulatedControllerGateway(debugAvailable: true);
     addTearDown(gateway.close);
