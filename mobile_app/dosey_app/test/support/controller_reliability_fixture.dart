@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
-import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/controller/controller_bench_service.dart';
@@ -30,7 +29,7 @@ class ControllerReliabilityFixture {
     required this.database,
     required this.simulator,
     required this.supervisor,
-    required this.coordinator,
+    required this.lifecycle,
     required this.bench,
     required this.commandRepository,
     required this.healthRepository,
@@ -47,7 +46,7 @@ class ControllerReliabilityFixture {
   final DoseyDatabase database;
   final SimulatedControllerGateway simulator;
   final ControllerHealthSupervisor supervisor;
-  final CarouselDispenseCoordinator coordinator;
+  final ControllerLifecycleService lifecycle;
   final ControllerBenchService bench;
   final LocalControllerCommandRepository commandRepository;
   final LocalControllerHealthEventRepository healthRepository;
@@ -104,9 +103,6 @@ class ControllerReliabilityFixture {
       carouselSlots: slots,
       now: () => scheduler.now,
     );
-    final coordinator = CarouselDispenseCoordinator(
-      controllerLifecycle: lifecycle,
-    );
     final bench = ControllerBenchService(
       controller: supervisor,
       lifecycle: lifecycle,
@@ -140,7 +136,7 @@ class ControllerReliabilityFixture {
       database: database,
       simulator: simulator,
       supervisor: supervisor,
-      coordinator: coordinator,
+      lifecycle: lifecycle,
       bench: bench,
       commandRepository: commandRepository,
       healthRepository: healthRepository,
@@ -162,7 +158,7 @@ class ControllerReliabilityFixture {
   }
 
   Future<void> dispense() {
-    return coordinator.dispenseLoadedSlot(
+    return lifecycle.requestDoseDispense(
       slotId: 'slot-1',
       doseId: doseId,
       scheduleId: 'schedule-1',

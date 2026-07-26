@@ -1,5 +1,4 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
-import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
 import 'package:dosey_app/core/carousel/carousel_load_session.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
@@ -529,9 +528,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
       if (!context.mounted) return;
       final dependencies = DoseyAppScope.of(context);
       final slotId = slot.id.startsWith('guided:') ? null : slot.id;
-      await CarouselDispenseCoordinator(
-        controllerLifecycle: dependencies.controllerLifecycle,
-      ).dispenseLoadedSlot(
+      await dependencies.controllerLifecycle.requestDoseDispense(
         slotId: slotId,
         doseId: doseId,
         scheduleId: slot.scheduleId,
