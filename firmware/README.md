@@ -20,7 +20,9 @@ board = seeed-xiao-esp32-c6
 framework = arduino
 ```
 
-That platform currently resolves Arduino-ESP32 3.3.7 for the XIAO ESP32-C6. The servo-only environments pin `madhephaestus/ESP32Servo` 3.2.1.
+That platform currently resolves Arduino-ESP32 3.3.7 for the XIAO ESP32-C6.
+Servo PWM uses the repository's small Arduino LEDC adapter so attach, write, and
+detach failures remain explicit protocol errors.
 
 Run commands from this directory with PlatformIO Core 6.1.19:
 
@@ -191,9 +193,9 @@ BLE notifications and does not enable any external path.
 
 The read-only `DEVICE_INFO` command reports the firmware name, D1 protocol,
 XIAO ESP32-C6 Grove Base profile, and baseline/debug build flavor.
-`CONFIG_STATUS` reports compiled servo, PIR, I2C, and button states plus the
-selected Grove Base D8 servo profile. `SAFETY_STATUS` reports the 2.5-second movement
-timeout, 1000-2000 us pulse range, 90-100 degree test range, and disabled
+`CONFIG_STATUS` reports compiled servo, PIR, I2C, button, and Grove diagnostics
+states plus the selected Grove Base D8 servo profile. `SAFETY_STATUS` reports the
+2.5-second movement timeout, 1000-2000 us pulse range, 90-100 degree test range, and disabled
 `DISPENSE_NEXT` command. Run all three before enabling hardware and confirm all
 external paths report disabled in a committed build. See
 `../docs/controller_bench_runbook.md` for the exact supervised sequence.

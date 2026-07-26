@@ -637,6 +637,38 @@ void test_movement_timeout_stops_hardware_and_remains_unresolved() {
   TEST_ASSERT_EQUAL(1, hardware.movementStops);
 }
 
+void test_movement_timeout_also_reports_failed_servo_detach() {
+  FakeHardware hardware;
+  hardware.servoIsConfigured = true;
+  hardware.nextMovementStopResult = HardwareMovementStopResult::detachFailed;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD move-1 DISPENSE_TEST", 100);
+  engine.update(100 + safety::kMovementTimeoutMs);
+
+  TEST_ASSERT_EQUAL_STRING("D1 ERROR move-1 MOVEMENT_TIMEOUT",
+                           output.lines[2].c_str());
+  TEST_ASSERT_EQUAL_STRING("D1 ERROR move-1 SERVO_DETACH_FAILED",
+                           output.lines[3].c_str());
+}
+
+void test_cancel_also_reports_failed_servo_detach() {
+  FakeHardware hardware;
+  hardware.servoIsConfigured = true;
+  hardware.nextMovementStopResult = HardwareMovementStopResult::detachFailed;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD move-1 SERVO_TEST", 100);
+  engine.handleLine("D1 CMD cancel-1 CANCEL", 101);
+
+  TEST_ASSERT_EQUAL_STRING("D1 EVT move-1 MOVEMENT_CANCELLED_UNRESOLVED",
+                           output.lines[3].c_str());
+  TEST_ASSERT_EQUAL_STRING("D1 ERROR move-1 SERVO_DETACH_FAILED",
+                           output.lines[4].c_str());
+}
+
 void test_failed_servo_start_reports_error_without_movement_started() {
   FakeHardware hardware;
   hardware.servoIsConfigured = true;
@@ -665,6 +697,21 @@ void test_failed_initial_servo_write_reports_error_without_movement_started() {
   TEST_ASSERT_EQUAL(1, hardware.movementStops);
 }
 
+void test_failed_initial_write_also_reports_failed_servo_detach() {
+  FakeHardware hardware;
+  hardware.servoIsConfigured = true;
+  hardware.nextMovementStartResult = HardwareMovementStartResult::writeFailed;
+  hardware.nextMovementStopResult = HardwareMovementStopResult::detachFailed;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD move-1 SERVO_TEST", 100);
+
+  assertLines(output, {"D1 EVT move-1 COMMAND_RECEIVED",
+                       "D1 ERROR move-1 SERVO_WRITE_FAILED",
+                       "D1 ERROR move-1 SERVO_DETACH_FAILED"});
+}
+
 void test_failed_servo_write_during_movement_reports_error_not_completion() {
   FakeHardware hardware;
   hardware.servoIsConfigured = true;
@@ -678,6 +725,23 @@ void test_failed_servo_write_during_movement_reports_error_not_completion() {
   TEST_ASSERT_EQUAL_STRING("D1 ERROR move-1 SERVO_WRITE_FAILED",
                            output.lines.back().c_str());
   TEST_ASSERT_EQUAL(1, hardware.movementStops);
+}
+
+void test_failed_inflight_write_also_reports_failed_servo_detach() {
+  FakeHardware hardware;
+  hardware.servoIsConfigured = true;
+  hardware.nextMovementStopResult = HardwareMovementStopResult::detachFailed;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD move-1 SERVO_TEST", 100);
+  hardware.nextMovementUpdate = HardwareMovementUpdate::writeFailed;
+  engine.update(101);
+
+  TEST_ASSERT_EQUAL_STRING("D1 ERROR move-1 SERVO_WRITE_FAILED",
+                           output.lines[2].c_str());
+  TEST_ASSERT_EQUAL_STRING("D1 ERROR move-1 SERVO_DETACH_FAILED",
+                           output.lines[3].c_str());
 }
 
 void test_failed_servo_detach_reports_error_not_completion() {
@@ -747,11 +811,15 @@ int main(int argc, char **argv) {
   RUN_TEST(test_transport_disconnect_stops_active_movement_without_completion);
   RUN_TEST(test_hardware_completion_reports_servo_done);
   RUN_TEST(test_movement_timeout_stops_hardware_and_remains_unresolved);
+  RUN_TEST(test_movement_timeout_also_reports_failed_servo_detach);
+  RUN_TEST(test_cancel_also_reports_failed_servo_detach);
   RUN_TEST(test_failed_servo_start_reports_error_without_movement_started);
   RUN_TEST(
       test_failed_initial_servo_write_reports_error_without_movement_started);
+  RUN_TEST(test_failed_initial_write_also_reports_failed_servo_detach);
   RUN_TEST(
       test_failed_servo_write_during_movement_reports_error_not_completion);
+  RUN_TEST(test_failed_inflight_write_also_reports_failed_servo_detach);
   RUN_TEST(test_failed_servo_detach_reports_error_not_completion);
   RUN_TEST(test_malformed_and_oversized_input_use_untrusted_id);
   return UNITY_END();

@@ -125,7 +125,15 @@ void main() {
       isNull,
     );
     expect(find.text('Read-only commands'), findsOneWidget);
-    expect(find.text('Supervised output and movement'), findsOneWidget);
+    expect(find.text('Supervised state changes and outputs'), findsOneWidget);
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'DEBUG_ON'),
+          )
+          .onPressed,
+      isNull,
+    );
     expect(
       tester
           .widget<OutlinedButton>(
@@ -249,6 +257,34 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -180));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(OutlinedButton, 'LED_TEST'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter Action PIN'), findsOneWidget);
+  });
+
+  testWidgets('bench debug toggle requires action PIN when enabled', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    ).setActionPin('1234');
+
+    await tester.pumpWidget(_TestControllerApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect controller'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(OutlinedButton, 'DEBUG_ON'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -180));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'DEBUG_ON'));
     await tester.pumpAndSettle();
 
     expect(find.text('Enter Action PIN'), findsOneWidget);

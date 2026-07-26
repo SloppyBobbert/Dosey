@@ -77,7 +77,7 @@ class ControllerScreen extends StatelessWidget {
                 const SizedBox(height: 12),
                 if (dependencies.isDemo) ...[
                   _ControllerBenchCard(
-                    canRunMovement: canDispense,
+                    canRunSupervisedAction: canDispense,
                     runCommand: (command) => _runControllerAction(
                       context,
                       () => dependencies.controllerBench.run(command),
@@ -149,7 +149,7 @@ class ControllerScreen extends StatelessWidget {
                 if (!dependencies.isDemo) ...[
                   const SizedBox(height: 12),
                   _ControllerBenchCard(
-                    canRunMovement: canDispense,
+                    canRunSupervisedAction: canDispense,
                     runCommand: (command) => _runControllerAction(
                       context,
                       () => dependencies.controllerBench.run(command),
@@ -346,11 +346,11 @@ class _DemoScenarioCard extends StatelessWidget {
 
 class _ControllerBenchCard extends StatelessWidget {
   const _ControllerBenchCard({
-    required this.canRunMovement,
+    required this.canRunSupervisedAction,
     required this.runCommand,
   });
 
-  final bool canRunMovement;
+  final bool canRunSupervisedAction;
   final Future<void> Function(ControllerBenchCommand command) runCommand;
 
   @override
@@ -361,11 +361,11 @@ class _ControllerBenchCard extends StatelessWidget {
       ControllerBenchCommand.deviceInfo,
       ControllerBenchCommand.configStatus,
       ControllerBenchCommand.safetyStatus,
-      ControllerBenchCommand.debugOn,
-      ControllerBenchCommand.debugOff,
       ControllerBenchCommand.pirStatus,
     ];
     const supervisedCommands = [
+      ControllerBenchCommand.debugOn,
+      ControllerBenchCommand.debugOff,
       ControllerBenchCommand.servoTest,
       ControllerBenchCommand.dispenseTest,
       ControllerBenchCommand.ledTest,
@@ -401,7 +401,7 @@ class _ControllerBenchCard extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Supervised output and movement',
+              'Supervised state changes and outputs',
               style: Theme.of(context).textTheme.labelLarge,
             ),
             const SizedBox(height: 4),
@@ -415,7 +415,7 @@ class _ControllerBenchCard extends StatelessWidget {
               children: [
                 for (final command in supervisedCommands)
                   OutlinedButton(
-                    onPressed: canRunMovement
+                    onPressed: canRunSupervisedAction
                         ? () => runCommand(command)
                         : null,
                     child: Text(_commandLabel(command)),
@@ -433,6 +433,8 @@ bool _isSupervisedBenchCommand(ControllerBenchCommand command) =>
     switch (command) {
       ControllerBenchCommand.servoTest ||
       ControllerBenchCommand.dispenseTest ||
+      ControllerBenchCommand.debugOn ||
+      ControllerBenchCommand.debugOff ||
       ControllerBenchCommand.ledTest => true,
       _ => false,
     };

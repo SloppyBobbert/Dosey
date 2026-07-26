@@ -524,7 +524,9 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
 
   void _handleControllerEvent(ControllerEvent event) {
     if (event != ControllerEvent.wakeFace ||
-        _currentRole?.canHostRobot != true) {
+        _currentRole?.canHostRobot != true ||
+        (_lifecycleState != null &&
+            _lifecycleState != AppLifecycleState.resumed)) {
       return;
     }
     _selectTab(_ShellTabId.robotFace);

@@ -51,6 +51,7 @@ public:
 private:
   void handleCommand(const Command &command, std::uint32_t nowMs);
   void startMovement(const Command &command, std::uint32_t nowMs);
+  bool stopMovementAndReportDetachFailure(const char *id);
   bool sendEvent(const char *id, const char *code);
   bool sendRawValue(const char *id, const char *label, int value);
   void sendNack(const char *id, const char *code);

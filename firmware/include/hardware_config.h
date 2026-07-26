@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+
 #if __has_include("hardware_config.local.h")
 #include "hardware_config.local.h"
 #endif
@@ -68,6 +70,24 @@ constexpr bool enabledPinsConflict(bool firstEnabled, int firstPin,
   return firstEnabled && secondEnabled && firstPin == secondPin;
 }
 
+struct EnabledPin {
+  bool enabled;
+  int pin;
+};
+
+template <std::size_t N>
+constexpr bool enabledPinsAreUnique(const EnabledPin (&pins)[N]) {
+  for (std::size_t first = 0; first < N; ++first) {
+    for (std::size_t second = first + 1; second < N; ++second) {
+      if (enabledPinsConflict(pins[first].enabled, pins[first].pin,
+                              pins[second].enabled, pins[second].pin)) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 // XIAO ESP32-C6 user LED. Seeed's board definition uses active-low output.
 inline constexpr int kOnboardLedPin = 15;
 inline constexpr bool kOnboardLedActiveLow = true;
@@ -105,6 +125,16 @@ inline constexpr bool kGroveDiagnosticsEnabled =
 inline constexpr bool kServoEnabled = DOSEY_SERVO_ENABLED;
 inline constexpr int kServoPin = DOSEY_SERVO_PIN;
 
+inline constexpr EnabledPin kExternalSignalPins[] = {
+    {kDigitalOutputConfigured, kDigitalOutputPin},
+    {kButtonConfigured, kButtonPin},
+    {kPirConfigured, kPirPin},
+    {kAnalogInputConfigured, kAnalogInputPin},
+    {kI2cConfigured, kI2cSdaPin},
+    {kI2cConfigured, kI2cSclPin},
+    {kServoEnabled, kServoPin},
+};
+
 static_assert(!kDigitalOutputConfigured ||
                   kDigitalOutputPin != kUnconfiguredPin,
               "Digital output cannot be enabled without a verified pin");
@@ -121,24 +151,8 @@ static_assert(!kI2cConfigured || (kI2cSdaPin != kUnconfiguredPin &&
               "I2C cannot be enabled without verified SDA and SCL pins");
 static_assert(!kServoEnabled || kServoPin != kUnconfiguredPin,
               "Servo cannot be enabled without a verified pin");
-static_assert(!enabledPinsConflict(kServoEnabled, kServoPin, kPirConfigured,
-                                   kPirPin),
-              "Servo and PIR cannot share a signal pin");
-static_assert(!enabledPinsConflict(kServoEnabled, kServoPin, kButtonConfigured,
-                                   kButtonPin),
-              "Servo and button cannot share a signal pin");
-static_assert(!enabledPinsConflict(kServoEnabled, kServoPin,
-                                   kDigitalOutputConfigured,
-                                   kDigitalOutputPin),
-              "Servo and digital output cannot share a signal pin");
-static_assert(!enabledPinsConflict(kServoEnabled, kServoPin,
-                                   kAnalogInputConfigured, kAnalogInputPin),
-              "Servo and analog input cannot share a signal pin");
-static_assert(!enabledPinsConflict(kServoEnabled, kServoPin, kI2cConfigured,
-                                   kI2cSdaPin) &&
-                  !enabledPinsConflict(kServoEnabled, kServoPin, kI2cConfigured,
-                                       kI2cSclPin),
-              "Servo and I2C cannot share a signal pin");
+static_assert(enabledPinsAreUnique(kExternalSignalPins),
+              "Enabled external hardware paths cannot share signal pins");
 
 } // namespace dosey::hardware
 

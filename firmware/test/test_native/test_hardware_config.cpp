@@ -129,6 +129,17 @@ void test_enabled_paths_detect_shared_signal_pins() {
       dosey::hardware::enabledPinsConflict(false, 16, true, 16));
 }
 
+void test_all_enabled_paths_must_have_unique_signal_pins() {
+  constexpr dosey::hardware::EnabledPin uniquePins[] = {
+      {true, 1}, {true, 2}, {false, 2}, {true, 3}};
+  constexpr dosey::hardware::EnabledPin conflictingNonServoPins[] = {
+      {true, 1}, {true, 2}, {true, 1}};
+
+  TEST_ASSERT_TRUE(dosey::hardware::enabledPinsAreUnique(uniquePins));
+  TEST_ASSERT_FALSE(
+      dosey::hardware::enabledPinsAreUnique(conflictingNonServoPins));
+}
+
 void test_compile_time_overrides_populate_hardware_configuration() {
   TEST_ASSERT_TRUE(dosey::hardware::kDigitalOutputConfigured);
   TEST_ASSERT_EQUAL(1, dosey::hardware::kDigitalOutputPin);
@@ -179,6 +190,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_servo_pwm_rejects_reattachment_without_second_hal_attach);
   RUN_TEST(test_grove_base_profile_matches_selected_hardware_layout);
   RUN_TEST(test_enabled_paths_detect_shared_signal_pins);
+  RUN_TEST(test_all_enabled_paths_must_have_unique_signal_pins);
   RUN_TEST(test_compile_time_overrides_populate_hardware_configuration);
 #else
   RUN_TEST(test_external_hardware_defaults_remain_disabled);

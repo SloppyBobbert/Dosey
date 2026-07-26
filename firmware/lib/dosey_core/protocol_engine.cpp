@@ -60,8 +60,8 @@ void ProtocolEngine::update(std::uint32_t nowMs) {
   }
 
   if (controller_.update(nowMs) == MovementResult::timedOut) {
-    hardware_.stopMovement();
     sendError(controller_.activeCommandId(), "MOVEMENT_TIMEOUT");
+    stopMovementAndReportDetachFailure(controller_.activeCommandId());
     return;
   }
 
@@ -72,15 +72,14 @@ void ProtocolEngine::update(std::uint32_t nowMs) {
   const HardwareMovementUpdate movementUpdate =
       hardware_.updateMovement(nowMs);
   if (movementUpdate == HardwareMovementUpdate::writeFailed) {
-    hardware_.stopMovement();
     controller_.cancelMovement();
     sendError(controller_.activeCommandId(), "SERVO_WRITE_FAILED");
+    stopMovementAndReportDetachFailure(controller_.activeCommandId());
     return;
   }
   if (movementUpdate == HardwareMovementUpdate::completed) {
-    if (hardware_.stopMovement() == HardwareMovementStopResult::detachFailed) {
+    if (!stopMovementAndReportDetachFailure(controller_.activeCommandId())) {
       controller_.cancelMovement();
-      sendError(controller_.activeCommandId(), "SERVO_DETACH_FAILED");
       return;
     }
     controller_.completeMovement();
@@ -237,8 +236,8 @@ void ProtocolEngine::handleCommand(const Command &command,
     }
     sendEvent(command.id, "COMMAND_RECEIVED");
     controller_.cancelMovement();
-    hardware_.stopMovement();
     sendEvent(controller_.activeCommandId(), "MOVEMENT_CANCELLED_UNRESOLVED");
+    stopMovementAndReportDetachFailure(controller_.activeCommandId());
     return;
   }
 }
@@ -270,14 +269,22 @@ void ProtocolEngine::startMovement(const Command &command,
       hardware_.startMovement(nowMs);
   if (movementStart != HardwareMovementStartResult::started) {
     controller_.cancelMovement();
-    hardware_.stopMovement();
     sendError(command.id,
               movementStart == HardwareMovementStartResult::attachFailed
                   ? "SERVO_ATTACH_FAILED"
                   : "SERVO_WRITE_FAILED");
+    stopMovementAndReportDetachFailure(command.id);
     return;
   }
   sendEvent(command.id, "MOVEMENT_STARTED");
+}
+
+bool ProtocolEngine::stopMovementAndReportDetachFailure(const char *id) {
+  if (hardware_.stopMovement() == HardwareMovementStopResult::stopped) {
+    return true;
+  }
+  sendError(id, "SERVO_DETACH_FAILED");
+  return false;
 }
 
 bool ProtocolEngine::sendEvent(const char *id, const char *code) {

@@ -591,6 +591,39 @@ void main() {
     expect(screenAwake.states.last, isFalse);
   });
 
+  testWidgets('PIR wake is ignored while Robot Mode is paused', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final screenAwake = _FakeScreenAwakeGateway();
+    addTearDown(database.close);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, screenAwakeGateway: screenAwake),
+    );
+    await tester.tap(find.text('Controller').hitTestable());
+    await _pumpShellFrame(tester);
+    final controller =
+        DoseyAppScope.of(tester.element(find.byType(DoseyShell))).controller
+            as SimulatedControllerGateway;
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await _pumpShellFrame(tester);
+    controller.emitWakeFace();
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(screenAwake.wakeCalls, 0);
+    expect(screenAwake.states.last, isFalse);
+  });
+
   testWidgets('touch on Robot Face restarts the awake window', (
     WidgetTester tester,
   ) async {
