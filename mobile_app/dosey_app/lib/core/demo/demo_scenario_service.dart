@@ -78,6 +78,7 @@ class DemoScenarioService {
     required this.doseActions,
     required this.reconciliation,
     DemoPlaybackDelay? playbackDelay,
+    this._onReset,
   }) : _playbackDelay = playbackDelay ?? Future<void>.delayed,
        _state = DemoScenarioState(
          scenario: demoScenarioCatalog.first,
@@ -97,6 +98,7 @@ class DemoScenarioService {
   final DoseActionService doseActions;
   final MissedDoseReconciliationService reconciliation;
   final DemoPlaybackDelay _playbackDelay;
+  final void Function()? _onReset;
   final StreamController<DemoScenarioState> _states =
       StreamController<DemoScenarioState>.broadcast();
 
@@ -150,6 +152,7 @@ class DemoScenarioService {
 
   void stopPresentation() {
     pause();
+    _onReset?.call();
     if (_state.isPresenting) {
       _emit(_state.copyWith(isPresenting: false));
     }
@@ -212,6 +215,7 @@ class DemoScenarioService {
     _stepGeneration += 1;
     final reset = _resetBarrier.then((_) async {
       try {
+        _onReset?.call();
         await _resetBaseline();
         _resetFailure = null;
         _emit(nextState());

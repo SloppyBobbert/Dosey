@@ -1349,6 +1349,12 @@ class _FakeVoicePlaybackGateway implements VoicePlaybackGateway {
   double? lastVolume;
 
   @override
+  bool get isPlaying => false;
+
+  @override
+  Stream<bool> get playing => const Stream<bool>.empty();
+
+  @override
   Future<void> dispose() async {}
 
   @override
@@ -1360,4 +1366,7 @@ class _FakeVoicePlaybackGateway implements VoicePlaybackGateway {
     );
     lastVolume = volume;
   }
+
+  @override
+  Future<void> stop() async {}
 }

@@ -10,6 +10,8 @@ enum ControllerHealthState {
   error,
 }
 
+enum ControllerErrorKind { bluetoothUnavailable, other }
+
 abstract class ControllerGatewayException implements Exception {
   const ControllerGatewayException(this.message);
 
@@ -70,6 +72,7 @@ class ControllerSnapshot {
     required this.canRequestDispense,
     required this.statusLabel,
     this.healthState = ControllerHealthState.disconnected,
+    this.errorKind,
     this.lastSuccessfulHeartbeatAt,
     this.reconnectAttempt = 0,
     this.nextReconnectAt,
@@ -80,6 +83,7 @@ class ControllerSnapshot {
       canRequestDispense = false,
       statusLabel = 'Controller disconnected',
       healthState = ControllerHealthState.disconnected,
+      errorKind = null,
       lastSuccessfulHeartbeatAt = null,
       reconnectAttempt = 0,
       nextReconnectAt = null;
@@ -89,6 +93,7 @@ class ControllerSnapshot {
       canRequestDispense = false,
       statusLabel = 'Controller connected; heartbeat not verified',
       healthState = ControllerHealthState.verifying,
+      errorKind = null,
       lastSuccessfulHeartbeatAt = null,
       reconnectAttempt = 0,
       nextReconnectAt = null;
@@ -98,6 +103,7 @@ class ControllerSnapshot {
       canRequestDispense = true,
       statusLabel = 'Controller online',
       healthState = ControllerHealthState.online,
+      errorKind = null,
       lastSuccessfulHeartbeatAt = null,
       reconnectAttempt = 0,
       nextReconnectAt = null;
@@ -106,6 +112,7 @@ class ControllerSnapshot {
   final bool canRequestDispense;
   final String statusLabel;
   final ControllerHealthState healthState;
+  final ControllerErrorKind? errorKind;
   final DateTime? lastSuccessfulHeartbeatAt;
   final int reconnectAttempt;
   final DateTime? nextReconnectAt;

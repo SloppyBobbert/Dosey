@@ -1,37 +1,136 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:dosey_app/features/robot_face/robot_face_animation.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:flutter/material.dart';
 
+RobotFaceControllerCondition? _effectiveControllerCondition(
+  RobotFaceState state,
+) {
+  return switch (state.mode) {
+    RobotFaceMode.offline => switch (state.controllerCondition) {
+      RobotFaceControllerCondition.online => null,
+      final condition => condition,
+    },
+    RobotFaceMode.error => switch (state.controllerCondition) {
+      RobotFaceControllerCondition.bluetoothUnavailable ||
+      RobotFaceControllerCondition.fault => state.controllerCondition,
+      _ => RobotFaceControllerCondition.fault,
+    },
+    _ => null,
+  };
+}
+
+bool _usesNetworkAdvisoryPalette(RobotFaceState state) =>
+    state.mode == RobotFaceMode.idle &&
+    state.networkAdvisory == RobotFaceNetworkAdvisory.internetOffline;
+
 class RobotFaceCanvas extends StatefulWidget {
-  const RobotFaceCanvas({super.key, required this.state, this.isActive = true});
+  const RobotFaceCanvas({
+    super.key,
+    required this.state,
+    this.isActive = true,
+    this.isPreparing = false,
+    this.isSpeaking = false,
+    this.animationCue,
+    this.animationRevision = 0,
+    this.onAnimationCompleted,
+  });
 
   final RobotFaceState state;
   final bool isActive;
+  final bool isPreparing;
+  final bool isSpeaking;
+  final RobotFaceAnimationCue? animationCue;
+  final int animationRevision;
+  final void Function(RobotFaceAnimationCue cue, int revision)?
+  onAnimationCompleted;
 
   @override
   State<RobotFaceCanvas> createState() => _RobotFaceCanvasState();
 }
 
 class _RobotFaceCanvasState extends State<RobotFaceCanvas>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _controller;
+  late final AnimationController _cueController;
   int _resumeGeneration = 0;
+  bool _disableAnimations = false;
+  bool _hasBoundDependencies = false;
+  RobotFaceAnimationCue? _activeCue;
+  RobotFaceAnimationCue? _requestedCue;
+  int _activeCueRevision = 0;
+  Timer? _reducedMotionCueTimer;
+
+  static const _ambientDuration = Duration(milliseconds: 5200);
+  static const _speakingDuration = Duration(milliseconds: 920);
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 5200),
+      duration: _durationForWidget(widget),
+    );
+    _cueController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
     );
     _syncAnimationActivity();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnimations = MediaQuery.disableAnimationsOf(context);
+    final changed = _disableAnimations != disableAnimations;
+    _disableAnimations = disableAnimations;
+    if (changed) {
+      _syncAnimationActivity();
+      if (_activeCue != null) {
+        _startCue(_requestedCue!, _activeCueRevision);
+      }
+    }
+    if (!_hasBoundDependencies) {
+      _hasBoundDependencies = true;
+      final cue = widget.animationCue;
+      if (cue != null && widget.animationRevision > 0) {
+        _startCue(cue, widget.animationRevision);
+      }
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant RobotFaceCanvas oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.isActive != widget.isActive) {
+    if (!widget.isActive) {
+      _cancelCue();
+    } else if (oldWidget.animationRevision != widget.animationRevision) {
+      final cue = widget.animationCue;
+      if (cue == null) {
+        _cancelCue();
+      } else {
+        _startCue(cue, widget.animationRevision);
+      }
+    } else {
+      final transitionCue = robotFaceTransitionCue(
+        oldWidget.state,
+        widget.state,
+      );
+      if (transitionCue != null) {
+        _startCue(transitionCue, widget.animationRevision);
+      }
+    }
+    if (oldWidget.isSpeaking != widget.isSpeaking ||
+        oldWidget.state.mode != widget.state.mode ||
+        oldWidget.state.controllerCondition !=
+            widget.state.controllerCondition) {
+      _controller.duration = _durationForWidget(widget);
+      _controller.stop(canceled: false);
+      _controller.value = _controller.lowerBound;
+      _syncAnimationActivity();
+    } else if (oldWidget.isActive != widget.isActive) {
       _syncAnimationActivity();
     }
   }
@@ -39,7 +138,7 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
   void _syncAnimationActivity() {
     _resumeGeneration += 1;
 
-    if (widget.isActive) {
+    if (widget.isActive && !_disableAnimations) {
       if (_controller.isAnimating) {
         return;
       }
@@ -89,51 +188,200 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
   }
 
   double get debugPhase => _controller.value;
+  Duration get debugAnimationDuration => _controller.duration!;
+  bool get debugIsAnimating => _controller.isAnimating;
+  RobotFaceAnimationCue? get debugActiveCue => _activeCue;
+  bool get debugIsCueAnimating => _cueController.isAnimating;
+  double get debugCueProgress => _cueProgress;
+  RobotFaceControllerCondition? get debugEffectiveControllerCondition =>
+      _effectiveControllerCondition(widget.state);
+  bool get debugUsesNetworkAdvisoryPalette =>
+      _usesNetworkAdvisoryPalette(widget.state);
+
+  static Duration _durationForWidget(RobotFaceCanvas widget) {
+    if (widget.isSpeaking) return _speakingDuration;
+    return switch (_effectiveControllerCondition(widget.state)) {
+      RobotFaceControllerCondition.connecting => const Duration(
+        milliseconds: 3600,
+      ),
+      RobotFaceControllerCondition.verifying => const Duration(
+        milliseconds: 2200,
+      ),
+      RobotFaceControllerCondition.reconnecting => const Duration(
+        milliseconds: 1800,
+      ),
+      RobotFaceControllerCondition.bluetoothUnavailable => const Duration(
+        milliseconds: 2600,
+      ),
+      RobotFaceControllerCondition.fault => const Duration(milliseconds: 1600),
+      _ => _ambientDuration,
+    };
+  }
+
+  double get _cueProgress {
+    if (_activeCue == null) return 0;
+    return _disableAnimations ? 0.62 : _cueController.value;
+  }
+
+  void _startCue(RobotFaceAnimationCue cue, int revision) {
+    if (!widget.isActive) {
+      _cancelCue();
+      return;
+    }
+
+    final effectiveCue = safeRobotFaceAnimationCue(cue, widget.state);
+    _requestedCue = cue;
+    _activeCue = effectiveCue;
+    _activeCueRevision = revision;
+    _reducedMotionCueTimer?.cancel();
+    _cueController
+      ..stop(canceled: false)
+      ..duration = _durationForCue(effectiveCue)
+      ..value = _cueController.lowerBound;
+
+    if (_disableAnimations) {
+      _reducedMotionCueTimer = Timer(_durationForCue(effectiveCue), () {
+        _completeCue(effectiveCue, revision);
+      });
+      return;
+    }
+
+    _cueController.forward().whenCompleteOrCancel(() {
+      if (!mounted ||
+          _disableAnimations ||
+          _activeCue != effectiveCue ||
+          _activeCueRevision != revision ||
+          _cueController.status != AnimationStatus.completed) {
+        return;
+      }
+      _completeCue(effectiveCue, revision);
+    });
+  }
+
+  void _completeCue(RobotFaceAnimationCue effectiveCue, int revision) {
+    if (!mounted ||
+        _activeCue != effectiveCue ||
+        _activeCueRevision != revision) {
+      return;
+    }
+    final completedCue = _requestedCue!;
+    setState(() {
+      _activeCue = null;
+      _requestedCue = null;
+    });
+    widget.onAnimationCompleted?.call(completedCue, revision);
+  }
+
+  void _cancelCue() {
+    _reducedMotionCueTimer?.cancel();
+    _reducedMotionCueTimer = null;
+    _cueController
+      ..stop(canceled: false)
+      ..value = _cueController.lowerBound;
+    _activeCue = null;
+    _requestedCue = null;
+  }
+
+  static Duration _durationForCue(RobotFaceAnimationCue cue) => switch (cue) {
+    RobotFaceAnimationCue.wake => const Duration(milliseconds: 900),
+    RobotFaceAnimationCue.acknowledge => const Duration(milliseconds: 620),
+    RobotFaceAnimationCue.notice => const Duration(milliseconds: 720),
+    RobotFaceAnimationCue.focus => const Duration(milliseconds: 640),
+    RobotFaceAnimationCue.track => const Duration(milliseconds: 880),
+    RobotFaceAnimationCue.celebrate => const Duration(milliseconds: 920),
+    RobotFaceAnimationCue.concern => const Duration(milliseconds: 820),
+    RobotFaceAnimationCue.recover => const Duration(milliseconds: 780),
+  };
 
   @override
   void dispose() {
+    _reducedMotionCueTimer?.cancel();
     _controller.dispose();
+    _cueController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return CustomPaint(
-          painter: _RobotFacePainter(
-            state: widget.state,
-            phase: _controller.value,
-          ),
-          child: const SizedBox.expand(),
-        );
-      },
+    return Semantics(
+      label: widget.isSpeaking ? 'Robot is speaking' : null,
+      liveRegion: widget.isSpeaking,
+      child: AnimatedBuilder(
+        animation: Listenable.merge(<Listenable>[_controller, _cueController]),
+        builder: (context, child) {
+          return CustomPaint(
+            painter: _RobotFacePainter(
+              state: widget.state,
+              phase: _controller.value,
+              isPreparing: widget.isPreparing,
+              isSpeaking: widget.isSpeaking,
+              reducedMotion: _disableAnimations,
+              animationCue: _activeCue,
+              cueProgress: _cueProgress,
+            ),
+            child: const SizedBox.expand(),
+          );
+        },
+      ),
     );
   }
 }
 
 class _RobotFacePainter extends CustomPainter {
-  const _RobotFacePainter({required this.state, required this.phase});
+  const _RobotFacePainter({
+    required this.state,
+    required this.phase,
+    required this.isPreparing,
+    required this.isSpeaking,
+    required this.reducedMotion,
+    required this.animationCue,
+    required this.cueProgress,
+  });
 
   final RobotFaceState state;
   final double phase;
+  final bool isPreparing;
+  final bool isSpeaking;
+  final bool reducedMotion;
+  final RobotFaceAnimationCue? animationCue;
+  final double cueProgress;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
+    final controllerCondition = _effectiveControllerCondition(state);
     final motion = _motionProfileFor(state, size);
+    final cue = _cueFrameFor(animationCue, cueProgress, size);
+    final speakingPulse = isSpeaking
+        ? reducedMotion
+              ? 0.55
+              : (math.sin(phase * math.pi * 2) + 1) / 2
+        : 0.0;
     final breathing =
-        1 + math.sin(phase * math.pi * 2) * motion.breathingAmplitude;
+        1 +
+        math.sin(phase * math.pi * 2) * motion.breathingAmplitude +
+        (speakingPulse * 0.035) +
+        cue.eyeScale;
     final pulse = _pulseValue();
     final blink = _blinkValue();
 
-    final palette = _paletteFor(state.mode);
-    final concernTilt = _concernTiltFor(state.mode);
+    final palette = controllerCondition == null
+        ? _usesNetworkAdvisoryPalette(state)
+              ? _networkAdvisoryPalette
+              : _paletteFor(state.mode)
+        : _controllerPaletteFor(controllerCondition);
+    final concernTilt =
+        _concernTiltFor(state.mode, controllerCondition) + cue.concernTilt;
     // Keep expression changes in the eyes only. Robot Mode intentionally has no
     // mouth so status color, tilt, blink, and glow carry the state.
-    final eyelidOpen = _eyelidOpenFor(state, blink, phase);
-    final pupilOffset = _pupilOffsetFor(state, size, phase);
+    final eyelidOpen =
+        (_eyelidOpenFor(state, blink, phase, controllerCondition) +
+                cue.eyelidBoost)
+            .clamp(0.12, 1.08);
+    final pupilOffset = isPreparing
+        ? Offset.zero
+        : _pupilOffsetFor(state, size, phase, controllerCondition) +
+              cue.pupilOffset;
 
     final backgroundPaint = Paint()
       ..shader = LinearGradient(
@@ -169,7 +417,7 @@ class _RobotFacePainter extends CustomPainter {
     final eyeArea = Rect.fromCenter(
       center: Offset(
         size.width * 0.5,
-        size.height * (0.48 - motion.eyeLift) + motion.idleDrift,
+        size.height * (0.48 - motion.eyeLift - cue.eyeLift) + motion.idleDrift,
       ),
       width: size.width * 0.8,
       height: size.height * 0.48,
@@ -196,20 +444,28 @@ class _RobotFacePainter extends CustomPainter {
       eyeRadius,
     );
 
-    if (motion.attentionRingStrength > 0) {
+    final attentionRingStrength = math.max(
+      math.max(motion.attentionRingStrength, cue.attentionRingStrength),
+      isSpeaking
+          ? 0.38 + (speakingPulse * 0.34)
+          : isPreparing
+          ? 0.28
+          : 0.0,
+    );
+    if (attentionRingStrength > 0) {
       _paintAttentionRing(
         canvas,
         leftEye.outerRect,
         palette,
         pulse,
-        motion.attentionRingStrength,
+        attentionRingStrength,
       );
       _paintAttentionRing(
         canvas,
         rightEye.outerRect,
         palette,
         pulse,
-        motion.attentionRingStrength,
+        attentionRingStrength,
       );
     }
 
@@ -219,7 +475,10 @@ class _RobotFacePainter extends CustomPainter {
       palette,
       pupilOffset,
       concernTilt * -1,
-      motion.glowBoost,
+      motion.glowBoost +
+          cue.glowBoost +
+          (isPreparing ? 0.08 : 0) +
+          (speakingPulse * 0.14),
     );
     _paintEye(
       canvas,
@@ -227,7 +486,10 @@ class _RobotFacePainter extends CustomPainter {
       palette,
       pupilOffset,
       concernTilt,
-      motion.glowBoost,
+      motion.glowBoost +
+          cue.glowBoost +
+          (isPreparing ? 0.08 : 0) +
+          (speakingPulse * 0.14),
     );
 
     _paintDisplayVignette(canvas, rect, state);
@@ -500,7 +762,79 @@ class _RobotFacePainter extends CustomPainter {
     return Curves.easeOut.transform(pulse);
   }
 
-  double _eyelidOpenFor(RobotFaceState state, double blink, double phase) {
+  _FaceCueFrame _cueFrameFor(
+    RobotFaceAnimationCue? cue,
+    double progress,
+    Size size,
+  ) {
+    if (cue == null) return const _FaceCueFrame();
+    final envelope = math.sin(progress.clamp(0.0, 1.0) * math.pi);
+    return switch (cue) {
+      RobotFaceAnimationCue.wake => _FaceCueFrame(
+        eyelidBoost: envelope * 0.18,
+        eyeLift: envelope * 0.028,
+        eyeScale: envelope * 0.045,
+        attentionRingStrength: envelope * 0.38,
+        glowBoost: envelope * 0.12,
+      ),
+      RobotFaceAnimationCue.acknowledge => _FaceCueFrame(
+        eyeLift: envelope * 0.018,
+        pupilOffset: Offset(0, -size.height * 0.018 * envelope),
+        attentionRingStrength: envelope * 0.32,
+        glowBoost: envelope * 0.1,
+      ),
+      RobotFaceAnimationCue.notice => _FaceCueFrame(
+        eyelidBoost: envelope * 0.08,
+        pupilOffset: Offset(size.width * 0.018 * envelope, 0),
+        attentionRingStrength: envelope * 0.42,
+        glowBoost: envelope * 0.12,
+      ),
+      RobotFaceAnimationCue.focus => _FaceCueFrame(
+        eyelidBoost: envelope * 0.08,
+        eyeLift: envelope * 0.016,
+        eyeScale: envelope * 0.055,
+        pupilOffset: Offset(0, -size.height * 0.014 * envelope),
+        attentionRingStrength: envelope * 0.62,
+        glowBoost: envelope * 0.16,
+      ),
+      RobotFaceAnimationCue.track => _FaceCueFrame(
+        pupilOffset: Offset(
+          math.sin(progress * math.pi * 2) * size.width * 0.026,
+          -size.height * 0.006 * envelope,
+        ),
+        attentionRingStrength: envelope * 0.42,
+        glowBoost: envelope * 0.1,
+      ),
+      RobotFaceAnimationCue.celebrate => _FaceCueFrame(
+        eyelidBoost: envelope * 0.12,
+        eyeLift: envelope * 0.046,
+        eyeScale: envelope * 0.075,
+        attentionRingStrength: envelope * 0.72,
+        glowBoost: envelope * 0.2,
+      ),
+      RobotFaceAnimationCue.concern => _FaceCueFrame(
+        eyeLift: envelope * -0.014,
+        pupilOffset: Offset(0, size.height * 0.012 * envelope),
+        concernTilt: envelope * 0.045,
+        attentionRingStrength: envelope * 0.28,
+        glowBoost: envelope * 0.08,
+      ),
+      RobotFaceAnimationCue.recover => _FaceCueFrame(
+        eyelidBoost: envelope * 0.1,
+        eyeLift: envelope * 0.022,
+        eyeScale: envelope * 0.04,
+        attentionRingStrength: envelope * 0.46,
+        glowBoost: envelope * 0.14,
+      ),
+    };
+  }
+
+  double _eyelidOpenFor(
+    RobotFaceState state,
+    double blink,
+    double phase,
+    RobotFaceControllerCondition? controllerCondition,
+  ) {
     final ramp = state.rampProgress.clamp(0.0, 1.0);
     final awakeLift = state.isInAwakeWindow ? 0.04 : 0.0;
     final liveLift = state.mode == RobotFaceMode.idle
@@ -508,66 +842,185 @@ class _RobotFacePainter extends CustomPainter {
         : 0.0;
     // Lower lids communicate sleepy/offline/warning states without adding a
     // mouth or extra facial features.
-    final base = switch (state.mode) {
-      RobotFaceMode.sleepy => 0.22,
-      RobotFaceMode.offline => 0.54,
-      RobotFaceMode.error || RobotFaceMode.missed => 0.46,
-      RobotFaceMode.happyConfirmed => 1.08,
-      RobotFaceMode.doseApproaching => 1.0 + awakeLift + (ramp * 0.06),
-      RobotFaceMode.doseReady => 1.06,
-      RobotFaceMode.dispensing => 0.92,
-      RobotFaceMode.waitingForConfirmation => 0.9 + awakeLift,
-      RobotFaceMode.idle => 0.94 + awakeLift + liveLift,
+    final base = switch (controllerCondition) {
+      RobotFaceControllerCondition.disconnected => 0.42,
+      RobotFaceControllerCondition.connecting => 0.72,
+      RobotFaceControllerCondition.verifying => 0.94,
+      RobotFaceControllerCondition.offline => 0.5,
+      RobotFaceControllerCondition.reconnecting => 0.8,
+      RobotFaceControllerCondition.bluetoothUnavailable => 0.48,
+      RobotFaceControllerCondition.fault => 0.4,
+      _ => switch (state.mode) {
+        RobotFaceMode.sleepy => 0.22,
+        RobotFaceMode.offline => 0.54,
+        RobotFaceMode.error || RobotFaceMode.missed => 0.46,
+        RobotFaceMode.happyConfirmed => 1.08,
+        RobotFaceMode.doseApproaching => 1.0 + awakeLift + (ramp * 0.06),
+        RobotFaceMode.doseReady => 1.06,
+        RobotFaceMode.dispensing => 0.92,
+        RobotFaceMode.waitingForConfirmation => 0.9 + awakeLift,
+        RobotFaceMode.idle => 0.94 + awakeLift + liveLift,
+      },
     };
     return (base - blink * 0.94).clamp(0.12, 1.08);
   }
 
-  double _concernTiltFor(RobotFaceMode mode) {
-    return switch (mode) {
-      RobotFaceMode.error => 0.1,
-      RobotFaceMode.offline => 0.06,
-      RobotFaceMode.missed => 0.08,
-      _ => 0,
+  double _concernTiltFor(
+    RobotFaceMode mode,
+    RobotFaceControllerCondition? controllerCondition,
+  ) {
+    return switch (controllerCondition) {
+      RobotFaceControllerCondition.disconnected => 0.045,
+      RobotFaceControllerCondition.offline => 0.07,
+      RobotFaceControllerCondition.bluetoothUnavailable => 0.09,
+      RobotFaceControllerCondition.fault => 0.13,
+      _ => switch (mode) {
+        RobotFaceMode.error => 0.1,
+        RobotFaceMode.offline => 0.06,
+        RobotFaceMode.missed => 0.08,
+        _ => 0,
+      },
     };
   }
 
-  Offset _pupilOffsetFor(RobotFaceState state, Size size, double phase) {
+  Offset _pupilOffsetFor(
+    RobotFaceState state,
+    Size size,
+    double phase,
+    RobotFaceControllerCondition? controllerCondition,
+  ) {
     final ramp = state.rampProgress.clamp(0.0, 1.0);
     final horizontal = math.sin(phase * math.pi * 2) * size.width * 0.012;
     final idleVertical = math.sin(phase * math.pi * 4) * size.height * 0.003;
 
-    return switch (state.mode) {
-      RobotFaceMode.sleepy => Offset(-size.width * 0.012, size.height * 0.012),
-      RobotFaceMode.doseApproaching => Offset(
-        horizontal * (0.35 - (ramp * 0.2)),
-        -size.height * (0.01 + (ramp * 0.012)),
+    return switch (controllerCondition) {
+      RobotFaceControllerCondition.disconnected => Offset(
+        0,
+        size.height * 0.018,
       ),
-      RobotFaceMode.doseReady => Offset(0, -size.height * 0.024),
-      RobotFaceMode.dispensing => Offset(
-        horizontal * 0.2,
-        -size.height * 0.016 +
-            math.sin(phase * math.pi * 4) * size.height * 0.008,
+      RobotFaceControllerCondition.connecting => Offset(
+        horizontal * 1.4,
+        size.height * 0.004,
       ),
-      RobotFaceMode.waitingForConfirmation => Offset(
-        horizontal * 0.18,
-        -size.height * 0.014,
+      RobotFaceControllerCondition.verifying => Offset(0, -size.height * 0.012),
+      RobotFaceControllerCondition.offline => Offset(
+        -size.width * 0.008,
+        size.height * 0.014,
       ),
-      RobotFaceMode.happyConfirmed => Offset(
-        horizontal * 0.3,
-        -size.height * 0.022,
+      RobotFaceControllerCondition.reconnecting => Offset(
+        horizontal * 2.1,
+        -size.height * 0.004,
       ),
-      RobotFaceMode.error => Offset(size.width * 0.008, size.height * 0.006),
-      RobotFaceMode.offline => Offset(-size.width * 0.006, size.height * 0.01),
-      RobotFaceMode.idle when state.isInAwakeWindow => Offset(
-        horizontal * 0.5,
-        -size.height * 0.012 + idleVertical,
+      RobotFaceControllerCondition.bluetoothUnavailable => Offset(
+        0,
+        size.height * 0.008,
       ),
-      _ => Offset(horizontal, idleVertical),
+      RobotFaceControllerCondition.fault => Offset(
+        size.width * 0.014,
+        size.height * 0.01,
+      ),
+      _ => switch (state.mode) {
+        RobotFaceMode.sleepy => Offset(
+          -size.width * 0.012,
+          size.height * 0.012,
+        ),
+        RobotFaceMode.doseApproaching => Offset(
+          horizontal * (0.35 - (ramp * 0.2)),
+          -size.height * (0.01 + (ramp * 0.012)),
+        ),
+        RobotFaceMode.doseReady => Offset(0, -size.height * 0.024),
+        RobotFaceMode.dispensing => Offset(
+          horizontal * 0.2,
+          -size.height * 0.016 +
+              math.sin(phase * math.pi * 4) * size.height * 0.008,
+        ),
+        RobotFaceMode.waitingForConfirmation => Offset(
+          horizontal * 0.18,
+          -size.height * 0.014,
+        ),
+        RobotFaceMode.happyConfirmed => Offset(
+          horizontal * 0.3,
+          -size.height * 0.022,
+        ),
+        RobotFaceMode.error => Offset(size.width * 0.008, size.height * 0.006),
+        RobotFaceMode.offline => Offset(
+          -size.width * 0.006,
+          size.height * 0.01,
+        ),
+        RobotFaceMode.idle when state.isInAwakeWindow => Offset(
+          horizontal * 0.5,
+          -size.height * 0.012 + idleVertical,
+        ),
+        _ => Offset(horizontal, idleVertical),
+      },
     };
   }
 
   _FaceMotionProfile _motionProfileFor(RobotFaceState state, Size size) {
     final ramp = state.rampProgress.clamp(0.0, 1.0);
+    final controllerCondition = _effectiveControllerCondition(state);
+
+    final controllerMotion = switch (controllerCondition) {
+      RobotFaceControllerCondition.disconnected => const _FaceMotionProfile(
+        breathingAmplitude: 0.006,
+        glowBoost: 0,
+        eyeLift: -0.014,
+        attentionRingStrength: 0,
+        wakeAura: 0,
+        idleDrift: 0,
+      ),
+      RobotFaceControllerCondition.connecting => _FaceMotionProfile(
+        breathingAmplitude: 0.01,
+        glowBoost: 0.05,
+        eyeLift: 0,
+        attentionRingStrength: 0.22,
+        wakeAura: 0.18,
+        idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.003,
+      ),
+      RobotFaceControllerCondition.verifying => const _FaceMotionProfile(
+        breathingAmplitude: 0.012,
+        glowBoost: 0.13,
+        eyeLift: 0.012,
+        attentionRingStrength: 0.48,
+        wakeAura: 0.42,
+        idleDrift: 0,
+      ),
+      RobotFaceControllerCondition.offline => const _FaceMotionProfile(
+        breathingAmplitude: 0.006,
+        glowBoost: 0.01,
+        eyeLift: -0.008,
+        attentionRingStrength: 0,
+        wakeAura: 0,
+        idleDrift: 0,
+      ),
+      RobotFaceControllerCondition.reconnecting => _FaceMotionProfile(
+        breathingAmplitude: 0.014,
+        glowBoost: 0.1,
+        eyeLift: 0.006,
+        attentionRingStrength: 0.55,
+        wakeAura: 0.48,
+        idleDrift: math.sin(phase * math.pi * 4) * size.height * 0.005,
+      ),
+      RobotFaceControllerCondition.bluetoothUnavailable =>
+        const _FaceMotionProfile(
+          breathingAmplitude: 0.008,
+          glowBoost: 0.16,
+          eyeLift: -0.006,
+          attentionRingStrength: 0.52,
+          wakeAura: 0.22,
+          idleDrift: 0,
+        ),
+      RobotFaceControllerCondition.fault => _FaceMotionProfile(
+        breathingAmplitude: 0.01,
+        glowBoost: 0.22,
+        eyeLift: -0.01,
+        attentionRingStrength: 0.72,
+        wakeAura: 0.32,
+        idleDrift: math.sin(phase * math.pi * 4) * size.height * 0.004,
+      ),
+      _ => null,
+    };
+    if (controllerMotion != null) return controllerMotion;
 
     return switch (state.mode) {
       RobotFaceMode.doseApproaching => _FaceMotionProfile(
@@ -717,9 +1170,94 @@ class _RobotFacePainter extends CustomPainter {
     };
   }
 
+  _FacePalette _controllerPaletteFor(RobotFaceControllerCondition condition) {
+    return switch (condition) {
+      RobotFaceControllerCondition.disconnected => const _FacePalette(
+        backgroundTop: Color(0xFF11141A),
+        backgroundBottom: Color(0xFF06070A),
+        eyeTop: Color(0xFFAEB6C5),
+        eyeBottom: Color(0xFF596171),
+        pupil: Color(0xFF252932),
+        glow: Color(0xFF7C879B),
+        accent: Color(0xFF858C99),
+      ),
+      RobotFaceControllerCondition.connecting => const _FacePalette(
+        backgroundTop: Color(0xFF0D1822),
+        backgroundBottom: Color(0xFF05080C),
+        eyeTop: Color(0xFFB8D9E8),
+        eyeBottom: Color(0xFF5A8EA8),
+        pupil: Color(0xFF12303F),
+        glow: Color(0xFF72BDD9),
+        accent: Color(0xFF87CDE5),
+      ),
+      RobotFaceControllerCondition.verifying => const _FacePalette(
+        backgroundTop: Color(0xFF081923),
+        backgroundBottom: Color(0xFF03080C),
+        eyeTop: Color(0xFFC7F8FF),
+        eyeBottom: Color(0xFF52C5DD),
+        pupil: Color(0xFF07313D),
+        glow: Color(0xFF55E4FF),
+        accent: Color(0xFF8DEEFF),
+      ),
+      RobotFaceControllerCondition.offline => const _FacePalette(
+        backgroundTop: Color(0xFF12141A),
+        backgroundBottom: Color(0xFF06070A),
+        eyeTop: Color(0xFFA7B0C0),
+        eyeBottom: Color(0xFF5E6675),
+        pupil: Color(0xFF252932),
+        glow: Color(0xFF7E899E),
+        accent: Color(0xFF838A99),
+      ),
+      RobotFaceControllerCondition.reconnecting => const _FacePalette(
+        backgroundTop: Color(0xFF0B1722),
+        backgroundBottom: Color(0xFF04080C),
+        eyeTop: Color(0xFFC4E7F3),
+        eyeBottom: Color(0xFF4E9DBB),
+        pupil: Color(0xFF0A3040),
+        glow: Color(0xFF61CBEA),
+        accent: Color(0xFF82DDF4),
+      ),
+      RobotFaceControllerCondition.bluetoothUnavailable => const _FacePalette(
+        backgroundTop: Color(0xFF1C1014),
+        backgroundBottom: Color(0xFF090607),
+        eyeTop: Color(0xFFFFB0BA),
+        eyeBottom: Color(0xFFD85C70),
+        pupil: Color(0xFF3A0B13),
+        glow: Color(0xFFFF7388),
+        accent: Color(0xFFFF9A79),
+      ),
+      RobotFaceControllerCondition.fault => const _FacePalette(
+        backgroundTop: Color(0xFF210E12),
+        backgroundBottom: Color(0xFF0B0507),
+        eyeTop: Color(0xFFFF929F),
+        eyeBottom: Color(0xFFC83F57),
+        pupil: Color(0xFF3D0710),
+        glow: Color(0xFFFF536D),
+        accent: Color(0xFFFFA15F),
+      ),
+      RobotFaceControllerCondition.online => _paletteFor(state.mode),
+    };
+  }
+
+  static const _networkAdvisoryPalette = _FacePalette(
+    backgroundTop: Color(0xFF211A0D),
+    backgroundBottom: Color(0xFF0A0804),
+    eyeTop: Color(0xFFFFE0A1),
+    eyeBottom: Color(0xFFD99428),
+    pupil: Color(0xFF3B2404),
+    glow: Color(0xFFFFB84D),
+    accent: Color(0xFFFFCC73),
+  );
+
   @override
   bool shouldRepaint(covariant _RobotFacePainter oldDelegate) {
-    return oldDelegate.state != state || oldDelegate.phase != phase;
+    return oldDelegate.state != state ||
+        oldDelegate.phase != phase ||
+        oldDelegate.isPreparing != isPreparing ||
+        oldDelegate.isSpeaking != isSpeaking ||
+        oldDelegate.reducedMotion != reducedMotion ||
+        oldDelegate.animationCue != animationCue ||
+        oldDelegate.cueProgress != cueProgress;
   }
 }
 
@@ -759,4 +1297,24 @@ class _FaceMotionProfile {
   final double attentionRingStrength;
   final double wakeAura;
   final double idleDrift;
+}
+
+class _FaceCueFrame {
+  const _FaceCueFrame({
+    this.eyelidBoost = 0,
+    this.eyeLift = 0,
+    this.eyeScale = 0,
+    this.pupilOffset = Offset.zero,
+    this.concernTilt = 0,
+    this.attentionRingStrength = 0,
+    this.glowBoost = 0,
+  });
+
+  final double eyelidBoost;
+  final double eyeLift;
+  final double eyeScale;
+  final Offset pupilOffset;
+  final double concernTilt;
+  final double attentionRingStrength;
+  final double glowBoost;
 }

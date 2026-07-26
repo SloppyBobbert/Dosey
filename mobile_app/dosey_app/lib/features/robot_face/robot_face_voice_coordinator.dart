@@ -20,10 +20,12 @@ class RobotFaceVoiceCoordinator {
     AppDevicePlatform Function()? platform,
     DateTime Function()? now,
     int Function(int max)? randomIndex,
+    bool isActive = true,
   }) : _voicePlayer = voicePlayer,
        _platform = platform ?? currentAppDevicePlatform,
        _now = now ?? DateTime.now,
-       _randomIndex = randomIndex ?? ((max) => Random().nextInt(max)) {
+       _randomIndex = randomIndex ?? ((max) => Random().nextInt(max)),
+       _isActive = isActive {
     _subscriptions = <StreamSubscription<Object?>>[
       settingsStream.listen(_handleSettings),
       roleStream.listen(_handleRole),
@@ -35,7 +37,10 @@ class RobotFaceVoiceCoordinator {
   final AppDevicePlatform Function() _platform;
   final DateTime Function() _now;
   final int Function(int max) _randomIndex;
+  bool _isActive;
   late final List<StreamSubscription<Object?>> _subscriptions;
+  Future<void> _deactivation = Future<void>.value();
+  bool _hasQueuedDeactivation = false;
 
   RobotFaceSettings _settings = const RobotFaceSettings();
   AppDeviceRole? _role;
@@ -50,8 +55,30 @@ class RobotFaceVoiceCoordinator {
       <_VoiceEffectKind, DateTime>{};
 
   Future<void> close() async {
-    for (final subscription in _subscriptions) {
-      await subscription.cancel();
+    _isActive = false;
+    final cancellation = Future.wait(
+      _subscriptions.map((subscription) => subscription.cancel()),
+    );
+    await deactivate();
+    await cancellation;
+  }
+
+  Future<void> deactivate() {
+    _isActive = false;
+    if (!_hasQueuedDeactivation) {
+      _hasQueuedDeactivation = true;
+      _deactivation = _deactivation.then((_) => _voicePlayer.stop());
+    }
+    return _deactivation;
+  }
+
+  void setActive(bool isActive) {
+    if (_isActive == isActive) return;
+    _isActive = isActive;
+    if (isActive) {
+      _hasQueuedDeactivation = false;
+    } else {
+      unawaited(deactivate());
     }
   }
 
@@ -174,6 +201,7 @@ class RobotFaceVoiceCoordinator {
   bool get _shouldSpeak {
     return _platform() == AppDevicePlatform.android &&
         _role == AppDeviceRole.androidRobot &&
+        _isActive &&
         _settings.voiceEnabled;
   }
 

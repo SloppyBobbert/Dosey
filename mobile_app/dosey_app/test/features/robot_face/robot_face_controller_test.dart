@@ -6,6 +6,7 @@ import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
+import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -39,6 +40,49 @@ void main() {
       expect(state.nextEventLabel, '10:00 · Morning meds');
       expect(state.rampProgress, 0);
       expect(state.isInAwakeWindow, isFalse);
+    },
+  );
+
+  test('internet loss adds a non-blocking Robot Face advisory', () async {
+    final fixture = await _RobotFaceControllerFixture.create(
+      now: DateTime(2026, 7, 8, 9),
+      scheduleHour: 10,
+      connectivity: Stream<ConnectivityState>.value(ConnectivityState.offline),
+    );
+    addTearDown(fixture.close);
+
+    await fixture.settle();
+    final state = await fixture.controller.watchState().first;
+
+    expect(state.mode, RobotFaceMode.idle);
+    expect(state.networkAdvisory, RobotFaceNetworkAdvisory.internetOffline);
+    expect(state.availableActions, isEmpty);
+  });
+
+  test(
+    'internet advisory does not replace a blocking controller error',
+    () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9),
+        scheduleHour: 10,
+        connectivity: Stream<ConnectivityState>.value(
+          ConnectivityState.offline,
+        ),
+        controllerSnapshot: const ControllerSnapshot(
+          connectionState: ControllerConnectionState.disconnected,
+          healthState: ControllerHealthState.error,
+          statusLabel: 'Bluetooth is unavailable',
+          canRequestDispense: false,
+        ),
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+      final state = await fixture.controller.watchState().first;
+
+      expect(state.mode, RobotFaceMode.error);
+      expect(state.statusLabel, 'Bluetooth is unavailable');
+      expect(state.networkAdvisory, RobotFaceNetworkAdvisory.internetOffline);
     },
   );
 
@@ -518,8 +562,88 @@ void main() {
     final state = await fixture.controller.watchState().first;
 
     expect(state.mode, RobotFaceMode.offline);
+    expect(state.controllerCondition, RobotFaceControllerCondition.verifying);
     expect(state.statusLabel, 'Verifying controller heartbeat');
   });
+
+  for (final testCase
+      in <
+        ({ControllerSnapshot snapshot, RobotFaceControllerCondition condition})
+      >[
+        (
+          snapshot: const ControllerSnapshot.disconnected(),
+          condition: RobotFaceControllerCondition.disconnected,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.scanning,
+            canRequestDispense: false,
+            statusLabel: 'Connecting to controller',
+            healthState: ControllerHealthState.connecting,
+          ),
+          condition: RobotFaceControllerCondition.connecting,
+        ),
+        (
+          snapshot: const ControllerSnapshot.connected(),
+          condition: RobotFaceControllerCondition.verifying,
+        ),
+        (
+          snapshot: const ControllerSnapshot.online(),
+          condition: RobotFaceControllerCondition.online,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.disconnected,
+            canRequestDispense: false,
+            statusLabel: 'Controller heartbeat missed',
+            healthState: ControllerHealthState.offline,
+          ),
+          condition: RobotFaceControllerCondition.offline,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.scanning,
+            canRequestDispense: false,
+            statusLabel: 'Reconnecting to controller',
+            healthState: ControllerHealthState.reconnecting,
+          ),
+          condition: RobotFaceControllerCondition.reconnecting,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.error,
+            canRequestDispense: false,
+            statusLabel: 'Wireless hardware is unavailable',
+            healthState: ControllerHealthState.error,
+            errorKind: ControllerErrorKind.bluetoothUnavailable,
+          ),
+          condition: RobotFaceControllerCondition.bluetoothUnavailable,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.error,
+            canRequestDispense: false,
+            statusLabel: 'Bluetooth controller reported a jam',
+            healthState: ControllerHealthState.error,
+            errorKind: ControllerErrorKind.other,
+          ),
+          condition: RobotFaceControllerCondition.fault,
+        ),
+      ]) {
+    test('maps ${testCase.condition.name} controller presentation', () async {
+      final fixture = await _RobotFaceControllerFixture.create(
+        now: DateTime(2026, 7, 8, 9),
+        scheduleHour: 10,
+        controllerSnapshot: testCase.snapshot,
+      );
+      addTearDown(fixture.close);
+
+      await fixture.settle();
+
+      final state = await fixture.controller.watchState().first;
+      expect(state.controllerCondition, testCase.condition);
+    });
+  }
 
   test(
     'surfaces happy confirmed for the current due dose before advancing',
@@ -1094,6 +1218,62 @@ void main() {
     },
   );
 
+  for (final testCase
+      in <
+        ({ControllerSnapshot snapshot, RobotFaceControllerCondition condition})
+      >[
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.disconnected,
+            canRequestDispense: false,
+            statusLabel: 'Controller heartbeat missed',
+            healthState: ControllerHealthState.offline,
+          ),
+          condition: RobotFaceControllerCondition.offline,
+        ),
+        (
+          snapshot: const ControllerSnapshot(
+            connectionState: ControllerConnectionState.error,
+            canRequestDispense: false,
+            statusLabel: 'Controller fault',
+            healthState: ControllerHealthState.error,
+            errorKind: ControllerErrorKind.other,
+          ),
+          condition: RobotFaceControllerCondition.fault,
+        ),
+      ]) {
+    test(
+      'active missed alert outranks ${testCase.condition.name} controller mode',
+      () async {
+        final fixture = await _RobotFaceControllerFixture.create(
+          now: DateTime(2026, 7, 8, 9, 5),
+          scheduleHour: 9,
+          controllerSnapshot: testCase.snapshot,
+        );
+        addTearDown(fixture.close);
+
+        await fixture.settle();
+        await fixture.doseLog.addEvent(
+          DoseLogEvent.doseMissed(
+            doseId: fixture.currentDoseId,
+            occurredAt: fixture.now.toUtc(),
+          ),
+        );
+        await fixture.settle();
+
+        final state = await fixture.controller.watchState().first;
+
+        expect(state.mode, RobotFaceMode.missed);
+        expect(state.controllerCondition, testCase.condition);
+        expect(state.statusLabel, testCase.snapshot.statusLabel);
+        expect(state.actionDoseId, fixture.currentDoseId);
+        expect(state.availableActions, const <RobotFaceActionKind>{
+          RobotFaceActionKind.recognizeMissedDose,
+        });
+      },
+    );
+  }
+
   test(
     'an unrecognized missed dose stays visible even after a later dose becomes due',
     () async {
@@ -1419,6 +1599,7 @@ class _RobotFaceControllerFixture {
     ScheduleProfile? activeProfile,
     bool emitDefaultActiveProfile = true,
     Stream<DateTime>? clock,
+    Stream<ConnectivityState>? connectivity,
     Stream<List<MedicationShortageAlertRow>>? shortageAlerts,
     CarouselSlotRepository? carouselSlots,
     ControllerSnapshot controllerSnapshot = const ControllerSnapshot.online(),
@@ -1476,6 +1657,7 @@ class _RobotFaceControllerFixture {
       doseLog: doseLog,
       carouselSlots: slotRepository,
       shortageAlerts: shortageAlerts,
+      connectivity: connectivity,
       clock: clock,
       now: () => currentNow,
     );

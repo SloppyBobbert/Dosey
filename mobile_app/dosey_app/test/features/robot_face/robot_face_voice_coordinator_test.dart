@@ -60,6 +60,46 @@ void main() {
   });
 
   test(
+    'inactive Robot Face stops playback and suppresses new prompts',
+    () async {
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: true),
+      );
+      addTearDown(harness.dispose);
+
+      harness.coordinator.setActive(false);
+      harness.emit(_state(RobotFaceMode.doseReady));
+      await pumpEventQueue();
+
+      expect(harness.voiceGateway.stopCount, 1);
+      expect(harness.voiceGateway.playedPhrases, isEmpty);
+    },
+  );
+
+  test(
+    'closing cancels prompt subscriptions before stopping playback',
+    () async {
+      final gateway = _FakeVoicePlaybackGateway(blockStop: true);
+      final harness = _VoiceCoordinatorHarness(
+        settings: const RobotFaceSettings(voiceEnabled: true),
+        voiceGateway: gateway,
+      );
+      await pumpEventQueue();
+
+      final closing = harness.coordinator.close();
+      await Future<void>.delayed(Duration.zero);
+      harness.emit(_state(RobotFaceMode.doseReady));
+      await Future<void>.delayed(Duration.zero);
+      gateway.completeStop();
+      await closing;
+      await pumpEventQueue();
+
+      expect(gateway.playedPhrases, isEmpty);
+      await harness.closeStreams();
+    },
+  );
+
+  test(
     'eligible state emitted before initial inputs resolves speaks once after startup gating arrives',
     () async {
       final harness = _VoiceCoordinatorHarness(
@@ -1362,6 +1402,10 @@ class _VoiceCoordinatorHarness {
 
   Future<void> dispose() async {
     await coordinator.close();
+    await closeStreams();
+  }
+
+  Future<void> closeStreams() async {
     await _settingsController.close();
     await _roleController.close();
     await states.close();
@@ -1373,9 +1417,15 @@ abstract interface class _InspectableVoicePlaybackGateway
   List<DoseyVoicePhrase> get playedPhrases;
   bool get sideEffectsSeen;
   double? get lastVolume;
+  int get stopCount;
 }
 
 class _FakeVoicePlaybackGateway implements _InspectableVoicePlaybackGateway {
+  _FakeVoicePlaybackGateway({this.blockStop = false});
+
+  final bool blockStop;
+  Completer<void>? _stopCompleter;
+
   @override
   final List<DoseyVoicePhrase> playedPhrases = <DoseyVoicePhrase>[];
   @override
@@ -1383,6 +1433,15 @@ class _FakeVoicePlaybackGateway implements _InspectableVoicePlaybackGateway {
 
   @override
   bool sideEffectsSeen = false;
+
+  @override
+  bool get isPlaying => false;
+
+  @override
+  Stream<bool> get playing => const Stream<bool>.empty();
+
+  @override
+  int stopCount = 0;
 
   @override
   Future<void> dispose() async {}
@@ -1396,6 +1455,17 @@ class _FakeVoicePlaybackGateway implements _InspectableVoicePlaybackGateway {
     );
     lastVolume = volume;
   }
+
+  @override
+  Future<void> stop() async {
+    stopCount += 1;
+    if (blockStop) {
+      _stopCompleter ??= Completer<void>();
+      await _stopCompleter!.future;
+    }
+  }
+
+  void completeStop() => _stopCompleter?.complete();
 }
 
 class _ThrowingVoicePlaybackGateway
@@ -1410,10 +1480,24 @@ class _ThrowingVoicePlaybackGateway
   double? get lastVolume => null;
 
   @override
+  bool get isPlaying => false;
+
+  @override
+  Stream<bool> get playing => const Stream<bool>.empty();
+
+  @override
+  int stopCount = 0;
+
+  @override
   Future<void> dispose() async {}
 
   @override
   Future<void> playAsset(String assetPath, {required double volume}) {
     throw StateError('Playback failed for $assetPath');
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCount += 1;
   }
 }

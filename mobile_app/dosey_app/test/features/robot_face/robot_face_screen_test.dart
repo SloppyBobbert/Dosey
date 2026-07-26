@@ -23,6 +23,10 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
+import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
+import 'package:dosey_app/core/voice/voice_player.dart';
+import 'package:dosey_app/features/robot_face/demo_face_lab_controller.dart';
+import 'package:dosey_app/features/robot_face/robot_face_animation.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
@@ -281,6 +285,680 @@ void main() {
 
     final loopedPhase = state.debugPhase as double;
     expect(loopedPhase, closeTo(0.04, 0.03));
+  });
+
+  testWidgets('animates the face only while voice playback is active', (
+    WidgetTester tester,
+  ) async {
+    final gateway = _ControllableVoicePlaybackGateway();
+    final voicePlayer = DoseyVoicePlayer(playbackGateway: gateway);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        voicePlayer: voicePlayer,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isFalse,
+    );
+
+    gateway.setPlaying(true);
+    await tester.pump();
+
+    final speakingCanvas = tester.widget<RobotFaceCanvas>(
+      find.byType(RobotFaceCanvas),
+    );
+    final dynamic speakingState = tester.state(find.byType(RobotFaceCanvas));
+    expect(speakingCanvas.isSpeaking, isTrue);
+    expect(
+      speakingState.debugAnimationDuration as Duration,
+      const Duration(milliseconds: 920),
+    );
+    expect(find.bySemanticsLabel('Robot is speaking'), findsOneWidget);
+
+    gateway.setPlaying(false);
+    await tester.pump();
+
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isFalse,
+    );
+  });
+
+  testWidgets('shows a focused preparing face before playback starts', (
+    WidgetTester tester,
+  ) async {
+    final gateway = _ControllableVoicePlaybackGateway(blockPreparation: true);
+    final voicePlayer = DoseyVoicePlayer(playbackGateway: gateway);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        voicePlayer: voicePlayer,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final playback = voicePlayer.speak(DoseyVoicePhrase.doseSoon);
+    await tester.pump();
+
+    final preparingCanvas = tester.widget<RobotFaceCanvas>(
+      find.byType(RobotFaceCanvas),
+    );
+    final dynamic preparingState = tester.state(find.byType(RobotFaceCanvas));
+    expect(preparingCanvas.isPreparing, isTrue);
+    expect(preparingCanvas.isSpeaking, isFalse);
+    expect(
+      preparingState.debugAnimationDuration as Duration,
+      const Duration(milliseconds: 5200),
+    );
+    expect(find.bySemanticsLabel('Robot is speaking'), findsNothing);
+
+    gateway.completePreparation();
+    await playback;
+    await tester.pump();
+
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isPreparing,
+      isFalse,
+    );
+  });
+
+  testWidgets('voice coordinator rebind waits for stale playback stop', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await database.setAppSetting(
+      'device_role',
+      AppDeviceRole.androidRobot.storageValue,
+    );
+    await RobotFaceSettingsRepository(
+      database,
+    ).saveSettings(const RobotFaceSettings(voiceEnabled: true));
+    final firstStates = StreamController<RobotFaceState>.broadcast();
+    final secondStates = StreamController<RobotFaceState>.broadcast();
+    final stateStream = ValueNotifier<Stream<RobotFaceState>>(
+      firstStates.stream,
+    );
+    addTearDown(firstStates.close);
+    addTearDown(secondStates.close);
+    addTearDown(stateStream.dispose);
+    final gateway = _RecordingVoicePlaybackGateway();
+    final voicePlayer = DoseyVoicePlayer(playbackGateway: gateway);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        stateStreamNotifier: stateStream,
+        voicePlayer: voicePlayer,
+      ),
+    );
+    await tester.pump();
+    firstStates.add(
+      const RobotFaceState(
+        mode: RobotFaceMode.doseReady,
+        nextEventLabel: 'Now · Morning meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+        actionDoseId: 'dose-0',
+        voiceOccurrenceKey: 'schedule-0:2026-07-20',
+      ),
+    );
+    for (
+      var attempt = 0;
+      attempt < 20 && gateway.playedAssets.isEmpty;
+      attempt += 1
+    ) {
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    expect(gateway.playedAssets, hasLength(1));
+    gateway.playedAssets.clear();
+
+    gateway.blockNextStop();
+    stateStream.value = secondStates.stream;
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        stateStreamNotifier: stateStream,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+        ),
+        isActive: false,
+        voicePlayer: voicePlayer,
+      ),
+    );
+    expect(
+      tester.widget<RobotFaceScreen>(find.byType(RobotFaceScreen)).stateStream,
+      same(stateStream.value),
+    );
+    for (
+      var attempt = 0;
+      attempt < 20 && !gateway.hasBlockedStop;
+      attempt += 1
+    ) {
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+    expect(
+      gateway.hasBlockedStop,
+      isTrue,
+      reason:
+          'Expected coordinator close to stop playback; stops: ${gateway.stopCount}',
+    );
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        stateStreamNotifier: stateStream,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+        ),
+        voicePlayer: voicePlayer,
+      ),
+    );
+    const replacementState = RobotFaceState(
+      mode: RobotFaceMode.doseReady,
+      nextEventLabel: 'Now · Morning meds',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 1,
+      isInAwakeWindow: true,
+      actionDoseId: 'dose-1',
+      voiceOccurrenceKey: 'schedule-1:2026-07-20',
+    );
+    secondStates.add(replacementState);
+    await tester.pump();
+
+    expect(gateway.playedAssets, isEmpty);
+
+    gateway.completeBlockedStop();
+    for (
+      var attempt = 0;
+      attempt < 200 && gateway.playedAssets.isEmpty;
+      attempt += 1
+    ) {
+      secondStates.add(replacementState);
+      await tester.pump(const Duration(milliseconds: 1));
+    }
+
+    expect(
+      gateway.playedAssets,
+      hasLength(1),
+      reason:
+          'Replacement coordinator did not become active; stops: ${gateway.stopCount}',
+    );
+  });
+
+  testWidgets('background keeps Robot Face voice inactive until resume', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await database.setAppSetting(
+      'device_role',
+      AppDeviceRole.androidRobot.storageValue,
+    );
+    await RobotFaceSettingsRepository(
+      database,
+    ).saveSettings(const RobotFaceSettings(voiceEnabled: true));
+    final states = StreamController<RobotFaceState>.broadcast();
+    addTearDown(states.close);
+    final gateway = _RecordingVoicePlaybackGateway();
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        stateStream: states.stream,
+        voicePlayer: DoseyVoicePlayer(playbackGateway: gateway),
+      ),
+    );
+    await tester.pump();
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    states.add(
+      const RobotFaceState(
+        mode: RobotFaceMode.doseReady,
+        nextEventLabel: 'Now · Morning meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      ),
+    );
+    await tester.pump();
+
+    expect(gateway.playedAssets, isEmpty);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    states.add(
+      const RobotFaceState(
+        mode: RobotFaceMode.doseReady,
+        nextEventLabel: 'Now · Morning meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+        actionDoseId: 'dose-1',
+        voiceOccurrenceKey: 'schedule-1:2026-07-20',
+      ),
+    );
+    await tester.pump();
+
+    expect(gateway.playedAssets, hasLength(1));
+  });
+
+  testWidgets('reduced motion uses a static speaking indication', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: const SizedBox(
+            width: 800,
+            height: 400,
+            child: RobotFaceCanvas(
+              isSpeaking: true,
+              state: RobotFaceState(
+                mode: RobotFaceMode.missed,
+                nextEventLabel: '8:00 PM · Evening meds',
+                isFlipped: false,
+                isLandscapeOnly: true,
+                rampProgress: 1,
+                isInAwakeWindow: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvasState.debugIsAnimating as bool, isFalse);
+    expect(find.bySemanticsLabel('Robot is speaking'), findsOneWidget);
+  });
+
+  testWidgets('state changes trigger the matching one-shot face cue', (
+    WidgetTester tester,
+  ) async {
+    final faceState = ValueNotifier<RobotFaceState>(
+      const RobotFaceState(
+        mode: RobotFaceMode.sleepy,
+        nextEventLabel: 'No reminders scheduled',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 0,
+        isInAwakeWindow: false,
+      ),
+    );
+    addTearDown(faceState.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ValueListenableBuilder<RobotFaceState>(
+          valueListenable: faceState,
+          builder: (context, state, child) => RobotFaceCanvas(state: state),
+        ),
+      ),
+    );
+
+    faceState.value = const RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+    await tester.pump();
+
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.wake);
+    expect(canvas.debugIsCueAnimating, isTrue);
+
+    await tester.pump(const Duration(milliseconds: 1000));
+    expect(canvas.debugActiveCue, isNull);
+  });
+
+  testWidgets(
+    'explicit cue replay restarts and safety faces sanitize the cue',
+    (WidgetTester tester) async {
+      const missed = RobotFaceState(
+        mode: RobotFaceMode.missed,
+        nextEventLabel: '8:00 PM · Evening meds',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+      );
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: RobotFaceCanvas(
+            state: missed,
+            animationCue: RobotFaceAnimationCue.celebrate,
+            animationRevision: 1,
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 240));
+
+      final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+      expect(canvas.debugActiveCue, RobotFaceAnimationCue.concern);
+      final firstProgress = canvas.debugCueProgress as double;
+      expect(firstProgress, greaterThan(0));
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: RobotFaceCanvas(
+            state: missed,
+            animationCue: RobotFaceAnimationCue.celebrate,
+            animationRevision: 2,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(canvas.debugCueProgress as double, lessThan(firstProgress));
+    },
+  );
+
+  testWidgets('reduced motion shows a static cue without running a ticker', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MediaQuery(
+          data: MediaQueryData(disableAnimations: true),
+          child: RobotFaceCanvas(
+            state: RobotFaceState(
+              mode: RobotFaceMode.doseReady,
+              nextEventLabel: 'Now · Morning meds',
+              isFlipped: false,
+              isLandscapeOnly: true,
+              rampProgress: 1,
+              isInAwakeWindow: true,
+            ),
+            animationCue: RobotFaceAnimationCue.focus,
+            animationRevision: 1,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.focus);
+    expect(canvas.debugIsCueAnimating, isFalse);
+    expect(canvas.debugCueProgress, greaterThan(0));
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(canvas.debugActiveCue, isNull);
+  });
+
+  testWidgets('inactive face cancels a one-shot cue', (
+    WidgetTester tester,
+  ) async {
+    const state = RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: RobotFaceCanvas(
+          state: state,
+          animationCue: RobotFaceAnimationCue.acknowledge,
+          animationRevision: 1,
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 120));
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: RobotFaceCanvas(
+          state: state,
+          isActive: false,
+          animationCue: RobotFaceAnimationCue.acknowledge,
+          animationRevision: 1,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, isNull);
+    expect(canvas.debugIsCueAnimating, isFalse);
+  });
+
+  testWidgets('tapping the face triggers an acknowledgment cue', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(RobotFaceScreen.canvasKey));
+    await tester.pump();
+
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.acknowledge);
+    expect(canvas.debugIsCueAnimating, isTrue);
+
+    await tester.pump(const Duration(milliseconds: 700));
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).animationCue,
+      isNull,
+    );
+  });
+
+  testWidgets('shows an amber local-first advisory while internet is offline', (
+    WidgetTester tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: '10:00 · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+          networkAdvisory: RobotFaceNetworkAdvisory.internetOffline,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(
+      find.text('Internet offline. Local reminders still work.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(RobotFaceScreen.networkAdvisoryBadgeKey), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(
+            find.text('Internet offline. Local reminders still work.'),
+          )
+          .label,
+      'Internet offline. Local reminders still work.',
+    );
+    semantics.dispose();
+    final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvasState.debugUsesNetworkAdvisoryPalette as bool, isTrue);
+  });
+
+  testWidgets(
+    'controller failure stays red while network advisory is badge only',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          initialState: const RobotFaceState(
+            mode: RobotFaceMode.error,
+            nextEventLabel: '10:00 · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 0,
+            isInAwakeWindow: false,
+            statusLabel: 'Bluetooth is unavailable',
+            networkAdvisory: RobotFaceNetworkAdvisory.internetOffline,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('Bluetooth is unavailable'), findsOneWidget);
+      expect(
+        find.text('Internet offline. Local reminders still work.'),
+        findsOneWidget,
+      );
+      final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+      expect(canvasState.debugUsesNetworkAdvisoryPalette as bool, isFalse);
+    },
+  );
+
+  for (final testCase
+      in <
+        ({
+          RobotFaceControllerCondition condition,
+          RobotFaceMode mode,
+          Duration cadence,
+        })
+      >[
+        (
+          condition: RobotFaceControllerCondition.disconnected,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 5200),
+        ),
+        (
+          condition: RobotFaceControllerCondition.connecting,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 3600),
+        ),
+        (
+          condition: RobotFaceControllerCondition.verifying,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 2200),
+        ),
+        (
+          condition: RobotFaceControllerCondition.offline,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 5200),
+        ),
+        (
+          condition: RobotFaceControllerCondition.reconnecting,
+          mode: RobotFaceMode.offline,
+          cadence: Duration(milliseconds: 1800),
+        ),
+        (
+          condition: RobotFaceControllerCondition.bluetoothUnavailable,
+          mode: RobotFaceMode.error,
+          cadence: Duration(milliseconds: 2600),
+        ),
+        (
+          condition: RobotFaceControllerCondition.fault,
+          mode: RobotFaceMode.error,
+          cadence: Duration(milliseconds: 1600),
+        ),
+      ]) {
+    testWidgets('${testCase.condition.name} uses its controller face family', (
+      WidgetTester tester,
+    ) async {
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          initialState: RobotFaceState(
+            mode: testCase.mode,
+            controllerCondition: testCase.condition,
+            nextEventLabel: 'No reminders scheduled',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 0,
+            isInAwakeWindow: false,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+      expect(canvasState.debugEffectiveControllerCondition, testCase.condition);
+      expect(canvasState.debugAnimationDuration, testCase.cadence);
+    });
+  }
+
+  testWidgets('dose and missed faces outrank stale controller presentation', (
+    WidgetTester tester,
+  ) async {
+    for (final mode in <RobotFaceMode>[
+      RobotFaceMode.doseReady,
+      RobotFaceMode.missed,
+    ]) {
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          key: ValueKey<RobotFaceMode>(mode),
+          initialState: RobotFaceState(
+            mode: mode,
+            controllerCondition: RobotFaceControllerCondition.reconnecting,
+            nextEventLabel: 'Now · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final dynamic canvasState = tester.state(find.byType(RobotFaceCanvas));
+      expect(canvasState.debugEffectiveControllerCondition, isNull);
+    }
   });
 
   testWidgets('ramps compact urgency between soon and ready states', (
@@ -1498,6 +2176,197 @@ void main() {
 
     expect(doseActionLogger.events, hasLength(1));
   });
+
+  testWidgets('Face Lab is available only in isolated demo mode', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byKey(RobotFaceScreen.faceLabButtonKey), findsNothing);
+
+    final demoDatabase = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(demoDatabase.close);
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        key: const ValueKey<String>('demo-face-lab-app'),
+        database: demoDatabase,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byKey(RobotFaceScreen.faceLabButtonKey), findsOneWidget);
+  });
+
+  testWidgets('Face Lab previews controller and voice states without actions', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(database.close);
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.waitingForConfirmation,
+          nextEventLabel: 'Taken? · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          actionDoseId: 'dose-123',
+          availableActions: {
+            RobotFaceActionKind.confirmTaken,
+            RobotFaceActionKind.skipDose,
+            RobotFaceActionKind.askForHelp,
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabButtonKey));
+    await tester.pump();
+
+    expect(find.byKey(RobotFaceScreen.faceLabPanelKey), findsOneWidget);
+    final dropdown = tester.widget<DropdownButton<DemoFacePreview>>(
+      find.descendant(
+        of: find.byKey(RobotFaceScreen.faceLabFaceSelectorKey),
+        matching: find.byType(DropdownButton<DemoFacePreview>),
+      ),
+    );
+    dropdown.onChanged?.call(DemoFacePreview.reconnecting);
+    await tester.pump();
+
+    expect(find.byKey(RobotFaceScreen.faceLabPreviewMarkerKey), findsOneWidget);
+    expect(find.byKey(RobotFaceScreen.actionPanelKey), findsNothing);
+    final dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(
+      canvas.debugEffectiveControllerCondition,
+      RobotFaceControllerCondition.reconnecting,
+    );
+
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabVoiceSpeakingKey));
+    await tester.pump();
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isTrue,
+    );
+    await tester.ensureVisible(
+      find.byKey(RobotFaceScreen.faceLabVoiceInterruptKey),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabVoiceInterruptKey));
+    await tester.pump();
+    expect(find.text('Voice interrupted'), findsOneWidget);
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isFalse,
+    );
+  });
+
+  testWidgets('Face Lab reduced motion and reset are deterministic', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(database.close);
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: false,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabButtonKey));
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabVoiceSpeakingKey));
+    tester
+        .widget<SwitchListTile>(
+          find.byKey(RobotFaceScreen.faceLabReducedMotionKey),
+        )
+        .onChanged
+        ?.call(true);
+    await tester.pump();
+
+    expect(
+      (tester.state(find.byType(RobotFaceCanvas)) as dynamic).debugIsAnimating,
+      isFalse,
+    );
+
+    await tester.ensureVisible(find.byKey(RobotFaceScreen.faceLabResetKey));
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabResetKey));
+    await tester.pump();
+    expect(find.byKey(RobotFaceScreen.faceLabPreviewMarkerKey), findsNothing);
+    expect(
+      tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
+      isFalse,
+    );
+  });
+
+  testWidgets('Face Lab replays cues and advances the manual animation tour', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(database.close);
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        database: database,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: 'No reminders scheduled',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabButtonKey));
+    await tester.pump();
+
+    await tester.ensureVisible(
+      find.byKey(RobotFaceScreen.faceLabAnimationFocusKey),
+    );
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabAnimationFocusKey));
+    await tester.pump();
+
+    dynamic canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.focus);
+    expect(find.text('Playing Focus'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(RobotFaceScreen.faceLabTourNextKey));
+    await tester.tap(find.byKey(RobotFaceScreen.faceLabTourNextKey));
+    await tester.pump();
+
+    canvas = tester.state(find.byType(RobotFaceCanvas));
+    expect(canvas.debugActiveCue, RobotFaceAnimationCue.wake);
+    expect(find.text('Tour 1 of 8 · Wake up'), findsOneWidget);
+  });
 }
 
 class _RawAppClock implements AppClock {
@@ -1518,19 +2387,23 @@ class _RobotFaceTestApp extends StatefulWidget {
     this.database,
     this.controller,
     this.stateStream,
+    this.stateStreamNotifier,
     this.initialState,
     this.isActive = true,
     this.doseActionLogger,
     this.appClock,
+    this.voicePlayer,
   });
 
   final DoseyDatabase? database;
   final RobotFaceController? controller;
   final Stream<RobotFaceState>? stateStream;
+  final ValueNotifier<Stream<RobotFaceState>>? stateStreamNotifier;
   final RobotFaceState? initialState;
   final bool isActive;
   final RobotFaceDoseActionLogger? doseActionLogger;
   final AppClock? appClock;
+  final DoseyVoicePlayer? voicePlayer;
 
   @override
   State<_RobotFaceTestApp> createState() => _RobotFaceTestAppState();
@@ -1550,6 +2423,17 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
 
   @override
   Widget build(BuildContext context) {
+    Widget buildScreen(Stream<RobotFaceState>? stateStream) {
+      return RobotFaceScreen(
+        controller: widget.controller,
+        stateStream: stateStream,
+        initialState: widget.initialState,
+        isActive: widget.isActive,
+        doseActionLogger: widget.doseActionLogger,
+      );
+    }
+
+    final stateStreamNotifier = widget.stateStreamNotifier;
     return DoseyAppScope(
       database: _database,
       appClock: widget.appClock,
@@ -1558,16 +2442,111 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
       permissionGateway: _FakePermissionGateway(),
       reminderScheduler: _FakeReminderScheduler(),
       missedDoseReconciliationService: _FakeMissedDoseReconciliationService(),
+      voicePlayer: widget.voicePlayer,
       child: MaterialApp(
-        home: RobotFaceScreen(
-          controller: widget.controller,
-          stateStream: widget.stateStream,
-          initialState: widget.initialState,
-          isActive: widget.isActive,
-          doseActionLogger: widget.doseActionLogger,
-        ),
+        home: stateStreamNotifier == null
+            ? buildScreen(widget.stateStream)
+            : ValueListenableBuilder<Stream<RobotFaceState>>(
+                valueListenable: stateStreamNotifier,
+                builder: (context, stateStream, child) {
+                  return buildScreen(stateStream);
+                },
+              ),
       ),
     );
+  }
+}
+
+class _ControllableVoicePlaybackGateway implements VoicePlaybackGateway {
+  _ControllableVoicePlaybackGateway({
+    bool initiallyPlaying = false,
+    this.blockPreparation = false,
+  }) : _isPlaying = initiallyPlaying;
+
+  final StreamController<bool> _playing = StreamController<bool>.broadcast();
+  bool _isPlaying;
+  final bool blockPreparation;
+  Completer<void>? _preparationCompleter;
+
+  @override
+  bool get isPlaying => _isPlaying;
+
+  @override
+  Stream<bool> get playing => _playing.stream;
+
+  @override
+  Future<void> dispose() => _playing.close();
+
+  @override
+  Future<void> playAsset(String assetPath, {required double volume}) async {
+    if (blockPreparation) {
+      _preparationCompleter = Completer<void>();
+      await _preparationCompleter!.future;
+    }
+  }
+
+  @override
+  Future<void> stop() async => setPlaying(false);
+
+  void setPlaying(bool value) {
+    _isPlaying = value;
+    _playing.add(value);
+  }
+
+  void completePreparation() {
+    _preparationCompleter?.complete();
+    _preparationCompleter = null;
+  }
+}
+
+class _RecordingVoicePlaybackGateway implements VoicePlaybackGateway {
+  final StreamController<bool> _playing = StreamController<bool>.broadcast();
+  final List<String> playedAssets = <String>[];
+  Completer<void>? _blockedStop;
+  bool _blockNextStop = false;
+  bool _isPlaying = false;
+  int stopCount = 0;
+
+  @override
+  bool get isPlaying => _isPlaying;
+
+  @override
+  Stream<bool> get playing => _playing.stream;
+
+  bool get hasBlockedStop => _blockedStop != null;
+
+  void blockNextStop() {
+    _blockNextStop = true;
+  }
+
+  void completeBlockedStop() {
+    _blockedStop?.complete();
+    _blockedStop = null;
+  }
+
+  @override
+  Future<void> dispose() => _playing.close();
+
+  @override
+  Future<void> playAsset(String assetPath, {required double volume}) async {
+    playedAssets.add(assetPath);
+    _setPlaying(true);
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCount += 1;
+    if (_blockNextStop) {
+      _blockNextStop = false;
+      _blockedStop = Completer<void>();
+      await _blockedStop!.future;
+    }
+    _setPlaying(false);
+  }
+
+  void _setPlaying(bool value) {
+    _isPlaying = value;
+    _playing.add(value);
   }
 }
 

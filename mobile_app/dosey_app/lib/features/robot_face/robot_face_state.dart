@@ -13,6 +13,19 @@ enum RobotFaceMode {
 
 enum RobotFaceTone { calm, ready, attention, warning, offline }
 
+enum RobotFaceNetworkAdvisory { internetOffline }
+
+enum RobotFaceControllerCondition {
+  disconnected,
+  connecting,
+  verifying,
+  online,
+  offline,
+  reconnecting,
+  bluetoothUnavailable,
+  fault,
+}
+
 enum RobotFaceActionKind {
   confirmTaken,
   skipDose,
@@ -63,6 +76,8 @@ class RobotFaceState {
     required this.rampProgress,
     required this.isInAwakeWindow,
     this.statusLabel,
+    this.controllerCondition,
+    this.networkAdvisory,
     this.actionDoseId,
     this.voiceOccurrenceKey,
     this.isAwaitingControllerConfirmation = false,
@@ -81,6 +96,8 @@ class RobotFaceState {
   final double rampProgress;
   final bool isInAwakeWindow;
   final String? statusLabel;
+  final RobotFaceControllerCondition? controllerCondition;
+  final RobotFaceNetworkAdvisory? networkAdvisory;
   final String? actionDoseId;
   final String? voiceOccurrenceKey;
   final bool isAwaitingControllerConfirmation;
@@ -100,6 +117,8 @@ class RobotFaceState {
     double? rampProgress,
     bool? isInAwakeWindow,
     String? statusLabel,
+    Object? controllerCondition = _unset,
+    Object? networkAdvisory = _unset,
     Object? actionDoseId = _unset,
     Object? voiceOccurrenceKey = _unset,
     bool? isAwaitingControllerConfirmation,
@@ -118,6 +137,12 @@ class RobotFaceState {
       rampProgress: rampProgress ?? this.rampProgress,
       isInAwakeWindow: isInAwakeWindow ?? this.isInAwakeWindow,
       statusLabel: statusLabel ?? this.statusLabel,
+      controllerCondition: identical(controllerCondition, _unset)
+          ? this.controllerCondition
+          : controllerCondition as RobotFaceControllerCondition?,
+      networkAdvisory: identical(networkAdvisory, _unset)
+          ? this.networkAdvisory
+          : networkAdvisory as RobotFaceNetworkAdvisory?,
       actionDoseId: identical(actionDoseId, _unset)
           ? this.actionDoseId
           : actionDoseId as String?,
@@ -161,6 +186,8 @@ class RobotFaceState {
         other.rampProgress == rampProgress &&
         other.isInAwakeWindow == isInAwakeWindow &&
         other.statusLabel == statusLabel &&
+        other.controllerCondition == controllerCondition &&
+        other.networkAdvisory == networkAdvisory &&
         other.actionDoseId == actionDoseId &&
         other.voiceOccurrenceKey == voiceOccurrenceKey &&
         other.isAwaitingControllerConfirmation ==
@@ -182,6 +209,8 @@ class RobotFaceState {
     rampProgress,
     isInAwakeWindow,
     statusLabel,
+    controllerCondition,
+    networkAdvisory,
     actionDoseId,
     voiceOccurrenceKey,
     isAwaitingControllerConfirmation,
