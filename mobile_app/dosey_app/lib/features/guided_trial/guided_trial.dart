@@ -134,8 +134,14 @@ class GuidedTrialController extends ChangeNotifier {
   Future<void> restart() async {
     if (_isDisposed || _state.isRunning) return;
     _scenarios.pause();
-    await _scenarios.restart();
-    _setState(const GuidedTrialState(step: GuidedTrialStep.introduction));
+    _setState(_state.copyWith(isRunning: true));
+    try {
+      await _scenarios.restart();
+      _setState(const GuidedTrialState(step: GuidedTrialStep.introduction));
+    } on Object {
+      _setState(_state.copyWith(isRunning: false));
+      rethrow;
+    }
   }
 
   Future<void> _runCurrentStep() async {

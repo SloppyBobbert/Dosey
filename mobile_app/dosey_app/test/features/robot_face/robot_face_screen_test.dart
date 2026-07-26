@@ -7,6 +7,7 @@ import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
+import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -2177,9 +2178,7 @@ void main() {
     expect(doseActionLogger.events, hasLength(1));
   });
 
-  testWidgets('Face Lab stays hidden during the guided trial', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('Face Lab is disabled by default', (WidgetTester tester) async {
     await tester.pumpWidget(
       const _RobotFaceTestApp(
         initialState: RobotFaceState(
@@ -2194,25 +2193,45 @@ void main() {
     );
     await tester.pump();
     expect(find.byKey(RobotFaceScreen.faceLabButtonKey), findsNothing);
+  });
 
-    final demoDatabase = DoseyDatabase.inMemory(isDemo: true);
-    addTearDown(demoDatabase.close);
+  testWidgets('Face Lab stays hidden during an active guided trial', (
+    WidgetTester tester,
+  ) async {
+    final productionDatabase = DoseyDatabase.inMemory();
+    final trialDatabase = DoseyDatabase.inMemory(isDemo: true);
+    addTearDown(productionDatabase.close);
+    addTearDown(trialDatabase.close);
+
     await tester.pumpWidget(
-      _RobotFaceTestApp(
-        key: const ValueKey<String>('demo-face-lab-app'),
-        database: demoDatabase,
-        initialState: const RobotFaceState(
-          mode: RobotFaceMode.idle,
-          nextEventLabel: 'No reminders scheduled',
-          isFlipped: false,
-          isLandscapeOnly: true,
-          rampProgress: 0,
-          isInAwakeWindow: false,
-        ),
+      DemoModeHost(
+        productionDatabase: productionDatabase,
+        demoDatabaseFactory: () => trialDatabase,
+        builder: (context, session) => session.isDemo
+            ? _RobotFaceTestApp(
+                database: session.database,
+                initialState: const RobotFaceState(
+                  mode: RobotFaceMode.idle,
+                  nextEventLabel: 'No reminders scheduled',
+                  isFlipped: false,
+                  isLandscapeOnly: true,
+                  rampProgress: 0,
+                  isInAwakeWindow: false,
+                ),
+              )
+            : MaterialApp(
+                home: FilledButton(
+                  onPressed: DemoModeHost.of(context).startGuidedTrial,
+                  child: const Text('Start trial'),
+                ),
+              ),
       ),
     );
+    await tester.tap(find.text('Start trial'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
 
+    expect(find.text('GUIDED TRIAL - FAKE DATA'), findsOneWidget);
     expect(find.byKey(RobotFaceScreen.faceLabButtonKey), findsNothing);
   });
 

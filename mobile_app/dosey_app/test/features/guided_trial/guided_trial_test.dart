@@ -88,6 +88,34 @@ void main() {
     expect(controller.state.step, GuidedTrialStep.doseReady);
   });
 
+  test('restart blocks progression until the reset completes', () async {
+    await controller.next();
+    scenarios.blockRestart();
+    final pendingRestart = controller.restart();
+
+    expect(controller.state.isRunning, isTrue);
+    await controller.next();
+    expect(scenarios.selected, isEmpty);
+
+    scenarios.releaseRestart();
+    await pendingRestart;
+    expect(controller.state.step, GuidedTrialStep.introduction);
+    expect(controller.state.isRunning, isFalse);
+  });
+
+  test(
+    'failed restart clears busy state without returning to introduction',
+    () async {
+      await controller.next();
+      scenarios.restartFailure = StateError('Reset failed.');
+
+      await expectLater(controller.restart(), throwsStateError);
+
+      expect(controller.state.step, GuidedTrialStep.reminderPreview);
+      expect(controller.state.isRunning, isFalse);
+    },
+  );
+
   test('async completion does not update state after disposal', () async {
     await controller.next();
     scenarios.blockNext();
@@ -105,10 +133,16 @@ class _FakeScenarioRunner implements GuidedTrialScenarioRunner {
   Object? failure;
   int restartCalls = 0;
   Completer<void>? _nextCompleter;
+  Completer<void>? _restartCompleter;
+  Object? restartFailure;
 
   void blockNext() => _nextCompleter = Completer<void>();
 
   void releaseNext() => _nextCompleter?.complete();
+
+  void blockRestart() => _restartCompleter = Completer<void>();
+
+  void releaseRestart() => _restartCompleter?.complete();
 
   @override
   Future<void> next() async {
@@ -122,7 +156,13 @@ class _FakeScenarioRunner implements GuidedTrialScenarioRunner {
   void pause() {}
 
   @override
-  Future<void> restart() async => restartCalls += 1;
+  Future<void> restart() async {
+    restartCalls += 1;
+    await _restartCompleter?.future;
+    _restartCompleter = null;
+    final error = restartFailure;
+    if (error != null) throw error;
+  }
 
   @override
   Future<void> select(DemoScenarioId id) async {
