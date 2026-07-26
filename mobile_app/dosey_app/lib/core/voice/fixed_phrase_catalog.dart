@@ -59,6 +59,18 @@ enum DoseyVoicePhrase {
   controllerProblem,
   controllerStopCheck,
   controllerReadyAgain,
+  nextDoseGettingCloser,
+  scheduledDoseComingUp,
+  notifyWhenDoseReady,
+  doseReadyCheckCup,
+  doseTimeLookInCup,
+  scheduledDoseLooksRight,
+  startingCarouselNow,
+  carouselMovingPleaseWait,
+  movingNextDose,
+  carouselStoppedCheckCup,
+  checkCupDoseLooksRight,
+  confirmOnlyAfterTaken,
 }
 
 enum DoseyVoicePhraseCategory {
@@ -555,6 +567,105 @@ class FixedPhraseCatalog {
       assetPath: '${assetDirectory}controller_ready_again.wav',
       categories: <DoseyVoicePhraseCategory>{
         DoseyVoicePhraseCategory.controllerHardware,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.nextDoseGettingCloser,
+      text: 'Your next dose time is getting closer.',
+      assetPath: '${assetDirectory}reminder_next_dose_getting_closer.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.reminderApproaching,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.scheduledDoseComingUp,
+      text: 'A scheduled dose is coming up.',
+      assetPath: '${assetDirectory}reminder_scheduled_dose_coming_up.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.reminderApproaching,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.notifyWhenDoseReady,
+      text: 'I will let you know when your dose is ready.',
+      assetPath: '${assetDirectory}reminder_notify_when_ready.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.reminderApproaching,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.doseReadyCheckCup,
+      text: 'Your dose is ready. Please check the cup.',
+      assetPath: '${assetDirectory}ready_dose_check_cup.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.doseReadyCupCheck,
+        DoseyVoicePhraseCategory.quietHoursReadySafety,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.doseTimeLookInCup,
+      text: 'It is dose time. Look in the cup before taking anything.',
+      assetPath: '${assetDirectory}ready_dose_time_look_in_cup.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.doseReadyCupCheck,
+        DoseyVoicePhraseCategory.quietHoursReadySafety,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.scheduledDoseLooksRight,
+      text: 'Please check that the scheduled dose looks right.',
+      assetPath: '${assetDirectory}ready_scheduled_dose_looks_right.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.doseReadyCupCheck,
+        DoseyVoicePhraseCategory.quietHoursReadySafety,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.startingCarouselNow,
+      text: 'I am starting the carousel now.',
+      assetPath: '${assetDirectory}dispense_starting_carousel_now.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.dispensingMovement,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.carouselMovingPleaseWait,
+      text: 'The carousel is moving. Please wait.',
+      assetPath: '${assetDirectory}dispense_carousel_moving_wait.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.dispensingMovement,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.movingNextDose,
+      text: 'The dispenser is moving your next dose.',
+      assetPath: '${assetDirectory}dispense_moving_next_dose.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.dispensingMovement,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.carouselStoppedCheckCup,
+      text: 'The carousel has stopped. Please check the cup.',
+      assetPath: '${assetDirectory}confirm_carousel_stopped_check_cup.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.confirmationSafety,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.checkCupDoseLooksRight,
+      text: 'Check the cup and make sure the dose looks right.',
+      assetPath: '${assetDirectory}confirm_check_cup_dose_looks_right.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.confirmationSafety,
+      },
+    ),
+    FixedPhraseDefinition(
+      phrase: DoseyVoicePhrase.confirmOnlyAfterTaken,
+      text: 'Only confirm taken after you have taken the dose.',
+      assetPath: '${assetDirectory}confirm_only_after_taken.wav',
+      categories: <DoseyVoicePhraseCategory>{
+        DoseyVoicePhraseCategory.confirmationSafety,
       },
     ),
   ];
