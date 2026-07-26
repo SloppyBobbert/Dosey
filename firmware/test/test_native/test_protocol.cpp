@@ -1,5 +1,6 @@
 #if defined(DOSEY_TEST_PROTOCOL)
 
+#include <cstring>
 #include <initializer_list>
 #include <string>
 #include <vector>
@@ -37,6 +38,24 @@ public:
 
   bool acceptWrites = true;
   std::vector<std::string> lines;
+};
+
+class QueuedOutput final : public ProtocolOutput {
+public:
+  bool writeLine(const char *line) override {
+    const std::size_t length = std::strlen(line);
+    std::vector<std::uint8_t> framed(length + 1);
+    std::memcpy(framed.data(), line, length);
+    framed[length] = '\n';
+    if (!queue.push(framed.data(), framed.size())) {
+      ++rejectedWrites;
+      return false;
+    }
+    return true;
+  }
+
+  ByteQueue queue;
+  int rejectedWrites = 0;
 };
 
 class FakeHardware final : public ProtocolHardware {
@@ -543,6 +562,25 @@ void test_grove_diagnostics_reports_missing_dht20() {
                            output.lines.back().c_str());
 }
 
+void test_grove_diagnostics_fit_in_ble_output_queue() {
+  FakeHardware hardware;
+  hardware.groveDiagnosticsAreConfigured = true;
+  QueuedOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD diagnostics-1234 GROVE_DIAGNOSTICS", 100);
+
+  std::string transmitted;
+  char value = '\0';
+  while (output.queue.pop(value)) {
+    transmitted.push_back(value);
+  }
+  TEST_ASSERT_EQUAL(0, output.rejectedWrites);
+  TEST_ASSERT_NOT_EQUAL(
+      std::string::npos,
+      transmitted.find("D1 EVT diagnostics-1234 DIAGNOSTICS_DONE\n"));
+}
+
 void test_movement_rejects_duplicate_and_overlapping_commands() {
   FakeHardware hardware;
   hardware.servoIsConfigured = true;
@@ -805,6 +843,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_grove_diagnostics_rejects_unconfigured_profile);
   RUN_TEST(test_grove_diagnostics_reports_raw_snapshot_without_interpretation);
   RUN_TEST(test_grove_diagnostics_reports_missing_dht20);
+  RUN_TEST(test_grove_diagnostics_fit_in_ble_output_queue);
   RUN_TEST(test_movement_rejects_duplicate_and_overlapping_commands);
   RUN_TEST(test_movement_does_not_start_when_acceptance_cannot_be_written);
   RUN_TEST(test_cancel_stops_active_movement_as_unresolved);

@@ -6,7 +6,10 @@
 
 namespace dosey {
 
-inline constexpr std::size_t kBleByteQueueCapacity = 256;
+// Protocol handlers enqueue complete response transcripts before the BLE loop
+// drains 20-byte notification chunks. Keep enough bounded space for the
+// largest current response, GROVE_DIAGNOSTICS, including line framing.
+inline constexpr std::size_t kBleByteQueueCapacity = 2048;
 
 class ByteQueue {
 public:
