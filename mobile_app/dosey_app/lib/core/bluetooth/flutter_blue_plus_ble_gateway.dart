@@ -182,7 +182,9 @@ class FlutterBluePlusBleGateway implements DoseyBleGateway {
 
     if (deviceId == null) {
       await _clearProtocolSubscription();
-      _setConnection(const BleConnectionSnapshot.disconnected());
+      if (_connectionSnapshot.state != BleConnectionState.disconnected) {
+        _setConnection(const BleConnectionSnapshot.disconnected());
+      }
       return;
     }
 
