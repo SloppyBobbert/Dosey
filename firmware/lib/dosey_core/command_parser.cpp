@@ -30,11 +30,16 @@ bool parseType(const char *name, CommandType &type) {
   constexpr Mapping mappings[] = {
       {"STATUS", CommandType::status},
       {"HEARTBEAT", CommandType::heartbeat},
+      {"DEVICE_INFO", CommandType::deviceInfo},
+      {"CONFIG_STATUS", CommandType::configStatus},
+      {"SAFETY_STATUS", CommandType::safetyStatus},
       {"LED_TEST", CommandType::ledTest},
       {"PIR_STATUS", CommandType::pirStatus},
       {"SERVO_TEST", CommandType::servoTest},
       {"DISPENSE_TEST", CommandType::dispenseTest},
       {"DISPENSE_NEXT", CommandType::dispenseNext},
+      {"DEBUG_ON", CommandType::debugOn},
+      {"DEBUG_OFF", CommandType::debugOff},
       {"CANCEL", CommandType::cancel},
   };
 
@@ -135,6 +140,12 @@ const char *commandName(CommandType type) {
     return "STATUS";
   case CommandType::heartbeat:
     return "HEARTBEAT";
+  case CommandType::deviceInfo:
+    return "DEVICE_INFO";
+  case CommandType::configStatus:
+    return "CONFIG_STATUS";
+  case CommandType::safetyStatus:
+    return "SAFETY_STATUS";
   case CommandType::ledTest:
     return "LED_TEST";
   case CommandType::pirStatus:
@@ -145,6 +156,10 @@ const char *commandName(CommandType type) {
     return "DISPENSE_TEST";
   case CommandType::dispenseNext:
     return "DISPENSE_NEXT";
+  case CommandType::debugOn:
+    return "DEBUG_ON";
+  case CommandType::debugOff:
+    return "DEBUG_OFF";
   case CommandType::cancel:
     return "CANCEL";
   }

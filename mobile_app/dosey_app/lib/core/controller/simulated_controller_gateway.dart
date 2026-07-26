@@ -180,6 +180,14 @@ class SimulatedControllerGateway
     return switch (command) {
       ControllerBenchCommand.status => 'Simulator connected',
       ControllerBenchCommand.heartbeat => 'Heartbeat OK',
+      ControllerBenchCommand.deviceInfo =>
+        'FIRMWARE_DOSEY_CONTROLLER, BUILD_BASELINE',
+      ControllerBenchCommand.configStatus =>
+        'SERVO_DISABLED, PIR_DISABLED, UART_RESERVED_SERVO_D6_PROFILE',
+      ControllerBenchCommand.safetyStatus =>
+        'MOVEMENT_TIMEOUT_MS_2500, DISPENSE_NEXT_DISABLED',
+      ControllerBenchCommand.debugOn => 'DEBUG_ON',
+      ControllerBenchCommand.debugOff => 'DEBUG_OFF',
       ControllerBenchCommand.pirStatus => 'PIR idle',
       ControllerBenchCommand.ledTest => 'LED test complete',
       ControllerBenchCommand.servoTest ||

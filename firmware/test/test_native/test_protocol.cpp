@@ -7,11 +7,20 @@
 #include <unity.h>
 
 #include "byte_queue.h"
+#include "debug_event_observer.h"
 #include "line_accumulator.h"
 #include "protocol_engine.h"
 #include "safety_limits.h"
 
 using namespace dosey;
+
+#if defined(DOSEY_TEST_PROTOCOL_DEBUG)
+constexpr const char *kExpectedDebugAvailabilityLine =
+    "D1 EVT status-1 DEBUG_AVAILABLE";
+#else
+constexpr const char *kExpectedDebugAvailabilityLine =
+    "D1 EVT status-1 DEBUG_UNAVAILABLE";
+#endif
 
 void setUp() {}
 void tearDown() {}
@@ -172,6 +181,20 @@ void test_byte_queue_rejects_overflow_without_partial_write() {
   TEST_ASSERT_EQUAL(kBleByteQueueCapacity, input.size());
 }
 
+void test_debug_event_observer_only_accepts_terminal_d1_toggle_events() {
+  TEST_ASSERT_EQUAL(DebugOutputState::enabled,
+                    debugOutputState("D1 EVT debug-1 DEBUG_ON"));
+  TEST_ASSERT_EQUAL(DebugOutputState::disabled,
+                    debugOutputState("D1 EVT debug-2 DEBUG_OFF"));
+  TEST_ASSERT_EQUAL(DebugOutputState::unchanged,
+                    debugOutputState("D1 CMD debug-1 DEBUG_ON"));
+  TEST_ASSERT_EQUAL(DebugOutputState::unchanged,
+                    debugOutputState("D1 EVT debug-1 DEBUG_ON EXTRA"));
+  TEST_ASSERT_EQUAL(DebugOutputState::unchanged,
+                    debugOutputState("D1 EVT status-1 MOVEMENT_IDLE"));
+  TEST_ASSERT_EQUAL(DebugOutputState::unchanged, debugOutputState(nullptr));
+}
+
 void test_status_reports_capabilities_and_idle_state() {
   FakeHardware hardware;
   CapturingOutput output;
@@ -180,10 +203,12 @@ void test_status_reports_capabilities_and_idle_state() {
   engine.handleLine("D1 CMD status-1 STATUS", 100);
 
   assertLines(output,
-              {"D1 EVT status-1 COMMAND_RECEIVED", "D1 EVT status-1 STATUS_OK",
-               "D1 EVT status-1 SERVO_UNCONFIGURED",
-               "D1 EVT status-1 PIR_UNCONFIGURED",
-               "D1 EVT status-1 MOVEMENT_IDLE"});
+               {"D1 EVT status-1 COMMAND_RECEIVED", "D1 EVT status-1 STATUS_OK",
+                "D1 EVT status-1 SERVO_UNCONFIGURED",
+                "D1 EVT status-1 PIR_UNCONFIGURED",
+                kExpectedDebugAvailabilityLine,
+                "D1 EVT status-1 DEBUG_OFF",
+                "D1 EVT status-1 MOVEMENT_IDLE"});
 }
 
 void test_status_reports_active_movement() {
@@ -198,10 +223,12 @@ void test_status_reports_active_movement() {
   engine.handleLine("D1 CMD status-1 STATUS", 101);
 
   assertLines(output,
-              {"D1 EVT status-1 COMMAND_RECEIVED", "D1 EVT status-1 STATUS_OK",
-               "D1 EVT status-1 SERVO_CONFIGURED",
-               "D1 EVT status-1 PIR_CONFIGURED",
-               "D1 EVT status-1 MOVEMENT_ACTIVE"});
+               {"D1 EVT status-1 COMMAND_RECEIVED", "D1 EVT status-1 STATUS_OK",
+                "D1 EVT status-1 SERVO_CONFIGURED",
+                "D1 EVT status-1 PIR_CONFIGURED",
+                kExpectedDebugAvailabilityLine,
+                "D1 EVT status-1 DEBUG_OFF",
+                "D1 EVT status-1 MOVEMENT_ACTIVE"});
 }
 
 void test_heartbeat_has_exact_transcript() {
@@ -214,6 +241,92 @@ void test_heartbeat_has_exact_transcript() {
   assertLines(output,
               {"D1 EVT beat-1 COMMAND_RECEIVED", "D1 EVT beat-1 HEARTBEAT_OK"});
 }
+
+void test_device_info_reports_stable_identity() {
+  FakeHardware hardware;
+  CapturingOutput output;
+  ProtocolEngine protocol(hardware, output);
+
+  protocol.handleLine("D1 CMD info-1 DEVICE_INFO", 0);
+
+  assertLines(output, {"D1 EVT info-1 COMMAND_RECEIVED",
+                       "D1 EVT info-1 DEVICE_INFO_OK",
+                       "D1 EVT info-1 FIRMWARE_DOSEY_CONTROLLER",
+                       "D1 EVT info-1 PROTOCOL_D1",
+                       "D1 EVT info-1 BOARD_XIAO_ESP32_C6_EXPANSION",
+#if defined(DOSEY_TEST_PROTOCOL_DEBUG)
+                       "D1 EVT info-1 BUILD_DEBUG"});
+#else
+                       "D1 EVT info-1 BUILD_BASELINE"});
+#endif
+}
+
+void test_config_status_reports_safe_default_profile() {
+  FakeHardware hardware;
+  CapturingOutput output;
+  ProtocolEngine protocol(hardware, output);
+
+  protocol.handleLine("D1 CMD config-1 CONFIG_STATUS", 0);
+
+  assertLines(output, {"D1 EVT config-1 COMMAND_RECEIVED",
+                       "D1 EVT config-1 CONFIG_STATUS_OK",
+                       "D1 EVT config-1 SERVO_DISABLED",
+                       "D1 EVT config-1 PIR_DISABLED",
+                       "D1 EVT config-1 I2C_DISABLED",
+                       "D1 EVT config-1 BUTTON_DISABLED",
+                       "D1 EVT config-1 UART_RESERVED_SERVO_D6_PROFILE"});
+}
+
+void test_safety_status_reports_compiled_limits_and_disabled_dispense() {
+  FakeHardware hardware;
+  CapturingOutput output;
+  ProtocolEngine protocol(hardware, output);
+
+  protocol.handleLine("D1 CMD safety-1 SAFETY_STATUS", 0);
+
+  assertLines(output, {"D1 EVT safety-1 COMMAND_RECEIVED",
+                       "D1 EVT safety-1 SAFETY_STATUS_OK",
+                       "D1 EVT safety-1 MOVEMENT_TIMEOUT_MS_2500",
+                       "D1 EVT safety-1 SERVO_PULSE_US_1000_2000",
+                       "D1 EVT safety-1 SERVO_ANGLES_DEG_90_100",
+                       "D1 EVT safety-1 DISPENSE_NEXT_DISABLED"});
+  TEST_ASSERT_EQUAL(0, hardware.movementStarts);
+  TEST_ASSERT_EQUAL(0, hardware.movementStops);
+}
+
+void test_debug_commands_are_disabled_without_debug_capability() {
+  FakeHardware hardware;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD debug-1 DEBUG_ON", 100);
+  engine.handleLine("D1 CMD debug-2 DEBUG_OFF", 101);
+
+  assertLines(output, {"D1 NACK debug-1 COMMAND_DISABLED",
+                       "D1 NACK debug-2 COMMAND_DISABLED"});
+}
+
+#if defined(DOSEY_TEST_PROTOCOL_DEBUG)
+void test_debug_commands_toggle_volatile_debug_state() {
+  FakeHardware hardware;
+  CapturingOutput output;
+  ProtocolEngine engine(hardware, output);
+
+  engine.handleLine("D1 CMD debug-1 DEBUG_ON", 100);
+  engine.handleLine("D1 CMD status-1 STATUS", 101);
+  engine.handleLine("D1 CMD debug-2 DEBUG_OFF", 102);
+
+  assertLines(
+      output,
+      {"D1 EVT debug-1 COMMAND_RECEIVED", "D1 EVT debug-1 DEBUG_ON",
+       "D1 EVT status-1 COMMAND_RECEIVED", "D1 EVT status-1 STATUS_OK",
+       "D1 EVT status-1 SERVO_UNCONFIGURED",
+       "D1 EVT status-1 PIR_UNCONFIGURED",
+       "D1 EVT status-1 DEBUG_AVAILABLE", "D1 EVT status-1 DEBUG_ON",
+       "D1 EVT status-1 MOVEMENT_IDLE", "D1 EVT debug-2 COMMAND_RECEIVED",
+       "D1 EVT debug-2 DEBUG_OFF"});
+}
+#endif
 
 void test_led_test_rejects_overlap_and_finishes_at_deadline() {
   FakeHardware hardware;
@@ -405,9 +518,18 @@ int main(int argc, char **argv) {
   RUN_TEST(test_line_accumulator_rejects_invalid_bytes_and_recovers);
   RUN_TEST(test_byte_queue_preserves_fragmented_input_order);
   RUN_TEST(test_byte_queue_rejects_overflow_without_partial_write);
+  RUN_TEST(test_debug_event_observer_only_accepts_terminal_d1_toggle_events);
   RUN_TEST(test_status_reports_capabilities_and_idle_state);
   RUN_TEST(test_status_reports_active_movement);
   RUN_TEST(test_heartbeat_has_exact_transcript);
+  RUN_TEST(test_device_info_reports_stable_identity);
+  RUN_TEST(test_config_status_reports_safe_default_profile);
+  RUN_TEST(test_safety_status_reports_compiled_limits_and_disabled_dispense);
+#if defined(DOSEY_TEST_PROTOCOL_DEBUG)
+  RUN_TEST(test_debug_commands_toggle_volatile_debug_state);
+#else
+  RUN_TEST(test_debug_commands_are_disabled_without_debug_capability);
+#endif
   RUN_TEST(test_led_test_rejects_overlap_and_finishes_at_deadline);
   RUN_TEST(test_led_deadline_handles_timer_wraparound);
   RUN_TEST(test_unconfigured_commands_and_dispense_next_are_rejected);

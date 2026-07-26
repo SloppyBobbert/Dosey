@@ -2,12 +2,33 @@
 
 #include <unity.h>
 
+#include "expansion_board_pins.h"
 #include "hardware_config.h"
 
 void setUp() {}
 void tearDown() {}
 
 #if defined(DOSEY_TEST_CONFIG)
+void test_expansion_board_profile_matches_selected_hardware_layout() {
+  TEST_ASSERT_EQUAL(0, dosey::hardware::expansion_board::kMiniPirPin);
+  TEST_ASSERT_EQUAL(1, dosey::hardware::expansion_board::kOnboardButtonPin);
+  TEST_ASSERT_EQUAL(21, dosey::hardware::expansion_board::kOnboardBuzzerPin);
+  TEST_ASSERT_EQUAL(22, dosey::hardware::expansion_board::kI2cSdaPin);
+  TEST_ASSERT_EQUAL(23, dosey::hardware::expansion_board::kI2cSclPin);
+  TEST_ASSERT_EQUAL(16, dosey::hardware::expansion_board::kServoPin);
+  TEST_ASSERT_EQUAL(dosey::hardware::expansion_board::kServoPin,
+                    dosey::hardware::expansion_board::kUartTxPin);
+  TEST_ASSERT_EQUAL(17, dosey::hardware::expansion_board::kUartRxPin);
+}
+
+void test_enabled_paths_detect_shared_signal_pins() {
+  TEST_ASSERT_TRUE(dosey::hardware::enabledPinsConflict(true, 16, true, 16));
+  TEST_ASSERT_FALSE(
+      dosey::hardware::enabledPinsConflict(true, 16, true, 17));
+  TEST_ASSERT_FALSE(
+      dosey::hardware::enabledPinsConflict(false, 16, true, 16));
+}
+
 void test_compile_time_overrides_populate_hardware_configuration() {
   TEST_ASSERT_TRUE(dosey::hardware::kDigitalOutputConfigured);
   TEST_ASSERT_EQUAL(1, dosey::hardware::kDigitalOutputPin);
@@ -46,6 +67,8 @@ void test_external_hardware_defaults_remain_disabled() {
 int main(int argc, char **argv) {
   UNITY_BEGIN();
 #if defined(DOSEY_TEST_CONFIG)
+  RUN_TEST(test_expansion_board_profile_matches_selected_hardware_layout);
+  RUN_TEST(test_enabled_paths_detect_shared_signal_pins);
   RUN_TEST(test_compile_time_overrides_populate_hardware_configuration);
 #else
   RUN_TEST(test_external_hardware_defaults_remain_disabled);

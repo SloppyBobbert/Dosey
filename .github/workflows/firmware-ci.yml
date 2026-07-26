@@ -40,6 +40,7 @@ jobs:
           pio test -e native_parser
           pio test -e native_state
           pio test -e native_protocol
+          pio test -e native_protocol_debug
           pio test -e native_config
           pio test -e native_config_defaults
 
@@ -54,8 +55,12 @@ jobs:
           pio run -e 07_servo_sweep
           pio run -e 08_serial_protocol
           pio run -e 09_ble_protocol
+          pio run -e controller_baseline
+          pio run -e controller_debug
 
       - name: Check protocol environment
         run: |
           pio check -e 08_serial_protocol --skip-packages
           pio check -e 09_ble_protocol --skip-packages
+          pio check -e controller_baseline --skip-packages
+          pio check -e controller_debug --skip-packages

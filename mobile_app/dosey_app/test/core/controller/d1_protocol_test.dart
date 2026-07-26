@@ -11,6 +11,29 @@ void main() {
     );
   });
 
+  test('encodes controller readiness and debug commands', () {
+    expect(
+      D1Command.values
+          .where(
+            (command) => {
+              D1Command.deviceInfo,
+              D1Command.configStatus,
+              D1Command.safetyStatus,
+              D1Command.debugOn,
+              D1Command.debugOff,
+            }.contains(command),
+          )
+          .map((command) => command.wireName),
+      [
+        'DEVICE_INFO',
+        'CONFIG_STATUS',
+        'SAFETY_STATUS',
+        'DEBUG_ON',
+        'DEBUG_OFF',
+      ],
+    );
+  });
+
   test('rejects invalid command identifiers', () {
     expect(
       () => D1Protocol.encodeCommand('bad id', D1Command.status),

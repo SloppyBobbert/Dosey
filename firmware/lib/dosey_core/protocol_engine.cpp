@@ -2,10 +2,19 @@
 
 #include <cstring>
 
+#include "debug_config.h"
+#include "firmware_identity.h"
+#include "hardware_config.h"
 #include "protocol_writer.h"
 #include "safety_limits.h"
 
 namespace dosey {
+
+static_assert(safety::kMovementTimeoutMs == 2500);
+static_assert(safety::kServoMinimumPulseUs == 1000 &&
+              safety::kServoMaximumPulseUs == 2000);
+static_assert(safety::kServoHomeDegrees == 90 &&
+              safety::kServoTestDegrees == 100);
 
 void ProtocolEngine::handleLine(const char *line, std::uint32_t nowMs) {
   const ParseResult parsed = parseCommand(line);
@@ -61,13 +70,45 @@ void ProtocolEngine::handleCommand(const Command &command,
     sendEvent(command.id, hardware_.servoConfigured() ? "SERVO_CONFIGURED"
                                                       : "SERVO_UNCONFIGURED");
     sendEvent(command.id, hardware_.pirConfigured() ? "PIR_CONFIGURED"
-                                                    : "PIR_UNCONFIGURED");
+                                                     : "PIR_UNCONFIGURED");
+    sendEvent(command.id,
+              debug::kAvailable ? "DEBUG_AVAILABLE" : "DEBUG_UNAVAILABLE");
+    sendEvent(command.id, debugEnabled_ ? "DEBUG_ON" : "DEBUG_OFF");
     sendEvent(command.id,
               controller_.isMoving() ? "MOVEMENT_ACTIVE" : "MOVEMENT_IDLE");
     return;
   case CommandType::heartbeat:
     sendEvent(command.id, "COMMAND_RECEIVED");
     sendEvent(command.id, "HEARTBEAT_OK");
+    return;
+  case CommandType::deviceInfo:
+    sendEvent(command.id, "COMMAND_RECEIVED");
+    sendEvent(command.id, "DEVICE_INFO_OK");
+    sendEvent(command.id, firmware::kNameEvent);
+    sendEvent(command.id, "PROTOCOL_D1");
+    sendEvent(command.id, firmware::kBoardProfileEvent);
+    sendEvent(command.id, debug::kAvailable ? "BUILD_DEBUG" : "BUILD_BASELINE");
+    return;
+  case CommandType::configStatus:
+    sendEvent(command.id, "COMMAND_RECEIVED");
+    sendEvent(command.id, "CONFIG_STATUS_OK");
+    sendEvent(command.id,
+              hardware_.servoConfigured() ? "SERVO_ENABLED" : "SERVO_DISABLED");
+    sendEvent(command.id,
+              hardware_.pirConfigured() ? "PIR_ENABLED" : "PIR_DISABLED");
+    sendEvent(command.id,
+              hardware::kI2cConfigured ? "I2C_ENABLED" : "I2C_DISABLED");
+    sendEvent(command.id, hardware::kButtonConfigured ? "BUTTON_ENABLED"
+                                                       : "BUTTON_DISABLED");
+    sendEvent(command.id, "UART_RESERVED_SERVO_D6_PROFILE");
+    return;
+  case CommandType::safetyStatus:
+    sendEvent(command.id, "COMMAND_RECEIVED");
+    sendEvent(command.id, "SAFETY_STATUS_OK");
+    sendEvent(command.id, "MOVEMENT_TIMEOUT_MS_2500");
+    sendEvent(command.id, "SERVO_PULSE_US_1000_2000");
+    sendEvent(command.id, "SERVO_ANGLES_DEG_90_100");
+    sendEvent(command.id, "DISPENSE_NEXT_DISABLED");
     return;
   case CommandType::ledTest:
     if (ledTestActive_) {
@@ -95,6 +136,24 @@ void ProtocolEngine::handleCommand(const Command &command,
     return;
   case CommandType::dispenseNext:
     sendNack(command.id, "COMMAND_DISABLED");
+    return;
+  case CommandType::debugOn:
+    if (!debug::kAvailable) {
+      sendNack(command.id, "COMMAND_DISABLED");
+      return;
+    }
+    sendEvent(command.id, "COMMAND_RECEIVED");
+    debugEnabled_ = true;
+    sendEvent(command.id, "DEBUG_ON");
+    return;
+  case CommandType::debugOff:
+    if (!debug::kAvailable) {
+      sendNack(command.id, "COMMAND_DISABLED");
+      return;
+    }
+    sendEvent(command.id, "COMMAND_RECEIVED");
+    sendEvent(command.id, "DEBUG_OFF");
+    debugEnabled_ = false;
     return;
   case CommandType::cancel:
     if (!controller_.isMoving()) {

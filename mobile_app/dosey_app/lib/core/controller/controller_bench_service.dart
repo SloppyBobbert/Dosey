@@ -31,6 +31,11 @@ class ControllerBenchService {
         return _lifecycle.requestManualDispenseTest();
       case ControllerBenchCommand.status:
       case ControllerBenchCommand.heartbeat:
+      case ControllerBenchCommand.deviceInfo:
+      case ControllerBenchCommand.configStatus:
+      case ControllerBenchCommand.safetyStatus:
+      case ControllerBenchCommand.debugOn:
+      case ControllerBenchCommand.debugOff:
       case ControllerBenchCommand.pirStatus:
       case ControllerBenchCommand.ledTest:
         return _runDiagnostic(command);
@@ -41,6 +46,11 @@ class ControllerBenchService {
     final commandType = switch (command) {
       ControllerBenchCommand.status => ControllerCommandType.status,
       ControllerBenchCommand.heartbeat => ControllerCommandType.heartbeat,
+      ControllerBenchCommand.deviceInfo => ControllerCommandType.deviceInfo,
+      ControllerBenchCommand.configStatus => ControllerCommandType.configStatus,
+      ControllerBenchCommand.safetyStatus => ControllerCommandType.safetyStatus,
+      ControllerBenchCommand.debugOn => ControllerCommandType.debugOn,
+      ControllerBenchCommand.debugOff => ControllerCommandType.debugOff,
       ControllerBenchCommand.pirStatus => ControllerCommandType.pirStatus,
       ControllerBenchCommand.ledTest => ControllerCommandType.ledTest,
       ControllerBenchCommand.servoTest ||
