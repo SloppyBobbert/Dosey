@@ -496,13 +496,37 @@ void test_grove_diagnostics_reports_raw_snapshot_without_interpretation() {
   assertLines(output,
               {"D1 EVT grove-1 COMMAND_RECEIVED",
                "D1 EVT grove-1 GROVE_DIAGNOSTICS_OK",
+               "D1 EVT grove-1 DIAGNOSTICS_BEGIN",
+                "D1 EVT grove-1 FIRMWARE_DOSEY_CONTROLLER",
+                "D1 EVT grove-1 PROTOCOL_D1",
+                "D1 EVT grove-1 BOARD_XIAO_ESP32_C6_GROVE_BASE",
+#if defined(DOSEY_TEST_PROTOCOL_DEBUG)
+                "D1 EVT grove-1 BUILD_DEBUG",
+#else
+                "D1 EVT grove-1 BUILD_BASELINE",
+#endif
+                "D1 EVT grove-1 MOVEMENT_TIMEOUT_MS_2500",
+               "D1 EVT grove-1 SERVO_PULSE_US_1000_2000",
+               "D1 EVT grove-1 SERVO_ANGLES_DEG_90_100",
+               "D1 EVT grove-1 DISPENSE_NEXT_DISABLED",
+               "D1 EVT grove-1 GROVE_BASE_D8_SERVO_PROFILE",
                "D1 EVT grove-1 PIR_RAW_1",
-               "D1 EVT grove-1 LIGHT_RAW_2048",
-               "D1 EVT grove-1 BUTTON_1A_RAW_1",
-               "D1 EVT grove-1 BUTTON_1B_RAW_0",
-               "D1 EVT grove-1 BUTTON_2A_RAW_0",
-               "D1 EVT grove-1 BUTTON_2B_RAW_1",
-               "D1 EVT grove-1 DHT20_PRESENT"});
+                "D1 EVT grove-1 LIGHT_RAW_2048",
+                "D1 EVT grove-1 BUTTON_1A_RAW_1",
+                "D1 EVT grove-1 BUTTON_1B_RAW_0",
+                "D1 EVT grove-1 BUTTON_2A_RAW_0",
+                "D1 EVT grove-1 BUTTON_2B_RAW_1",
+               "D1 EVT grove-1 DHT20_PRESENT",
+               "D1 EVT grove-1 PIR_WAKE_DISABLED",
+               "D1 EVT grove-1 SERVO_DISABLED",
+               "D1 EVT grove-1 MOVEMENT_IDLE",
+               "D1 EVT grove-1 DHT20_READING_AWAITING_VALIDATION",
+               "D1 EVT grove-1 BUTTON_EVENTS_AWAITING_VALIDATION",
+               "D1 EVT grove-1 PIR_CALIBRATION_REQUIRED",
+               "D1 EVT grove-1 BUZZER_TEST_DISABLED",
+               "D1 EVT grove-1 LED_TEST_AVAILABLE",
+               "D1 EVT grove-1 RELIABILITY_SESSION_NOT_STARTED",
+               "D1 EVT grove-1 DIAGNOSTICS_DONE"});
 }
 
 void test_grove_diagnostics_reports_missing_dht20() {
@@ -514,6 +538,8 @@ void test_grove_diagnostics_reports_missing_dht20() {
   engine.handleLine("D1 CMD grove-1 GROVE_DIAGNOSTICS", 100);
 
   TEST_ASSERT_EQUAL_STRING("D1 EVT grove-1 DHT20_NOT_FOUND",
+                           output.lines[18].c_str());
+  TEST_ASSERT_EQUAL_STRING("D1 EVT grove-1 DIAGNOSTICS_DONE",
                            output.lines.back().c_str());
 }
 

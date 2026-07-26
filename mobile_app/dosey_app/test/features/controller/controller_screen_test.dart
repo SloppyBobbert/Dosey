@@ -33,6 +33,13 @@ void main() {
       find.text('Movement stays separate from dose taken confirmation.'),
       findsOneWidget,
     );
+    await tester.scrollUntilVisible(
+      find.text('Hardware diagnostics'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('Hardware diagnostics'), findsOneWidget);
+    expect(find.textContaining('Read-only snapshot'), findsOneWidget);
   });
 
   testWidgets('shows verified health and reconnect details separately', (
@@ -113,6 +120,16 @@ void main() {
       tester
           .widget<OutlinedButton>(
             find.widgetWithText(OutlinedButton, 'DISPENSE_TEST'),
+          )
+          .onPressed,
+      isNull,
+    );
+    expect(find.text('Read-only commands'), findsOneWidget);
+    expect(find.text('Supervised output and movement'), findsOneWidget);
+    expect(
+      tester
+          .widget<OutlinedButton>(
+            find.widgetWithText(OutlinedButton, 'LED_TEST'),
           )
           .onPressed,
       isNull,
@@ -207,6 +224,34 @@ void main() {
     final session = await repository.getLatestRelevantSession();
     expect(session, isNotNull);
     expect(session!.commandType, ControllerCommandType.dispenseTest);
+  });
+
+  testWidgets('bench LED test requires action PIN when enabled', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    ).setActionPin('1234');
+
+    await tester.pumpWidget(_TestControllerApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Connect controller'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.widgetWithText(OutlinedButton, 'LED_TEST'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.drag(find.byType(ListView), const Offset(0, -180));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'LED_TEST'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter Action PIN'), findsOneWidget);
   });
 
   testWidgets('enters and exits isolated demo mode from Controller', (

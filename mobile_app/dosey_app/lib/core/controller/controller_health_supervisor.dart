@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 
 enum ControllerHealthEventType {
@@ -30,6 +31,7 @@ class ControllerHealthSupervisor
     implements
         StagedControllerGateway,
         ControllerBenchGateway,
+        ControllerDiagnosticsGateway,
         ControllerEventGateway {
   ControllerHealthSupervisor({
     required StagedControllerGateway delegate,
@@ -135,7 +137,7 @@ class ControllerHealthSupervisor
     _ensureOpen();
     if (!_eligible) {
       throw const ControllerCommandPreconditionException(
-        'Controller monitoring requires foreground Android Robot Mode.',
+        'Controller access is unavailable for this device role.',
       );
     }
     _connectionWanted = true;
@@ -291,6 +293,19 @@ class ControllerHealthSupervisor
       }
       rethrow;
     }
+  }
+
+  @override
+  Future<ControllerDiagnosticReport> readControllerDiagnostics() {
+    final diagnosticsDelegate = _delegate is ControllerDiagnosticsGateway
+        ? _delegate as ControllerDiagnosticsGateway
+        : null;
+    if (diagnosticsDelegate == null) {
+      throw const ControllerCommandPreconditionException(
+        'Controller does not support diagnostics reports.',
+      );
+    }
+    return _runUserCommand(diagnosticsDelegate.readControllerDiagnostics);
   }
 
   Future<T> _runUserCommand<T>(

@@ -7,6 +7,7 @@ import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/features/controller/controller_diagnostics_card.dart';
 import 'package:flutter/material.dart';
 
 class ControllerScreen extends StatelessWidget {
@@ -80,6 +81,7 @@ class ControllerScreen extends StatelessWidget {
                     runCommand: (command) => _runControllerAction(
                       context,
                       () => dependencies.controllerBench.run(command),
+                      requiresPin: _isSupervisedBenchCommand(command),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -151,12 +153,14 @@ class ControllerScreen extends StatelessWidget {
                     runCommand: (command) => _runControllerAction(
                       context,
                       () => dependencies.controllerBench.run(command),
-                      requiresPin:
-                          command == ControllerBenchCommand.servoTest ||
-                          command == ControllerBenchCommand.dispenseTest,
+                      requiresPin: _isSupervisedBenchCommand(command),
                     ),
                   ),
                 ],
+                const SizedBox(height: 12),
+                ControllerDiagnosticsCard(
+                  runDiagnostics: dependencies.controllerBench.runDiagnostics,
+                ),
               ],
             );
           },
@@ -351,7 +355,7 @@ class _ControllerBenchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const commands = [
+    const readOnlyCommands = [
       ControllerBenchCommand.status,
       ControllerBenchCommand.heartbeat,
       ControllerBenchCommand.deviceInfo,
@@ -359,9 +363,11 @@ class _ControllerBenchCard extends StatelessWidget {
       ControllerBenchCommand.safetyStatus,
       ControllerBenchCommand.debugOn,
       ControllerBenchCommand.debugOff,
+      ControllerBenchCommand.pirStatus,
+    ];
+    const supervisedCommands = [
       ControllerBenchCommand.servoTest,
       ControllerBenchCommand.dispenseTest,
-      ControllerBenchCommand.pirStatus,
       ControllerBenchCommand.ledTest,
     ];
     return Card(
@@ -375,22 +381,43 @@ class _ControllerBenchCard extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Movement tests create controller history only. They never mark a dose taken or change inventory.',
-            ),
+            const Text('Read-only checks do not activate hardware outputs.'),
             const SizedBox(height: 12),
+            Text(
+              'Read-only commands',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                for (final command in commands)
+                for (final command in readOnlyCommands)
                   OutlinedButton(
-                    onPressed:
-                        !canRunMovement &&
-                            (command == ControllerBenchCommand.servoTest ||
-                                command == ControllerBenchCommand.dispenseTest)
-                        ? null
-                        : () => runCommand(command),
+                    onPressed: () => runCommand(command),
+                    child: Text(_commandLabel(command)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Supervised output and movement',
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Requires verified controller health and Action PIN when enabled. Movement never marks a dose taken or changes inventory.',
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final command in supervisedCommands)
+                  OutlinedButton(
+                    onPressed: canRunMovement
+                        ? () => runCommand(command)
+                        : null,
                     child: Text(_commandLabel(command)),
                   ),
               ],
@@ -401,6 +428,14 @@ class _ControllerBenchCard extends StatelessWidget {
     );
   }
 }
+
+bool _isSupervisedBenchCommand(ControllerBenchCommand command) =>
+    switch (command) {
+      ControllerBenchCommand.servoTest ||
+      ControllerBenchCommand.dispenseTest ||
+      ControllerBenchCommand.ledTest => true,
+      _ => false,
+    };
 
 class _ControllerHistoryCard extends StatelessWidget {
   const _ControllerHistoryCard({required this.history});
@@ -470,6 +505,7 @@ String _commandTypeLabel(ControllerCommandType command) => switch (command) {
   ControllerCommandType.servoTest => 'SERVO_TEST',
   ControllerCommandType.heartbeat => 'HEARTBEAT',
   ControllerCommandType.status => 'STATUS',
+  ControllerCommandType.diagnostics => 'GROVE_DIAGNOSTICS',
   ControllerCommandType.deviceInfo => 'DEVICE_INFO',
   ControllerCommandType.configStatus => 'CONFIG_STATUS',
   ControllerCommandType.safetyStatus => 'SAFETY_STATUS',

@@ -4,6 +4,7 @@ import 'dart:async';
 // ignore_for_file: prefer_initializing_formals
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/d1_protocol.dart';
 
@@ -14,6 +15,7 @@ class BleControllerGateway
     implements
         StagedControllerGateway,
         ControllerBenchGateway,
+        ControllerDiagnosticsGateway,
         ControllerEventGateway {
   BleControllerGateway({
     required DoseyBleGateway transport,
@@ -143,6 +145,12 @@ class BleControllerGateway
       ),
     };
     return _send(protocolCommand);
+  }
+
+  @override
+  Future<ControllerDiagnosticReport> readControllerDiagnostics() async {
+    final details = await _send(D1Command.groveDiagnostics);
+    return ControllerDiagnosticsRegistry.standard.parse(details.split(', '));
   }
 
   @override
@@ -310,6 +318,7 @@ class BleControllerGateway
       D1Command.debugOff => code == 'DEBUG_OFF',
       D1Command.ledTest => code == 'LED_TEST_DONE',
       D1Command.pirStatus => code == 'PIR_MOTION' || code == 'PIR_CLEAR',
+      D1Command.groveDiagnostics => code == 'DIAGNOSTICS_DONE',
       D1Command.servoTest ||
       D1Command.dispenseTest ||
       D1Command.dispenseNext ||

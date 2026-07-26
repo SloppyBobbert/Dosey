@@ -1,4 +1,5 @@
 import 'package:dosey_app/core/controller/controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_lifecycle_service.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 
@@ -39,6 +40,78 @@ class ControllerBenchService {
       case ControllerBenchCommand.pirStatus:
       case ControllerBenchCommand.ledTest:
         return _runDiagnostic(command);
+    }
+  }
+
+  Future<ControllerDiagnosticReport> runDiagnostics() async {
+    final sentAt = _current();
+    final session = await _commandRepository.createSession(
+      commandType: ControllerCommandType.diagnostics,
+      now: sentAt,
+    );
+    await _commandRepository.appendEvent(
+      session.id,
+      ControllerCommandEventType.commandSent,
+      occurredAt: sentAt,
+    );
+
+    try {
+      final diagnosticsController = _controller is ControllerDiagnosticsGateway
+          ? _controller as ControllerDiagnosticsGateway
+          : null;
+      if (diagnosticsController == null) {
+        throw const ControllerCommandPreconditionException(
+          'Controller does not support diagnostics reports.',
+        );
+      }
+      final report = await diagnosticsController.readControllerDiagnostics();
+      final resolvedAt = _current();
+      final details = [
+        'DIAGNOSTICS_BEGIN',
+        ...report.rawCodes,
+        'DIAGNOSTICS_DONE',
+      ].join(', ');
+      await _commandRepository.appendEvent(
+        session.id,
+        ControllerCommandEventType.ack,
+        occurredAt: resolvedAt,
+        details: details,
+      );
+      if (_wasOffline) {
+        await _commandRepository.appendEvent(
+          session.id,
+          ControllerCommandEventType.reconnected,
+          occurredAt: resolvedAt,
+        );
+        _wasOffline = false;
+      }
+      await _commandRepository.updateSessionState(
+        session.id,
+        ControllerCommandSessionState.succeeded,
+        acceptedAt: resolvedAt,
+        resolvedAt: resolvedAt,
+        updatedAt: resolvedAt,
+      );
+      return report;
+    } on Object catch (error) {
+      final failedAt = _current();
+      final offline = error is ControllerTransportOfflineException;
+      _wasOffline = _wasOffline || offline;
+      await _commandRepository.appendEvent(
+        session.id,
+        offline
+            ? ControllerCommandEventType.offline
+            : ControllerCommandEventType.controllerError,
+        occurredAt: failedAt,
+        details: error.toString(),
+      );
+      await _commandRepository.updateSessionState(
+        session.id,
+        ControllerCommandSessionState.failed,
+        failureReason: offline ? ControllerCommandFailureReason.offline : null,
+        updatedAt: failedAt,
+      );
+      rethrow;
     }
   }
 

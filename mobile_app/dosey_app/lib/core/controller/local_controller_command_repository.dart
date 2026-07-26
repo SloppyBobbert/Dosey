@@ -10,6 +10,7 @@ enum ControllerCommandType {
   servoTest,
   heartbeat,
   status,
+  diagnostics,
   deviceInfo,
   configStatus,
   safetyStatus,

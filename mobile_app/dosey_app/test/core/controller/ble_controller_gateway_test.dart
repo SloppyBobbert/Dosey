@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/controller/ble_controller_gateway.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/d1_protocol.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -196,6 +197,38 @@ void main() {
     expect(
       await request,
       'MOVEMENT_STARTED, STATUS_OK, SERVO_UNCONFIGURED, PIR_UNCONFIGURED, MOVEMENT_IDLE',
+    );
+  });
+
+  test('reads a framed typed diagnostics report through BLE', () async {
+    final transport = _FakeDoseyBleGateway();
+    final gateway = BleControllerGateway(
+      transport: transport,
+      canHostRobot: () => true,
+      commandTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    final request = gateway.readControllerDiagnostics();
+    expect(_commandName(transport.writes.single), 'GROVE_DIAGNOSTICS');
+    final id = _commandId(transport.writes.single);
+    for (final code in const [
+      'COMMAND_RECEIVED',
+      'GROVE_DIAGNOSTICS_OK',
+      'DIAGNOSTICS_BEGIN',
+      'PIR_RAW_1',
+      'DHT20_PRESENT',
+      'DIAGNOSTICS_DONE',
+    ]) {
+      transport.emit('D1 EVT $id $code\n');
+    }
+
+    final report = await request;
+    expect(report.reading('pirRaw')?.value, '1 (raw HIGH)');
+    expect(
+      report.reading('dht20Presence')?.status,
+      ControllerDiagnosticStatus.ok,
     );
   });
 

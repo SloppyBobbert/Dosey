@@ -3,6 +3,7 @@ import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_health_supervisor.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
@@ -278,7 +279,7 @@ void main() {
   });
 
   testWidgets(
-    'production supervisor stays active while Android Robot Mode is paused',
+    'production supervisor stays active for personal-mode diagnostics',
     (WidgetTester tester) async {
       final database = DoseyDatabase.inMemory();
       await database.setAppSetting(
@@ -341,8 +342,12 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
       expect(
         (await dependencies.controller.watchController().first).healthState,
-        ControllerHealthState.disconnected,
+        ControllerHealthState.online,
       );
+      final diagnostics =
+          await (dependencies.controller as ControllerDiagnosticsGateway)
+              .readControllerDiagnostics();
+      expect(diagnostics.reading('firmware')?.value, 'Dosey controller');
 
       await tester.pumpWidget(const SizedBox());
       await database.close();

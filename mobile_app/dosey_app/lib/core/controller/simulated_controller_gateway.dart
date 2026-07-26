@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 
 typedef RobotModeAccess = FutureOr<bool> Function();
@@ -20,10 +21,13 @@ enum SimulatedHeartbeatOutcome { success, missed, disconnect }
 
 enum SimulatedConnectOutcome { success, failure }
 
+enum SimulatedDiagnosticsScenario { healthy, missingHardware, abnormalSignals }
+
 class SimulatedControllerGateway
     implements
         StagedControllerGateway,
         ControllerBenchGateway,
+        ControllerDiagnosticsGateway,
         ControllerEventGateway {
   SimulatedControllerGateway({
     RobotModeAccess? canHostRobot,
@@ -58,6 +62,8 @@ class SimulatedControllerGateway
   SimulatedHeartbeatOutcome _nextHeartbeatOutcome =
       SimulatedHeartbeatOutcome.success;
   SimulatedConnectOutcome _nextConnectOutcome = SimulatedConnectOutcome.success;
+  SimulatedDiagnosticsScenario _nextDiagnosticsScenario =
+      SimulatedDiagnosticsScenario.healthy;
   final _controller = StreamController<ControllerSnapshot>.broadcast();
   final _controllerEvents = StreamController<ControllerEvent>.broadcast();
 
@@ -165,6 +171,78 @@ class SimulatedControllerGateway
 
   void queueNextConnectOutcome(SimulatedConnectOutcome outcome) {
     _nextConnectOutcome = outcome;
+  }
+
+  void queueNextDiagnosticsScenario(SimulatedDiagnosticsScenario scenario) {
+    _nextDiagnosticsScenario = scenario;
+  }
+
+  @override
+  Future<ControllerDiagnosticReport> readControllerDiagnostics() async {
+    if (!_snapshot.canRequestDispense) {
+      throw const ControllerTransportOfflineException();
+    }
+    await _benchDelay(const Duration(milliseconds: 150));
+    final scenario = _nextDiagnosticsScenario;
+    _nextDiagnosticsScenario = SimulatedDiagnosticsScenario.healthy;
+    final signalCodes = switch (scenario) {
+      SimulatedDiagnosticsScenario.healthy => const [
+        'PIR_RAW_0',
+        'LIGHT_RAW_2048',
+        'BUTTON_1A_RAW_0',
+        'BUTTON_1B_RAW_0',
+        'BUTTON_2A_RAW_0',
+        'BUTTON_2B_RAW_0',
+        'DHT20_PRESENT',
+        'PIR_WAKE_ENABLED',
+        'SERVO_ENABLED',
+        'MOVEMENT_IDLE',
+      ],
+      SimulatedDiagnosticsScenario.missingHardware => const [
+        'PIR_RAW_0',
+        'LIGHT_RAW_0',
+        'BUTTON_1A_RAW_0',
+        'BUTTON_1B_RAW_0',
+        'BUTTON_2A_RAW_0',
+        'BUTTON_2B_RAW_0',
+        'DHT20_NOT_FOUND',
+        'PIR_WAKE_DISABLED',
+        'SERVO_DISABLED',
+        'MOVEMENT_IDLE',
+      ],
+      SimulatedDiagnosticsScenario.abnormalSignals => const [
+        'PIR_RAW_1',
+        'LIGHT_RAW_4095',
+        'BUTTON_1A_RAW_1',
+        'BUTTON_1B_RAW_1',
+        'BUTTON_2A_RAW_1',
+        'BUTTON_2B_RAW_1',
+        'DHT20_NOT_FOUND',
+        'PIR_WAKE_DISABLED',
+        'SERVO_DISABLED',
+        'MOVEMENT_ACTIVE',
+      ],
+    };
+    return ControllerDiagnosticsRegistry.standard.parse([
+      'DIAGNOSTICS_BEGIN',
+      'FIRMWARE_DOSEY_CONTROLLER',
+      'PROTOCOL_D1',
+      'BOARD_XIAO_ESP32_C6_GROVE_BASE',
+      'BUILD_BASELINE',
+      'MOVEMENT_TIMEOUT_MS_2500',
+      'SERVO_PULSE_US_1000_2000',
+      'SERVO_ANGLES_DEG_90_100',
+      'DISPENSE_NEXT_DISABLED',
+      'GROVE_BASE_D8_SERVO_PROFILE',
+      ...signalCodes,
+      'DHT20_READING_AWAITING_VALIDATION',
+      'BUTTON_EVENTS_AWAITING_VALIDATION',
+      'PIR_CALIBRATION_REQUIRED',
+      'BUZZER_TEST_DISABLED',
+      'LED_TEST_AVAILABLE',
+      'RELIABILITY_SESSION_NOT_STARTED',
+      'DIAGNOSTICS_DONE',
+    ]);
   }
 
   @override

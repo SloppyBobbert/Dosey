@@ -148,6 +148,16 @@ void ProtocolEngine::handleCommand(const Command &command,
     }
     sendEvent(command.id, "COMMAND_RECEIVED");
     sendEvent(command.id, "GROVE_DIAGNOSTICS_OK");
+    sendEvent(command.id, "DIAGNOSTICS_BEGIN");
+    sendEvent(command.id, firmware::kNameEvent);
+    sendEvent(command.id, "PROTOCOL_D1");
+    sendEvent(command.id, firmware::kBoardProfileEvent);
+    sendEvent(command.id, debug::kAvailable ? "BUILD_DEBUG" : "BUILD_BASELINE");
+    sendEvent(command.id, "MOVEMENT_TIMEOUT_MS_2500");
+    sendEvent(command.id, "SERVO_PULSE_US_1000_2000");
+    sendEvent(command.id, "SERVO_ANGLES_DEG_90_100");
+    sendEvent(command.id, "DISPENSE_NEXT_DISABLED");
+    sendEvent(command.id, "GROVE_BASE_D8_SERVO_PROFILE");
     sendRawValue(command.id, "PIR_RAW", hardware_.grovePirRaw());
     sendRawValue(command.id, "LIGHT_RAW", hardware_.groveLightRaw());
     constexpr const char *kButtonLabels[] = {
@@ -157,7 +167,22 @@ void ProtocolEngine::handleCommand(const Command &command,
                    hardware_.groveButtonRaw(index));
     }
     sendEvent(command.id, hardware_.groveDht20Present() ? "DHT20_PRESENT"
-                                                        : "DHT20_NOT_FOUND");
+                                                         : "DHT20_NOT_FOUND");
+    sendEvent(command.id, hardware_.pirWakeConfigured() ? "PIR_WAKE_ENABLED"
+                                                         : "PIR_WAKE_DISABLED");
+    sendEvent(command.id,
+              hardware_.servoConfigured() ? "SERVO_ENABLED" : "SERVO_DISABLED");
+    sendEvent(command.id,
+              controller_.isMoving() ? "MOVEMENT_ACTIVE" : "MOVEMENT_IDLE");
+    sendEvent(command.id, "DHT20_READING_AWAITING_VALIDATION");
+    sendEvent(command.id, "BUTTON_EVENTS_AWAITING_VALIDATION");
+    sendEvent(command.id, "PIR_CALIBRATION_REQUIRED");
+    sendEvent(command.id, hardware::kDigitalOutputConfigured
+                              ? "BUZZER_TEST_AVAILABLE"
+                              : "BUZZER_TEST_DISABLED");
+    sendEvent(command.id, "LED_TEST_AVAILABLE");
+    sendEvent(command.id, "RELIABILITY_SESSION_NOT_STARTED");
+    sendEvent(command.id, "DIAGNOSTICS_DONE");
     return;
   }
   case CommandType::ledTest:

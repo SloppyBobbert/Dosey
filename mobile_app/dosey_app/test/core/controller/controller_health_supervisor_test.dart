@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/controller/controller_diagnostics.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_health_supervisor.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -535,6 +536,19 @@ void main() {
 
     await event;
   });
+
+  test('forwards typed diagnostics reports from its delegate', () async {
+    final delegate = _FakeControllerGateway();
+    final harness = _Harness(delegate);
+    addTearDown(harness.close);
+    await harness.supervisor.setMonitoringEligible(true);
+    await harness.supervisor.connect();
+
+    final report = await harness.supervisor.readControllerDiagnostics();
+
+    expect(report.reading('pirRaw')?.value, '0 (raw LOW)');
+    expect(delegate.diagnosticsReadCount, 1);
+  });
 }
 
 Future<void> _flushEvents() async {
@@ -593,6 +607,7 @@ class _FakeControllerGateway
     implements
         StagedControllerGateway,
         ControllerBenchGateway,
+        ControllerDiagnosticsGateway,
         ControllerEventGateway {
   final _snapshots = StreamController<ControllerSnapshot>.broadcast();
   final _controllerEvents = StreamController<ControllerEvent>.broadcast();
@@ -607,6 +622,7 @@ class _FakeControllerGateway
   int disconnectCount = 0;
   int heartbeatCount = 0;
   int closeCount = 0;
+  int diagnosticsReadCount = 0;
   Object? nextBenchError;
 
   @override
@@ -658,6 +674,16 @@ class _FakeControllerGateway
       return Future<String>.value('HEARTBEAT_OK');
     }
     return heartbeatResults.removeAt(0);
+  }
+
+  @override
+  Future<ControllerDiagnosticReport> readControllerDiagnostics() async {
+    diagnosticsReadCount += 1;
+    return ControllerDiagnosticsRegistry.standard.parse(const [
+      'DIAGNOSTICS_BEGIN',
+      'PIR_RAW_0',
+      'DIAGNOSTICS_DONE',
+    ]);
   }
 
   @override

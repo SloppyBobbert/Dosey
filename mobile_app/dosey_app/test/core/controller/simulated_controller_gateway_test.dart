@@ -47,6 +47,29 @@ void main() {
     );
   });
 
+  test('simulator provides deterministic diagnostics scenarios', () async {
+    final gateway = SimulatedControllerGateway(delay: (_) async {});
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    final healthy = await gateway.readControllerDiagnostics();
+    expect(healthy.reading('dht20Presence')?.value, 'Detected');
+    expect(healthy.reading('movement')?.value, 'Idle');
+
+    gateway.queueNextDiagnosticsScenario(
+      SimulatedDiagnosticsScenario.missingHardware,
+    );
+    final missing = await gateway.readControllerDiagnostics();
+    expect(missing.reading('dht20Presence')?.value, 'Not found');
+
+    gateway.queueNextDiagnosticsScenario(
+      SimulatedDiagnosticsScenario.abnormalSignals,
+    );
+    final abnormal = await gateway.readControllerDiagnostics();
+    expect(abnormal.reading('pirRaw')?.value, '1 (raw HIGH)');
+    expect(abnormal.reading('movement')?.value, 'Active');
+  });
+
   test('debug simulator accepts debug commands', () async {
     final gateway = SimulatedControllerGateway(debugAvailable: true);
     addTearDown(gateway.close);
