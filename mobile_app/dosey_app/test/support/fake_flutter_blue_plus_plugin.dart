@@ -38,6 +38,7 @@ class FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {
   Object? connectError;
   Object? disconnectError;
   Object? writeError;
+  Object? closeError;
 
   final List<String> scanServiceUuids = [];
   final List<String> scanDeviceNames = [];
@@ -75,6 +76,8 @@ class FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {
     connectCalls.add(deviceId);
     await connectGate?.future;
     _throwIfPresent(connectError);
+    // The gateway reports connected after discovery and notification setup;
+    // tests emit native state changes only when exercising those callbacks.
   }
 
   @override
@@ -138,6 +141,7 @@ class FakeFlutterBluePlusPlugin implements FlutterBluePlusPlugin {
     await _adapterController.close();
     await _connectionController.close();
     await _protocolController.close();
+    _throwIfPresent(closeError);
   }
 
   void _throwIfPresent(Object? error) {

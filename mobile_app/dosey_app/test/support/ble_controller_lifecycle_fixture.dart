@@ -233,13 +233,40 @@ class BleControllerLifecycleFixture {
 
   Future<void> settle() => pumpEventQueue();
 
+  Future<void> waitUntil(
+    bool Function() condition, {
+    required String description,
+  }) async {
+    for (var attempt = 0; attempt < 100; attempt += 1) {
+      if (condition()) return;
+      await settle();
+    }
+    throw StateError('Timed out waiting for $description.');
+  }
+
   Future<void> close() async {
-    await _controllerSubscription.cancel();
-    await _controllerEventSubscription.cancel();
-    await supervisor.close();
-    await transport.close();
-    await plugin.close();
-    await database.close();
+    Object? firstError;
+    StackTrace? firstStackTrace;
+
+    Future<void> attempt(Future<void> Function() cleanup) async {
+      try {
+        await cleanup();
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+
+    await attempt(_controllerSubscription.cancel);
+    await attempt(_controllerEventSubscription.cancel);
+    await attempt(supervisor.close);
+    await attempt(transport.close);
+    await attempt(plugin.close);
+    await attempt(database.close);
+
+    if (firstError case final error?) {
+      Error.throwWithStackTrace(error, firstStackTrace!);
+    }
   }
 
   static Future<void> _seedDatabase(

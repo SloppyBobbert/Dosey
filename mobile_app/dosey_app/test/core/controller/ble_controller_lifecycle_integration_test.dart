@@ -13,6 +13,34 @@ import '../../support/ble_controller_lifecycle_fixture.dart';
 import '../../support/fake_flutter_blue_plus_plugin.dart';
 
 void main() {
+  test('fixture waitUntil reports the unmet condition', () async {
+    final fixture = await BleControllerLifecycleFixture.create();
+    addTearDown(fixture.close);
+
+    await expectLater(
+      fixture.waitUntil(() => false, description: 'test condition'),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          'Timed out waiting for test condition.',
+        ),
+      ),
+    );
+  });
+
+  test('fixture teardown preserves the first error and continues', () async {
+    final fixture = await BleControllerLifecycleFixture.create();
+    final closeError = StateError('plugin close failed');
+    fixture.plugin.closeError = closeError;
+
+    await expectLater(fixture.close(), throwsA(same(closeError)));
+    await expectLater(
+      fixture.database.customSelect('SELECT 1').get(),
+      throwsStateError,
+    );
+  });
+
   test(
     'native connection stays fail-closed until heartbeat verification',
     () async {
@@ -250,7 +278,7 @@ void main() {
 
   test('silent timeout remains ambiguous and quarantines the slot', () async {
     final fixture = await BleControllerLifecycleFixture.create(
-      commandTimeout: const Duration(milliseconds: 20),
+      commandTimeout: const Duration(seconds: 1),
     );
     addTearDown(fixture.close);
     await _connectVerified(fixture);
@@ -421,6 +449,26 @@ void main() {
     );
   });
 
+  test('duplicate disconnect preserves the pending reconnect', () async {
+    final fixture = await BleControllerLifecycleFixture.create();
+    addTearDown(fixture.close);
+    await _connectVerified(fixture);
+
+    fixture.plugin.emitDisconnected();
+    await fixture.settle();
+    final nextReconnectAt = fixture.latestController.nextReconnectAt;
+    final reconnectAttempt = fixture.latestController.reconnectAttempt;
+    expect(fixture.scheduler.pendingTimerCount, 1);
+
+    fixture.plugin.emitDisconnected();
+    await fixture.settle();
+
+    expect(fixture.scheduler.pendingTimerCount, 1);
+    expect(fixture.latestController.nextReconnectAt, nextReconnectAt);
+    expect(fixture.latestController.reconnectAttempt, reconnectAttempt);
+    expect(fixture.latestController.canRequestDispense, isFalse);
+  });
+
   test('adapter unavailable suppresses retries until recovery', () async {
     final fixture = await BleControllerLifecycleFixture.create();
     addTearDown(fixture.close);
@@ -482,14 +530,10 @@ void main() {
     fixture.plugin.notificationGate = notificationGate;
 
     final connection = fixture.connect();
-    for (
-      var attempt = 0;
-      fixture.plugin.notificationCalls.isEmpty && attempt < 100;
-      attempt += 1
-    ) {
-      await fixture.settle();
-    }
-    expect(fixture.plugin.notificationCalls, isNotEmpty);
+    await fixture.waitUntil(
+      () => fixture.plugin.notificationCalls.isNotEmpty,
+      description: 'protocol notification setup to start',
+    );
 
     await fixture.supervisor.setMonitoringEligible(false);
     notificationGate.complete();
