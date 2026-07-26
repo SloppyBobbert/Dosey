@@ -9,6 +9,8 @@
 #include "arduino_protocol_hardware.h"
 #include "ble_config.h"
 #include "byte_queue.h"
+#include "debug_config.h"
+#include "debug_event_observer.h"
 #include "hardware_config.h"
 #include "line_accumulator.h"
 #include "protocol_engine.h"
@@ -17,6 +19,7 @@
 namespace {
 
 std::atomic<bool> deviceConnected{false};
+std::atomic<bool> connectPending{false};
 std::atomic<bool> disconnectPending{false};
 std::atomic<bool> inputOverflow{false};
 dosey::ByteQueue inputBytes;
@@ -42,13 +45,41 @@ public:
       Serial.println("BLE output queue full; command response rejected");
       return false;
     }
+
+    const dosey::DebugOutputState nextState = dosey::debugOutputState(line);
+    if constexpr (dosey::debug::kAvailable) {
+      if (debugEnabled_ || nextState == dosey::DebugOutputState::enabled) {
+        Serial.print("DEBUG TX ");
+        Serial.println(line);
+      }
+      if (nextState == dosey::DebugOutputState::enabled) {
+        debugEnabled_ = true;
+        printConfigSnapshot();
+      } else if (nextState == dosey::DebugOutputState::disabled) {
+        debugEnabled_ = false;
+      }
+    }
     return true;
   }
+
+  bool debugEnabled() const { return debugEnabled_; }
+
+private:
+  void printConfigSnapshot() const {
+    Serial.printf("DEBUG CONFIG SERVO=%s PIR=%s I2C=%s BUTTON=%s\n",
+                  dosey::hardware::kServoEnabled ? "ON" : "OFF",
+                  dosey::hardware::kPirConfigured ? "ON" : "OFF",
+                  dosey::hardware::kI2cConfigured ? "ON" : "OFF",
+                  dosey::hardware::kButtonConfigured ? "ON" : "OFF");
+  }
+
+  bool debugEnabled_ = false;
 };
 
 class ServerCallbacks final : public BLEServerCallbacks {
   void onConnect(BLEServer *) override {
     deviceConnected.store(true, std::memory_order_release);
+    connectPending.store(true, std::memory_order_release);
   }
 
   void onDisconnect(BLEServer *) override {
@@ -78,10 +109,17 @@ ServerCallbacks serverCallbacks;
 CommandCallbacks commandCallbacks;
 
 void processConnectionChanges() {
+  if (connectPending.exchange(false, std::memory_order_acq_rel) &&
+      output.debugEnabled()) {
+    Serial.println("DEBUG BLE CONNECTED");
+  }
   if (!disconnectPending.exchange(false, std::memory_order_acq_rel)) {
     return;
   }
   protocol.handleTransportDisconnect();
+  if (output.debugEnabled()) {
+    Serial.println("DEBUG BLE DISCONNECTED");
+  }
   inputBytes.clear();
   outputBytes.clear();
   inputLine.reset();
@@ -92,6 +130,9 @@ void processConnectionChanges() {
 
 void processInput() {
   if (inputOverflow.exchange(false, std::memory_order_acq_rel)) {
+    if (output.debugEnabled()) {
+      Serial.println("DEBUG RX INPUT_QUEUE_OVERFLOW");
+    }
     inputBytes.clear();
     inputLine.reset();
     protocol.handleLineTooLong();
@@ -102,10 +143,20 @@ void processInput() {
   while (inputBytes.pop(value)) {
     const dosey::LineResult result = inputLine.push(value);
     if (result == dosey::LineResult::lineReady) {
+      if (output.debugEnabled()) {
+        Serial.print("DEBUG RX ");
+        Serial.println(inputLine.line());
+      }
       protocol.handleLine(inputLine.line(), millis());
     } else if (result == dosey::LineResult::lineTooLong) {
+      if (output.debugEnabled()) {
+        Serial.println("DEBUG RX LINE_TOO_LONG");
+      }
       protocol.handleLineTooLong();
     } else if (result == dosey::LineResult::lineInvalid) {
+      if (output.debugEnabled()) {
+        Serial.println("DEBUG RX LINE_INVALID");
+      }
       protocol.handleLineInvalid();
     }
   }

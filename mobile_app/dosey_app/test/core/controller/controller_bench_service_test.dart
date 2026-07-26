@@ -9,33 +9,43 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test(
-    'bench status, heartbeat, PIR, and LED commands persist results',
-    () async {
-      final fixture = await _BenchFixture.create();
-      addTearDown(fixture.close);
+  test('read-only bench commands persist their results', () async {
+    final fixture = await _BenchFixture.create();
+    addTearDown(fixture.close);
 
-      await fixture.service.run(ControllerBenchCommand.status);
-      await fixture.service.run(ControllerBenchCommand.heartbeat);
-      await fixture.service.run(ControllerBenchCommand.pirStatus);
-      await fixture.service.run(ControllerBenchCommand.ledTest);
+    await fixture.service.run(ControllerBenchCommand.status);
+    await fixture.service.run(ControllerBenchCommand.heartbeat);
+    await fixture.service.run(ControllerBenchCommand.deviceInfo);
+    await fixture.service.run(ControllerBenchCommand.configStatus);
+    await fixture.service.run(ControllerBenchCommand.safetyStatus);
+    await fixture.service.run(ControllerBenchCommand.debugOn);
+    await fixture.service.run(ControllerBenchCommand.debugOff);
+    await fixture.service.run(ControllerBenchCommand.pirStatus);
+    await fixture.service.run(ControllerBenchCommand.ledTest);
 
-      final history = await fixture.repository.watchRecentHistory().first;
-      expect(history.map((entry) => entry.session.commandType), [
-        ControllerCommandType.ledTest,
-        ControllerCommandType.pirStatus,
-        ControllerCommandType.heartbeat,
-        ControllerCommandType.status,
-      ]);
-      expect(history[0].events.last.details, 'LED test complete');
-      expect(history[1].events.last.details, 'PIR idle');
-      expect(
-        history[2].events.last.eventType,
-        ControllerCommandEventType.heartbeatOk,
-      );
-      expect(history[3].events.last.details, 'Simulator connected');
-    },
-  );
+    final history = await fixture.repository.watchRecentHistory().first;
+    expect(history.map((entry) => entry.session.commandType), [
+      ControllerCommandType.ledTest,
+      ControllerCommandType.pirStatus,
+      ControllerCommandType.debugOff,
+      ControllerCommandType.debugOn,
+      ControllerCommandType.safetyStatus,
+      ControllerCommandType.configStatus,
+      ControllerCommandType.deviceInfo,
+      ControllerCommandType.heartbeat,
+      ControllerCommandType.status,
+    ]);
+    expect(history[0].events.last.details, 'LED test complete');
+    expect(history[1].events.last.details, 'PIR idle');
+    expect(history[2].events.last.details, 'DEBUG_OFF');
+    expect(history[3].events.last.details, 'DEBUG_ON');
+    expect(history[4].events.last.details, contains('DISPENSE_NEXT_DISABLED'));
+    expect(
+      history[7].events.last.eventType,
+      ControllerCommandEventType.heartbeatOk,
+    );
+    expect(history[8].events.last.details, 'Simulator connected');
+  });
 
   test(
     'manual servo and dispense tests never write clinical dose logs',
@@ -104,6 +114,7 @@ class _BenchFixture {
     final gateway = SimulatedControllerGateway(
       canHostRobot: () => true,
       delay: (_) async {},
+      debugAvailable: true,
     );
     await gateway.connect();
     var id = 0;

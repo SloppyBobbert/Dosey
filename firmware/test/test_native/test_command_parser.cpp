@@ -81,6 +81,30 @@ void test_recognizes_disabled_dispense_next() {
   TEST_ASSERT_EQUAL(CommandType::dispenseNext, result.command.type);
 }
 
+void test_parses_debug_toggle_commands() {
+  const ParseResult debugOn = parseCommand("D1 CMD debug-1 DEBUG_ON");
+  const ParseResult debugOff = parseCommand("D1 CMD debug-2 DEBUG_OFF");
+
+  TEST_ASSERT_TRUE(debugOn.ok);
+  TEST_ASSERT_TRUE(debugOff.ok);
+}
+
+void test_parses_read_only_readiness_commands() {
+  const ParseResult deviceInfo =
+      parseCommand("D1 CMD info-1 DEVICE_INFO");
+  const ParseResult configStatus =
+      parseCommand("D1 CMD config-1 CONFIG_STATUS");
+  const ParseResult safetyStatus =
+      parseCommand("D1 CMD safety-1 SAFETY_STATUS");
+
+  TEST_ASSERT_TRUE(deviceInfo.ok);
+  TEST_ASSERT_EQUAL(CommandType::deviceInfo, deviceInfo.command.type);
+  TEST_ASSERT_TRUE(configStatus.ok);
+  TEST_ASSERT_EQUAL(CommandType::configStatus, configStatus.command.type);
+  TEST_ASSERT_TRUE(safetyStatus.ok);
+  TEST_ASSERT_EQUAL(CommandType::safetyStatus, safetyStatus.command.type);
+}
+
 void test_writes_event_line() {
   char line[kMaxProtocolLineLength + 1];
 
@@ -123,6 +147,8 @@ int main(int argc, char **argv) {
   RUN_TEST(test_rejects_oversized_line);
   RUN_TEST(test_rejects_unknown_command);
   RUN_TEST(test_recognizes_disabled_dispense_next);
+  RUN_TEST(test_parses_debug_toggle_commands);
+  RUN_TEST(test_parses_read_only_readiness_commands);
   RUN_TEST(test_writes_event_line);
   RUN_TEST(test_writes_nack_line);
   RUN_TEST(test_writes_error_line);

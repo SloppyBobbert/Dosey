@@ -49,6 +49,7 @@ private:
   ProtocolHardware &hardware_;
   ProtocolOutput &output_;
   ControllerState controller_;
+  bool debugEnabled_ = false;
   bool ledTestActive_ = false;
   std::uint32_t ledDeadlineMs_ = 0;
   char ledCommandId_[kMaxCommandIdLength + 1] = {};

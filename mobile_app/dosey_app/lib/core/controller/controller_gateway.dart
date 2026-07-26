@@ -155,6 +155,11 @@ abstract interface class StagedControllerGateway implements ControllerGateway {
 enum ControllerBenchCommand {
   status,
   heartbeat,
+  deviceInfo,
+  configStatus,
+  safetyStatus,
+  debugOn,
+  debugOff,
   servoTest,
   dispenseTest,
   pirStatus,

@@ -123,6 +123,11 @@ class BleControllerGateway
     final protocolCommand = switch (command) {
       ControllerBenchCommand.status => D1Command.status,
       ControllerBenchCommand.heartbeat => D1Command.heartbeat,
+      ControllerBenchCommand.deviceInfo => D1Command.deviceInfo,
+      ControllerBenchCommand.configStatus => D1Command.configStatus,
+      ControllerBenchCommand.safetyStatus => D1Command.safetyStatus,
+      ControllerBenchCommand.debugOn => D1Command.debugOn,
+      ControllerBenchCommand.debugOff => D1Command.debugOff,
       ControllerBenchCommand.pirStatus => D1Command.pirStatus,
       ControllerBenchCommand.ledTest => D1Command.ledTest,
       ControllerBenchCommand.servoTest ||
@@ -282,6 +287,11 @@ class BleControllerGateway
     return switch (command) {
       D1Command.status => code == 'MOVEMENT_ACTIVE' || code == 'MOVEMENT_IDLE',
       D1Command.heartbeat => code == 'HEARTBEAT_OK',
+      D1Command.deviceInfo => code == 'BUILD_BASELINE' || code == 'BUILD_DEBUG',
+      D1Command.configStatus => code == 'UART_RESERVED_SERVO_D6_PROFILE',
+      D1Command.safetyStatus => code == 'DISPENSE_NEXT_DISABLED',
+      D1Command.debugOn => code == 'DEBUG_ON',
+      D1Command.debugOff => code == 'DEBUG_OFF',
       D1Command.ledTest => code == 'LED_TEST_DONE',
       D1Command.pirStatus => code == 'PIR_MOTION' || code == 'PIR_CLEAR',
       D1Command.servoTest ||

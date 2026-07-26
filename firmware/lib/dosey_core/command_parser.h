@@ -7,11 +7,16 @@ namespace dosey {
 enum class CommandType {
   status,
   heartbeat,
+  deviceInfo,
+  configStatus,
+  safetyStatus,
   ledTest,
   pirStatus,
   servoTest,
   dispenseTest,
   dispenseNext,
+  debugOn,
+  debugOff,
   cancel,
 };
 

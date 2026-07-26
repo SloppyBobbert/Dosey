@@ -41,8 +41,8 @@ The project is intended to explore whether an inexpensive, expressive, and repai
 | Robot phone | Horizontal Android phone, first tested on the 2024 Moto G Play |
 | Personal app | Flutter app for Android and iOS personal phones |
 | Controller | Seeed Studio XIAO ESP32-C6 controller |
-| Expansion hardware | Seeed Studio Grove Base for XIAO, with Grove ports for servo, PIR, and feedback modules |
-| Mechanism | Grove servo pusher with a ratchet or physical stop; basic servo movement is confirmed |
+| Expansion hardware | XIAO Expansion Board for the current no-solder servo and sensor layout; Grove Base for XIAO reserved for later |
+| Mechanism | SG90 servo pusher with a ratchet or physical stop; the earlier Grove servo moved the carousel, but repeatability remains unverified |
 | Shell | Fully LEGO body around the carousel, phone, electronics, cup opening, and service panels |
 | App data | Drift/SQLite on the phone only; no backend or cloud sync yet |
 | App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus a face-first mounted experience in Android Robot Mode |
@@ -68,7 +68,7 @@ Dosey is built around four main systems:
 1. **Daviky carousel and dispense path**
    - Use the premade Daviky carousel, chute, cup, and stand as the medication storage and presentation base.
    - Do not count individual pills. Each carousel compartment should hold one scheduled dose.
-   - Use a Grove servo pusher to advance one slot at a time.
+   - Use an SG90 servo pusher to advance one slot at a time.
    - Add a ratchet or physical stop so the carousel does not roll backward.
 
 2. **Phone app**
@@ -81,7 +81,8 @@ Dosey is built around four main systems:
 3. **XIAO and Grove controller**
    - The controller handles direct hardware only: servo movement, PIR, LEDs, buzzer/vibration, buttons, sensor readings, status, and Bluetooth messages.
    - The confirmed controller is the Seeed Studio XIAO ESP32-C6.
-   - The confirmed Grove base is the Seeed Studio Grove Base for XIAO. Older XIAO Expansion Board references are historical.
+   - The current no-solder base is the XIAO Expansion Board. Its `D6/TX`, 5 V, and GND header accepts the owned SG90 servo without powering a motor from a 3.3 V Grove socket. Keep the Grove Base for XIAO intact and reserved for later.
+   - The current module layout uses the SG90 on the `D6/TX` servo header, Mini PIR on `D0/A0`, DHT20 and LIS3DHTR on the two shared-bus I2C sockets, and the Expansion Board's onboard button, passive buzzer, OLED, and RTC. Keep the UART Grove socket empty because it shares D6 with the servo.
 
 4. **LEGO shell**
    - The shell direction is now fully LEGO, not a temporary placeholder before 3D printing.
@@ -96,8 +97,10 @@ Current plan-critical hardware:
 - Premade Daviky pill carousel with chute, cup, stand, and refill access.
 - Horizontal Android phone, currently the 2024 Moto G Play or similar.
 - Seeed Studio XIAO ESP32-C6 controller.
-- Seeed Studio Grove Base for XIAO.
-- Grove servo, with basic movement confirmed.
+- XIAO Expansion Board from the Seeed Studio XIAO Starter Kit.
+- Seeed Studio Grove Base for XIAO, retained for later use.
+- SG90 micro servo for the current 5 V carousel path.
+- Grove servo, retained as previously tested hardware but not used in the current 3.3 V Grove layout.
 - Grove Mini PIR motion sensor.
 - Grove cables, LEDs or LED strip, optional buzzer/vibration/buttons/sensors.
 - Multi-port USB charger with separate phone and controller power paths.
@@ -107,7 +110,7 @@ Current plan-critical hardware:
 
 The project should now focus on the servo/carousel rig while app MVP work continues in parallel.
 
-1. **Hardware confirmed** — ESP32-C6, Grove Base for XIAO, and basic servo movement are confirmed. Continue one-module checks for PIR, buttons, LEDs, buzzer/vibration, and sensors.
+1. **Hardware selected** — ESP32-C6, Expansion Board, and the no-solder module layout are selected. Verify the SG90 header orientation, PIR, DHT20, LIS3DHTR, and onboard peripherals one at a time before combined or loaded testing.
 2. **Servo and carousel rig** — Next major build. Advance the Daviky carousel one slot repeatably, prevent rollback, and align the slot with the chute/cup.
 3. **Bluetooth control** — Finish the phone-to-XIAO command/status protocol with acknowledgements, heartbeat, and status events.
 4. **Basic app MVP** — Continue Robot Mode with the face screen, schedule, loading guide, dispense, refill, history, hardware test, and local safety flows.
@@ -122,7 +125,7 @@ Log progress in [`docs/build_log.md`](docs/build_log.md) and criteria in [`docs/
 ```text
 Dosey/
 ├── README.md
-├── firmware/              # Arduino/PlatformIO C++ examples for XIAO and Grove hardware
+├── firmware/              # XIAO bring-up programs and safe controller firmware baseline
 ├── mobile_app/            # Flutter app workspace; app lives in mobile_app/dosey_app/
 ├── mechanical/            # Daviky carousel, LEGO shell, servo rig, measurements, assembly notes
 ├── docs/                  # Wiring, protocol, safety, tests, parts, decisions, logs
@@ -142,11 +145,11 @@ Useful docs:
 
 ## Firmware
 
-Firmware will start as small Arduino/PlatformIO C++ examples for the XIAO and Grove modules. Bring up each module on its own before combining modules into controller firmware.
+Firmware includes small Arduino/PlatformIO C++ bring-up programs, a safe `controller_baseline` flash target, and a `controller_debug` variant with volatile USB-only diagnostics. Both run the versioned D1 protocol over BLE while every external hardware path remains disabled by default. Read-only device, configuration, and safety-limit commands support pre-hardware checks from the app's Controller bench card. Bring up each module on its own before enabling it in the controller configuration.
 
 The controller should stay simple. It should handle direct hardware actions, heartbeat/status replies, ACK/NACK events, and error codes. It should not handle medication names, schedules, PIN logic, caregiver logic, voice, AI, or medical advice.
 
-No firmware build command exists yet.
+Build the safe-default controller image from `firmware/` with `/tmp/dosey-platformio/bin/pio run -e controller_baseline`. See [`firmware/README.md`](firmware/README.md) for pinned setup, tests, upload commands, and physical safety gates.
 
 ## Mobile app
 
@@ -201,15 +204,15 @@ The first mechanism to build is a servo pusher for the Daviky carousel:
 4. The servo returns to its starting position.
 5. The next preloaded dose aligns with the Daviky chute and cup.
 
-The servo has already been tested as strong enough for the current mechanism, so the main work is repeatable mounting, indexing, rollback prevention, and cup/chute alignment. Keep the LEGO shell serviceable and do not hide the mechanism before the one-slot movement test passes repeatedly.
+The earlier Grove servo moved the actual carousel, which supports the pusher approach but does not validate the SG90 power path or repeated movement. The next work is SG90 testing, repeatable mounting, indexing, rollback prevention, and cup/chute alignment. Keep the LEGO shell serviceable and do not hide the mechanism before the one-slot movement test passes repeatedly.
 
 ## Project status
 
-Early prototype. The repo has a safety-first Flutter app shell, mounted-phone Robot Mode guardrails, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, and local Android/iOS tooling. It still has no production firmware, completed BLE protocol, hardware heartbeat, cloud sync, push notifications, or proven Daviky carousel movement.
+Early prototype. The repo has a safety-first Flutter app shell, mounted-phone Robot Mode guardrails, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, local Android/iOS tooling, and a safe-default controller firmware baseline. It still has no physically validated integrated firmware, completed phone-to-hardware BLE lifecycle, cloud sync, push notifications, or proven repeatable Daviky carousel movement.
 
 Near-term work:
 
-- Record the ESP32-C6 and Grove Base wiring, power paths, and servo power behavior.
+- Verify the ESP32-C6 and Expansion Board wiring, pin assignments, and loaded servo power behavior.
 - Build the Stage 2 servo/carousel rig and run repeated one-slot tests.
 - Draft and test the Bluetooth command/status/heartbeat protocol against the simulator before hardware integration.
 - Run mounted-phone manual QA on the Moto G Play, including inactivity return, notification routing, Back containment, screen-awake release, and role changes.

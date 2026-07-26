@@ -158,6 +158,31 @@ void main() {
     );
   });
 
+  test('readiness commands complete on their terminal events', () async {
+    final transport = _FakeDoseyBleGateway();
+    final gateway = BleControllerGateway(
+      transport: transport,
+      canHostRobot: () => true,
+      commandTimeout: const Duration(seconds: 1),
+    );
+    addTearDown(gateway.close);
+    await gateway.connect();
+
+    for (final scenario in [
+      (ControllerBenchCommand.deviceInfo, 'BUILD_BASELINE'),
+      (ControllerBenchCommand.configStatus, 'UART_RESERVED_SERVO_D6_PROFILE'),
+      (ControllerBenchCommand.safetyStatus, 'DISPENSE_NEXT_DISABLED'),
+      (ControllerBenchCommand.debugOn, 'DEBUG_ON'),
+      (ControllerBenchCommand.debugOff, 'DEBUG_OFF'),
+    ]) {
+      final request = gateway.runBenchCommand(scenario.$1);
+      final id = _commandId(transport.writes.last);
+      transport.emit('D1 EVT $id COMMAND_RECEIVED\n');
+      transport.emit('D1 EVT $id ${scenario.$2}\n');
+      expect(await request, scenario.$2);
+    }
+  });
+
   test(
     'stage callback failures fail the command and preserve decoding',
     () async {

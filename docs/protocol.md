@@ -19,8 +19,9 @@ The XIAO owns direct hardware actions and reports: servo movement, PIR status, L
 ## Implemented USB and BLE bring-up protocol
 
 `firmware/bringup/08_serial_protocol` implements a line-oriented USB serial demo
-at 115200 baud. `firmware/bringup/09_ble_protocol` runs the same protocol engine
-over a single-client BLE GATT service. Both are bring-up groundwork.
+at 115200 baud. The `09_ble_protocol`, `controller_baseline`, and
+`controller_debug` PlatformIO environments run the same canonical BLE source
+over a single-client GATT service. These remain bring-up groundwork.
 
 The BLE peripheral advertises as `Dosey-XIAO-C6` with service UUID
 `8f3a1001-6f5b-4d4f-9c2a-5d6e7f801001`, RX/write characteristic
@@ -61,8 +62,12 @@ Implemented commands while external hardware remains unconfigured:
 
 | Command | Current result |
 | --- | --- |
-| `STATUS` | `COMMAND_RECEIVED`, `STATUS_OK`, servo configuration, PIR configuration, then movement state |
+| `STATUS` | `COMMAND_RECEIVED`, `STATUS_OK`, servo configuration, PIR configuration, debug availability/state, then movement state |
 | `HEARTBEAT` | `COMMAND_RECEIVED`, then `HEARTBEAT_OK` |
+| `DEVICE_INFO` | Stable firmware, protocol, board profile, and build flavor events |
+| `CONFIG_STATUS` | Read-only compiled hardware states and D6/UART reservation |
+| `SAFETY_STATUS` | Read-only movement timeout, servo limits, and scheduled-dispense lockout |
+| `DEBUG_ON` / `DEBUG_OFF` | Disabled in baseline; in the debug build, toggle volatile USB-only diagnostics |
 | `LED_TEST` | `COMMAND_RECEIVED`, `LED_TEST_STARTED`, then `LED_TEST_DONE` |
 | `PIR_STATUS` | `CONFIGURATION_REQUIRED` NACK |
 | `SERVO_TEST` | `CONFIGURATION_REQUIRED` NACK |
@@ -77,6 +82,8 @@ D1 EVT <command-id> COMMAND_RECEIVED
 D1 EVT <command-id> STATUS_OK
 D1 EVT <command-id> SERVO_UNCONFIGURED
 D1 EVT <command-id> PIR_UNCONFIGURED
+D1 EVT <command-id> DEBUG_UNAVAILABLE
+D1 EVT <command-id> DEBUG_OFF
 D1 EVT <command-id> MOVEMENT_IDLE
 ```
 
@@ -84,6 +91,26 @@ When paths are physically verified and locally enabled, configuration events
 change to `SERVO_CONFIGURED` and `PIR_CONFIGURED`. Movement state is
 `MOVEMENT_ACTIVE` only while one movement command owns the controller path;
 otherwise it is `MOVEMENT_IDLE`.
+
+The `controller_debug` build changes `DEBUG_UNAVAILABLE` to `DEBUG_AVAILABLE`.
+Diagnostics still start `DEBUG_OFF` after every reboot. Toggling diagnostics
+does not persist state, enable hardware, alter command outcomes, or send debug
+text through BLE; it only mirrors transport and protocol activity to USB serial.
+
+The committed `SAFETY_STATUS` transcript is:
+
+```text
+D1 EVT <command-id> COMMAND_RECEIVED
+D1 EVT <command-id> SAFETY_STATUS_OK
+D1 EVT <command-id> MOVEMENT_TIMEOUT_MS_2500
+D1 EVT <command-id> SERVO_PULSE_US_1000_2000
+D1 EVT <command-id> SERVO_ANGLES_DEG_90_100
+D1 EVT <command-id> DISPENSE_NEXT_DISABLED
+```
+
+These values describe compiled safeguards only. They do not verify servo power,
+mechanical travel, carousel alignment, BLE behavior, or physical fail-safe
+operation. See `controller_bench_runbook.md` for the supervised check sequence.
 
 After a servo and its power path are physically verified and explicitly enabled, `SERVO_TEST` and `DISPENSE_TEST` accept one movement at a time. Their lifecycle is `COMMAND_RECEIVED`, `MOVEMENT_STARTED`, then `SERVO_DONE` or an error. An overlapping command returns `BUSY`; reuse of the active ID returns `DUPLICATE_ACTIVE_ID`. `CANCEL` detaches PWM and emits `MOVEMENT_CANCELLED_UNRESOLVED` for the interrupted command. A deadline failure detaches PWM and emits `MOVEMENT_TIMEOUT`.
 

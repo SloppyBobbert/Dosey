@@ -1,6 +1,6 @@
 # Firmware
 
-Incremental Arduino/PlatformIO C++ bring-up firmware for the Seeed Studio XIAO ESP32-C6. The Grove Base for XIAO and all external modules remain unconfigured until their exact labels, ports, pins, and power paths can be checked in person.
+Incremental Arduino/PlatformIO C++ bring-up firmware for the Seeed Studio XIAO ESP32-C6. The current no-solder hardware layout uses the XIAO Expansion Board, but external paths remain disabled until their pins, active levels, and physical behavior are verified.
 
 This is prototype firmware. Test only with candy, beads, dry beans, vitamins, or fake pills. Do not use real prescription medication during bring-up.
 
@@ -29,6 +29,7 @@ Run commands from this directory with PlatformIO Core 6.1.19:
 /tmp/dosey-platformio/bin/pio test -e native_parser
 /tmp/dosey-platformio/bin/pio test -e native_state
 /tmp/dosey-platformio/bin/pio test -e native_protocol
+/tmp/dosey-platformio/bin/pio test -e native_protocol_debug
 /tmp/dosey-platformio/bin/pio test -e native_config
 /tmp/dosey-platformio/bin/pio test -e native_config_defaults
 ```
@@ -46,12 +47,15 @@ The commands below use that pinned executable directly.
 ## Layout
 
 - `include/hardware_config.h`: centralized pins and explicit external-hardware enable flags.
+- `include/expansion_board_pins.h`: named ESP32-C6 GPIO assignments for the selected Expansion Board layout.
 - `include/hardware_config.local.h.example`: safe template for ignored, bench-only configuration overrides.
 - `include/protocol_config.h`: protocol version and input bounds.
+- `include/debug_config.h`: compile-time availability for volatile USB diagnostics.
+- `include/firmware_identity.h`: stable firmware and board-profile identity events.
 - `include/ble_config.h`: fixed BLE device name, GATT UUIDs, and chunk size.
 - `include/safety_limits.h`: conservative timing, pulse, and travel limits.
 - `lib/dosey_core/`: host-testable framing, parser, protocol engine, line writer, and movement state.
-- `bringup/`: one independent program per bring-up step.
+- `bringup/`: independent bring-up programs plus the safe controller baseline entry point.
 - `test/test_native/`: native parser, protocol transcript, configuration, writer, and movement-state tests.
 
 ## Bring-up environments
@@ -60,13 +64,15 @@ The commands below use that pinned executable directly.
 | --- | --- | --- |
 | `01_blink_serial` | USB serial and onboard user LED | Ready for XIAO-only physical test |
 | `02_digital_output` | One external digital output | Disabled; pin unconfirmed |
-| `03_button_input` | One button input | Disabled; module and pin unconfirmed |
-| `04_pir_input` | PIR input | Disabled; module and pin unconfirmed |
+| `03_button_input` | One button input | Disabled; onboard D1 button selected but combined behavior unverified |
+| `04_pir_input` | PIR input | Disabled; Mini PIR selected for `D0/A0` but pin behavior unverified |
 | `05_analog_input` | One analog input | Disabled; module and pin unconfirmed |
-| `06_i2c_scanner` | Scan a verified Grove I2C path | Disabled; base and module unconfirmed |
-| `07_servo_sweep` | Commanded 10-degree servo test | Disabled; servo, pin, and power unconfirmed |
+| `06_i2c_scanner` | Scan a verified Grove I2C path | Disabled; DHT20 and LIS3DHTR selected but combined bus not scanned |
+| `07_servo_sweep` | Commanded 10-degree servo test | Disabled; SG90 selected for the D6/5 V/GND header but orientation and loaded power remain unverified |
 | `08_serial_protocol` | Versioned USB serial command demo | Compiles; external commands stay disabled |
 | `09_ble_protocol` | Same D1 engine over BLE GATT | Compiles; radio behavior and external hardware unverified |
+| `controller_baseline` | Primary flash target using the BLE D1 engine | Safe defaults compile; physical radio and hardware behavior remain unverified |
+| `controller_debug` | Same safe defaults with runtime USB diagnostics available | Debug starts off after every boot; BLE toggles USB output only |
 
 Disabled programs print `CONFIGURATION_REQUIRED` and do not configure or drive their external pins. The servo is detached at boot and cannot move unless the local configuration enables it and assigns a pin after physical verification. `DISPENSE_NEXT` remains disabled regardless of that flag.
 
@@ -77,10 +83,12 @@ After identifying one disconnected module and its authoritative pin mapping,
 create `include/hardware_config.local.h` from the adjacent example and change
 only that module's enable flag and pin. Git ignores the local file.
 
-The build fails at compile time if an external path is enabled while a required
-pin remains `-1`. The local file does not bypass the physical test gates, power
-rules, conservative servo limits, or disabled `DISPENSE_NEXT` command. Remove
-the local file to return immediately to the committed safe configuration.
+The template already names the selected Expansion Board pins but leaves every
+external path disabled. The build fails at compile time if an enabled path has
+no pin or if the servo shares a configured signal pin with another firmware
+path. The local file does not bypass the physical test gates, power rules,
+conservative servo limits, or disabled `DISPENSE_NEXT` command. Remove the local
+file to return immediately to the committed safe configuration.
 
 ## Reproduce Firmware CI
 
@@ -90,6 +98,7 @@ Run the native suites sequentially:
 /tmp/dosey-platformio/bin/pio test -e native_parser
 /tmp/dosey-platformio/bin/pio test -e native_state
 /tmp/dosey-platformio/bin/pio test -e native_protocol
+/tmp/dosey-platformio/bin/pio test -e native_protocol_debug
 /tmp/dosey-platformio/bin/pio test -e native_config
 /tmp/dosey-platformio/bin/pio test -e native_config_defaults
 ```
@@ -106,8 +115,12 @@ Build every safe-default XIAO environment sequentially:
 /tmp/dosey-platformio/bin/pio run -e 07_servo_sweep
 /tmp/dosey-platformio/bin/pio run -e 08_serial_protocol
 /tmp/dosey-platformio/bin/pio run -e 09_ble_protocol
+/tmp/dosey-platformio/bin/pio run -e controller_baseline
+/tmp/dosey-platformio/bin/pio run -e controller_debug
 /tmp/dosey-platformio/bin/pio check -e 08_serial_protocol --skip-packages
 /tmp/dosey-platformio/bin/pio check -e 09_ble_protocol --skip-packages
+/tmp/dosey-platformio/bin/pio check -e controller_baseline --skip-packages
+/tmp/dosey-platformio/bin/pio check -e controller_debug --skip-packages
 ```
 
 `.github/workflows/firmware-ci.yml` runs the same tests, builds, and protocol
@@ -118,7 +131,7 @@ electrical stability, sensor behavior, servo movement, or carousel movement.
 
 ## First physical test
 
-Test the bare XIAO before attaching the Grove Base or any module:
+Test the bare XIAO before attaching the Expansion Board or any module:
 
 1. Disconnect every external wire and module. Do not connect the battery/JST port or SWD pins.
 2. Place the board on a nonconductive surface and connect it directly to the computer with a known USB data cable.
@@ -128,7 +141,7 @@ Test the bare XIAO before attaching the Grove Base or any module:
 6. Confirm the serial header identifies `XIAO_ESP32_C6`, then confirm the onboard user LED changes with matching `LED ON` and `LED OFF` lines.
 7. Disconnect immediately if the board heats, smells unusual, repeatedly resets, or behaves unexpectedly.
 
-Do not record this test as passed until the LED and serial observations are made on the physical board. Identify the Grove Base and one module at a time only after this XIAO-only check passes.
+Do not record this test as passed until the LED and serial observations are made on the physical board. Attach the Expansion Board and identify one module at a time only after this XIAO-only check passes.
 
 ## USB protocol bench check
 
@@ -155,6 +168,8 @@ D1 EVT status-1 COMMAND_RECEIVED
 D1 EVT status-1 STATUS_OK
 D1 EVT status-1 SERVO_UNCONFIGURED
 D1 EVT status-1 PIR_UNCONFIGURED
+D1 EVT status-1 DEBUG_UNAVAILABLE
+D1 EVT status-1 DEBUG_OFF
 D1 EVT status-1 MOVEMENT_IDLE
 ```
 
@@ -163,12 +178,32 @@ Enter `D1 CMD dose-1 DISPENSE_NEXT`. It must return
 board heats, smells unusual, resets repeatedly, emits unexpected output, or any
 external component moves.
 
+## Debug and readiness checks
+
+`controller_baseline` cannot enable diagnostics. For a supervised BLE bench
+session, build and upload `controller_debug`, then keep the USB serial monitor
+open at 115200 baud. Debug starts off after every reboot and is never persisted.
+Send `D1 CMD debug-1 DEBUG_ON` over BLE to mirror subsequent complete RX/TX
+protocol lines, connection changes, invalid or oversized input, queue overflow,
+and the compiled configuration snapshot to USB serial. Send
+`D1 CMD debug-2 DEBUG_OFF` to stop mirroring. Diagnostic text is never added to
+BLE notifications and does not enable any external path.
+
+The read-only `DEVICE_INFO` command reports the firmware name, D1 protocol,
+XIAO ESP32-C6 Expansion Board profile, and baseline/debug build flavor.
+`CONFIG_STATUS` reports compiled servo, PIR, I2C, and button states plus the
+reserved D6/UART profile. `SAFETY_STATUS` reports the 2.5-second movement
+timeout, 1000-2000 us pulse range, 90-100 degree test range, and disabled
+`DISPENSE_NEXT` command. Run all three before enabling hardware and confirm all
+external paths report disabled in a committed build. See
+`../docs/controller_bench_runbook.md` for the exact supervised sequence.
+
 ## BLE protocol bench check
 
 Run this only after the bare-XIAO and USB protocol checks pass. Keep the Grove
-Base, servo, battery/JST, SWD, and every external wire disconnected.
+Expansion Board, servo, battery/JST, SWD, and every external wire disconnected.
 
-1. Upload `09_ble_protocol` with `/tmp/dosey-platformio/bin/pio run -e 09_ble_protocol -t upload --upload-port <port>`.
+1. Upload `controller_baseline` with `/tmp/dosey-platformio/bin/pio run -e controller_baseline -t upload --upload-port <port>`.
 2. Keep the USB serial monitor open at 115200 baud and confirm `D1 EVT boot BLE_READY`.
 3. On an Android robot phone, open Controller, grant Bluetooth scan/connect access, and tap Connect.
 4. Confirm the app reports both `Transport connected` and `Health: Online`. A transport connection without `HEARTBEAT_OK` must remain verifying and must not enable movement.
@@ -201,6 +236,6 @@ compile/test evidence.
 - Timeout detaches PWM and emits `MOVEMENT_TIMEOUT`.
 - Servo attachment failure emits `SERVO_ATTACH_FAILED` before movement starts.
 - `DISPENSE_TEST` is movement-only. `DISPENSE_NEXT` returns `COMMAND_DISABLED` until carousel movement meets the mechanical test gate.
-- Motors must not be powered from the phone or directly from a XIAO GPIO pin. If servo power is unstable, use a suitable regulated 5 V path with shared ground after the wiring is verified.
+- Motors must not be powered from the phone, a XIAO GPIO pin, or a 3.3 V Grove socket. Use the SG90 on the Expansion Board's D6/5 V/GND header for initial tests. Keep the UART Grove socket empty because it shares D6. If loaded power is unstable, use a suitable regulated 5 V path with shared ground after the wiring is verified.
 
 See `../docs/protocol.md` for the implemented serial demo and `../docs/wiring.md` for confirmed versus pending wiring.

@@ -54,6 +54,11 @@ namespace dosey::hardware {
 
 inline constexpr int kUnconfiguredPin = -1;
 
+constexpr bool enabledPinsConflict(bool firstEnabled, int firstPin,
+                                   bool secondEnabled, int secondPin) {
+  return firstEnabled && secondEnabled && firstPin == secondPin;
+}
+
 // XIAO ESP32-C6 user LED. Seeed's board definition uses active-low output.
 inline constexpr int kOnboardLedPin = 15;
 inline constexpr bool kOnboardLedActiveLow = true;
@@ -98,6 +103,24 @@ static_assert(!kI2cConfigured || (kI2cSdaPin != kUnconfiguredPin &&
               "I2C cannot be enabled without verified SDA and SCL pins");
 static_assert(!kServoEnabled || kServoPin != kUnconfiguredPin,
               "Servo cannot be enabled without a verified pin");
+static_assert(!enabledPinsConflict(kServoEnabled, kServoPin, kPirConfigured,
+                                   kPirPin),
+              "Servo and PIR cannot share a signal pin");
+static_assert(!enabledPinsConflict(kServoEnabled, kServoPin, kButtonConfigured,
+                                   kButtonPin),
+              "Servo and button cannot share a signal pin");
+static_assert(!enabledPinsConflict(kServoEnabled, kServoPin,
+                                   kDigitalOutputConfigured,
+                                   kDigitalOutputPin),
+              "Servo and digital output cannot share a signal pin");
+static_assert(!enabledPinsConflict(kServoEnabled, kServoPin,
+                                   kAnalogInputConfigured, kAnalogInputPin),
+              "Servo and analog input cannot share a signal pin");
+static_assert(!enabledPinsConflict(kServoEnabled, kServoPin, kI2cConfigured,
+                                   kI2cSdaPin) &&
+                  !enabledPinsConflict(kServoEnabled, kServoPin, kI2cConfigured,
+                                       kI2cSclPin),
+              "Servo and I2C cannot share a signal pin");
 
 } // namespace dosey::hardware
 

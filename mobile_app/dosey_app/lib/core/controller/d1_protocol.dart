@@ -4,6 +4,11 @@ import 'dart:math' as math;
 enum D1Command {
   status('STATUS'),
   heartbeat('HEARTBEAT'),
+  deviceInfo('DEVICE_INFO'),
+  configStatus('CONFIG_STATUS'),
+  safetyStatus('SAFETY_STATUS'),
+  debugOn('DEBUG_ON'),
+  debugOff('DEBUG_OFF'),
   ledTest('LED_TEST'),
   pirStatus('PIR_STATUS'),
   servoTest('SERVO_TEST'),

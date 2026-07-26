@@ -1,5 +1,7 @@
 #pragma once
 
+#include "expansion_board_pins.h"
+
 // Copy this file to hardware_config.local.h only during supervised bench work.
 // Keep each path disabled until its module, pin, and power path are physically
 // verified while USB is disconnected. The local file is ignored by Git.
@@ -9,18 +11,19 @@
 #define DOSEY_DIGITAL_OUTPUT_ACTIVE_HIGH 1
 
 #define DOSEY_BUTTON_CONFIGURED 0
-#define DOSEY_BUTTON_PIN -1
-#define DOSEY_BUTTON_USE_INTERNAL_PULLUP 0
+#define DOSEY_BUTTON_PIN dosey::hardware::expansion_board::kOnboardButtonPin
+#define DOSEY_BUTTON_USE_INTERNAL_PULLUP 1
 
 #define DOSEY_PIR_CONFIGURED 0
-#define DOSEY_PIR_PIN -1
+#define DOSEY_PIR_PIN dosey::hardware::expansion_board::kMiniPirPin
 
 #define DOSEY_ANALOG_INPUT_CONFIGURED 0
 #define DOSEY_ANALOG_INPUT_PIN -1
 
 #define DOSEY_I2C_CONFIGURED 0
-#define DOSEY_I2C_SDA_PIN -1
-#define DOSEY_I2C_SCL_PIN -1
+#define DOSEY_I2C_SDA_PIN dosey::hardware::expansion_board::kI2cSdaPin
+#define DOSEY_I2C_SCL_PIN dosey::hardware::expansion_board::kI2cSclPin
 
+// Enabling this reserves D6. Keep the D6/D7 UART Grove socket empty.
 #define DOSEY_SERVO_ENABLED 0
-#define DOSEY_SERVO_PIN -1
+#define DOSEY_SERVO_PIN dosey::hardware::expansion_board::kServoPin
