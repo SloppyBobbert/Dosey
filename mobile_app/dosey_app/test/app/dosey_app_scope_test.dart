@@ -6,10 +6,12 @@ import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/controller/controller_health_supervisor.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
+import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/demo/demo_data_repository.dart';
 import 'package:dosey_app/core/demo/demo_external_services.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -88,6 +90,8 @@ void main() {
     expect(dependencies.robotFaceController, isNotNull);
     expect(dependencies.demoFaceLab, isNull);
     expect(dependencies.doseActions, isNotNull);
+    expect(dependencies.cloudIdentity, isA<DisabledCloudIdentityGateway>());
+    expect(dependencies.householdSync, isA<DisabledHouseholdSyncGateway>());
 
     await tester.pumpWidget(const SizedBox());
   });

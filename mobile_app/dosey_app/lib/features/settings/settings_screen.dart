@@ -527,6 +527,9 @@ class _DeviceModeCard extends StatelessWidget {
   }) async {
     final dependencies = DoseyAppScope.of(context);
     if (!currentRole.canHostRobot || newRole.canHostRobot) {
+      if (!currentRole.canHostRobot && newRole.canHostRobot) {
+        await dependencies.auth.signOut();
+      }
       await dependencies.settings.setDeviceRole(newRole);
       return true;
     }

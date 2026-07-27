@@ -2,6 +2,7 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/backup/backup_codec.dart';
 import 'package:dosey_app/core/backup/backup_file_gateway.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
+import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -268,6 +269,35 @@ void main() {
 
     expect(find.text('Leave Robot Mode?'), findsNothing);
     expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
+  });
+
+  testWidgets('entering Robot Mode signs out the owner session first', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final cloudIdentity = _FakeCloudIdentityGateway();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, cloudIdentityGateway: cloudIdentity),
+    );
+    await tester.pumpAndSettle();
+    final dependencies = DoseyAppScope.of(
+      tester.element(find.byType(MaterialApp)),
+    );
+    await dependencies.auth.signInWithGoogle();
+
+    await _chooseDeviceRole(tester, AppDeviceRole.androidRobot);
+
+    expect(cloudIdentity.signOutCount, 1);
+    expect(
+      await dependencies.settings.getDeviceRole(),
+      AppDeviceRole.androidRobot,
+    );
   });
 
   testWidgets('canceling Action PIN keeps Robot Mode selected', (
@@ -1329,6 +1359,7 @@ class _TestSettingsApp extends StatelessWidget {
     this.sectionTarget,
     this.backupFileGateway,
     this.appClock,
+    this.cloudIdentityGateway,
   });
 
   final DoseyDatabase database;
@@ -1337,6 +1368,7 @@ class _TestSettingsApp extends StatelessWidget {
   final SettingsSection? sectionTarget;
   final BackupFileGateway? backupFileGateway;
   final AppClock? appClock;
+  final CloudIdentityGateway? cloudIdentityGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -1349,6 +1381,7 @@ class _TestSettingsApp extends StatelessWidget {
       reminderScheduler: const _NoopReminderScheduler(),
       missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
       backupFileGateway: backupFileGateway,
+      cloudIdentityGateway: cloudIdentityGateway,
       voicePlayer: voicePlayer,
       child: MaterialApp(
         theme: ThemeData(
@@ -1364,6 +1397,27 @@ class _TestSettingsApp extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FakeCloudIdentityGateway implements CloudIdentityGateway {
+  var signOutCount = 0;
+
+  @override
+  Future<CloudIdentity> signInWithGoogle({
+    List<String> scopes = const [],
+  }) async => const CloudIdentity.signedIn(
+    accountId: 'owner-1',
+    email: 'owner@example.com',
+  );
+
+  @override
+  Future<void> signOut() async {
+    signOutCount += 1;
+  }
+
+  @override
+  Stream<CloudIdentity> watchIdentity() =>
+      Stream.value(const CloudIdentity.signedOut());
 }
 
 class _FakeBackupFileGateway implements BackupFileGateway {
