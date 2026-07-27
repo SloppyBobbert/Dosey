@@ -47,22 +47,21 @@ Drift. Remote push notifications and medication-data cloud sync are not active.
 
 ## Appwrite setup
 
-Local configured builds read seven public values from the ignored `.env` file:
+Local configured builds read four public values from the ignored `.env` file:
 
 ```text
 APPWRITE_ENDPOINT
 APPWRITE_PROJECT_ID
-APPWRITE_DATABASE_ID
-APPWRITE_PAIRING_CLAIMS_TABLE_ID
-APPWRITE_PAIRING_ATTEMPTS_TABLE_ID
 APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID
 APPWRITE_CLAIM_ROBOT_FUNCTION_ID
 ```
 
 The app invokes the pairing Functions; it does not read pairing tables
-directly. Never add the server pairing HMAC secret or a Function dynamic API key
-to this file. See [`../../backend/appwrite/README.md`](../../backend/appwrite/README.md)
-for server schema and deployment details.
+directly, so database and table IDs stay in the Function environment rather
+than Flutter configuration. Never add the server pairing HMAC secret or a
+Function dynamic API key to this file. See
+[`../../backend/appwrite/README.md`](../../backend/appwrite/README.md) for server
+schema and deployment details.
 
 ## Target product model
 

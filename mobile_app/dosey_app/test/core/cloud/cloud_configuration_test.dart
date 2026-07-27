@@ -14,9 +14,6 @@ void main() {
     final configuration = CloudConfiguration.fromValues(
       endpoint: 'https://nyc.cloud.appwrite.io/v1',
       projectId: 'dosey-development',
-      databaseId: 'dosey',
-      pairingClaimsTableId: 'pairing-claims',
-      pairingAttemptsTableId: 'pairing-attempts',
       createPairingCodeFunctionId: 'create-code',
       claimRobotFunctionId: 'claim-robot',
     );
@@ -25,9 +22,6 @@ void main() {
     expect(configuration.isPairingEnabled, isTrue);
     expect(configuration.endpoint, 'https://nyc.cloud.appwrite.io/v1');
     expect(configuration.projectId, 'dosey-development');
-    expect(configuration.databaseId, 'dosey');
-    expect(configuration.pairingClaimsTableId, 'pairing-claims');
-    expect(configuration.pairingAttemptsTableId, 'pairing-attempts');
     expect(configuration.createPairingCodeFunctionId, 'create-code');
     expect(configuration.claimRobotFunctionId, 'claim-robot');
   });
@@ -38,7 +32,7 @@ void main() {
       final configuration = CloudConfiguration.fromValues(
         endpoint: 'https://nyc.cloud.appwrite.io/v1',
         projectId: 'dosey-development',
-        databaseId: 'dosey',
+        createPairingCodeFunctionId: 'create-code',
       );
 
       expect(configuration.isEnabled, isTrue);

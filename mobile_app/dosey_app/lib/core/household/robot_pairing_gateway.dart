@@ -21,6 +21,8 @@ class RobotPairingException implements Exception {
 }
 
 abstract interface class RobotPairingGateway {
+  bool get isAvailable;
+
   Future<RobotPairingCredential> createPairingCode({required String robotId});
 
   Future<String> claimRobot({required String code});
@@ -28,6 +30,9 @@ abstract interface class RobotPairingGateway {
 
 class DisabledRobotPairingGateway implements RobotPairingGateway {
   const DisabledRobotPairingGateway();
+
+  @override
+  bool get isAvailable => false;
 
   @override
   Future<RobotPairingCredential> createPairingCode({required String robotId}) =>

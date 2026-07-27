@@ -79,6 +79,9 @@ class AppwriteRobotPairingGateway implements RobotPairingGateway {
   final String _claimRobotFunctionId;
 
   @override
+  bool get isAvailable => true;
+
+  @override
   Future<RobotPairingCredential> createPairingCode({
     required String robotId,
   }) async {

@@ -143,6 +143,14 @@ class AppwriteHouseholdSyncGateway implements HouseholdSyncGateway {
   }
 
   @override
+  Future<RobotInstallation?> refreshRobot() async {
+    final robot = await _restoreRobot();
+    _revision += 1;
+    _changes.add(robot);
+    return robot;
+  }
+
+  @override
   Future<RobotInstallation> createRobot({
     required String displayName,
     required String ownerAccountId,

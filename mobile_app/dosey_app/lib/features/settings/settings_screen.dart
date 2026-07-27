@@ -866,7 +866,10 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
                                   ? 'Local profile data remains available. Link this device to enable cloud robot membership.'
                                   : 'This device is linked to the robot household. Local medication data remains on this device.',
                             ),
-                            if (role.canHostRobot) ...[
+                            if (!dependencies.robotPairing.isAvailable) ...[
+                              const SizedBox(height: 12),
+                              const Text('Robot pairing is not configured.'),
+                            ] else if (role.canHostRobot) ...[
                               const SizedBox(height: 12),
                               FilledButton.icon(
                                 onPressed: _pairingBusy
@@ -919,16 +922,35 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
   Future<void> _createPairingCode(RobotInstallation robot) async {
     setState(() => _pairingBusy = true);
     try {
+      final dependencies = DoseyAppScope.of(context);
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
       final result = await runProtectedAdminAction<RobotPairingCredential>(
         context,
-        action: (_) => DoseyAppScope.of(
-          context,
-        ).robotPairing.createPairingCode(robotId: robot.id),
+        action: (actor) async {
+          final credential = await dependencies.robotPairing.createPairingCode(
+            robotId: robot.id,
+          );
+          await dependencies.adminAudit.addEvent(
+            const AdminAuditEventFactory().pairingCodeGenerated(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: robot.id,
+              summary: 'Generated a temporary mounted-device pairing code.',
+              details: {
+                'expiresAt': credential.expiresAt.toUtc().toIso8601String(),
+              },
+            ),
+          );
+          return credential;
+        },
       );
       if (!mounted || !result.isSuccess) return;
       setState(() => _pairingCredential = result.value);
     } on RobotPairingException catch (error) {
-      if (mounted) _showPairingError(context, error.reason);
+      if (mounted) {
+        _showPairingError(context, error.reason, creatingCode: true);
+      }
     } on Object {
       if (mounted) {
         _showPairingError(context, RobotPairingFailureReason.functionFailure);
@@ -985,11 +1007,29 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
     if (!mounted || code == null) return;
     setState(() => _pairingBusy = true);
     try {
-      await DoseyAppScope.of(context).robotPairing.claimRobot(code: code);
-      if (!mounted) return;
-      ScaffoldMessenger.of(
+      final claimedRobotId = await DoseyAppScope.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('Robot phone paired.')));
+      ).robotPairing.claimRobot(code: code);
+      if (!mounted) return;
+      var refreshedClaim = false;
+      try {
+        final robot = await DoseyAppScope.of(
+          context,
+        ).householdSync.refreshRobot();
+        refreshedClaim = robot?.id == claimedRobotId;
+      } on Object {
+        // The server-side claim succeeded; a display refresh cannot undo it.
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            refreshedClaim
+                ? 'Robot phone paired.'
+                : 'Robot phone paired, but linked status could not refresh.',
+          ),
+        ),
+      );
     } on RobotPairingException catch (error) {
       if (mounted) _showPairingError(context, error.reason);
     } on Object {
@@ -1011,12 +1051,15 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
 
   void _showPairingError(
     BuildContext context,
-    RobotPairingFailureReason reason,
-  ) {
+    RobotPairingFailureReason reason, {
+    bool creatingCode = false,
+  }) {
     final message = switch (reason) {
       RobotPairingFailureReason.invalidCode => 'That pairing code is invalid.',
       RobotPairingFailureReason.missingSession =>
-        'Could not create the restricted robot session.',
+        creatingCode
+            ? 'Sign in again to generate a pairing code.'
+            : 'Could not create the restricted robot session.',
       RobotPairingFailureReason.consumedCode =>
         'That pairing code has already been used.',
       RobotPairingFailureReason.expiredCode => 'That pairing code has expired.',

@@ -26,9 +26,6 @@ void main() {
     final configuration = CloudConfiguration.fromValues(
       endpoint: 'https://example.appwrite.io/v1',
       projectId: 'dosey-development',
-      databaseId: 'dosey',
-      pairingClaimsTableId: 'claims',
-      pairingAttemptsTableId: 'attempts',
       createPairingCodeFunctionId: 'create-code',
       claimRobotFunctionId: 'claim-robot',
     );

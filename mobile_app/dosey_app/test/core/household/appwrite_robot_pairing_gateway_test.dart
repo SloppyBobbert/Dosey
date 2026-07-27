@@ -56,12 +56,18 @@ void main() {
       'claim-robot',
     );
 
+    expect(gateway.isAvailable, isTrue);
+
     final result = await gateway.createPairingCode(robotId: 'robot-1');
 
     expect(result.code, 'ABCD2EFGH3');
     expect(result.expiresAt, DateTime.parse('2026-07-26T12:10:00.000Z'));
     expect(api.functionId, 'create-code');
     expect(api.body, '{"robotId":"robot-1"}');
+  });
+
+  test('disabled pairing reports that it is unavailable', () {
+    expect(const DisabledRobotPairingGateway().isAvailable, isFalse);
   });
 
   test(

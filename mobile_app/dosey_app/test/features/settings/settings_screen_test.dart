@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/backup/backup_codec.dart';
 import 'package:dosey_app/core/backup/backup_file_gateway.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
@@ -1261,11 +1264,60 @@ void main() {
     await tester.tap(find.text('Robot linking'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Generate robot pairing code'));
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
 
     expect(pairing.createdForRobotId, 'robot-1');
     expect(find.text('Pairing code: ABCD2EFGH3'), findsOneWidget);
     expect(find.textContaining('expires'), findsOneWidget);
+    final auditRows = await database.select(database.adminAuditEvents).get();
+    expect(auditRows, hasLength(1));
+    expect(
+      auditRows.single.eventType,
+      AdminAuditEventType.pairingCodeGenerated.name,
+    );
+    expect(auditRows.single.targetId, 'robot-1');
+  });
+
+  testWidgets('owner generation uses an owner-specific session error', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    final pairing = _FakeRobotPairingGateway(
+      createFailure: const RobotPairingException(
+        RobotPairingFailureReason.missingSession,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        cloudIdentityGateway: _FakeCloudIdentityGateway(
+          identity: const CloudIdentity.signedIn(
+            accountId: 'owner-1',
+            email: 'owner@example.com',
+          ),
+        ),
+        householdSyncGateway: _FakeHouseholdSyncGateway(_robotInstallation),
+        robotPairingGateway: pairing,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Generate robot pairing code'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Sign in again to generate a pairing code.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Robot Mode can claim an existing robot with a temporary code', (
@@ -1275,12 +1327,13 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
     final pairing = _FakeRobotPairingGateway();
+    final household = _RefreshingHouseholdSyncGateway(_robotInstallation);
 
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
         sectionTarget: SettingsSection.householdAccount,
-        householdSyncGateway: const DisabledHouseholdSyncGateway(),
+        householdSyncGateway: household,
         robotPairingGateway: pairing,
       ),
     );
@@ -1298,7 +1351,65 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pairing.claimedCode, 'abcd2-efgh3');
+    expect(household.refreshCount, 1);
     expect(find.text('Robot phone paired.'), findsOneWidget);
+    expect(_findRichTextContaining('Cloud sync: Linked'), findsOneWidget);
+  });
+
+  testWidgets('disabled pairing configuration hides Robot Mode action', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pair this robot phone'), findsNothing);
+    expect(find.text('Robot pairing is not configured.'), findsOneWidget);
+  });
+
+  testWidgets('Robot Mode reports when claimed membership cannot refresh', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    final pairing = _FakeRobotPairingGateway(claimedRobotId: 'robot-2');
+    final household = _RefreshingHouseholdSyncGateway(_robotInstallation);
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        householdSyncGateway: household,
+        robotPairingGateway: pairing,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pair this robot phone'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, '10-character pairing code'),
+      'ABCD2EFGH3',
+    );
+    await tester.tap(find.text('Pair robot'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Robot phone paired, but linked status could not refresh.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('Robot Mode keeps the pairing dialog open for a blank code', (
@@ -1578,6 +1689,39 @@ class _FakeHouseholdSyncGateway implements HouseholdSyncGateway {
   Stream<RobotInstallation?> watchRobot() => Stream.value(robot);
 
   @override
+  Future<RobotInstallation?> refreshRobot() async => robot;
+
+  @override
+  Future<RobotInstallation> createRobot({
+    required String displayName,
+    required String ownerAccountId,
+    required String mountedDeviceId,
+  }) => throw UnimplementedError();
+}
+
+class _RefreshingHouseholdSyncGateway implements HouseholdSyncGateway {
+  _RefreshingHouseholdSyncGateway(this.robot);
+
+  final RobotInstallation robot;
+  final _changes = StreamController<RobotInstallation?>.broadcast();
+  RobotInstallation? _current;
+  var refreshCount = 0;
+
+  @override
+  Stream<RobotInstallation?> watchRobot() async* {
+    yield _current;
+    yield* _changes.stream;
+  }
+
+  @override
+  Future<RobotInstallation?> refreshRobot() async {
+    refreshCount += 1;
+    _current = robot;
+    _changes.add(robot);
+    return robot;
+  }
+
+  @override
   Future<RobotInstallation> createRobot({
     required String displayName,
     required String ownerAccountId,
@@ -1586,17 +1730,27 @@ class _FakeHouseholdSyncGateway implements HouseholdSyncGateway {
 }
 
 class _FakeRobotPairingGateway implements RobotPairingGateway {
-  _FakeRobotPairingGateway({this.claimFailure});
+  _FakeRobotPairingGateway({
+    this.createFailure,
+    this.claimFailure,
+    this.claimedRobotId = 'robot-1',
+  });
 
+  final RobotPairingException? createFailure;
   final RobotPairingException? claimFailure;
+  final String claimedRobotId;
   String? createdForRobotId;
   String? claimedCode;
+
+  @override
+  bool get isAvailable => true;
 
   @override
   Future<RobotPairingCredential> createPairingCode({
     required String robotId,
   }) async {
     createdForRobotId = robotId;
+    if (createFailure case final failure?) throw failure;
     return RobotPairingCredential(
       code: 'ABCD2EFGH3',
       expiresAt: DateTime.utc(2026, 7, 26, 12, 10),
@@ -1607,7 +1761,7 @@ class _FakeRobotPairingGateway implements RobotPairingGateway {
   Future<String> claimRobot({required String code}) async {
     claimedCode = code;
     if (claimFailure case final failure?) throw failure;
-    return 'robot-1';
+    return claimedRobotId;
   }
 }
 

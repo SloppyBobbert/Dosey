@@ -239,6 +239,24 @@ class AdminAuditEventFactory {
     );
   }
 
+  AdminAuditEvent pairingCodeGenerated({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    Map<String, Object?>? details,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.pairingCodeGenerated,
+    targetType: AdminAuditTargetType.robot,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    summary: summary,
+    details: details,
+    occurredAt: occurredAt,
+    targetId: targetId,
+  );
+
   AdminAuditEvent guidedLoadConfirmed({
     required AdminAuditActorIdentity actor,
     required String sourceDeviceRole,
