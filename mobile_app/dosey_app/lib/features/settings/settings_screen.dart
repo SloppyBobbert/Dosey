@@ -15,12 +15,15 @@ import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
+import 'package:dosey_app/core/settings/app_theme_preference.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
+import 'package:dosey_app/features/log/dose_log_screen.dart';
+import 'package:dosey_app/features/settings/settings_accordion.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -40,6 +43,18 @@ enum SettingsSection {
   helpAbout,
   guidedTrial,
   setup,
+}
+
+enum _SettingsGroup {
+  profile,
+  household,
+  history,
+  actionPin,
+  notifications,
+  appearance,
+  robotFace,
+  help,
+  safety,
 }
 
 class SettingsScreen extends StatefulWidget {
@@ -63,8 +78,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   late final ScrollController _scrollController;
   late final DoseyVoicePlayer _previewVoicePlayer;
+  late Future<GuidedTrialCompletion?> _guidedTrialCompletion;
+  LocalAppSettingsRepository? _guidedTrialSettings;
+  bool? _guidedTrialWasDemo;
+  bool _showsRobotFaceGroup = false;
   bool _isSigningIn = false;
   String? _authMessage;
+  final Set<_SettingsGroup> _expandedGroups = {
+    _SettingsGroup.profile,
+    _SettingsGroup.notifications,
+  };
 
   @override
   void initState() {
@@ -73,7 +96,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _previewVoicePlayer =
         widget.previewVoicePlayer ??
         DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway());
+    final target = widget.sectionTarget;
+    if (target != null) _expandedGroups.add(_groupFor(target));
     _scrollToTargetAfterBuild();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final dependencies = DoseyAppScope.of(context);
+    final settings =
+        DemoModeHost.maybeOf(context)?.productionSettings ??
+        dependencies.settings;
+    if (!identical(_guidedTrialSettings, settings) ||
+        _guidedTrialWasDemo != dependencies.isDemo) {
+      _guidedTrialSettings = settings;
+      _guidedTrialWasDemo = dependencies.isDemo;
+      _guidedTrialCompletion = settings.getGuidedTrialCompletion();
+    }
   }
 
   @override
@@ -89,6 +129,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void didUpdateWidget(SettingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sectionTarget != widget.sectionTarget) {
+      final target = widget.sectionTarget;
+      if (target != null) {
+        setState(() => _expandedGroups.add(_groupFor(target)));
+      }
       _scrollToTargetAfterBuild();
     }
   }
@@ -103,7 +147,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         Scrollable.ensureVisible(
           targetContext,
           duration: Duration.zero,
-          alignment: 0.08,
+          alignment: 0.25,
         );
       } else if (_scrollController.hasClients) {
         // Some sections may not have built yet; use stable estimates so deep
@@ -118,20 +162,63 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   double _estimatedSectionOffset(SettingsSection section) {
+    const listHeaderExtent = 52.0;
+    const collapsedAccordionExtent = 84.0;
+    final visibleGroups = _SettingsGroup.values
+        .where(
+          (group) => group != _SettingsGroup.robotFace || _showsRobotFaceGroup,
+        )
+        .toList();
+    final groupIndex = visibleGroups.indexOf(_groupFor(section));
+    return listHeaderExtent + groupIndex * collapsedAccordionExtent;
+  }
+
+  _SettingsGroup _groupFor(SettingsSection section) {
     return switch (section) {
-      SettingsSection.account => 120,
-      SettingsSection.deviceMode => 320,
-      SettingsSection.actionPin => 500,
-      SettingsSection.householdAccount => 700,
-      SettingsSection.adminHistory => 720,
-      SettingsSection.backupDatabase => 800,
-      SettingsSection.robotFace => 950,
-      SettingsSection.notifications => 1100,
-      SettingsSection.safety => 1250,
-      SettingsSection.helpAbout => 1400,
-      SettingsSection.guidedTrial => 1550,
-      SettingsSection.setup => 1700,
+      SettingsSection.account ||
+      SettingsSection.deviceMode => _SettingsGroup.profile,
+      SettingsSection.householdAccount => _SettingsGroup.household,
+      SettingsSection.adminHistory ||
+      SettingsSection.backupDatabase => _SettingsGroup.history,
+      SettingsSection.actionPin => _SettingsGroup.actionPin,
+      SettingsSection.notifications => _SettingsGroup.notifications,
+      SettingsSection.robotFace => _SettingsGroup.robotFace,
+      SettingsSection.helpAbout ||
+      SettingsSection.guidedTrial ||
+      SettingsSection.setup => _SettingsGroup.help,
+      SettingsSection.safety => _SettingsGroup.safety,
     };
+  }
+
+  Widget _accordion({
+    required _SettingsGroup group,
+    required String title,
+    required Widget child,
+  }) {
+    return SettingsAccordion(
+      title: title,
+      expanded: _expandedGroups.contains(group),
+      onExpansionChanged: (expanded) {
+        setState(() {
+          if (expanded) {
+            _expandedGroups.add(group);
+          } else {
+            _expandedGroups.remove(group);
+          }
+        });
+      },
+      child: child,
+    );
+  }
+
+  Widget _targeted(SettingsSection section, Widget child) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SizedBox(key: _sectionKeys[section]),
+        child,
+      ],
+    );
   }
 
   @override
@@ -149,6 +236,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final role = storedRole != null && allowedRoles.contains(storedRole)
             ? storedRole
             : AppDeviceRole.defaultFor(platform);
+        _showsRobotFaceGroup = role.canHostRobot;
 
         return StreamBuilder<AuthSession>(
           stream: dependencies.auth.watchSession(),
@@ -161,105 +249,173 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 Text('Settings', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
-                _ProfileSummaryCard(session: session, platform: platform),
-                const SizedBox(height: 12),
-                if (!role.canHostRobot) ...[
-                  _SettingsSectionCard(
-                    key: _sectionKeys[SettingsSection.account],
-                    icon: Icons.account_circle_outlined,
-                    title: 'Account',
+                _accordion(
+                  group: _SettingsGroup.profile,
+                  title: 'Profile, account & device',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        session.user == null
-                            ? 'Signed out. $providerName sign-in is local-only until cloud sync is chosen.'
-                            : 'Signed in as ${session.user!.email}',
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('Cloud sync is not active yet.'),
-                      if (_authMessage != null) ...[
-                        const SizedBox(height: 8),
-                        Text(_authMessage!),
-                      ],
-                      const SizedBox(height: 12),
-                      if (session.isSignedIn)
-                        OutlinedButton.icon(
-                          onPressed: _signOut,
-                          icon: const Icon(Icons.logout),
-                          label: const Text('Sign out'),
-                        )
-                      else
-                        FilledButton.tonalIcon(
-                          onPressed: _isSigningIn ? null : _signIn,
-                          icon: Icon(
-                            usesAppleSignIn ? Icons.apple : Icons.login,
-                          ),
-                          label: Text(
-                            _isSigningIn
-                                ? 'Signing in...'
-                                : 'Sign in with $providerName',
+                      _ProfileSummaryCard(session: session, platform: platform),
+                      if (!role.canHostRobot) ...[
+                        const SizedBox(height: 12),
+                        _targeted(
+                          SettingsSection.account,
+                          _SettingsSectionCard(
+                            icon: Icons.account_circle_outlined,
+                            title: 'Account',
+                            children: [
+                              Text(
+                                session.user == null
+                                    ? 'Signed out. $providerName sign-in is local-only until cloud sync is chosen.'
+                                    : 'Signed in as ${session.user!.email}',
+                              ),
+                              const SizedBox(height: 8),
+                              const Text('Cloud sync is not active yet.'),
+                              if (_authMessage != null) ...[
+                                const SizedBox(height: 8),
+                                Text(_authMessage!),
+                              ],
+                              const SizedBox(height: 12),
+                              if (session.isSignedIn)
+                                OutlinedButton.icon(
+                                  onPressed: _signOut,
+                                  icon: const Icon(Icons.logout),
+                                  label: const Text('Sign out'),
+                                )
+                              else
+                                FilledButton.tonalIcon(
+                                  onPressed: _isSigningIn ? null : _signIn,
+                                  icon: Icon(
+                                    usesAppleSignIn ? Icons.apple : Icons.login,
+                                  ),
+                                  label: Text(
+                                    _isSigningIn
+                                        ? 'Signing in...'
+                                        : 'Sign in with $providerName',
+                                  ),
+                                ),
+                            ],
                           ),
                         ),
+                      ],
+                      const SizedBox(height: 12),
+                      _targeted(
+                        SettingsSection.deviceMode,
+                        _DeviceModeCard(platform: platform),
+                      ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 12),
+                _accordion(
+                  group: _SettingsGroup.household,
+                  title: 'Household & robot profile',
+                  child: _targeted(
+                    SettingsSection.householdAccount,
+                    _HouseholdAccountCard(platform: platform),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _accordion(
+                  group: _SettingsGroup.history,
+                  title: 'History & data',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _DoseHistoryCard(),
+                      const SizedBox(height: 12),
+                      _targeted(
+                        SettingsSection.adminHistory,
+                        _AdminHistoryCard(),
+                      ),
+                      const SizedBox(height: 12),
+                      _targeted(
+                        SettingsSection.backupDatabase,
+                        _BackupDatabaseCard(),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _accordion(
+                  group: _SettingsGroup.actionPin,
+                  title: 'Action PIN',
+                  child: _targeted(SettingsSection.actionPin, _ActionPinCard()),
+                ),
+                const SizedBox(height: 12),
+                _accordion(
+                  group: _SettingsGroup.notifications,
+                  title: 'Reminder notifications',
+                  child: _targeted(
+                    SettingsSection.notifications,
+                    _ReminderNotificationCard(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _accordion(
+                  group: _SettingsGroup.appearance,
+                  title: 'Appearance',
+                  child: const _AppearanceCard(),
+                ),
+                if (role.canHostRobot) ...[
                   const SizedBox(height: 12),
+                  _accordion(
+                    group: _SettingsGroup.robotFace,
+                    title: 'Robot Face options',
+                    child: _targeted(
+                      SettingsSection.robotFace,
+                      _RobotFaceSettingsCard(
+                        previewVoicePlayer: _previewVoicePlayer,
+                      ),
+                    ),
+                  ),
                 ],
-                _DeviceModeCard(
-                  key: _sectionKeys[SettingsSection.deviceMode],
-                  platform: platform,
+                const SizedBox(height: 12),
+                _accordion(
+                  group: _SettingsGroup.help,
+                  title: 'Help, guided trial & setup',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _targeted(SettingsSection.helpAbout, _HelpAboutCard()),
+                      const SizedBox(height: 12),
+                      _targeted(
+                        SettingsSection.guidedTrial,
+                        _GuidedTrialSettingsCard(
+                          completion: _guidedTrialCompletion,
+                          onStart: DemoModeHost.maybeOf(
+                            context,
+                          )?.startGuidedTrial,
+                          isActive: dependencies.isDemo,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _targeted(
+                        SettingsSection.setup,
+                        _SettingsSectionCard(
+                          icon: Icons.restart_alt,
+                          title: 'Setup',
+                          children: [
+                            const Text(
+                              'Show the first-run safety notice and mode selection again.',
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: _resetSetup,
+                              icon: const Icon(Icons.replay_outlined),
+                              label: const Text('Start over setup'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 12),
-                _ActionPinCard(key: _sectionKeys[SettingsSection.actionPin]),
-                const SizedBox(height: 12),
-                _HouseholdAccountCard(
-                  key: _sectionKeys[SettingsSection.householdAccount],
-                  platform: platform,
-                ),
-                const SizedBox(height: 12),
-                _AdminHistoryCard(
-                  key: _sectionKeys[SettingsSection.adminHistory],
-                ),
-                const SizedBox(height: 12),
-                _BackupDatabaseCard(
-                  key: _sectionKeys[SettingsSection.backupDatabase],
-                ),
-                _RobotFaceSettingsSection(
-                  sectionKey: _sectionKeys[SettingsSection.robotFace],
-                  previewVoicePlayer: _previewVoicePlayer,
-                ),
-                const SizedBox(height: 12),
-                _ReminderNotificationCard(
-                  key: _sectionKeys[SettingsSection.notifications],
-                ),
-                const SizedBox(height: 12),
-                _SafetyCard(key: _sectionKeys[SettingsSection.safety]),
-                const SizedBox(height: 12),
-                _HelpAboutCard(key: _sectionKeys[SettingsSection.helpAbout]),
-                const SizedBox(height: 12),
-                _GuidedTrialSettingsCard(
-                  key: _sectionKeys[SettingsSection.guidedTrial],
-                  completion:
-                      (DemoModeHost.maybeOf(context)?.productionSettings ??
-                              dependencies.settings)
-                          .getGuidedTrialCompletion(),
-                  onStart: DemoModeHost.maybeOf(context)?.startGuidedTrial,
-                  isActive: dependencies.isDemo,
-                ),
-                const SizedBox(height: 12),
-                _SettingsSectionCard(
-                  key: _sectionKeys[SettingsSection.setup],
-                  icon: Icons.restart_alt,
-                  title: 'Setup',
-                  children: [
-                    const Text(
-                      'Show the first-run safety notice and mode selection again.',
-                    ),
-                    const SizedBox(height: 12),
-                    OutlinedButton.icon(
-                      onPressed: _resetSetup,
-                      icon: const Icon(Icons.replay_outlined),
-                      label: const Text('Start over setup'),
-                    ),
-                  ],
+                _accordion(
+                  group: _SettingsGroup.safety,
+                  title: 'Safety & limitations',
+                  child: _targeted(SettingsSection.safety, _SafetyCard()),
                 ),
               ],
             );
@@ -324,7 +480,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 class _GuidedTrialSettingsCard extends StatelessWidget {
   const _GuidedTrialSettingsCard({
-    super.key,
     required this.completion,
     required this.onStart,
     required this.isActive,
@@ -481,7 +636,7 @@ class _ProfileSummaryCard extends StatelessWidget {
 }
 
 class _DeviceModeCard extends StatelessWidget {
-  const _DeviceModeCard({super.key, required this.platform});
+  const _DeviceModeCard({required this.platform});
 
   final AppDevicePlatform platform;
 
@@ -627,7 +782,7 @@ class _DeviceModeDropdownState extends State<_DeviceModeDropdown> {
 }
 
 class _ActionPinCard extends StatelessWidget {
-  const _ActionPinCard({super.key});
+  const _ActionPinCard();
 
   @override
   Widget build(BuildContext context) {
@@ -757,7 +912,7 @@ class _ActionPinCard extends StatelessWidget {
 }
 
 class _ReminderNotificationCard extends StatefulWidget {
-  const _ReminderNotificationCard({super.key});
+  const _ReminderNotificationCard();
 
   @override
   State<_ReminderNotificationCard> createState() =>
@@ -765,7 +920,7 @@ class _ReminderNotificationCard extends StatefulWidget {
 }
 
 class _HouseholdAccountCard extends StatefulWidget {
-  const _HouseholdAccountCard({super.key, required this.platform});
+  const _HouseholdAccountCard({required this.platform});
 
   final AppDevicePlatform platform;
 
@@ -1715,8 +1870,86 @@ class _HouseholdMetadataRow extends StatelessWidget {
   }
 }
 
+class _DoseHistoryCard extends StatelessWidget {
+  const _DoseHistoryCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsSectionCard(
+      icon: Icons.medication_outlined,
+      title: 'Dose history',
+      children: [
+        const Text(
+          'Review taken, skipped, missed, and controller-related dose events.',
+        ),
+        const SizedBox(height: 12),
+        FilledButton.tonalIcon(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const DoseLogScreen()),
+          ),
+          icon: const Icon(Icons.history_outlined),
+          label: const Text('Open dose history'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AppearanceCard extends StatelessWidget {
+  const _AppearanceCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = DoseyAppScope.of(context).settings;
+    return StreamBuilder<AppThemePreference>(
+      stream: settings.watchThemePreference(),
+      builder: (context, snapshot) {
+        final preference = snapshot.data ?? AppThemePreference.dark;
+        return _SettingsSectionCard(
+          icon: Icons.palette_outlined,
+          title: 'Theme',
+          children: [
+            const Text('Choose how Dosey appears on this phone.'),
+            const SizedBox(height: 12),
+            SegmentedButton<AppThemePreference>(
+              segments: const [
+                ButtonSegment(
+                  value: AppThemePreference.dark,
+                  label: Text('Dark'),
+                  icon: Icon(Icons.dark_mode_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemePreference.light,
+                  label: Text('Light'),
+                  icon: Icon(Icons.light_mode_outlined),
+                ),
+                ButtonSegment(
+                  value: AppThemePreference.system,
+                  label: Text('System'),
+                  icon: Icon(Icons.settings_brightness_outlined),
+                ),
+              ],
+              selected: {preference},
+              onSelectionChanged: (selection) async {
+                try {
+                  await settings.setThemePreference(selection.single);
+                } on Object catch (error) {
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Theme update failed: $error')),
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _AdminHistoryCard extends StatelessWidget {
-  const _AdminHistoryCard({super.key});
+  const _AdminHistoryCard();
 
   @override
   Widget build(BuildContext context) {
@@ -1747,51 +1980,12 @@ class _AdminHistoryCard extends StatelessWidget {
 }
 
 class _RobotFaceSettingsCard extends StatefulWidget {
-  const _RobotFaceSettingsCard({super.key, required this.previewVoicePlayer});
+  const _RobotFaceSettingsCard({required this.previewVoicePlayer});
 
   final DoseyVoicePlayer previewVoicePlayer;
 
   @override
   State<_RobotFaceSettingsCard> createState() => _RobotFaceSettingsCardState();
-}
-
-class _RobotFaceSettingsSection extends StatelessWidget {
-  const _RobotFaceSettingsSection({
-    required this.sectionKey,
-    required this.previewVoicePlayer,
-  });
-
-  final Key? sectionKey;
-  final DoseyVoicePlayer previewVoicePlayer;
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<AppDeviceRole>(
-      stream: DoseyAppScope.of(context).settings.watchDeviceRole(),
-      builder: (context, roleSnapshot) {
-        final platform = currentAppDevicePlatform();
-        final fallbackRole = AppDeviceRole.defaultFor(platform);
-        final storedRole = roleSnapshot.data;
-        final role = storedRole != null && storedRole.isAllowedOn(platform)
-            ? storedRole
-            : fallbackRole;
-
-        if (!role.canHostRobot) {
-          return const SizedBox.shrink();
-        }
-
-        return Column(
-          children: [
-            const SizedBox(height: 12),
-            _RobotFaceSettingsCard(
-              key: sectionKey,
-              previewVoicePlayer: previewVoicePlayer,
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
 
 class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
@@ -2591,7 +2785,7 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
 }
 
 class _SafetyCard extends StatelessWidget {
-  const _SafetyCard({super.key});
+  const _SafetyCard();
 
   @override
   Widget build(BuildContext context) {
@@ -2643,7 +2837,7 @@ class _SafetyCard extends StatelessWidget {
 }
 
 class _HelpAboutCard extends StatelessWidget {
-  const _HelpAboutCard({super.key});
+  const _HelpAboutCard();
 
   static const _appVersion = String.fromEnvironment(
     'DOSEY_APP_VERSION',
@@ -2679,7 +2873,6 @@ class _HelpAboutCard extends StatelessWidget {
 
 class _SettingsSectionCard extends StatelessWidget {
   const _SettingsSectionCard({
-    super.key,
     required this.icon,
     required this.title,
     required this.children,

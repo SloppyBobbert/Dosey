@@ -277,6 +277,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       _database,
       sessionIdGenerator: demoIdGenerator?.call,
     );
+    final controllerHealthEvents = LocalControllerHealthEventRepository(
+      _database,
+    );
     final controllerLifecycle = ControllerLifecycleService(
       controller: controller,
       commandRepository: commandRepository,
@@ -375,6 +378,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       controller: controller,
       controllerLifecycle: controllerLifecycle,
       controllerCommands: commandRepository,
+      controllerHealthEvents: controllerHealthEvents,
       controllerBench: controllerBench,
       demoScenarios: demoScenarios,
       demoFaceLab: demoFaceLab,
@@ -562,6 +566,7 @@ class DoseyAppDependencies {
     required this.controller,
     required this.controllerLifecycle,
     required this.controllerCommands,
+    required this.controllerHealthEvents,
     required this.controllerBench,
     required this.demoScenarios,
     required this.demoFaceLab,
@@ -604,6 +609,7 @@ class DoseyAppDependencies {
   final ControllerGateway controller;
   final ControllerLifecycleService controllerLifecycle;
   final ControllerCommandRepository controllerCommands;
+  final LocalControllerHealthEventRepository controllerHealthEvents;
   final ControllerBenchService controllerBench;
   final DemoScenarioService? demoScenarios;
   final DemoFaceLabController? demoFaceLab;

@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
-import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/demo/demo_scenario.dart';
@@ -9,16 +8,13 @@ import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
-import 'package:dosey_app/features/carousel/carousel_screen.dart';
-import 'package:dosey_app/features/controller/controller_screen.dart';
-import 'package:dosey_app/features/log/dose_log_screen.dart';
-import 'package:dosey_app/features/prescriptions/prescriptions_screen.dart';
-import 'package:dosey_app/features/reminders/reminders_screen.dart';
+import 'package:dosey_app/features/carousel/carousel_hub_screen.dart';
+import 'package:dosey_app/features/dashboard/dashboard_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
-import 'package:dosey_app/features/today/today_screen.dart';
+import 'package:dosey_app/features/schedule/schedule_hub_screen.dart';
 import 'package:flutter/material.dart';
 
 class DoseyShell extends StatefulWidget {
@@ -39,6 +35,8 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   _ShellTabId? _selectedTabId;
   SettingsSection? _settingsSectionTarget;
   int _settingsNavigationRequest = 0;
+  CarouselHubSegment _carouselSegment = CarouselHubSegment.carousel;
+  int _carouselNavigationRequest = 0;
   DoseyAppDependencies? _dependencies;
   ReminderNotificationTapController? _notificationTaps;
   StreamSubscription<ReminderNotificationTap>? _notificationTapSubscription;
@@ -70,6 +68,9 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    if (widget.startOnController) {
+      _carouselSegment = CarouselHubSegment.controller;
+    }
     _lifecycleState = WidgetsBinding.instance.lifecycleState;
     WidgetsBinding.instance.addObserver(this);
   }
@@ -179,10 +180,13 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
         final role = _resolvedRole(roleSnapshot.data, platform);
         final tabs = _buildTabs(role);
         final selectedIndex = _selectedIndexForTabs(tabs, role);
+        final navigationTabs = tabs
+            .where((tab) => tab.destination != null)
+            .toList();
 
         final activeTab = tabs[selectedIndex];
-        final settingsTabIndex = tabs.indexWhere(
-          (tab) => tab.id == _ShellTabId.settings,
+        final selectedNavigationIndex = navigationTabs.indexWhere(
+          (tab) => tab.id == activeTab.id,
         );
 
         return Listener(
@@ -215,33 +219,6 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
                           Text(activeTab.title),
                         ],
                       ),
-                      actions: [
-                        StreamBuilder<AuthSession>(
-                          stream: dependencies.auth.watchSession(),
-                          builder: (context, authSnapshot) {
-                            final session =
-                                authSnapshot.data ??
-                                const AuthSession.signedOut();
-
-                            return Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: PopupMenuButton<_SettingsMenuAction>(
-                                tooltip: 'Open settings menu',
-                                icon: const Icon(Icons.settings_outlined),
-                                onSelected: (action) =>
-                                    _handleSettingsMenuAction(
-                                      action,
-                                      settingsTabIndex: settingsTabIndex,
-                                    ),
-                                itemBuilder: (context) => _settingsMenuItems(
-                                  session: session,
-                                  role: role,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
                     ),
               body: IndexedStack(
                 index: selectedIndex,
@@ -253,10 +230,18 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
               bottomNavigationBar: _wasPresenting
                   ? null
                   : NavigationBar(
-                      selectedIndex: selectedIndex,
+                      labelBehavior:
+                          MediaQuery.textScalerOf(context).scale(1) > 1.3
+                          ? NavigationDestinationLabelBehavior.alwaysHide
+                          : NavigationDestinationLabelBehavior.alwaysShow,
+                      selectedIndex: selectedNavigationIndex < 0
+                          ? 0
+                          : selectedNavigationIndex,
                       onDestinationSelected: (index) =>
-                          _selectTab(tabs[index].id),
-                      destinations: tabs.map((tab) => tab.destination).toList(),
+                          _selectTab(navigationTabs[index].id),
+                      destinations: navigationTabs
+                          .map((tab) => tab.destination!)
+                          .toList(),
                     ),
             ),
           ),
@@ -267,84 +252,79 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
 
   List<_ShellTab> _buildTabs(AppDeviceRole role) {
     return [
-      const _ShellTab(
-        id: _ShellTabId.today,
-        title: 'Today',
+      _ShellTab(
+        id: _ShellTabId.dashboard,
+        title: 'Dashboard',
         destination: NavigationDestination(
-          icon: Icon(Icons.today_outlined),
-          selectedIcon: Icon(Icons.today),
-          label: 'Today',
+          icon: Tooltip(
+            message: 'Dashboard',
+            child: Icon(Icons.dashboard_outlined),
+          ),
+          selectedIcon: Tooltip(
+            message: 'Dashboard',
+            child: Icon(Icons.dashboard),
+          ),
+          label: 'Dashboard',
         ),
-        screenBuilder: _buildTodayScreen,
-      ),
-      const _ShellTab(
-        id: _ShellTabId.prescriptions,
-        title: 'Prescriptions',
-        destination: NavigationDestination(
-          icon: Icon(Icons.medication_outlined),
-          selectedIcon: Icon(Icons.medication),
-          label: 'Prescriptions',
+        screenBuilder: (selectedIndex, tabIndex) => DashboardScreen(
+          showRobotFaceShortcut: role.canHostRobot,
+          onOpenSchedule: () => _selectTab(_ShellTabId.schedule),
+          onOpenCarousel: () => _openCarousel(CarouselHubSegment.carousel),
+          onOpenSettings: () => _openSettings(),
+          onOpenRobotFace: role.canHostRobot
+              ? () => _selectTab(_ShellTabId.robotFace)
+              : null,
         ),
-        screenBuilder: _buildPrescriptionsScreen,
       ),
-      const _ShellTab(
+      _ShellTab(
         id: _ShellTabId.schedule,
         title: 'Schedule',
         destination: NavigationDestination(
-          icon: Icon(Icons.alarm_outlined),
-          selectedIcon: Icon(Icons.alarm),
+          icon: Tooltip(message: 'Schedule', child: Icon(Icons.alarm_outlined)),
+          selectedIcon: Tooltip(message: 'Schedule', child: Icon(Icons.alarm)),
           label: 'Schedule',
         ),
-        screenBuilder: _buildRemindersScreen,
+        screenBuilder: (selectedIndex, tabIndex) => const ScheduleHubScreen(),
       ),
       // iOS and Personal Mode never expose the mounted robot face tab.
       if (role.canHostRobot)
         const _ShellTab(
           id: _ShellTabId.robotFace,
           title: 'Robot Face',
-          destination: NavigationDestination(
-            icon: Icon(Icons.smart_toy_outlined),
-            selectedIcon: Icon(Icons.smart_toy),
-            label: 'Robot Face',
-          ),
+          destination: null,
           screenBuilder: _buildRobotFaceScreen,
         ),
-      const _ShellTab(
+      _ShellTab(
         id: _ShellTabId.carousel,
         title: 'Carousel',
         destination: NavigationDestination(
-          icon: Icon(Icons.view_carousel_outlined),
-          selectedIcon: Icon(Icons.view_carousel),
+          icon: Tooltip(
+            message: 'Carousel',
+            child: Icon(Icons.view_carousel_outlined),
+          ),
+          selectedIcon: Tooltip(
+            message: 'Carousel',
+            child: Icon(Icons.view_carousel),
+          ),
           label: 'Carousel',
         ),
-        screenBuilder: _buildCarouselScreen,
-      ),
-      const _ShellTab(
-        id: _ShellTabId.controller,
-        title: 'Controller',
-        destination: NavigationDestination(
-          icon: Icon(Icons.memory_outlined),
-          selectedIcon: Icon(Icons.memory),
-          label: 'Controller',
+        screenBuilder: (selectedIndex, tabIndex) => CarouselHubScreen(
+          key: ValueKey('carousel-$_carouselNavigationRequest'),
+          initialSegment: _carouselSegment,
         ),
-        screenBuilder: _buildControllerScreen,
-      ),
-      const _ShellTab(
-        id: _ShellTabId.log,
-        title: 'Log',
-        destination: NavigationDestination(
-          icon: Icon(Icons.receipt_long_outlined),
-          selectedIcon: Icon(Icons.receipt_long),
-          label: 'Log',
-        ),
-        screenBuilder: _buildDoseLogScreen,
       ),
       _ShellTab(
         id: _ShellTabId.settings,
         title: 'Settings',
-        destination: const NavigationDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
+        destination: NavigationDestination(
+          icon: Tooltip(
+            message: 'Settings',
+            child: Icon(Icons.settings_outlined),
+          ),
+          selectedIcon: Tooltip(
+            message: 'Settings',
+            child: Icon(Icons.settings),
+          ),
           label: 'Settings',
         ),
         screenBuilder: (selectedIndex, tabIndex) => SettingsScreen(
@@ -352,110 +332,6 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
             'settings-$_settingsNavigationRequest-$_settingsSectionTarget',
           ),
           sectionTarget: _settingsSectionTarget,
-        ),
-      ),
-    ];
-  }
-
-  List<PopupMenuEntry<_SettingsMenuAction>> _settingsMenuItems({
-    required AuthSession session,
-    required AppDeviceRole role,
-  }) {
-    return [
-      if (!role.canHostRobot)
-        PopupMenuItem(
-          value: const _SettingsMenuAction.openSection(SettingsSection.account),
-          child: ListTile(
-            leading: Icon(
-              session.isSignedIn ? Icons.account_circle : Icons.login,
-            ),
-            title: const Text('Account'),
-            subtitle: Text(session.isSignedIn ? 'Sign out' : 'Sign in'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      const PopupMenuItem(
-        value: _SettingsMenuAction.openSection(SettingsSection.deviceMode),
-        child: ListTile(
-          leading: Icon(Icons.phone_android_outlined),
-          title: Text('Device mode'),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      const PopupMenuItem(
-        value: _SettingsMenuAction.openSection(
-          SettingsSection.householdAccount,
-        ),
-        child: ListTile(
-          leading: Icon(Icons.home_outlined),
-          title: Text('Household & robot profile'),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      const PopupMenuItem(
-        value: _SettingsMenuAction.openSection(SettingsSection.adminHistory),
-        child: ListTile(
-          leading: Icon(Icons.history_outlined),
-          title: Text('Admin history'),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      if (role.canHostRobot)
-        const PopupMenuItem(
-          value: _SettingsMenuAction.openSection(SettingsSection.robotFace),
-          child: ListTile(
-            leading: Icon(Icons.face_retouching_natural_outlined),
-            title: Text('Robot Face'),
-            contentPadding: EdgeInsets.zero,
-          ),
-        ),
-      const PopupMenuItem(
-        value: _SettingsMenuAction.openSection(SettingsSection.notifications),
-        child: ListTile(
-          leading: Icon(Icons.notifications_active_outlined),
-          title: Text('Reminder notifications'),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      const PopupMenuItem(
-        value: _SettingsMenuAction.openSection(SettingsSection.safety),
-        child: ListTile(
-          leading: Icon(Icons.health_and_safety_outlined),
-          title: Text('Prototype safety'),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      const PopupMenuItem(
-        value: _SettingsMenuAction.openSection(SettingsSection.helpAbout),
-        child: ListTile(
-          leading: Icon(Icons.help_outline),
-          title: Text('Help & About'),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      const PopupMenuItem(
-        value: _SettingsMenuAction.openSection(SettingsSection.guidedTrial),
-        child: ListTile(
-          leading: Icon(Icons.fact_check_outlined),
-          title: Text('Guided Trial Run'),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      const PopupMenuItem(
-        value: _SettingsMenuAction.openSection(SettingsSection.setup),
-        child: ListTile(
-          leading: Icon(Icons.restart_alt),
-          title: Text('Start over setup'),
-          contentPadding: EdgeInsets.zero,
-        ),
-      ),
-      const PopupMenuDivider(),
-      const PopupMenuItem(
-        value: _SettingsMenuAction.openSettingsHome(),
-        child: ListTile(
-          leading: Icon(Icons.settings_outlined),
-          title: Text('All settings'),
-          contentPadding: EdgeInsets.zero,
         ),
       ),
     ];
@@ -472,21 +348,25 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     return AppDeviceRole.defaultFor(platform);
   }
 
-  void _handleSettingsMenuAction(
-    _SettingsMenuAction action, {
-    required int settingsTabIndex,
-  }) {
-    _openSettings(settingsTabIndex, section: action.section);
-  }
-
-  void _openSettings(int settingsTabIndex, {SettingsSection? section}) {
-    if (settingsTabIndex < 0) return;
+  void _openSettings({SettingsSection? section}) {
     setState(() {
       // Bump the key so repeated settings deep links scroll again.
       _settingsSectionTarget = section;
       _settingsNavigationRequest += 1;
       _selectedTabId = _ShellTabId.settings;
     });
+    _stopFaceAwakeWindow();
+    _restartInactivityTimer();
+    _syncScreenAwake();
+  }
+
+  void _openCarousel(CarouselHubSegment segment) {
+    setState(() {
+      _carouselSegment = segment;
+      _carouselNavigationRequest += 1;
+      _selectedTabId = _ShellTabId.carousel;
+    });
+    _stopFaceAwakeWindow();
     _restartInactivityTimer();
     _syncScreenAwake();
   }
@@ -566,9 +446,11 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
       return;
     }
     _wasPresenting = state.isPresenting;
-    _selectTab(
-      state.isPresenting ? _ShellTabId.robotFace : _ShellTabId.controller,
-    );
+    if (state.isPresenting) {
+      _selectTab(_ShellTabId.robotFace);
+    } else {
+      _openCarousel(CarouselHubSegment.controller);
+    }
   }
 
   void _syncScreenAwake() {
@@ -711,12 +593,13 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
       return;
     }
     final role = _resolvedRole(storedRole, currentAppDevicePlatform());
-    final destination = switch (tap.kind) {
-      ReminderNotificationTapKind.shortage => _ShellTabId.carousel,
-      ReminderNotificationTapKind.doseReminder =>
-        role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.today,
-    };
-    _selectTab(destination);
+    if (tap.kind == ReminderNotificationTapKind.shortage) {
+      _openCarousel(CarouselHubSegment.carousel);
+    } else {
+      _selectTab(
+        role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.dashboard,
+      );
+    }
   }
 
   Future<void> _handleResume(bool preserveNotificationDestination) async {
@@ -748,32 +631,16 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
 
   _ShellTabId _defaultTabIdFor(AppDeviceRole role) {
     if (widget.forceTodayTab) {
-      return _ShellTabId.today;
+      return _ShellTabId.dashboard;
     }
     if (widget.startOnController) {
-      return _ShellTabId.controller;
+      return _ShellTabId.carousel;
     }
-    return role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.today;
+    return role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.dashboard;
   }
 }
 
-class _SettingsMenuAction {
-  const _SettingsMenuAction.openSection(this.section);
-  const _SettingsMenuAction.openSettingsHome() : section = null;
-
-  final SettingsSection? section;
-}
-
-enum _ShellTabId {
-  today,
-  prescriptions,
-  schedule,
-  robotFace,
-  carousel,
-  controller,
-  log,
-  settings,
-}
+enum _ShellTabId { dashboard, schedule, robotFace, carousel, settings }
 
 typedef _ShellScreenBuilder = Widget Function(int selectedIndex, int tabIndex);
 
@@ -787,7 +654,7 @@ class _ShellTab {
 
   final _ShellTabId id;
   final String title;
-  final NavigationDestination destination;
+  final NavigationDestination? destination;
   final _ShellScreenBuilder screenBuilder;
 
   Widget buildScreen(int selectedIndex, int tabIndex) {
@@ -795,17 +662,5 @@ class _ShellTab {
   }
 }
 
-Widget _buildTodayScreen(int selectedIndex, int tabIndex) =>
-    const TodayScreen();
-Widget _buildPrescriptionsScreen(int selectedIndex, int tabIndex) =>
-    const PrescriptionsScreen();
-Widget _buildRemindersScreen(int selectedIndex, int tabIndex) =>
-    const RemindersScreen();
 Widget _buildRobotFaceScreen(int selectedIndex, int tabIndex) =>
     RobotFaceScreen(isActive: selectedIndex == tabIndex);
-Widget _buildCarouselScreen(int selectedIndex, int tabIndex) =>
-    const CarouselScreen();
-Widget _buildControllerScreen(int selectedIndex, int tabIndex) =>
-    const ControllerScreen();
-Widget _buildDoseLogScreen(int selectedIndex, int tabIndex) =>
-    const DoseLogScreen();

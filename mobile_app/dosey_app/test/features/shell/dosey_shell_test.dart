@@ -16,14 +16,80 @@ import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
-import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/shell/dosey_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_app_scope_dependencies.dart';
+import '../../support/bottom_navigation_test_helper.dart';
 
 void main() {
+  for (final role in AppDeviceRole.values) {
+    testWidgets('${role.name} exposes exactly four bottom destinations', (
+      tester,
+    ) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _setDeviceRole(database, role);
+
+      await _pumpShell(tester, _TestShellApp(database: database));
+
+      final navigationBar = tester.widget<NavigationBar>(
+        find.byType(NavigationBar),
+      );
+      expect(
+        navigationBar.destinations.cast<NavigationDestination>().map(
+          (destination) => destination.label,
+        ),
+        ['Dashboard', 'Schedule', 'Carousel', 'Settings'],
+      );
+    });
+  }
+
+  testWidgets(
+    'bottom navigation adapts across supported sizes and text scales',
+    (tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await _setDeviceRole(database, AppDeviceRole.androidPersonal);
+
+      for (final width in [320.0, 360.0]) {
+        tester.view.physicalSize = Size(width, 700);
+        tester.view.devicePixelRatio = 1;
+        for (final scale in [1.0, 1.3, 1.4]) {
+          await _pumpShell(
+            tester,
+            _TestShellApp(
+              database: database,
+              textScaler: TextScaler.linear(scale),
+            ),
+          );
+
+          final navigationBar = tester.widget<NavigationBar>(
+            find.byType(NavigationBar),
+          );
+          expect(
+            navigationBar.labelBehavior,
+            scale > 1.3
+                ? NavigationDestinationLabelBehavior.alwaysHide
+                : NavigationDestinationLabelBehavior.alwaysShow,
+          );
+          for (final label in [
+            'Dashboard',
+            'Schedule',
+            'Carousel',
+            'Settings',
+          ]) {
+            expect(find.byTooltip(label), findsWidgets);
+          }
+          expect(tester.takeException(), isNull);
+        }
+      }
+    },
+  );
+
   testWidgets('Robot Mode opens Robot Face first', (WidgetTester tester) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
@@ -43,7 +109,7 @@ void main() {
         of: find.byType(NavigationBar),
         matching: find.text('Robot Face'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.byType(RobotFaceScreen, skipOffstage: false), findsOneWidget);
     expect(
@@ -69,10 +135,7 @@ void main() {
     );
 
     expect(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.text('Controller'),
-      ),
+      find.descendant(of: find.byType(AppBar), matching: find.text('Carousel')),
       findsOneWidget,
     );
   });
@@ -108,48 +171,21 @@ void main() {
     await _pumpShellFrame(tester);
     await tester.tap(find.text('Next step'));
     await _pumpShellFrame(tester);
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(NavigationBar),
-            matching: find.text('Robot Face'),
-          )
-          .hitTestable(),
-    );
+    await tester.binding.handlePopRoute();
     await _pumpShellFrame(tester);
     expect(find.text('SOON'), findsOneWidget);
 
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(NavigationBar),
-            matching: find.text('Controller'),
-          )
-          .hitTestable(),
-    );
+    await _openControllerHub(tester);
     await _pumpShellFrame(tester);
     await tester.tap(find.text('Next step'));
     await _pumpShellFrame(tester);
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(NavigationBar),
-            matching: find.text('Robot Face'),
-          )
-          .hitTestable(),
-    );
+    await tester.binding.handlePopRoute();
     await _pumpShellFrame(tester);
     expect(find.text('READY'), findsOneWidget);
 
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(NavigationBar),
-            matching: find.text('Today'),
-          )
-          .hitTestable(),
-    );
-    await _pumpShellFrame(tester);
+    await _openBottomDestination(tester, 'Dashboard');
+    await tester.tap(find.text("Today's doses").hitTestable());
+    await tester.pumpAndSettle();
     expect(find.text('Current dose'), findsOneWidget);
     expect(find.textContaining('FAKE Demo Tablets'), findsWidgets);
   });
@@ -165,7 +201,10 @@ void main() {
 
     expect(find.text('Robot Face'), findsNothing);
     expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Today')),
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('Dashboard'),
+      ),
       findsOneWidget,
     );
     expect(find.byType(RobotFaceScreen), findsNothing);
@@ -180,16 +219,6 @@ void main() {
 
     await _pumpShell(tester, _TestShellApp(database: database));
 
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(NavigationBar),
-            matching: find.text('Robot Face'),
-          )
-          .hitTestable(),
-    );
-    await _pumpShellFrame(tester);
-
     expect(
       tester
           .widget<RobotFaceScreen>(
@@ -198,10 +227,9 @@ void main() {
           .isActive,
       isTrue,
     );
-    expect(find.text('Robot Face'), findsNWidgets(2));
+    expect(find.text('Robot Face'), findsOneWidget);
 
-    await tester.tap(find.text('Controller'));
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
 
     expect(find.byType(RobotFaceScreen, skipOffstage: false), findsOneWidget);
     expect(
@@ -226,15 +254,7 @@ void main() {
     );
 
     await _pumpShell(tester, _TestShellApp(database: database));
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(NavigationBar),
-            matching: find.text('Controller'),
-          )
-          .hitTestable(),
-    );
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
 
     await tester.pump(const Duration(minutes: 1));
     await _pumpShellFrame(tester);
@@ -269,7 +289,7 @@ void main() {
     await tester.pump(const Duration(minutes: 2));
     await _pumpShellFrame(tester);
 
-    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(_appBarTitle('Carousel'), findsOneWidget);
   });
 
   testWidgets('Robot Mode interaction restarts the inactivity timeout', (
@@ -283,29 +303,14 @@ void main() {
     );
 
     await _pumpShell(tester, _TestShellApp(database: database));
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(NavigationBar),
-            matching: find.text('Controller'),
-          )
-          .hitTestable(),
-    );
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
     await tester.pump(const Duration(seconds: 30));
 
-    await tester.tap(
-      find
-          .descendant(
-            of: find.byType(NavigationBar),
-            matching: find.text('Controller'),
-          )
-          .hitTestable(),
-    );
+    await _openControllerHub(tester);
     await _pumpShellFrame(tester);
     await tester.pump(const Duration(seconds: 31));
     await _pumpShellFrame(tester);
-    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(_appBarTitle('Carousel'), findsOneWidget);
 
     await tester.pump(const Duration(seconds: 29));
     await _pumpShellFrame(tester);
@@ -323,13 +328,12 @@ void main() {
     );
 
     await _pumpShell(tester, _TestShellApp(database: database));
-    await tester.tap(find.text('Controller').hitTestable());
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
 
     await tester.pump(const Duration(minutes: 2));
     await _pumpShellFrame(tester);
 
-    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(_appBarTitle('Carousel'), findsOneWidget);
   });
 
   testWidgets('Robot Mode does not dismiss a dialog when inactivity expires', (
@@ -343,8 +347,7 @@ void main() {
     );
 
     await _pumpShell(tester, _TestShellApp(database: database));
-    await tester.tap(find.text('Controller').hitTestable());
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
     final shellContext = tester.element(find.byType(DoseyShell));
     showDialog<void>(
       context: shellContext,
@@ -363,7 +366,7 @@ void main() {
     await tester.pump(const Duration(minutes: 1));
     await _pumpShellFrame(tester);
     expect(find.text('Mounted action'), findsOneWidget);
-    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(_appBarTitle('Carousel'), findsOneWidget);
 
     await tester.tap(find.text('Close'));
     await _pumpShellFrame(tester);
@@ -380,8 +383,7 @@ void main() {
     await _setDeviceRole(database, AppDeviceRole.androidRobot);
 
     await _pumpShell(tester, _TestShellApp(database: database));
-    await tester.tap(find.text('Controller').hitTestable());
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
 
     await tester.binding.handlePopRoute();
     await _pumpShellFrame(tester);
@@ -445,11 +447,10 @@ void main() {
     await _pumpShellFrame(tester);
     expect(screenAwake.states.last, isFalse);
 
-    await tester.tap(find.text('Controller').hitTestable());
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
     expect(screenAwake.states.last, isFalse);
 
-    await tester.tap(find.text('Robot Face').hitTestable());
+    await tester.binding.handlePopRoute();
     await _pumpShellFrame(tester);
     expect(screenAwake.states.last, isTrue);
 
@@ -483,8 +484,7 @@ void main() {
       tester,
       _TestShellApp(database: database, screenAwakeGateway: screenAwake),
     );
-    await tester.tap(find.text('Controller').hitTestable());
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
     final controller =
         DoseyAppScope.of(tester.element(find.byType(DoseyShell))).controller
             as SimulatedControllerGateway;
@@ -518,8 +518,7 @@ void main() {
       tester,
       _TestShellApp(database: database, screenAwakeGateway: screenAwake),
     );
-    await tester.tap(find.text('Controller').hitTestable());
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
     final controller =
         DoseyAppScope.of(tester.element(find.byType(DoseyShell))).controller
             as SimulatedControllerGateway;
@@ -529,7 +528,7 @@ void main() {
     controller.emitWakeFace();
     await _pumpShellFrame(tester);
 
-    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(_appBarTitle('Carousel'), findsOneWidget);
     expect(screenAwake.wakeCalls, 0);
     expect(screenAwake.states.last, isFalse);
   });
@@ -622,8 +621,7 @@ void main() {
       tester,
       _TestShellApp(database: database, screenAwakeGateway: screenAwake),
     );
-    await tester.tap(find.text('Controller').hitTestable());
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
 
     expect(screenAwake.states, isNot(contains(true)));
   });
@@ -685,8 +683,7 @@ void main() {
         missedDoseReconciliationService: reconciliation,
       ),
     );
-    await tester.tap(find.text('Controller').hitTestable());
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
     final baselineCalls = reconciliation.reconcileCalls;
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
@@ -731,7 +728,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await _pumpShellFrame(tester);
 
-    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(_appBarTitle('Carousel'), findsOneWidget);
     expect(reconciliation.reconcileCalls, baselineCalls + 1);
   });
 
@@ -755,15 +752,14 @@ void main() {
         missedDoseReconciliationService: reconciliation,
       ),
     );
-    await tester.tap(find.text('Controller').hitTestable());
-    await _pumpShellFrame(tester);
+    await _openControllerHub(tester);
     final baselineCalls = reconciliation.reconcileCalls;
 
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await _pumpShellFrame(tester);
 
-    expect(_appBarTitle('Controller'), findsOneWidget);
+    expect(_appBarTitle('Carousel'), findsOneWidget);
     expect(reconciliation.reconcileCalls, baselineCalls + 1);
   });
 
@@ -785,15 +781,14 @@ void main() {
           notificationTapController: notificationTaps,
         ),
       );
-      await tester.tap(find.text('Controller').hitTestable());
-      await _pumpShellFrame(tester);
+      await _openControllerHub(tester);
 
       notificationTaps.handleTap('dose-17');
       await _pumpShellFrame(tester);
 
       expect(
         _appBarTitle(
-          role == AppDeviceRole.androidRobot ? 'Robot Face' : 'Today',
+          role == AppDeviceRole.androidRobot ? 'Robot Face' : 'Dashboard',
         ),
         findsOneWidget,
       );
@@ -889,7 +884,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('settings gear menu lists settings sections and opens safety', (
+  testWidgets('Settings destination opens Robot Mode settings', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -898,52 +893,14 @@ void main() {
 
     await _pumpShell(tester, _TestShellApp(database: database));
 
-    await _openSettingsMenu(tester);
+    await _openBottomDestination(tester, 'Settings');
 
     expect(find.text('Account'), findsNothing);
-    expect(find.text('Device mode'), findsWidgets);
-    expect(find.text('Household & robot profile'), findsOneWidget);
-    expect(find.text('Admin history'), findsOneWidget);
-    expect(find.text('Robot Face'), findsWidgets);
-    expect(find.text('Reminder notifications'), findsWidgets);
-    expect(find.text('Prototype safety'), findsWidgets);
-    expect(find.text('Help & About'), findsWidgets);
-    expect(find.text('Guided Trial Run'), findsOneWidget);
-    expect(find.text('Start over setup'), findsWidgets);
-    expect(find.text('All settings'), findsOneWidget);
-
-    await tester.tap(find.text('Prototype safety').hitTestable());
-    await _pumpShellFrame(tester);
-
-    expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
-      findsOneWidget,
-    );
-    await _scrollSettingsUntilVisible(
-      tester,
-      find.text('I understand prototype safety rules'),
-    );
-    expect(find.text('Prototype safety'), findsOneWidget);
-    expect(
-      find.text('I understand prototype safety rules').hitTestable(),
-      findsOneWidget,
-    );
-
-    await _openSettingsMenu(tester);
-    await tester.tap(find.text('Prototype safety').hitTestable());
-    await _pumpShellFrame(tester);
-
-    await _scrollSettingsUntilVisible(
-      tester,
-      find.text('I understand prototype safety rules'),
-    );
-    expect(
-      find.text('I understand prototype safety rules').hitTestable(),
-      findsOneWidget,
-    );
+    expect(_appBarTitle('Settings'), findsOneWidget);
+    expect(find.text('Profile, account & device'), findsOneWidget);
   });
 
-  testWidgets('Personal Mode settings menu retains Account', (
+  testWidgets('Personal Mode Settings retains Account', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -951,12 +908,13 @@ void main() {
     await _setDeviceRole(database, AppDeviceRole.androidPersonal);
 
     await _pumpShell(tester, _TestShellApp(database: database));
-    await _openSettingsMenu(tester);
+    await _openBottomDestination(tester, 'Settings');
 
     expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Robot Face options'), findsNothing);
   });
 
-  testWidgets('settings gear menu opens Help and About', (
+  testWidgets('Settings deep link opens Help and About', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -965,21 +923,13 @@ void main() {
 
     await _pumpShell(tester, _TestShellApp(database: database));
 
-    await _openSettingsMenu(tester);
-
-    expect(find.text('Help & About'), findsOneWidget);
-
-    await tester.tap(find.text('Help & About').hitTestable());
-    await tester.pumpAndSettle();
-
-    expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Settings')),
-      findsOneWidget,
+    await _openBottomDestination(tester, 'Settings');
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Help, guided trial & setup'),
     );
-    expect(
-      tester.widget<SettingsScreen>(find.byType(SettingsScreen)).sectionTarget,
-      SettingsSection.helpAbout,
-    );
+    await tester.tap(find.text('Help, guided trial & setup'));
+    await _pumpShellFrame(tester);
     await _scrollSettingsUntilVisible(
       tester,
       find.text('Caregiver sharing and cloud sync are not active yet.'),
@@ -996,53 +946,42 @@ void main() {
     );
   });
 
-  testWidgets(
-    'settings gear menu opens Household & robot profile and Admin history',
-    (WidgetTester tester) async {
-      final database = DoseyDatabase.inMemory();
-      addTearDown(database.close);
-      await _setDeviceRole(database, AppDeviceRole.androidRobot);
+  testWidgets('Settings accordions open Household profile and History data', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
 
-      await _pumpShell(tester, _TestShellApp(database: database));
+    await _pumpShell(tester, _TestShellApp(database: database));
 
-      await _openSettingsMenu(tester);
-      await tester.tap(find.text('Household & robot profile').hitTestable());
-      await tester.pumpAndSettle();
+    await _openBottomDestination(tester, 'Settings');
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Household & robot profile'),
+    );
+    await tester.tap(find.text('Household & robot profile'));
+    await _pumpShellFrame(tester);
+    await _scrollSettingsUntilVisible(tester, find.text('Profile & device'));
+    await tester.tap(find.text('Profile & device'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Edit household & robot profile').hitTestable(),
+      findsOneWidget,
+    );
 
-      expect(
-        tester
-            .widget<SettingsScreen>(find.byType(SettingsScreen))
-            .sectionTarget,
-        SettingsSection.householdAccount,
-      );
-      await _scrollSettingsUntilVisible(tester, find.text('Profile & device'));
-      await tester.tap(find.text('Profile & device'));
-      await tester.pumpAndSettle();
-      expect(
-        find.text('Edit household & robot profile').hitTestable(),
-        findsOneWidget,
-      );
-
-      await _openSettingsMenu(tester);
-      await tester.tap(find.text('Admin history').hitTestable());
-      await tester.pumpAndSettle();
-
-      expect(
-        tester
-            .widget<SettingsScreen>(find.byType(SettingsScreen))
-            .sectionTarget,
-        SettingsSection.adminHistory,
-      );
-      await _scrollSettingsUntilVisible(
-        tester,
-        find.text('No local admin changes recorded yet.'),
-      );
-      expect(
-        find.text('No local admin changes recorded yet.').hitTestable(),
-        findsOneWidget,
-      );
-    },
-  );
+    await _scrollSettingsUntilVisible(tester, find.text('History & data'));
+    await tester.tap(find.text('History & data'));
+    await _pumpShellFrame(tester);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('No local admin changes recorded yet.'),
+    );
+    expect(
+      find.text('No local admin changes recorded yet.').hitTestable(),
+      findsOneWidget,
+    );
+  });
 }
 
 Future<void> _setDeviceRole(DoseyDatabase database, AppDeviceRole role) async {
@@ -1057,8 +996,17 @@ Finder _appBarTitle(String title) {
   return find.descendant(of: find.byType(AppBar), matching: find.text(title));
 }
 
-Future<void> _openSettingsMenu(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('Open settings menu'));
+Future<void> _openBottomDestination(WidgetTester tester, String label) async {
+  await openBottomDestination(
+    tester,
+    label,
+    pumpFrame: () => _pumpShellFrame(tester),
+  );
+}
+
+Future<void> _openControllerHub(WidgetTester tester) async {
+  await _openBottomDestination(tester, 'Carousel');
+  await tester.tap(find.text('Controller').hitTestable());
   await _pumpShellFrame(tester);
 }
 
@@ -1094,6 +1042,7 @@ class _TestShellApp extends StatelessWidget {
     this.startOnController = false,
     this.appClock,
     this.useRealMissedDoseReconciliation = false,
+    this.textScaler,
   });
 
   final DoseyDatabase database;
@@ -1103,6 +1052,7 @@ class _TestShellApp extends StatelessWidget {
   final bool startOnController;
   final AppClock? appClock;
   final bool useRealMissedDoseReconciliation;
+  final TextScaler? textScaler;
 
   @override
   Widget build(BuildContext context) {
@@ -1120,6 +1070,12 @@ class _TestShellApp extends StatelessWidget {
                 FakeMissedDoseReconciliationService(),
       screenAwakeGateway: screenAwakeGateway,
       child: MaterialApp(
+        builder: textScaler == null
+            ? null
+            : (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+                child: child!,
+              ),
         home: DoseyShell(startOnController: startOnController),
       ),
     );

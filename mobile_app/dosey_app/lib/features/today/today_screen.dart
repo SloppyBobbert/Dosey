@@ -55,8 +55,6 @@ class TodayScreen extends StatelessWidget {
                           prescriptionsById: prescriptionsById,
                         ),
                         const SizedBox(height: 12),
-                        const _SafetyCard(),
-                        const SizedBox(height: 12),
                         StreamBuilder<List<DoseLogEvent>>(
                           stream: dependencies.doseLog.watchEvents(),
                           builder: (context, logSnapshot) =>
@@ -706,64 +704,40 @@ class _TodayHeroStatusChips extends StatelessWidget {
       builder: (context, controllerSnapshot) {
         final controller =
             controllerSnapshot.data ?? const ControllerSnapshot.disconnected();
-        return StreamBuilder<bool>(
-          stream: dependencies.settings.watchSafetyAcknowledged(),
-          builder: (context, safetySnapshot) {
-            final safetyAcknowledged = safetySnapshot.data ?? false;
-            return Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                const _StatusPill(
-                  icon: Icons.phone_android,
-                  label: 'Local-only',
-                ),
-                const _StatusPill(
-                  icon: Icons.science_outlined,
-                  label: 'Prototype-safe',
-                ),
-                const _StatusPill(
-                  icon: Icons.check_circle_outline,
-                  label: 'Manual confirmation',
-                ),
-                _StatusPill(
-                  icon: Icons.health_and_safety_outlined,
-                  label: safetyAcknowledged
-                      ? 'Safety acknowledged'
-                      : 'Safety to review',
-                ),
-                _StatusPill(
-                  icon: Icons.memory_outlined,
-                  label:
-                      controller.connectionState ==
-                          ControllerConnectionState.connected
-                      ? 'Controller connected'
-                      : 'Controller offline',
-                ),
-                _StatusPill(
-                  icon: hasActiveDose
-                      ? Icons.event_available_outlined
-                      : Icons.event_busy_outlined,
-                  label: hasActiveDose ? 'Active schedule' : 'No active dose',
-                ),
-                if (scheduledDoseCount > 0)
-                  _StatusPill(
-                    icon: Icons.timeline_outlined,
-                    label: '$scheduledDoseCount scheduled today',
-                  ),
-                if (loadedSlot != null)
-                  _StatusPill(
-                    icon: Icons.inventory_2_outlined,
-                    label: 'Loaded slot ${loadedSlot!.slotNumber}',
-                  ),
-                if (latestEvent != null)
-                  _StatusPill(
-                    icon: Icons.history_outlined,
-                    label: _latestEventLabel(latestEvent!),
-                  ),
-              ],
-            );
-          },
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _StatusPill(
+              icon: Icons.memory_outlined,
+              label:
+                  controller.connectionState ==
+                      ControllerConnectionState.connected
+                  ? 'Controller connected'
+                  : 'Controller offline',
+            ),
+            _StatusPill(
+              icon: hasActiveDose
+                  ? Icons.event_available_outlined
+                  : Icons.event_busy_outlined,
+              label: hasActiveDose ? 'Active schedule' : 'No active dose',
+            ),
+            if (scheduledDoseCount > 0)
+              _StatusPill(
+                icon: Icons.timeline_outlined,
+                label: '$scheduledDoseCount scheduled today',
+              ),
+            if (loadedSlot != null)
+              _StatusPill(
+                icon: Icons.inventory_2_outlined,
+                label: 'Loaded slot ${loadedSlot!.slotNumber}',
+              ),
+            if (latestEvent != null)
+              _StatusPill(
+                icon: Icons.history_outlined,
+                label: _latestEventLabel(latestEvent!),
+              ),
+          ],
         );
       },
     );
@@ -998,50 +972,6 @@ class _DoseStatusBanner extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _SafetyCard extends StatelessWidget {
-  const _SafetyCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.health_and_safety_outlined, color: colorScheme.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Prototype safety',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Use candy, beads, dry beans, vitamins, or fake pills.',
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Never mark a dose taken because the servo moved.',
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

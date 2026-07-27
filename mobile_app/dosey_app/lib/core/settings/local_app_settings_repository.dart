@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
+import 'package:dosey_app/core/settings/app_theme_preference.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 
@@ -28,6 +29,7 @@ class LocalAppSettingsRepository {
   LocalAppSettingsRepository(this._database, {required this.defaultRole});
 
   static const _deviceRoleKey = 'device_role';
+  static const _themePreferenceKey = 'theme_preference';
   static const _onboardingCompletedKey = 'onboarding_completed';
   static const _safetyAcknowledgedKey = 'safety_acknowledged';
   static const _actionPinHashKey = 'action_pin_hash';
@@ -38,6 +40,21 @@ class LocalAppSettingsRepository {
 
   final DoseyDatabase _database;
   final AppDeviceRole defaultRole;
+
+  Stream<AppThemePreference> watchThemePreference() {
+    final query = _database.select(_database.appSettings)
+      ..where((setting) => setting.key.equals(_themePreferenceKey));
+
+    return query.watchSingleOrNull().map(
+      (setting) =>
+          AppThemePreference.fromStorageValue(setting?.value ?? '') ??
+          AppThemePreference.dark,
+    );
+  }
+
+  Future<void> setThemePreference(AppThemePreference preference) {
+    return _setValue(_themePreferenceKey, preference.storageValue);
+  }
 
   Stream<AppDeviceRole> watchDeviceRole() {
     final query = _database.select(_database.appSettings)

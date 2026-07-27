@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/app/dosey_material_app.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
@@ -13,7 +14,7 @@ import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 class DoseyApp extends StatelessWidget {
   const DoseyApp({
@@ -51,8 +52,6 @@ class DoseyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const seed = Color(0xFF2F6F5E);
-
     return DemoModeHost(
       productionDatabase: database,
       productionClock: appClock,
@@ -75,13 +74,7 @@ class DoseyApp extends StatelessWidget {
             : householdManagementGateway,
         robotPairingGateway: session.isDemo ? null : robotPairingGateway,
         appClock: session.clock,
-        child: MaterialApp(
-          title: 'Dosey',
-          debugShowCheckedModeBanner: false,
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(seedColor: seed),
-            useMaterial3: true,
-          ),
+        child: DoseyMaterialApp(
           home: OnboardingGate(
             shellForceTodayTab: shellForceTodayTab,
             demoMode: session.isDemo,
