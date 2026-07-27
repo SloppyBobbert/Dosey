@@ -8,7 +8,6 @@ import 'package:dosey_app/core/reminders/active_profile_schedules_stream.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
-import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/doses/dose_action_logger.dart';
 import 'package:dosey_app/features/today/today_next_dose_helper.dart';
@@ -357,7 +356,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     final dependencies = DoseyAppScope.of(context);
     final now = dependencies.appClock.now;
     return StreamBuilder<AppDeviceRole>(
-      stream: dependencies.settings.watchDeviceRole(),
+      stream: dependencies.effectiveRole.watchDeviceRole(),
       builder: (context, roleSnapshot) {
         return StreamBuilder<ControllerSnapshot>(
           stream: dependencies.controller.watchController(),
@@ -501,11 +500,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     AppDeviceRole? storedRole,
     ControllerSnapshot controller,
   ) {
-    final platform = currentAppDevicePlatform();
-    final role = storedRole != null && storedRole.isAllowedOn(platform)
-        ? storedRole
-        : AppDeviceRole.defaultFor(platform);
-    return role.canHostRobot && controller.canRequestDispense;
+    return storedRole?.canHostRobot == true && controller.canRequestDispense;
   }
 
   Future<void> _dispenseLoadedSlot(

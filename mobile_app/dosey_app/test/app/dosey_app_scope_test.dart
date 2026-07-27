@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/build/app_build_profile.dart';
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
@@ -285,7 +286,7 @@ void main() {
   });
 
   testWidgets(
-    'production supervisor runs only in foreground Android Robot Mode',
+    'production supervisor follows foreground state and fixed Robot profile',
     (WidgetTester tester) async {
       final database = DoseyDatabase.inMemory();
       await database.setAppSetting(
@@ -306,6 +307,7 @@ void main() {
           textDirection: TextDirection.ltr,
           child: DoseyAppScope(
             database: database,
+            buildProfile: AppBuildProfile.robot,
             controllerGateway: supervisor,
             voicePlayer: DoseyVoicePlayer(playbackGateway: voiceGateway),
             child: Builder(
@@ -348,7 +350,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
       expect(
         (await dependencies.controller.watchController().first).healthState,
-        ControllerHealthState.disconnected,
+        ControllerHealthState.online,
       );
 
       await tester.pumpWidget(const SizedBox());

@@ -24,6 +24,7 @@ import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/log/dose_log_screen.dart';
 import 'package:dosey_app/features/settings/settings_accordion.dart';
+import 'package:dosey_app/features/settings/robot_phone_setup_screen.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -229,7 +230,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final providerName = usesAppleSignIn ? 'Apple' : 'Google';
 
     return StreamBuilder<AppDeviceRole>(
-      stream: dependencies.settings.watchDeviceRole(),
+      stream: dependencies.effectiveRole.watchDeviceRole(),
       builder: (context, roleSnapshot) {
         final allowedRoles = AppDeviceRole.allowedFor(platform);
         final storedRole = roleSnapshot.data;
@@ -397,7 +398,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           title: 'Setup',
                           children: [
                             const Text(
-                              'Show the first-run safety notice and mode selection again.',
+                              'Show the first-run safety notice and setup steps again.',
                             ),
                             const SizedBox(height: 12),
                             OutlinedButton.icon(
@@ -408,6 +409,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ],
                         ),
                       ),
+                      if (dependencies
+                          .effectiveRole
+                          .capabilities
+                          .showsRobotPhoneSetup) ...[
+                        const SizedBox(height: 12),
+                        _RobotPhoneSetupCard(
+                          onOpen: () => Navigator.of(context).push<void>(
+                            MaterialPageRoute(
+                              builder: (_) => RobotPhoneSetupScreen(
+                                gateway: dependencies.robotPhoneSetup,
+                                externalActionResumeGuard:
+                                    dependencies.externalActionResumeGuard,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -643,140 +661,54 @@ class _DeviceModeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.of(context);
-
-    return StreamBuilder<AppDeviceRole>(
-      stream: dependencies.settings.watchDeviceRole(),
-      builder: (context, snapshot) {
-        final allowedRoles = AppDeviceRole.allowedFor(platform);
-        final fallbackRole = AppDeviceRole.defaultFor(platform);
-        final storedRole = snapshot.data;
-        final role = storedRole != null && allowedRoles.contains(storedRole)
-            ? storedRole
-            : fallbackRole;
-
-        return _SettingsSectionCard(
-          icon: Icons.phone_android_outlined,
-          title: 'Device mode',
-          children: [
-            _DeviceModeDropdown(
-              key: ValueKey('${platform.name}:${role.storageValue}'),
-              role: role,
-              allowedRoles: allowedRoles,
-              onChanged: (newRole) =>
-                  _changeRole(context, currentRole: role, newRole: newRole),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              role.canHostRobot
-                  ? 'Robot Mode is for the mounted Android phone that controls Dosey hardware.'
-                  : 'Personal Mode is for reminders, history, and caregiver-facing features.',
-            ),
-            if (platform == AppDevicePlatform.ios) ...[
-              const SizedBox(height: 8),
-              const Text('iOS can only be a personal phone.'),
-            ],
-          ],
-        );
-      },
-    );
-  }
-
-  Future<bool> _changeRole(
-    BuildContext context, {
-    required AppDeviceRole currentRole,
-    required AppDeviceRole newRole,
-  }) async {
-    final dependencies = DoseyAppScope.of(context);
-    if (!currentRole.canHostRobot || newRole.canHostRobot) {
-      if (!currentRole.canHostRobot && newRole.canHostRobot) {
-        await dependencies.auth.signOut();
-      }
-      await dependencies.settings.setDeviceRole(newRole);
-      return true;
-    }
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Leave Robot Mode?'),
-        content: const Text(
-          'This Android phone will stop acting as Dosey\'s mounted robot phone and Robot Face will be removed. Continue?',
+    final capabilities = dependencies.effectiveRole.capabilities;
+    final isRobot = capabilities.canHostRobot;
+    return _SettingsSectionCard(
+      icon: Icons.phone_android_outlined,
+      title: 'Device mode',
+      children: [
+        Text(
+          isRobot ? 'Robot distribution' : 'Personal distribution',
+          style: Theme.of(context).textTheme.titleMedium,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Continue'),
-          ),
+        const SizedBox(height: 10),
+        Text(
+          isRobot
+              ? 'This app is fixed as the mounted Android robot phone and can control Dosey hardware.'
+              : 'This app is fixed for personal reminders, history, and management features.',
+        ),
+        if (platform == AppDevicePlatform.ios) ...[
+          const SizedBox(height: 8),
+          const Text('iOS always uses the Personal distribution.'),
         ],
-      ),
+        const SizedBox(height: 8),
+        const Text('Install the other Dosey app to change this phone’s role.'),
+      ],
     );
-    if (confirmed != true || !context.mounted) {
-      return false;
-    }
-
-    final result = await runProtectedAdminAction<void>(
-      context,
-      action: (_) => dependencies.settings.setDeviceRole(newRole),
-    );
-    return result.isSuccess;
   }
 }
 
-class _DeviceModeDropdown extends StatefulWidget {
-  const _DeviceModeDropdown({
-    super.key,
-    required this.role,
-    required this.allowedRoles,
-    required this.onChanged,
-  });
+class _RobotPhoneSetupCard extends StatelessWidget {
+  const _RobotPhoneSetupCard({required this.onOpen});
 
-  final AppDeviceRole role;
-  final List<AppDeviceRole> allowedRoles;
-  final Future<bool> Function(AppDeviceRole role) onChanged;
-
-  @override
-  State<_DeviceModeDropdown> createState() => _DeviceModeDropdownState();
-}
-
-class _DeviceModeDropdownState extends State<_DeviceModeDropdown> {
-  final _fieldKey = GlobalKey<FormFieldState<AppDeviceRole>>();
-
-  @override
-  void didUpdateWidget(_DeviceModeDropdown oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.role != widget.role) {
-      _fieldKey.currentState?.didChange(widget.role);
-    }
-  }
+  final VoidCallback onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<AppDeviceRole>(
-      key: _fieldKey,
-      initialValue: widget.role,
-      decoration: const InputDecoration(labelText: 'Mode'),
-      items: widget.allowedRoles
-          .map((role) => DropdownMenuItem(value: role, child: Text(role.label)))
-          .toList(),
-      onChanged: (newRole) async {
-        if (newRole == null) return;
-        try {
-          final accepted = await widget.onChanged(newRole);
-          if (!accepted) {
-            _fieldKey.currentState?.didChange(widget.role);
-          }
-        } on Object catch (error) {
-          _fieldKey.currentState?.didChange(widget.role);
-          if (!context.mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Device role update failed: $error')),
-          );
-        }
-      },
+    return _SettingsSectionCard(
+      icon: Icons.phonelink_setup_outlined,
+      title: 'Robot phone setup',
+      children: [
+        const Text(
+          'Review Bluetooth, Wi-Fi, notifications, battery optimization, and secure lock status.',
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: onOpen,
+          icon: const Icon(Icons.open_in_new),
+          label: const Text('Open robot phone setup'),
+        ),
+      ],
     );
   }
 }
@@ -975,7 +907,7 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.of(context);
     return StreamBuilder<AppDeviceRole>(
-      stream: dependencies.settings.watchDeviceRole(),
+      stream: dependencies.effectiveRole.watchDeviceRole(),
       builder: (context, roleSnapshot) {
         final allowedRoles = AppDeviceRole.allowedFor(widget.platform);
         final fallbackRole = AppDeviceRole.defaultFor(widget.platform);
@@ -2013,7 +1945,7 @@ class _RobotFaceSettingsCardState extends State<_RobotFaceSettingsCard> {
     final dependencies = DoseyAppScope.of(context);
 
     return StreamBuilder<AppDeviceRole>(
-      stream: dependencies.settings.watchDeviceRole(),
+      stream: dependencies.effectiveRole.watchDeviceRole(),
       builder: (context, roleSnapshot) {
         final platform = currentAppDevicePlatform();
         final fallbackRole = AppDeviceRole.defaultFor(platform);

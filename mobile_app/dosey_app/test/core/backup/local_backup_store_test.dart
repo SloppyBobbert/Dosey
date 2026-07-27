@@ -4,6 +4,10 @@ import 'package:dosey_app/core/backup/backup_validator.dart';
 import 'package:dosey_app/core/backup/backup_codec.dart';
 import 'package:dosey_app/core/backup/backup_document.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
+import 'package:dosey_app/core/build/app_build_profile.dart';
+import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/settings/effective_device_role_source.dart';
+import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -83,6 +87,38 @@ void main() {
     expect(
       settings.firstWhere((row) => row.key == 'profile_display_name').value,
       'Restored',
+    );
+  });
+
+  test('restored data cannot override either fixed Android profile', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final store = LocalBackupStore(database);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
+    final snapshot = await store.readSnapshot();
+
+    await database.transaction(() => store.replaceSnapshot(snapshot));
+
+    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
+    expect(
+      await EffectiveDeviceRoleSource(
+        settings,
+        profile: AppBuildProfile.personal,
+        platform: AppDevicePlatform.android,
+      ).getDeviceRole(),
+      AppDeviceRole.androidPersonal,
+    );
+    expect(
+      await EffectiveDeviceRoleSource(
+        settings,
+        profile: AppBuildProfile.robot,
+        platform: AppDevicePlatform.android,
+      ).getDeviceRole(),
+      AppDeviceRole.androidRobot,
     );
   });
 

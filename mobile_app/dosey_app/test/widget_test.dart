@@ -2,6 +2,7 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/main.dart' as app;
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/build/app_build_profile.dart';
 import 'package:dosey_app/core/carousel/carousel_load_session.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/carousel_position.dart';
@@ -41,7 +42,9 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
 
     expect(find.text('Dosey is not a medical device'), findsOneWidget);
@@ -54,7 +57,9 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
 
     final continueButton = tester.widget<FilledButton>(
@@ -94,7 +99,9 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
 
     await tester.tap(find.byType(Checkbox));
@@ -115,16 +122,19 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
     await _pumpAppFrame(tester);
 
     await _acceptMedicalNotice(tester);
-    await tester.tap(find.text('Robot Mode'));
     await _pumpAppFrame(tester);
 
     expect(find.text('Robot Face'), findsOneWidget);
     expect(find.text('Dashboard'), findsWidgets);
     expect(find.text('Sign in to continue'), findsNothing);
+    expect(find.text('Robot Mode'), findsNothing);
+    expect(find.text('Personal Mode'), findsNothing);
   });
 
   testWidgets('Android Personal Mode shows Google sign-in gate', (
@@ -133,11 +143,12 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
 
     await _acceptMedicalNotice(tester);
-    await tester.tap(find.text('Personal Mode'));
     await _pumpAppFrame(tester);
 
     expect(find.text('Sign in to continue'), findsOneWidget);
@@ -149,23 +160,28 @@ void main() {
     expect(find.text('Controller'), findsNothing);
   });
 
-  testWidgets('rapid role taps keep first onboarding role selection', (
+  testWidgets('Personal build ignores a stale persisted Robot role', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
+    await database.setAppSetting(
+      'device_role',
+      AppDeviceRole.androidRobot.storageValue,
+    );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
 
     await _acceptMedicalNotice(tester);
-    await tester.tap(find.text('Personal Mode'));
-    await tester.tap(find.text('Robot Mode'));
     await _pumpAppFrame(tester);
 
     expect(find.text('Sign in to continue'), findsOneWidget);
     expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Controller'), findsNothing);
+    expect(find.text('Robot Mode'), findsNothing);
   });
 
   testWidgets('onboarding sign-in failure stays on account gate', (
@@ -174,11 +190,12 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
 
     await _acceptMedicalNotice(tester);
-    await tester.tap(find.text('Personal Mode'));
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Continue with Google'));
     await _pumpAppFrame(tester);
@@ -203,15 +220,13 @@ void main() {
     addTearDown(database.close);
 
     try {
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
 
       await _acceptMedicalNotice(tester);
 
       expect(find.text('Robot Mode'), findsNothing);
-      expect(find.text('Personal Mode'), findsOneWidget);
-
-      await tester.tap(find.text('Personal Mode'));
+      expect(find.text('Personal Mode'), findsNothing);
       await _pumpAppFrame(tester);
 
       expect(find.text('Sign in to continue'), findsOneWidget);
@@ -228,8 +243,11 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _markOnboardingComplete(database);
+    await _saveSignedInUser(database, provider: AuthProvider.google);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
 
     await _openBottomDestination(tester, 'Settings');
@@ -254,7 +272,9 @@ void main() {
     );
     await _saveSignedInUser(database, provider: AuthProvider.google);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
     await _openBottomDestination(tester, 'Settings');
     await _pumpAppFrame(tester);
@@ -267,7 +287,7 @@ void main() {
     await _pumpAppFrame(tester);
 
     expect(find.text('Device mode'), findsOneWidget);
-    expect(find.text('Android personal phone'), findsOneWidget);
+    expect(find.text('Personal distribution'), findsOneWidget);
     await _openSettingsAccordion(tester, 'Safety & limitations');
     await _scrollSettingsUntilVisible(tester, find.text('Prototype safety'));
 
@@ -291,7 +311,9 @@ void main() {
     );
     await _saveSignedInUser(database, provider: AuthProvider.google);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
     await _openBottomDestination(tester, 'Settings');
     await _pumpAppFrame(tester);
@@ -299,7 +321,7 @@ void main() {
     expect(find.text('Dosey Tester'), findsOneWidget);
     expect(find.text('google@example.com'), findsOneWidget);
     expect(find.text('Google account'), findsOneWidget);
-    expect(find.text('Android personal phone'), findsOneWidget);
+    expect(find.text('Personal distribution'), findsOneWidget);
     expect(find.text('Sign out'), findsOneWidget);
   });
 
@@ -314,7 +336,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
     await _openReminderSettings(tester);
@@ -355,7 +377,11 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(
+        database: database,
+        permissionGateway: permissions,
+        buildProfile: AppBuildProfile.personal,
+      ),
     );
     await _pumpAppFrame(tester);
     await _openReminderSettings(tester);
@@ -365,7 +391,12 @@ void main() {
     notificationStatus[AppPermission.notifications] = AppPermissionState.denied;
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await _pumpAppFrame(tester);
+    for (var frame = 0; frame < 10; frame += 1) {
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.text('Notifications blocked').evaluate().isNotEmpty) {
+        break;
+      }
+    }
 
     expect(find.text('Notifications blocked'), findsOneWidget);
   });
@@ -384,7 +415,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
     await _openReminderSettings(tester);
@@ -409,7 +440,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
     await _openReminderSettings(tester);
@@ -435,7 +466,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(
+      _TestDoseyApp(
         database: database,
         permissionGateway: permissions,
         reminderScheduler: scheduler,
@@ -469,7 +500,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(
+      _TestDoseyApp(
         database: database,
         permissionGateway: permissions,
         reminderScheduler: scheduler,
@@ -506,7 +537,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(
+      _TestDoseyApp(
         database: database,
         permissionGateway: permissions,
         reminderScheduler: scheduler,
@@ -534,7 +565,9 @@ void main() {
     );
     await _saveSignedInUser(database, provider: AuthProvider.google);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
     await _openSettingsMenu(tester);
 
@@ -563,7 +596,9 @@ void main() {
     );
     await _saveSignedInUser(database, provider: AuthProvider.google);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
     await _openSettingsMenu(tester);
 
@@ -589,8 +624,9 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     await _markOnboardingComplete(database);
+    await _saveSignedInUser(database, provider: AuthProvider.google);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
 
     expect(find.text('Robot Face'), findsWidgets);
@@ -619,7 +655,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
 
     final navigationBar = find.byType(NavigationBar);
@@ -640,7 +676,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
@@ -664,7 +700,7 @@ void main() {
     await _addVitaminPrescription(database);
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
@@ -693,7 +729,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
@@ -742,7 +778,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
@@ -791,7 +827,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
@@ -839,7 +875,7 @@ void main() {
         ),
       );
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openCarouselHub(tester);
       await _pumpAppFrame(tester);
@@ -879,7 +915,7 @@ void main() {
       isEnabled: false,
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
@@ -960,7 +996,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await tester.tap(find.text('Connect controller'));
@@ -1073,7 +1109,7 @@ void main() {
         confirmedAt: now,
       );
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openControllerHub(tester);
       await _pumpAppFrame(tester);
@@ -1154,7 +1190,7 @@ void main() {
         confirmedAt: now,
       );
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openToday(tester);
       await tester.ensureVisible(find.text('Confirm taken'));
@@ -1247,7 +1283,7 @@ void main() {
         confirmedAt: todayUtc,
       );
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openControllerHub(tester);
       await _pumpAppFrame(tester);
@@ -1331,7 +1367,7 @@ void main() {
         confirmedAt: now,
       );
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openControllerHub(tester);
       await _pumpAppFrame(tester);
@@ -1376,7 +1412,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await tester.tap(find.text('Connect controller'));
@@ -1407,7 +1443,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await tester.tap(find.text('Connect controller'));
@@ -1443,7 +1479,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -1501,7 +1537,7 @@ void main() {
     await _addVitaminPrescription(database, remainingDoses: 2);
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -1552,7 +1588,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -1588,7 +1624,7 @@ void main() {
       await _addVitaminPrescription(database, remainingDoses: 2);
       await _addVitaminReminder(database, id: 'vitamin-d-morning');
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openToday(tester);
 
@@ -1625,7 +1661,7 @@ void main() {
     await _addVitaminPrescription(database, remainingDoses: 2);
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -1664,7 +1700,7 @@ void main() {
     await _addVitaminPrescription(database, remainingDoses: 2);
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -1701,7 +1737,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -1739,7 +1775,7 @@ void main() {
       await _addVitaminReminder(database, id: 'vitamin-d-morning');
       await _addLoadedVitaminSlot(database);
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openControllerHub(tester);
       await _pumpAppFrame(tester);
@@ -1778,7 +1814,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -1822,7 +1858,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -1855,7 +1891,7 @@ void main() {
       END;
     ''');
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -1881,7 +1917,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -1906,7 +1942,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -1933,7 +1969,9 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -1961,7 +1999,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -2006,7 +2044,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -2046,7 +2084,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -2080,7 +2118,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -2119,7 +2157,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
@@ -2146,7 +2184,9 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -2173,7 +2213,7 @@ void main() {
       await _addVitaminReminder(database, id: 'vitamin-d-morning');
       await _addLoadedVitaminSlot(database);
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openControllerHub(tester);
       await _pumpAppFrame(tester);
@@ -2210,7 +2250,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text('Dosey is not a medical device'), findsNothing);
@@ -2227,7 +2267,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2260,7 +2300,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2279,7 +2319,7 @@ void main() {
     await _addVitaminReminder(database, id: 'vitamin-d-morning');
     await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2314,7 +2354,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2359,7 +2399,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.scrollUntilVisible(find.text('Next schedule timeline'), 220);
@@ -2388,7 +2428,7 @@ void main() {
       minute: 0,
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2416,7 +2456,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2453,7 +2493,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2489,7 +2529,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2510,7 +2550,7 @@ void main() {
     ).setActionPin('1234');
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2538,7 +2578,7 @@ void main() {
     ).setActionPin('1234');
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Log snooze'));
@@ -2566,7 +2606,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Confirm taken'));
@@ -2588,7 +2628,7 @@ void main() {
     await _addVitaminPrescription(database, remainingDoses: 2);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Confirm taken'));
@@ -2609,7 +2649,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Already taken'));
@@ -2633,7 +2673,7 @@ void main() {
     await _addVitaminPrescription(database, remainingDoses: 2);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Already taken'));
@@ -2654,7 +2694,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Taken early'));
@@ -2678,7 +2718,7 @@ void main() {
     await _addVitaminPrescription(database, remainingDoses: 2);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Taken early'));
@@ -2699,7 +2739,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Taken late'));
@@ -2723,7 +2763,7 @@ void main() {
     await _addVitaminPrescription(database, remainingDoses: 2);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Taken late'));
@@ -2744,7 +2784,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Ask caregiver'));
@@ -2774,7 +2814,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Skip dose'));
@@ -2802,7 +2842,7 @@ void main() {
       await _addVitaminPrescription(database, remainingDoses: 2);
       await _addVitaminReminder(database);
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openToday(tester);
       await tester.ensureVisible(find.text('Skip dose'));
@@ -2826,7 +2866,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Mark missed'));
@@ -2856,7 +2896,7 @@ void main() {
     await _addVitaminPrescription(database, remainingDoses: 2);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.ensureVisible(find.text('Mark missed'));
@@ -2881,7 +2921,9 @@ void main() {
       role: AppDeviceRole.androidPersonal,
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _pumpAppFrame(tester);
 
     expect(find.text('Sign in to continue'), findsOneWidget);
@@ -2896,7 +2938,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2912,7 +2954,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
     await tester.tap(find.text('Confirm dose taken manually'));
@@ -2934,7 +2976,7 @@ void main() {
     await _addVitaminPrescription(database, remainingDoses: 2);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openToday(tester);
 
@@ -2985,7 +3027,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openDoseHistory(tester);
     await _pumpAppFrame(tester);
@@ -3005,7 +3047,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
@@ -3058,7 +3100,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
@@ -3118,7 +3160,7 @@ void main() {
         refillThreshold: 4,
       );
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openPrescriptions(tester);
       await _pumpAppFrame(tester);
@@ -3160,7 +3202,7 @@ void main() {
     await _addAllergyPrescription(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
@@ -3184,7 +3226,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminPrescription(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
@@ -3229,7 +3271,7 @@ void main() {
       minute: 0,
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
@@ -3260,7 +3302,7 @@ void main() {
       minute: 0,
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
@@ -3287,7 +3329,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -3321,7 +3363,7 @@ void main() {
         ),
       );
 
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openSchedule(tester);
       await _pumpAppFrame(tester);
@@ -3343,7 +3385,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminPrescription(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -3377,7 +3419,7 @@ void main() {
       ..scheduleError = Exception('notifications unavailable');
 
     await tester.pumpWidget(
-      DoseyApp(database: database, reminderScheduler: scheduler),
+      _TestDoseyApp(database: database, reminderScheduler: scheduler),
     );
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
@@ -3412,7 +3454,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
@@ -3444,7 +3486,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
@@ -3472,7 +3514,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
@@ -3499,7 +3541,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
@@ -3532,7 +3574,11 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(
+        database: database,
+        permissionGateway: permissions,
+        buildProfile: AppBuildProfile.personal,
+      ),
     );
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
@@ -3565,7 +3611,7 @@ void main() {
     );
 
     await tester.pumpWidget(
-      DoseyApp(database: database, permissionGateway: permissions),
+      _TestDoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
@@ -3596,7 +3642,11 @@ void main() {
     addTearDown(notificationTaps.dispose);
 
     await tester.pumpWidget(
-      DoseyApp(database: database, notificationTapController: notificationTaps),
+      _TestDoseyApp(
+        database: database,
+        notificationTapController: notificationTaps,
+        buildProfile: AppBuildProfile.personal,
+      ),
     );
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
@@ -3653,7 +3703,7 @@ void main() {
     await _addVitaminPrescription(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -3680,7 +3730,7 @@ void main() {
     await _addVitaminPrescription(database);
     await _addVitaminReminder(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -3726,7 +3776,7 @@ void main() {
       minute: 0,
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -3757,7 +3807,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminPrescription(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -3789,7 +3839,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -3826,7 +3876,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openControllerHub(tester);
     await _pumpAppFrame(tester);
@@ -3851,12 +3901,15 @@ void main() {
     await _saveSignedInUser(database, provider: AuthProvider.apple);
 
     try {
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openBottomDestination(tester, 'Settings');
       await _pumpAppFrame(tester);
 
-      expect(find.text('iOS personal phone'), findsOneWidget);
+      expect(
+        find.text('iOS always uses the Personal distribution.'),
+        findsOneWidget,
+      );
       expect(find.text('Android robot phone'), findsNothing);
       expect(find.text('Android personal phone'), findsNothing);
     } finally {
@@ -3874,7 +3927,7 @@ void main() {
     await _saveSignedInUser(database, provider: AuthProvider.apple);
 
     try {
-      await tester.pumpWidget(DoseyApp(database: database));
+      await tester.pumpWidget(_TestDoseyApp(database: database));
       await _pumpAppFrame(tester);
       await _openBottomDestination(tester, 'Settings');
       await _pumpAppFrame(tester);
@@ -3897,7 +3950,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminPrescription(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -3967,7 +4020,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -3993,7 +4046,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminPrescription(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -4031,7 +4084,7 @@ void main() {
     await _markOnboardingComplete(database);
     await _addVitaminPrescription(database);
 
-    await tester.pumpWidget(DoseyApp(database: database));
+    await tester.pumpWidget(_TestDoseyApp(database: database));
     await _pumpAppFrame(tester);
     await _openSchedule(tester);
     await _pumpAppFrame(tester);
@@ -4299,19 +4352,20 @@ Future<void> _runAsyncCallback(VoidCallback callback) async {
   }
 }
 
-class DoseyApp extends StatelessWidget {
-  const DoseyApp({
-    super.key,
+class _TestDoseyApp extends StatelessWidget {
+  const _TestDoseyApp({
     this.database,
     this.permissionGateway,
     this.reminderScheduler,
     this.notificationTapController,
+    this.buildProfile = AppBuildProfile.robot,
   });
 
   final DoseyDatabase? database;
   final AppPermissionGateway? permissionGateway;
   final ReminderScheduler? reminderScheduler;
   final ReminderNotificationTapController? notificationTapController;
+  final AppBuildProfile? buildProfile;
 
   @override
   Widget build(BuildContext context) {
@@ -4320,6 +4374,7 @@ class DoseyApp extends StatelessWidget {
       reminderScheduler: reminderScheduler ?? const _NoopReminderScheduler(),
       permissionGateway: permissionGateway,
       notificationTapController: notificationTapController,
+      buildProfile: buildProfile,
       missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
       bleGateway: FakeBleGateway(),
       connectivityGateway: FakeConnectivityGateway(),

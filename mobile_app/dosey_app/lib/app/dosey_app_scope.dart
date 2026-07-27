@@ -5,12 +5,15 @@ import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/google_auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/android/method_channel_robot_phone_setup_gateway.dart';
+import 'package:dosey_app/core/android/robot_phone_setup_gateway.dart';
 import 'package:dosey_app/core/audit/admin_audit_repository.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/bluetooth/flutter_blue_plus_ble_gateway.dart';
 import 'package:dosey_app/core/backup/backup_file_gateway.dart';
 import 'package:dosey_app/core/backup/local_backup_service.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
+import 'package:dosey_app/core/build/app_build_profile.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/cloud/cloud_google_account_gateway.dart';
@@ -51,6 +54,7 @@ import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart'
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/action_pin_gate.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/settings/effective_device_role_source.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
@@ -86,6 +90,8 @@ class DoseyAppScope extends StatefulWidget {
     this.householdSyncGateway,
     this.householdManagementGateway,
     this.robotPairingGateway,
+    this.buildProfile,
+    this.robotPhoneSetupGateway,
     this.enableDemoFaceLab = false,
   });
 
@@ -108,6 +114,8 @@ class DoseyAppScope extends StatefulWidget {
   final HouseholdSyncGateway? householdSyncGateway;
   final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
+  final AppBuildProfile? buildProfile;
+  final RobotPhoneSetupGateway? robotPhoneSetupGateway;
   final bool enableDemoFaceLab;
 
   static DoseyAppDependencies of(BuildContext context) {
@@ -216,6 +224,12 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       _database,
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
     );
+    final buildProfile = widget.buildProfile ?? AppBuildProfile.current;
+    final effectiveRole = EffectiveDeviceRoleSource(
+      settings,
+      profile: buildProfile,
+      platform: currentAppDevicePlatform(),
+    );
     final actionPinGate = ActionPinGate(settings);
     final backups = LocalBackupService(
       database: _database,
@@ -248,13 +262,13 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       controller = widget.controllerGateway!;
     } else if (_database.isDemo || ble is! DoseyBleGateway) {
       controller = SimulatedControllerGateway(
-        canHostRobot: () => _canHostRobot(settings),
+        canHostRobot: () async => effectiveRole.capabilities.canHostRobot,
         delay: demoStageGate?.wait,
       );
     } else {
       final transportController = BleControllerGateway(
         transport: ble,
-        canHostRobot: () => _canHostRobot(settings),
+        canHostRobot: () async => effectiveRole.capabilities.canHostRobot,
         prepareBleAccess: () => BlePermissionPreparer(
           permissions: permissions,
           platform: currentAppDevicePlatform(),
@@ -273,7 +287,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     }
     if (!_database.isDemo && controller is ControllerHealthSupervisor) {
       _controllerHealthSupervisor = controller;
-      _controllerRoleSubscription = settings.watchDeviceRole().listen((role) {
+      _controllerRoleSubscription = effectiveRole.watchDeviceRole().listen((
+        role,
+      ) {
         _controllerRole = role;
         unawaited(_updateControllerMonitoring());
       });
@@ -356,6 +372,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       isDemo: _database.isDemo,
       appClock: _appClock,
       settings: settings,
+      buildProfile: buildProfile,
+      effectiveRole: effectiveRole,
       actionPinGate: actionPinGate,
       prescriptions: prescriptions,
       doseActions: doseActions,
@@ -389,7 +407,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       demoFaceLab: demoFaceLab,
       robotFaceSettings: robotFaceSettings,
       robotFaceController: RobotFaceController(
-        settings: settings,
+        roleStream: effectiveRole.watchDeviceRole(),
         robotFaceSettings: robotFaceSettings,
         controller: controller,
         controllerLifecycle: controllerLifecycle,
@@ -412,6 +430,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
           DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway()),
       notificationTaps: notificationTaps,
       permissions: permissions,
+      robotPhoneSetup:
+          widget.robotPhoneSetupGateway ??
+          MethodChannelRobotPhoneSetupGateway(permissions: permissions),
       // Keeping a mounted display awake is reversible device behavior, unlike
       // the network, notification, and backup effects disabled in demo mode.
       screenAwake:
@@ -426,15 +447,6 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     } else {
       unawaited(_runStartupMaintenance());
     }
-  }
-
-  Future<bool> _canHostRobot(LocalAppSettingsRepository settings) async {
-    final platform = currentAppDevicePlatform();
-    final storedRole = await settings.getDeviceRole();
-    final role = storedRole.isAllowedOn(platform)
-        ? storedRole
-        : AppDeviceRole.defaultFor(platform);
-    return role.canHostRobot;
   }
 
   Future<void> _connectDemoController() async {
@@ -550,6 +562,8 @@ class DoseyAppDependencies {
     required this.isDemo,
     required this.appClock,
     required this.settings,
+    required this.buildProfile,
+    required this.effectiveRole,
     required this.actionPinGate,
     required this.prescriptions,
     required this.doseActions,
@@ -585,6 +599,7 @@ class DoseyAppDependencies {
     required this.voicePlayer,
     required this.notificationTaps,
     required this.permissions,
+    required this.robotPhoneSetup,
     required this.screenAwake,
     required this.systemUi,
     required this.externalActionResumeGuard,
@@ -595,6 +610,8 @@ class DoseyAppDependencies {
   final bool isDemo;
   final AppClock appClock;
   final LocalAppSettingsRepository settings;
+  final AppBuildProfile buildProfile;
+  final EffectiveDeviceRoleSource effectiveRole;
   final ActionPinGate actionPinGate;
   final LocalPrescriptionRepository prescriptions;
   final DoseActionService doseActions;
@@ -630,6 +647,7 @@ class DoseyAppDependencies {
   final DoseyVoicePlayer voicePlayer;
   final ReminderNotificationTapController notificationTaps;
   final AppPermissionGateway permissions;
+  final RobotPhoneSetupGateway robotPhoneSetup;
   final ScreenAwakeGateway screenAwake;
   final SystemUiGateway systemUi;
   final ExternalActionResumeGuard<String> externalActionResumeGuard;

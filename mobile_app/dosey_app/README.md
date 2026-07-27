@@ -11,7 +11,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 
 ## Current scope
 
-- Android and iOS app shell with Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings tabs, plus a profile menu. Android Robot Mode also shows Robot Face.
+- Four-destination Dashboard, Schedule, Carousel, and Settings shell. Prescriptions live under Schedule, Controller under Carousel, and histories under Settings. The Android Robot distribution also has a full-screen Robot Face.
 - Safety-first copy and local safety acknowledgement storage.
 - Local prescription storage with remaining-dose counts, refill thresholds, refill-add history, and medication-type display.
 - Local reminder schedule storage with add/edit/delete controls, enabled/disabled state, duplicate-time checks, and schedule profiles.
@@ -63,20 +63,30 @@ Function dynamic API key to this file. See
 [`../../backend/appwrite/README.md`](../../backend/appwrite/README.md) for server
 schema and deployment details.
 
-## Target product model
+## App distributions
 
-Dosey has two app modes:
+Dosey ships as two fixed Android distributions rather than a runtime mode choice:
 
-- **Robot Mode:** Android-only mode for the mounted phone inside Dosey. It shows the face, reminders, dispense UI, refill status, hardware test controls, and controller connection state. It uses soft in-app navigation and screen-awake guardrails rather than device-owner or lock-task kiosk provisioning.
-- **Personal Mode:** Android and iOS mode for patient or caregiver phones. It supports notifications, missed dose/refill visibility, dose history, and schedule editing when permissions allow.
+- **Dosey Personal:** package `com.sloppybobbert.dosey_app`. It updates the existing Android app in place, requires sign-in, and owns the only Android Appwrite OAuth callback. iOS always uses Personal behavior.
+- **Dosey Robot:** package `com.sloppybobbert.dosey_app.robot`. It is Android-only, works locally without sign-in, and has no OAuth callback or account actions. It retains schedule, carousel, history, household, and other management features. It uses soft in-app navigation and screen-awake guardrails, not device-owner or lock-task kiosk provisioning.
 
 The phone is the brain. It handles schedules, medication data, refill logic, dose history, PIN, caregiver logic, UI, reminders, Bluetooth commands, and future cloud, voice-command, or local AI features. The XIAO should only execute hardware actions and report status.
 
-Device role rules:
+The build profile is authoritative. Imported or stale local role settings cannot enable Robot capabilities in Personal or disable them in Robot.
 
-- Android can be the robot phone that lives in Dosey.
-- Android can also be a personal phone for notifications and app use.
-- iOS can only be a personal phone; it cannot be the robot's embedded phone.
+## Local configuration
+
+`.env` is ignored and must be bootstrapped separately in every checkout or worktree. Never commit it or print its values. It must contain the four public Appwrite keys listed above and must not contain `DOSEY_BUILD_PROFILE`; each build command supplies the profile explicitly.
+
+Personal Android Google/Appwrite sign-in requires the existing package and callback scheme to remain registered in Appwrite. Robot does not support OAuth. App-owned non-OAuth robot pairing remains available when its public Function configuration is present.
+
+## Android package migration
+
+Personal keeps the old package and its app-private Drift database. Robot uses a separate Android sandbox and cannot automatically inherit data from the old shared-package installation.
+
+To migrate non-sensitive prototype data, export a backup from the old/Personal installation before uninstalling anything, install Dosey Robot side by side, then import the backup from Settings. Verify prescriptions, schedules, carousel slots, app settings, dose history, and admin audit history after import. Device role is intentionally not portable and cannot override the destination build profile. Uninstalling before export loses app-private data.
+
+The package migration still requires a physical Android exercise. Until that is recorded, treat a new Robot installation as a clean start and do not assume automatic migration.
 
 ## What works locally
 
@@ -114,8 +124,11 @@ dart run build_runner build
 git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
-flutter build apk --debug --dart-define-from-file=.env
-flutter build ios --debug --no-codesign --dart-define-from-file=.env
+flutter run --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
+flutter run --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
+flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
+flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
+flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
 git diff --check
 ```
 
@@ -130,10 +143,11 @@ git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 dart format --set-exit-if-changed .
 flutter analyze
 flutter test
-flutter build apk --debug
+flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
+flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
 ```
 
-The workflow also checks committed whitespace with `git diff --check` and uploads the Android debug APK as a short-lived artifact. iOS no-codesign builds still run locally.
+CI writes the four required public values from same-named GitHub repository variables to a temporary `.env`, checks committed whitespace, uploads both debug APKs as short-lived artifacts, and removes the temporary file even after failure. iOS no-codesign builds still run locally.
 
 ## Local toolchain notes
 

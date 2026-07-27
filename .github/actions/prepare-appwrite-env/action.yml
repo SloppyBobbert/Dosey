@@ -1,0 +1,22 @@
+name: Prepare public Appwrite configuration
+description: Validate public Appwrite variables and write the Flutter dotenv file.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: mobile_app/dosey_app
+      run: |
+        set -euo pipefail
+        for name in APPWRITE_ENDPOINT APPWRITE_PROJECT_ID APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID APPWRITE_CLAIM_ROBOT_FUNCTION_ID; do
+          if [ -z "${!name}" ]; then
+            echo "Missing required repository variable: $name" >&2
+            exit 1
+          fi
+        done
+        umask 077
+        printf '%s=%s\n' \
+          APPWRITE_ENDPOINT "$APPWRITE_ENDPOINT" \
+          APPWRITE_PROJECT_ID "$APPWRITE_PROJECT_ID" \
+          APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID "$APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID" \
+          APPWRITE_CLAIM_ROBOT_FUNCTION_ID "$APPWRITE_CLAIM_ROBOT_FUNCTION_ID" > .env

@@ -1,0 +1,188 @@
+name: Android Release
+
+on:
+  push:
+    tags:
+      - 'android-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact pubspec version, including build number (for example 1.0.0+1)
+        required: true
+        type: string
+
+concurrency:
+  group: android-release-${{ github.event_name == 'push' && github.ref_name || format('android-v{0}', inputs.version) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-android:
+    name: Signed Personal and Robot APKs
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+    defaults:
+      run:
+        working-directory: mobile_app/dosey_app
+    env:
+      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.44.1'
+          channel: stable
+          cache: true
+
+      - name: Validate version and release tag
+        id: release
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          PUBSPEC_VERSION=$(awk '/^version: / { print $2; exit }' pubspec.yaml)
+          if [ "${{ github.event_name }}" = "push" ]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#android-v}"
+          else
+            VERSION="$REQUESTED_VERSION"
+            TAG="android-v$VERSION"
+            EXISTING=$(git ls-remote --tags origin "refs/tags/$TAG^{}" | cut -f1)
+            if [ -z "$EXISTING" ]; then
+              EXISTING=$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)
+            fi
+            if [ -n "$EXISTING" ] && [ "$EXISTING" != "$GITHUB_SHA" ]; then
+              echo "Tag $TAG already points to another commit." >&2
+              exit 1
+            fi
+          fi
+          if [ "$VERSION" != "$PUBSPEC_VERSION" ]; then
+            echo "Requested version $VERSION does not match pubspec version $PUBSPEC_VERSION." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare public Appwrite configuration
+        env:
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+          APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID }}
+          APPWRITE_CLAIM_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CLAIM_ROBOT_FUNCTION_ID }}
+        uses: ./.github/actions/prepare-appwrite-env
+
+      - name: Validate release signing configuration
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required release secret: $name" >&2
+              exit 1
+            fi
+          done
+          if [ "${ANDROID_KEY_ALIAS,,}" = "androiddebugkey" ]; then
+            echo "The Android debug key alias is not allowed for releases." >&2
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dosey-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/dosey-release.jks" >> "$GITHUB_ENV"
+
+      - name: Reject debug signing certificate
+        run: |
+          set -euo pipefail
+          CERTIFICATE=$(keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS")
+          if printf '%s' "$CERTIFICATE" | grep -qi 'Android Debug'; then
+            echo "Android Debug certificates are not allowed for releases." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Personal release APK
+        run: flutter build apk --release --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
+
+      - name: Build Robot release APK
+        run: flutter build apk --release --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
+
+      - name: Verify APK signers and name artifacts
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -1)
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner is unavailable." >&2
+            exit 1
+          fi
+          EXPECTED=$(keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" | awk -F': ' '/SHA256:/{gsub(":", "", $2); print tolower($2); exit}')
+          for flavor in personal robot; do
+            APK="build/app/outputs/flutter-apk/app-$flavor-release.apk"
+            "$APKSIGNER" verify --verbose --print-certs "$APK"
+            ACTUAL=$("$APKSIGNER" verify --print-certs "$APK" | awk -F': ' '/certificate SHA-256 digest:/{print tolower($2); exit}')
+            if [ -z "$EXPECTED" ] || [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "Signer fingerprint mismatch for $flavor APK." >&2
+              exit 1
+            fi
+          done
+          cp build/app/outputs/flutter-apk/app-personal-release.apk "Dosey-Personal-$VERSION.apk"
+          cp build/app/outputs/flutter-apk/app-robot-release.apk "Dosey-Robot-$VERSION.apk"
+
+      - name: Upload signed release APKs
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signed-android-release
+          path: |
+            mobile_app/dosey_app/Dosey-Personal-${{ steps.release.outputs.version }}.apk
+            mobile_app/dosey_app/Dosey-Robot-${{ steps.release.outputs.version }}.apk
+          if-no-files-found: error
+
+      - name: Remove temporary release files
+        if: always()
+        run: |
+          rm -f .env "$RUNNER_TEMP/dosey-release.jks"
+
+  publish-release:
+    name: Publish GitHub release
+    needs: release-android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download signed release APKs
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: signed-android-release
+          path: release-artifacts
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: ${{ needs.release-android.outputs.tag }}
+          name: Dosey Android ${{ needs.release-android.outputs.version }}
+          generate_release_notes: true
+          files: release-artifacts/*.apk

@@ -12,7 +12,6 @@ import 'package:dosey_app/core/reminders/active_profile_schedules_stream.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
-import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
@@ -81,7 +80,7 @@ class _CarouselScreenState extends State<CarouselScreen> {
                     // Hide slots for disabled or inactive-profile schedules so
                     // this screen matches what Today can actually dispense.
                     return StreamBuilder<AppDeviceRole>(
-                      stream: dependencies.settings.watchDeviceRole(),
+                      stream: dependencies.effectiveRole.watchDeviceRole(),
                       builder: (context, roleSnapshot) {
                         return StreamBuilder<CarouselLoadSession?>(
                           stream: activeProfile == null
@@ -253,11 +252,7 @@ class _CarouselScreenState extends State<CarouselScreen> {
     AppDeviceRole? storedRole,
     ControllerSnapshot controller,
   ) {
-    final platform = currentAppDevicePlatform();
-    final role = storedRole != null && storedRole.isAllowedOn(platform)
-        ? storedRole
-        : AppDeviceRole.defaultFor(platform);
-    return role.canHostRobot && controller.canRequestDispense;
+    return storedRole?.canHostRobot == true && controller.canRequestDispense;
   }
 
   static ReminderSchedule? _scheduleForSlot(

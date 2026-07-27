@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/build/app_build_profile.dart';
 import 'package:dosey_app/core/demo/demo_data_repository.dart';
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/controller/controller_gateway.dart';
@@ -425,6 +426,7 @@ class _TestControllerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return DoseyAppScope(
       database: database,
+      buildProfile: AppBuildProfile.robot,
       controllerGateway: controller,
       bleGateway: FakeBleGateway(),
       connectivityGateway: FakeConnectivityGateway(),
@@ -498,6 +500,7 @@ class _TestControllerHost extends StatelessWidget {
       builder: (context, session) => DoseyAppScope(
         key: ValueKey(session.isDemo),
         database: session.database,
+        buildProfile: AppBuildProfile.robot,
         appClock: session.clock,
         bleGateway: FakeBleGateway(),
         connectivityGateway: FakeConnectivityGateway(),
