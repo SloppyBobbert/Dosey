@@ -60,6 +60,8 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
   bool _hasBoundDependencies = false;
   RobotFaceAnimationCue? _activeCue;
   RobotFaceAnimationCue? _requestedCue;
+  RobotFaceAnimationCue? _outgoingCue;
+  double _outgoingCueProgress = 0;
   int _activeCueRevision = 0;
   Timer? _reducedMotionCueTimer;
 
@@ -230,6 +232,13 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
     }
 
     final effectiveCue = safeRobotFaceAnimationCue(cue, widget.state);
+    if (!_disableAnimations && _activeCue != null) {
+      _outgoingCue = _activeCue;
+      _outgoingCueProgress = _cueController.value;
+    } else {
+      _outgoingCue = null;
+      _outgoingCueProgress = 0;
+    }
     _requestedCue = cue;
     _activeCue = effectiveCue;
     _activeCueRevision = revision;
@@ -268,6 +277,8 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
     setState(() {
       _activeCue = null;
       _requestedCue = null;
+      _outgoingCue = null;
+      _outgoingCueProgress = 0;
     });
     widget.onAnimationCompleted?.call(completedCue, revision);
   }
@@ -280,6 +291,8 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
       ..value = _cueController.lowerBound;
     _activeCue = null;
     _requestedCue = null;
+    _outgoingCue = null;
+    _outgoingCueProgress = 0;
   }
 
   static Duration _durationForCue(RobotFaceAnimationCue cue) => switch (cue) {
@@ -318,6 +331,8 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
               reducedMotion: _disableAnimations,
               animationCue: _activeCue,
               cueProgress: _cueProgress,
+              outgoingCue: _outgoingCue,
+              outgoingCueProgress: _outgoingCueProgress,
             ),
             child: const SizedBox.expand(),
           );
@@ -336,6 +351,8 @@ class _RobotFacePainter extends CustomPainter {
     required this.reducedMotion,
     required this.animationCue,
     required this.cueProgress,
+    this.outgoingCue,
+    this.outgoingCueProgress = 0,
   });
 
   final RobotFaceState state;
@@ -345,6 +362,8 @@ class _RobotFacePainter extends CustomPainter {
   final bool reducedMotion;
   final RobotFaceAnimationCue? animationCue;
   final double cueProgress;
+  final RobotFaceAnimationCue? outgoingCue;
+  final double outgoingCueProgress;
 
   List<Color> get debugPaletteColors {
     final palette = _palette;
@@ -360,6 +379,32 @@ class _RobotFacePainter extends CustomPainter {
       _baseEyeRects(size, centerY: size.height * 0.48);
 
   List<Rect> debugAmbientGlowRects(Size size) => _ambientGlowRects(size);
+
+  Map<String, Object> debugMotionFrame(
+    Size size, {
+    double? phase,
+    double? cueProgress,
+  }) {
+    final frame = _motionFrameFor(
+      size,
+      phase: phase ?? this.phase,
+      cueProgress: cueProgress ?? this.cueProgress,
+    );
+    final baseEyes = _baseEyeRects(size, centerY: size.height * 0.48);
+    return <String, Object>{
+      'drawsInternalFeatures': false,
+      'baseAspectRatio': baseEyes.first.width / baseEyes.first.height,
+      'eyeOffset': frame.eyeOffset,
+      'eyeLift': frame.eyeLift,
+      'leftScale': frame.eyeScale,
+      'rightScale': frame.eyeScale,
+      'blink': frame.blink,
+      'leftTilt': frame.concernTilt * -1,
+      'rightTilt': frame.concernTilt,
+      'leftGlowBoost': frame.glowBoost,
+      'rightGlowBoost': frame.glowBoost,
+    };
+  }
 
   _FacePalette get _palette {
     final controllerCondition = _effectiveControllerCondition(state);
@@ -404,7 +449,7 @@ class _RobotFacePainter extends CustomPainter {
     final rect = Offset.zero & size;
     final controllerCondition = _effectiveControllerCondition(state);
     final motion = _motionProfileFor(state, size);
-    final cue = _cueFrameFor(animationCue, cueProgress, size);
+    final frame = _motionFrameFor(size);
     final speakingPulse = isSpeaking
         ? reducedMotion
               ? 0.55
@@ -414,23 +459,17 @@ class _RobotFacePainter extends CustomPainter {
         1 +
         math.sin(phase * math.pi * 2) * motion.breathingAmplitude +
         (speakingPulse * 0.035) +
-        cue.eyeScale;
+        frame.cue.eyeScale;
     final pulse = _pulseValue();
-    final blink = _blinkValue();
 
     final palette = _palette;
-    final concernTilt =
-        _concernTiltFor(state.mode, controllerCondition) + cue.concernTilt;
+    final concernTilt = frame.concernTilt;
     // Keep expression changes in the eyes only. Robot Mode intentionally has no
     // mouth so status color, tilt, blink, and glow carry the state.
     final eyelidOpen =
-        (_eyelidOpenFor(state, blink, phase, controllerCondition) +
-                cue.eyelidBoost)
+        (_eyelidOpenFor(state, frame.blink, phase, controllerCondition) +
+                frame.cue.eyelidBoost)
             .clamp(0.12, 1.08);
-    final pupilOffset = isPreparing
-        ? Offset.zero
-        : _pupilOffsetFor(state, size, phase, controllerCondition) +
-              cue.pupilOffset;
 
     final backgroundPaint = Paint()
       ..shader = LinearGradient(
@@ -447,7 +486,9 @@ class _RobotFacePainter extends CustomPainter {
         canvas,
         center: glow.center,
         radius: glow.width * 0.5,
-        color: palette.glow.withValues(alpha: 0.14 + motion.glowBoost),
+        color: palette.glow.withValues(
+          alpha: 0.14 + motion.glowBoost + frame.ambientGlowPulse,
+        ),
       );
     }
 
@@ -462,7 +503,7 @@ class _RobotFacePainter extends CustomPainter {
     final baseEyes = _baseEyeRects(
       size,
       centerY:
-          size.height * (0.48 - motion.eyeLift - cue.eyeLift) +
+          size.height * (0.48 - motion.eyeLift - frame.cue.eyeLift) +
           motion.idleDrift,
     );
     final eyeWidth = baseEyes.first.width * breathing;
@@ -471,7 +512,7 @@ class _RobotFacePainter extends CustomPainter {
 
     final leftEye = RRect.fromRectAndRadius(
       Rect.fromCenter(
-        center: baseEyes.first.center,
+        center: baseEyes.first.center + frame.eyeOffset,
         width: eyeWidth,
         height: math.max(28, eyeHeight),
       ),
@@ -479,7 +520,7 @@ class _RobotFacePainter extends CustomPainter {
     );
     final rightEye = RRect.fromRectAndRadius(
       Rect.fromCenter(
-        center: baseEyes[1].center,
+        center: baseEyes[1].center + frame.eyeOffset,
         width: eyeWidth,
         height: math.max(28, eyeHeight),
       ),
@@ -487,7 +528,7 @@ class _RobotFacePainter extends CustomPainter {
     );
 
     final attentionRingStrength = math.max(
-      math.max(motion.attentionRingStrength, cue.attentionRingStrength),
+      math.max(motion.attentionRingStrength, frame.cue.attentionRingStrength),
       isSpeaking
           ? 0.38 + (speakingPulse * 0.34)
           : isPreparing
@@ -515,10 +556,9 @@ class _RobotFacePainter extends CustomPainter {
       canvas,
       leftEye,
       palette,
-      pupilOffset,
       concernTilt * -1,
       motion.glowBoost +
-          cue.glowBoost +
+          frame.cue.glowBoost +
           (isPreparing ? 0.08 : 0) +
           (speakingPulse * 0.14),
     );
@@ -526,10 +566,9 @@ class _RobotFacePainter extends CustomPainter {
       canvas,
       rightEye,
       palette,
-      pupilOffset,
       concernTilt,
       motion.glowBoost +
-          cue.glowBoost +
+          frame.cue.glowBoost +
           (isPreparing ? 0.08 : 0) +
           (speakingPulse * 0.14),
     );
@@ -541,7 +580,6 @@ class _RobotFacePainter extends CustomPainter {
     Canvas canvas,
     RRect eye,
     _FacePalette palette,
-    Offset pupilOffset,
     double tilt,
     double glowBoost,
   ) {
@@ -568,34 +606,6 @@ class _RobotFacePainter extends CustomPainter {
       ..strokeWidth = 2
       ..color = Colors.white.withValues(alpha: 0.1);
     canvas.drawRRect(eye.deflate(1), innerFrame);
-
-    final pupilRect = Rect.fromCenter(
-      center: Offset(
-        eye.center.dx + pupilOffset.dx,
-        eye.center.dy + pupilOffset.dy,
-      ),
-      width: eye.width * 0.22,
-      height: eye.height * 0.48,
-    );
-    final pupil = RRect.fromRectAndRadius(
-      pupilRect,
-      Radius.circular(pupilRect.width * 0.48),
-    );
-    final pupilPaint = Paint()..color = palette.pupil;
-    canvas.drawRRect(pupil, pupilPaint);
-
-    final highlightRect = Rect.fromCenter(
-      center: Offset(pupil.center.dx - pupil.width * 0.14, pupil.top + 10),
-      width: pupil.width * 0.36,
-      height: pupil.height * 0.2,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        highlightRect,
-        Radius.circular(highlightRect.height),
-      ),
-      Paint()..color = Colors.white.withValues(alpha: 0.7),
-    );
 
     canvas.restore();
   }
@@ -788,15 +798,13 @@ class _RobotFacePainter extends CustomPainter {
     );
   }
 
-  double _blinkValue() {
-    final time = phase;
-    if (time > 0.18 && time < 0.22) {
-      return 1 - ((time - 0.2).abs() / 0.02);
-    }
-    if (time > 0.68 && time < 0.72) {
-      return 1 - ((time - 0.7).abs() / 0.02);
-    }
-    return 0;
+  double _blinkValue(double phase) {
+    double blinkAt(double center, double halfWidth) =>
+        (1 - ((phase - center).abs() / halfWidth)).clamp(0.0, 1.0);
+    return math.max(
+      math.max(blinkAt(0.18, 0.018), blinkAt(0.23, 0.018)),
+      blinkAt(0.7, 0.022),
+    );
   }
 
   double _pulseValue() {
@@ -810,65 +818,122 @@ class _RobotFacePainter extends CustomPainter {
     Size size,
   ) {
     if (cue == null) return const _FaceCueFrame();
-    final envelope = math.sin(progress.clamp(0.0, 1.0) * math.pi);
+    final normalized = progress.clamp(0.0, 1.0);
+    final envelope = math.sin(normalized * math.pi);
+    final settle = Curves.easeOutCubic.transform(normalized);
     return switch (cue) {
       RobotFaceAnimationCue.wake => _FaceCueFrame(
-        eyelidBoost: envelope * 0.18,
-        eyeLift: envelope * 0.028,
-        eyeScale: envelope * 0.045,
+        eyelidBoost: (1 - settle) * -0.32 + envelope * 0.12,
+        eyeLift: envelope * 0.034,
+        eyeScale: envelope * 0.052,
         attentionRingStrength: envelope * 0.38,
         glowBoost: envelope * 0.12,
       ),
       RobotFaceAnimationCue.acknowledge => _FaceCueFrame(
         eyeLift: envelope * 0.018,
-        pupilOffset: Offset(0, -size.height * 0.018 * envelope),
+        eyeOffset: Offset(0, -size.height * 0.018 * envelope),
         attentionRingStrength: envelope * 0.32,
         glowBoost: envelope * 0.1,
       ),
       RobotFaceAnimationCue.notice => _FaceCueFrame(
         eyelidBoost: envelope * 0.08,
-        pupilOffset: Offset(size.width * 0.018 * envelope, 0),
+        eyeOffset: Offset(0, -size.height * 0.026 * envelope),
         attentionRingStrength: envelope * 0.42,
         glowBoost: envelope * 0.12,
       ),
       RobotFaceAnimationCue.focus => _FaceCueFrame(
-        eyelidBoost: envelope * 0.08,
+        eyelidBoost: envelope * -0.1,
         eyeLift: envelope * 0.016,
-        eyeScale: envelope * 0.055,
-        pupilOffset: Offset(0, -size.height * 0.014 * envelope),
+        eyeScale: envelope * 0.025,
         attentionRingStrength: envelope * 0.62,
         glowBoost: envelope * 0.16,
       ),
       RobotFaceAnimationCue.track => _FaceCueFrame(
-        pupilOffset: Offset(
+        eyeOffset: Offset(
           math.sin(progress * math.pi * 2) * size.width * 0.026,
           -size.height * 0.006 * envelope,
         ),
         attentionRingStrength: envelope * 0.42,
         glowBoost: envelope * 0.1,
       ),
-      RobotFaceAnimationCue.celebrate => _FaceCueFrame(
-        eyelidBoost: envelope * 0.12,
-        eyeLift: envelope * 0.046,
-        eyeScale: envelope * 0.075,
-        attentionRingStrength: envelope * 0.72,
-        glowBoost: envelope * 0.2,
-      ),
+      RobotFaceAnimationCue.celebrate => () {
+        final firstBounce = normalized <= 0.48
+            ? math.sin((normalized / 0.48) * math.pi)
+            : 0.0;
+        final secondBounce = normalized >= 0.48
+            ? math.sin(((normalized - 0.48) / 0.52) * math.pi) * 0.7
+            : 0.0;
+        final bounce = math.max(firstBounce, secondBounce);
+        return _FaceCueFrame(
+          eyelidBoost: bounce * 0.12,
+          eyeLift: bounce * 0.052,
+          eyeScale: bounce * 0.078,
+          attentionRingStrength: bounce * 0.72,
+          glowBoost: bounce * 0.2,
+        );
+      }(),
       RobotFaceAnimationCue.concern => _FaceCueFrame(
         eyeLift: envelope * -0.014,
-        pupilOffset: Offset(0, size.height * 0.012 * envelope),
+        eyeOffset: Offset(0, size.height * 0.012 * envelope),
         concernTilt: envelope * 0.045,
         attentionRingStrength: envelope * 0.28,
         glowBoost: envelope * 0.08,
       ),
       RobotFaceAnimationCue.recover => _FaceCueFrame(
-        eyelidBoost: envelope * 0.1,
-        eyeLift: envelope * 0.022,
-        eyeScale: envelope * 0.04,
+        eyelidBoost: (1 - settle) * -0.12 + envelope * 0.08,
+        eyeLift: envelope * 0.02,
+        eyeScale: envelope * 0.035,
         attentionRingStrength: envelope * 0.46,
         glowBoost: envelope * 0.14,
       ),
     };
+  }
+
+  _FaceMotionFrame _motionFrameFor(
+    Size size, {
+    double? phase,
+    double? cueProgress,
+  }) {
+    final framePhase = reducedMotion ? 0.0 : phase ?? this.phase;
+    final frameCueProgress = cueProgress ?? this.cueProgress;
+    final incomingCue = _cueFrameFor(animationCue, frameCueProgress, size);
+    final cue = outgoingCue == null || reducedMotion
+        ? incomingCue
+        : _FaceCueFrame.lerp(
+            _cueFrameFor(outgoingCue, outgoingCueProgress, size),
+            incomingCue,
+            Curves.easeOutCubic.transform(
+              (frameCueProgress / 0.2).clamp(0.0, 1.0),
+            ),
+          );
+    final controllerCondition = _effectiveControllerCondition(state);
+    final safetyFace =
+        state.mode == RobotFaceMode.missed ||
+        state.mode == RobotFaceMode.error ||
+        controllerCondition == RobotFaceControllerCondition.fault;
+    final suppressIdlePersonality =
+        reducedMotion ||
+        safetyFace ||
+        isPreparing ||
+        isSpeaking ||
+        animationCue != null;
+    final ambientOffset = suppressIdlePersonality
+        ? Offset.zero
+        : _eyeOffsetFor(state, size, framePhase, controllerCondition);
+    final glowPulse = suppressIdlePersonality
+        ? 0.0
+        : ((math.sin(framePhase * math.pi * 2) + 1) / 2) * 0.035;
+    return _FaceMotionFrame(
+      cue: cue,
+      eyeOffset: ambientOffset + cue.eyeOffset,
+      blink: suppressIdlePersonality ? 0.0 : _blinkValue(framePhase),
+      concernTilt:
+          _concernTiltFor(state.mode, controllerCondition) + cue.concernTilt,
+      ambientGlowPulse: glowPulse,
+      eyeLift: cue.eyeLift,
+      eyeScale: 1 + cue.eyeScale,
+      glowBoost: cue.glowBoost + glowPulse,
+    );
   }
 
   double _eyelidOpenFor(
@@ -925,7 +990,7 @@ class _RobotFacePainter extends CustomPainter {
     };
   }
 
-  Offset _pupilOffsetFor(
+  Offset _eyeOffsetFor(
     RobotFaceState state,
     Size size,
     double phase,
@@ -989,13 +1054,36 @@ class _RobotFacePainter extends CustomPainter {
           -size.width * 0.006,
           size.height * 0.01,
         ),
-        RobotFaceMode.idle when state.isInAwakeWindow => Offset(
-          horizontal * 0.5,
-          -size.height * 0.012 + idleVertical,
+        RobotFaceMode.idle when state.isInAwakeWindow => _idlePersonalityOffset(
+          size,
+          phase,
         ),
         _ => Offset(horizontal, idleVertical),
       },
     };
+  }
+
+  Offset _idlePersonalityOffset(Size size, double phase) {
+    double transition(double start, double end) {
+      final progress = ((phase - start) / (end - start)).clamp(0.0, 1.0);
+      return Curves.easeInOutCubic.transform(progress);
+    }
+
+    final horizontal = switch (phase) {
+      < 0.18 => 0.0,
+      < 0.30 => transition(0.18, 0.30),
+      < 0.40 => 1.0,
+      < 0.52 => 1 - transition(0.40, 0.52),
+      < 0.64 => -transition(0.52, 0.64),
+      < 0.72 => -1.0,
+      < 0.86 => -1 + transition(0.72, 0.86),
+      _ => 0.0,
+    };
+    final glanceLift = horizontal.abs() * size.height * 0.002;
+    return Offset(
+      horizontal * size.width * 0.012,
+      -size.height * 0.012 - glanceLift,
+    );
   }
 
   _FaceMotionProfile _motionProfileFor(RobotFaceState state, Size size) {
@@ -1133,7 +1221,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF04070D),
         eyeTop: Color(0xFFB8C8EE),
         eyeBottom: Color(0xFF3B4E73),
-        pupil: Color(0xFFF2F7FF),
         glow: Color(0xFF6E86B8),
         accent: Color(0xFF9AA8E8),
       ),
@@ -1142,7 +1229,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF03080A),
         eyeTop: Color(0xFFA4FFE8),
         eyeBottom: Color(0xFF38CDAA),
-        pupil: Color(0xFF052C24),
         glow: Color(0xFF4BF3C8),
         accent: Color(0xFF6EEFD8),
       ),
@@ -1151,7 +1237,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF04090B),
         eyeTop: Color(0xFFD0FFF3),
         eyeBottom: Color(0xFF5ED8BA),
-        pupil: Color(0xFF073229),
         glow: Color(0xFF68F3D2),
         accent: Color(0xFF8AF5E0),
       ),
@@ -1160,7 +1245,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF03070B),
         eyeTop: Color(0xFF71F4FF),
         eyeBottom: Color(0xFF1797BE),
-        pupil: Color(0xFF04283A),
         glow: Color(0xFF2AE7FF),
         accent: Color(0xFF7EEDFF),
       ),
@@ -1169,7 +1253,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF03070B),
         eyeTop: Color(0xFF67F0FF),
         eyeBottom: Color(0xFF0FA3D1),
-        pupil: Color(0xFF04283A),
         glow: Color(0xFF34EDFF),
         accent: Color(0xFF8BEFFF),
       ),
@@ -1178,7 +1261,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF04100E),
         eyeTop: Color(0xFF9DF9DB),
         eyeBottom: Color(0xFF38C4A2),
-        pupil: Color(0xFF06372C),
         glow: Color(0xFF56F0C7),
         accent: Color(0xFF83EFD4),
       ),
@@ -1187,7 +1269,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF0A0607),
         eyeTop: Color(0xFFFFA0AD),
         eyeBottom: Color(0xFFCF5066),
-        pupil: Color(0xFF380911),
         glow: Color(0xFFFF6C83),
         accent: Color(0xFFFFB366),
       ),
@@ -1196,7 +1277,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF08090D),
         eyeTop: Color(0xFFB6C0D4),
         eyeBottom: Color(0xFF6E788D),
-        pupil: Color(0xFF242833),
         glow: Color(0xFF94A4C8),
         accent: Color(0xFF8D93A7),
       ),
@@ -1205,7 +1285,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF0B2940),
         eyeTop: Color(0xFF8BFFF3),
         eyeBottom: Color(0xFF36D9EA),
-        pupil: Color(0xFF062E3C),
         glow: Color(0xFF62ECFF),
         accent: Color(0xFF8EEBFF),
       ),
@@ -1219,7 +1298,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF06070A),
         eyeTop: Color(0xFFAEB6C5),
         eyeBottom: Color(0xFF596171),
-        pupil: Color(0xFF252932),
         glow: Color(0xFF7C879B),
         accent: Color(0xFF858C99),
       ),
@@ -1228,7 +1306,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF05080C),
         eyeTop: Color(0xFFB8D9E8),
         eyeBottom: Color(0xFF5A8EA8),
-        pupil: Color(0xFF12303F),
         glow: Color(0xFF72BDD9),
         accent: Color(0xFF87CDE5),
       ),
@@ -1237,7 +1314,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF03080C),
         eyeTop: Color(0xFFC7F8FF),
         eyeBottom: Color(0xFF52C5DD),
-        pupil: Color(0xFF07313D),
         glow: Color(0xFF55E4FF),
         accent: Color(0xFF8DEEFF),
       ),
@@ -1246,7 +1322,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF06070A),
         eyeTop: Color(0xFFA7B0C0),
         eyeBottom: Color(0xFF5E6675),
-        pupil: Color(0xFF252932),
         glow: Color(0xFF7E899E),
         accent: Color(0xFF838A99),
       ),
@@ -1255,7 +1330,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF04080C),
         eyeTop: Color(0xFFC4E7F3),
         eyeBottom: Color(0xFF4E9DBB),
-        pupil: Color(0xFF0A3040),
         glow: Color(0xFF61CBEA),
         accent: Color(0xFF82DDF4),
       ),
@@ -1264,7 +1338,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF090607),
         eyeTop: Color(0xFFFFB0BA),
         eyeBottom: Color(0xFFD85C70),
-        pupil: Color(0xFF3A0B13),
         glow: Color(0xFFFF7388),
         accent: Color(0xFFFF9A79),
       ),
@@ -1273,7 +1346,6 @@ class _RobotFacePainter extends CustomPainter {
         backgroundBottom: Color(0xFF0B0507),
         eyeTop: Color(0xFFFF929F),
         eyeBottom: Color(0xFFC83F57),
-        pupil: Color(0xFF3D0710),
         glow: Color(0xFFFF536D),
         accent: Color(0xFFFFA15F),
       ),
@@ -1286,7 +1358,6 @@ class _RobotFacePainter extends CustomPainter {
     backgroundBottom: Color(0xFF0A0804),
     eyeTop: Color(0xFFFFE0A1),
     eyeBottom: Color(0xFFD99428),
-    pupil: Color(0xFF3B2404),
     glow: Color(0xFFFFB84D),
     accent: Color(0xFFFFCC73),
   );
@@ -1299,7 +1370,9 @@ class _RobotFacePainter extends CustomPainter {
         oldDelegate.isSpeaking != isSpeaking ||
         oldDelegate.reducedMotion != reducedMotion ||
         oldDelegate.animationCue != animationCue ||
-        oldDelegate.cueProgress != cueProgress;
+        oldDelegate.cueProgress != cueProgress ||
+        oldDelegate.outgoingCue != outgoingCue ||
+        oldDelegate.outgoingCueProgress != outgoingCueProgress;
   }
 }
 
@@ -1309,7 +1382,6 @@ class _FacePalette {
     required this.backgroundBottom,
     required this.eyeTop,
     required this.eyeBottom,
-    required this.pupil,
     required this.glow,
     required this.accent,
   });
@@ -1318,7 +1390,6 @@ class _FacePalette {
   final Color backgroundBottom;
   final Color eyeTop;
   final Color eyeBottom;
-  final Color pupil;
   final Color glow;
   final Color accent;
 }
@@ -1346,7 +1417,7 @@ class _FaceCueFrame {
     this.eyelidBoost = 0,
     this.eyeLift = 0,
     this.eyeScale = 0,
-    this.pupilOffset = Offset.zero,
+    this.eyeOffset = Offset.zero,
     this.concernTilt = 0,
     this.attentionRingStrength = 0,
     this.glowBoost = 0,
@@ -1355,8 +1426,53 @@ class _FaceCueFrame {
   final double eyelidBoost;
   final double eyeLift;
   final double eyeScale;
-  final Offset pupilOffset;
+  final Offset eyeOffset;
   final double concernTilt;
   final double attentionRingStrength;
+  final double glowBoost;
+
+  static _FaceCueFrame lerp(
+    _FaceCueFrame begin,
+    _FaceCueFrame end,
+    double progress,
+  ) {
+    return _FaceCueFrame(
+      eyelidBoost: _lerpDouble(begin.eyelidBoost, end.eyelidBoost, progress),
+      eyeLift: _lerpDouble(begin.eyeLift, end.eyeLift, progress),
+      eyeScale: _lerpDouble(begin.eyeScale, end.eyeScale, progress),
+      eyeOffset: Offset.lerp(begin.eyeOffset, end.eyeOffset, progress)!,
+      concernTilt: _lerpDouble(begin.concernTilt, end.concernTilt, progress),
+      attentionRingStrength: _lerpDouble(
+        begin.attentionRingStrength,
+        end.attentionRingStrength,
+        progress,
+      ),
+      glowBoost: _lerpDouble(begin.glowBoost, end.glowBoost, progress),
+    );
+  }
+
+  static double _lerpDouble(double begin, double end, double progress) =>
+      begin + (end - begin) * progress;
+}
+
+class _FaceMotionFrame {
+  const _FaceMotionFrame({
+    required this.cue,
+    required this.eyeOffset,
+    required this.blink,
+    required this.concernTilt,
+    required this.ambientGlowPulse,
+    required this.eyeLift,
+    required this.eyeScale,
+    required this.glowBoost,
+  });
+
+  final _FaceCueFrame cue;
+  final Offset eyeOffset;
+  final double blink;
+  final double concernTilt;
+  final double ambientGlowPulse;
+  final double eyeLift;
+  final double eyeScale;
   final double glowBoost;
 }
