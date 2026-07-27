@@ -39,6 +39,165 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('uses the Classic palette for idle and red for missed doses', (
+    WidgetTester tester,
+  ) async {
+    Future<List<Color>> paletteFor(RobotFaceMode mode) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 800,
+            height: 400,
+            child: RobotFaceCanvas(
+              isActive: false,
+              state: RobotFaceState(
+                mode: mode,
+                nextEventLabel: 'No reminders scheduled',
+                isFlipped: false,
+                isLandscapeOnly: true,
+                rampProgress: mode == RobotFaceMode.missed ? 1 : 0,
+                isInAwakeWindow: true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final customPaint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(RobotFaceCanvas),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      final dynamic painter = customPaint.painter;
+      return painter.debugPaletteColors as List<Color>;
+    }
+
+    expect(await paletteFor(RobotFaceMode.idle), const <Color>[
+      Color(0xFF071A2D),
+      Color(0xFF0B2940),
+      Color(0xFF8BFFF3),
+      Color(0xFF36D9EA),
+    ]);
+    expect(await paletteFor(RobotFaceMode.missed), const <Color>[
+      Color(0xFF1D1013),
+      Color(0xFF0A0607),
+      Color(0xFFFFA0AD),
+      Color(0xFFCF5066),
+    ]);
+  });
+
+  testWidgets('keeps the same tall base eye geometry across sizes and modes', (
+    WidgetTester tester,
+  ) async {
+    Future<List<Rect>> eyeRectsFor({
+      required Size size,
+      required RobotFaceState state,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: size.width,
+            height: size.height,
+            child: RobotFaceCanvas(isActive: false, state: state),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final customPaint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(RobotFaceCanvas),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      final dynamic painter = customPaint.painter;
+      return painter.debugBaseEyeRects(size) as List<Rect>;
+    }
+
+    const states = <RobotFaceState>[
+      RobotFaceState(
+        mode: RobotFaceMode.idle,
+        nextEventLabel: 'No reminders scheduled',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 0,
+        isInAwakeWindow: true,
+      ),
+      RobotFaceState(
+        mode: RobotFaceMode.missed,
+        nextEventLabel: 'Morning dose missed',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+      ),
+      RobotFaceState(
+        mode: RobotFaceMode.offline,
+        nextEventLabel: 'No reminders scheduled',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 0,
+        isInAwakeWindow: true,
+        controllerCondition: RobotFaceControllerCondition.reconnecting,
+      ),
+    ];
+
+    for (final size in const <Size>[Size.square(600), Size(800, 400)]) {
+      for (final state in states) {
+        final eyes = await eyeRectsFor(size: size, state: state);
+        expect(eyes, hasLength(2));
+        expect(eyes.first.width / eyes.first.height, closeTo(0.79, 0.02));
+        expect(eyes[1].width, closeTo(eyes.first.width, 0.01));
+        expect(eyes[1].height, closeTo(eyes.first.height, 0.01));
+        expect(eyes.first.center.dy, closeTo(eyes[1].center.dy, 0.01));
+        expect(eyes.first.left, greaterThanOrEqualTo(0));
+        expect(eyes[1].right, lessThanOrEqualTo(size.width));
+      }
+    }
+  });
+
+  testWidgets('uses equal ambient glow behind both eyes', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: SizedBox(
+          width: 800,
+          height: 400,
+          child: RobotFaceCanvas(
+            isActive: false,
+            state: RobotFaceState(
+              mode: RobotFaceMode.idle,
+              nextEventLabel: 'No reminders scheduled',
+              isFlipped: false,
+              isLandscapeOnly: true,
+              rampProgress: 0,
+              isInAwakeWindow: true,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final customPaint = tester.widget<CustomPaint>(
+      find.descendant(
+        of: find.byType(RobotFaceCanvas),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+    final dynamic painter = customPaint.painter;
+    final glows =
+        painter.debugAmbientGlowRects(const Size(800, 400)) as List<Rect>;
+
+    expect(glows, hasLength(2));
+    expect(glows.first.width, closeTo(glows[1].width, 0.01));
+    expect(glows.first.height, closeTo(glows[1].height, 0.01));
+    expect(glows.first.center.dy, closeTo(glows[1].center.dy, 0.01));
+  });
+
   testWidgets('renders large eyes and next event card', (
     WidgetTester tester,
   ) async {

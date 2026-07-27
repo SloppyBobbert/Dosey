@@ -346,6 +346,59 @@ class _RobotFacePainter extends CustomPainter {
   final RobotFaceAnimationCue? animationCue;
   final double cueProgress;
 
+  List<Color> get debugPaletteColors {
+    final palette = _palette;
+    return <Color>[
+      palette.backgroundTop,
+      palette.backgroundBottom,
+      palette.eyeTop,
+      palette.eyeBottom,
+    ];
+  }
+
+  List<Rect> debugBaseEyeRects(Size size) =>
+      _baseEyeRects(size, centerY: size.height * 0.48);
+
+  List<Rect> debugAmbientGlowRects(Size size) => _ambientGlowRects(size);
+
+  _FacePalette get _palette {
+    final controllerCondition = _effectiveControllerCondition(state);
+    return controllerCondition == null
+        ? _usesNetworkAdvisoryPalette(state)
+              ? _networkAdvisoryPalette
+              : _paletteFor(state.mode)
+        : _controllerPaletteFor(controllerCondition);
+  }
+
+  List<Rect> _baseEyeRects(Size size, {required double centerY}) {
+    const eyeAspectRatio = 0.79;
+    final eyeHeight = math.min(
+      size.shortestSide * 0.34,
+      math.min(size.height * 0.58, size.width / 2.1),
+    );
+    final eyeWidth = eyeHeight * eyeAspectRatio;
+    final eyeOffset = eyeHeight * 0.55;
+    return <Rect>[
+      Rect.fromCenter(
+        center: Offset(size.width * 0.5 - eyeOffset, centerY),
+        width: eyeWidth,
+        height: eyeHeight,
+      ),
+      Rect.fromCenter(
+        center: Offset(size.width * 0.5 + eyeOffset, centerY),
+        width: eyeWidth,
+        height: eyeHeight,
+      ),
+    ];
+  }
+
+  List<Rect> _ambientGlowRects(Size size) {
+    final radius = size.shortestSide * 0.32;
+    return _baseEyeRects(size, centerY: size.height * 0.48)
+        .map((eye) => Rect.fromCircle(center: eye.center, radius: radius))
+        .toList(growable: false);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
@@ -365,11 +418,7 @@ class _RobotFacePainter extends CustomPainter {
     final pulse = _pulseValue();
     final blink = _blinkValue();
 
-    final palette = controllerCondition == null
-        ? _usesNetworkAdvisoryPalette(state)
-              ? _networkAdvisoryPalette
-              : _paletteFor(state.mode)
-        : _controllerPaletteFor(controllerCondition);
+    final palette = _palette;
     final concernTilt =
         _concernTiltFor(state.mode, controllerCondition) + cue.concernTilt;
     // Keep expression changes in the eyes only. Robot Mode intentionally has no
@@ -393,18 +442,14 @@ class _RobotFacePainter extends CustomPainter {
 
     _paintDisplayTexture(canvas, size, palette, state, pulse);
 
-    _paintGlowOrb(
-      canvas,
-      center: Offset(size.width * 0.22, size.height * 0.18),
-      radius: size.shortestSide * 0.38,
-      color: palette.glow.withValues(alpha: 0.18 + motion.glowBoost),
-    );
-    _paintGlowOrb(
-      canvas,
-      center: Offset(size.width * 0.82, size.height * 0.24),
-      radius: size.shortestSide * 0.26,
-      color: palette.accent.withValues(alpha: 0.08 + (motion.glowBoost * 0.75)),
-    );
+    for (final glow in _ambientGlowRects(size)) {
+      _paintGlowOrb(
+        canvas,
+        center: glow.center,
+        radius: glow.width * 0.5,
+        color: palette.glow.withValues(alpha: 0.14 + motion.glowBoost),
+      );
+    }
 
     if (motion.wakeAura > 0) {
       _paintWakeAura(canvas, size, palette, motion.wakeAura, pulse);
@@ -414,22 +459,19 @@ class _RobotFacePainter extends CustomPainter {
       _paintSleepVeil(canvas, size, phase);
     }
 
-    final eyeArea = Rect.fromCenter(
-      center: Offset(
-        size.width * 0.5,
-        size.height * (0.48 - motion.eyeLift - cue.eyeLift) + motion.idleDrift,
-      ),
-      width: size.width * 0.8,
-      height: size.height * 0.48,
+    final baseEyes = _baseEyeRects(
+      size,
+      centerY:
+          size.height * (0.48 - motion.eyeLift - cue.eyeLift) +
+          motion.idleDrift,
     );
-    final eyeWidth = eyeArea.width * 0.36 * breathing;
-    final eyeHeight = eyeArea.height * 0.62 * eyelidOpen;
+    final eyeWidth = baseEyes.first.width * breathing;
+    final eyeHeight = baseEyes.first.height * eyelidOpen;
     final eyeRadius = Radius.circular(math.max(26, eyeHeight * 0.42));
-    final eyeOffset = eyeArea.width * 0.24;
 
     final leftEye = RRect.fromRectAndRadius(
       Rect.fromCenter(
-        center: Offset(eyeArea.center.dx - eyeOffset, eyeArea.center.dy),
+        center: baseEyes.first.center,
         width: eyeWidth,
         height: math.max(28, eyeHeight),
       ),
@@ -437,7 +479,7 @@ class _RobotFacePainter extends CustomPainter {
     );
     final rightEye = RRect.fromRectAndRadius(
       Rect.fromCenter(
-        center: Offset(eyeArea.center.dx + eyeOffset, eyeArea.center.dy),
+        center: baseEyes[1].center,
         width: eyeWidth,
         height: math.max(28, eyeHeight),
       ),
@@ -1159,10 +1201,10 @@ class _RobotFacePainter extends CustomPainter {
         accent: Color(0xFF8D93A7),
       ),
       _ => const _FacePalette(
-        backgroundTop: Color(0xFF0D1726),
-        backgroundBottom: Color(0xFF04070D),
-        eyeTop: Color(0xFFD9FBFF),
-        eyeBottom: Color(0xFF78DDF1),
+        backgroundTop: Color(0xFF071A2D),
+        backgroundBottom: Color(0xFF0B2940),
+        eyeTop: Color(0xFF8BFFF3),
+        eyeBottom: Color(0xFF36D9EA),
         pupil: Color(0xFF062E3C),
         glow: Color(0xFF62ECFF),
         accent: Color(0xFF8EEBFF),
