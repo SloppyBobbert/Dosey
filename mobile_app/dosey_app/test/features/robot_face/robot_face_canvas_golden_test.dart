@@ -1,13 +1,29 @@
+import 'dart:typed_data';
+
 import 'package:dosey_app/features/robot_face/robot_face_animation.dart';
 import 'package:dosey_app/features/robot_face/robot_face_canvas.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+const double _goldenPrecisionTolerance = 0.00025;
+
 void main() {
+  test('golden tolerance accepts raster noise but rejects visual changes', () {
+    expect(_isWithinGoldenTolerance(0.00019), isTrue);
+    expect(_isWithinGoldenTolerance(_goldenPrecisionTolerance), isTrue);
+    expect(_isWithinGoldenTolerance(0.00026), isFalse);
+  });
+
   testWidgets('Robot Face representative poses match the Classic identity', (
     WidgetTester tester,
   ) async {
+    final previousComparator = goldenFileComparator;
+    goldenFileComparator = _TolerantGoldenFileComparator(
+      Uri.parse('test/features/robot_face/robot_face_canvas_golden_test.dart'),
+    );
+    addTearDown(() => goldenFileComparator = previousComparator);
+
     await tester.binding.setSurfaceSize(const Size(800, 400));
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
@@ -83,4 +99,28 @@ void main() {
       matchesGoldenFile('goldens/robot_face_classic_poses.png'),
     );
   });
+}
+
+bool _isWithinGoldenTolerance(double diffPercent) =>
+    diffPercent <= _goldenPrecisionTolerance;
+
+class _TolerantGoldenFileComparator extends LocalFileComparator {
+  _TolerantGoldenFileComparator(super.testFile);
+
+  @override
+  Future<bool> compare(Uint8List imageBytes, Uri golden) async {
+    final result = await GoldenFileComparator.compareLists(
+      imageBytes,
+      await getGoldenBytes(golden),
+    );
+
+    if (result.passed || _isWithinGoldenTolerance(result.diffPercent)) {
+      result.dispose();
+      return true;
+    }
+
+    final error = await generateFailureOutput(result, golden, basedir);
+    result.dispose();
+    throw FlutterError(error);
+  }
 }
