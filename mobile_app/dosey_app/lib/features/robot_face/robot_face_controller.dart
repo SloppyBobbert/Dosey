@@ -12,7 +12,6 @@ import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
-import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
@@ -22,7 +21,7 @@ import 'package:dosey_app/features/today/unresolved_missed_dose_helper.dart';
 
 class RobotFaceController {
   RobotFaceController({
-    required this._settings,
+    required Stream<AppDeviceRole> roleStream,
     required this._robotFaceSettings,
     required this._controller,
     required this._controllerLifecycle,
@@ -38,7 +37,7 @@ class RobotFaceController {
   }) : _now = now ?? DateTime.now {
     _lastInteractionAt = _now();
     _subscriptions = <StreamSubscription<Object?>>[
-      _settings.watchDeviceRole().listen((value) {
+      roleStream.listen((value) {
         _role = value;
         _emit();
       }),
@@ -90,7 +89,6 @@ class RobotFaceController {
     }
   }
 
-  final LocalAppSettingsRepository _settings;
   final RobotFaceSettingsRepository _robotFaceSettings;
   final ControllerGateway _controller;
   final ControllerLifecycleService _controllerLifecycle;

@@ -72,7 +72,7 @@ class _CompletedOnboardingGate extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<AppDeviceRole>(
-      stream: dependencies.settings.watchDeviceRole(),
+      stream: dependencies.effectiveRole.watchDeviceRole(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const _SetupLoadError();

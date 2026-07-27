@@ -197,7 +197,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
       _voiceCoordinator = RobotFaceVoiceCoordinator(
         stateStream: stateStream,
         settingsStream: dependencies.robotFaceSettings.watchSettings(),
-        roleStream: dependencies.settings.watchDeviceRole(),
+        roleStream: dependencies.effectiveRole.watchDeviceRole(),
         voicePlayer: dependencies.voicePlayer,
         isActive: _isVoiceActive,
       );

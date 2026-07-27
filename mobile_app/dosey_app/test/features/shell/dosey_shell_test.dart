@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/build/app_build_profile.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/display/system_ui_gateway.dart';
@@ -33,7 +34,15 @@ void main() {
       addTearDown(database.close);
       await _setDeviceRole(database, role);
 
-      await _pumpShell(tester, _TestShellApp(database: database));
+      await _pumpShell(
+        tester,
+        _TestShellApp(
+          database: database,
+          buildProfile: role.canHostRobot
+              ? AppBuildProfile.robot
+              : AppBuildProfile.personal,
+        ),
+      );
 
       if (role.canHostRobot) {
         await tester.longPress(find.byKey(RobotFaceScreen.displayFrameKey));
@@ -69,6 +78,7 @@ void main() {
             tester,
             _TestShellApp(
               database: database,
+              buildProfile: AppBuildProfile.personal,
               textScaler: TextScaler.linear(scale),
             ),
           );
@@ -385,7 +395,10 @@ void main() {
     addTearDown(database.close);
     await _setDeviceRole(database, AppDeviceRole.androidPersonal);
 
-    await _pumpShell(tester, _TestShellApp(database: database));
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
 
     expect(find.text('Robot Face'), findsNothing);
     expect(
@@ -515,7 +528,10 @@ void main() {
       const RobotFaceSettings(returnToFaceAfterInactivityMinutes: 1),
     );
 
-    await _pumpShell(tester, _TestShellApp(database: database));
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _openControllerHub(tester);
 
     await tester.pump(const Duration(minutes: 2));
@@ -602,7 +618,10 @@ void main() {
     addTearDown(database.close);
     await _setDeviceRole(database, AppDeviceRole.androidPersonal);
 
-    await _pumpShell(tester, _TestShellApp(database: database));
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
 
     expect(
       find.byWidgetPredicate(
@@ -654,7 +673,7 @@ void main() {
       tester.element(find.byType(DoseyShell)),
     ).settings.setDeviceRole(AppDeviceRole.androidPersonal);
     await _pumpShellFrame(tester);
-    expect(screenAwake.states.last, isFalse);
+    expect(screenAwake.states.last, isTrue);
   });
 
   testWidgets('PIR wake routes Robot Mode to face for configured duration', (
@@ -807,7 +826,11 @@ void main() {
 
     await _pumpShell(
       tester,
-      _TestShellApp(database: database, screenAwakeGateway: screenAwake),
+      _TestShellApp(
+        database: database,
+        buildProfile: AppBuildProfile.personal,
+        screenAwakeGateway: screenAwake,
+      ),
     );
     await _openControllerHub(tester);
 
@@ -937,6 +960,7 @@ void main() {
       tester,
       _TestShellApp(
         database: database,
+        buildProfile: AppBuildProfile.personal,
         missedDoseReconciliationService: reconciliation,
       ),
     );
@@ -966,6 +990,9 @@ void main() {
         tester,
         _TestShellApp(
           database: database,
+          buildProfile: role.canHostRobot
+              ? AppBuildProfile.robot
+              : AppBuildProfile.personal,
           notificationTapController: notificationTaps,
         ),
       );
@@ -1001,6 +1028,9 @@ void main() {
         tester,
         _TestShellApp(
           database: database,
+          buildProfile: role.canHostRobot
+              ? AppBuildProfile.robot
+              : AppBuildProfile.personal,
           notificationTapController: notificationTaps,
         ),
       );
@@ -1044,7 +1074,7 @@ void main() {
     expect(_appBarTitle('Carousel'), findsOneWidget);
   });
 
-  testWidgets('selected index stays safe when role changes', (
+  testWidgets('persisted role changes do not change fixed Robot navigation', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -1093,7 +1123,10 @@ void main() {
     addTearDown(database.close);
     await _setDeviceRole(database, AppDeviceRole.androidPersonal);
 
-    await _pumpShell(tester, _TestShellApp(database: database));
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
     await _openBottomDestination(tester, 'Settings');
 
     expect(find.text('Account'), findsOneWidget);
@@ -1247,6 +1280,7 @@ class _TestShellApp extends StatelessWidget {
     this.appClock,
     this.useRealMissedDoseReconciliation = false,
     this.textScaler,
+    this.buildProfile = AppBuildProfile.robot,
   });
 
   final DoseyDatabase database;
@@ -1258,11 +1292,13 @@ class _TestShellApp extends StatelessWidget {
   final AppClock? appClock;
   final bool useRealMissedDoseReconciliation;
   final TextScaler? textScaler;
+  final AppBuildProfile buildProfile;
 
   @override
   Widget build(BuildContext context) {
     return DoseyAppScope(
       database: database,
+      buildProfile: buildProfile,
       appClock: appClock,
       bleGateway: FakeBleGateway(),
       connectivityGateway: FakeConnectivityGateway(),

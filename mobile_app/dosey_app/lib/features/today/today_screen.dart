@@ -357,7 +357,7 @@ class _CurrentDoseSectionState extends State<_CurrentDoseSection> {
     final dependencies = DoseyAppScope.of(context);
     final now = dependencies.appClock.now;
     return StreamBuilder<AppDeviceRole>(
-      stream: dependencies.settings.watchDeviceRole(),
+      stream: dependencies.effectiveRole.watchDeviceRole(),
       builder: (context, roleSnapshot) {
         return StreamBuilder<ControllerSnapshot>(
           stream: dependencies.controller.watchController(),

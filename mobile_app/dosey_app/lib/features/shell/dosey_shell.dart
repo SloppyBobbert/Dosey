@@ -100,9 +100,9 @@ class _DoseyShellState extends State<DoseyShell>
     if (!identical(dependencies.settings, _settingsSource)) {
       unawaited(_deviceRoleSubscription?.cancel());
       _settingsSource = dependencies.settings;
-      _deviceRoleSubscription = dependencies.settings.watchDeviceRole().listen(
-        _handleDeviceRoleChanged,
-      );
+      _deviceRoleSubscription = dependencies.effectiveRole
+          .watchDeviceRole()
+          .listen(_handleDeviceRoleChanged);
     }
     if (!identical(dependencies.robotFaceSettings, _robotFaceSettingsSource)) {
       unawaited(_robotFaceSettingsSubscription?.cancel());
@@ -205,7 +205,7 @@ class _DoseyShellState extends State<DoseyShell>
   Widget build(BuildContext context) {
     final dependencies = DoseyAppScope.of(context);
     final platform = currentAppDevicePlatform();
-    final roleStream = dependencies.settings.watchDeviceRole();
+    final roleStream = dependencies.effectiveRole.watchDeviceRole();
 
     return StreamBuilder<AppDeviceRole>(
       stream: roleStream,
@@ -716,7 +716,7 @@ class _DoseyShellState extends State<DoseyShell>
       return;
     }
 
-    final storedRole = await dependencies.settings.getDeviceRole();
+    final storedRole = await dependencies.effectiveRole.getDeviceRole();
     if (!mounted || generation != _authoritativeNavigationGeneration) {
       return;
     }
@@ -750,7 +750,7 @@ class _DoseyShellState extends State<DoseyShell>
       return;
     }
 
-    final storedRole = await dependencies.settings.getDeviceRole();
+    final storedRole = await dependencies.effectiveRole.getDeviceRole();
     if (!mounted) {
       return;
     }

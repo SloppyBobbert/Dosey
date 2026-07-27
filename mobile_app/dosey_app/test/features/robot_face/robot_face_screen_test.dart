@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/build/app_build_profile.dart';
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
@@ -3182,6 +3183,7 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
     final stateStreamNotifier = widget.stateStreamNotifier;
     return DoseyAppScope(
       database: _database,
+      buildProfile: AppBuildProfile.robot,
       enableDemoFaceLab: widget.enableDemoFaceLab,
       appClock: widget.appClock,
       bleGateway: _FakeBleGateway(),
@@ -3449,11 +3451,12 @@ class _RobotFaceInteractionControllerHarness {
       clock = StreamController<DateTime>.broadcast(),
       initialTime = DateTime(2026, 7, 13, 12) {
     currentTime = initialTime;
+    final settings = _FixedAppSettingsRepository(
+      database,
+      AppDeviceRole.androidRobot,
+    );
     controller = RobotFaceController(
-      settings: _FixedAppSettingsRepository(
-        database,
-        AppDeviceRole.androidRobot,
-      ),
+      roleStream: settings.watchDeviceRole(),
       robotFaceSettings: _FixedRobotFaceSettingsRepository(database),
       controller: const _ConnectedControllerGateway(),
       controllerLifecycle: _IdleControllerLifecycleService(),

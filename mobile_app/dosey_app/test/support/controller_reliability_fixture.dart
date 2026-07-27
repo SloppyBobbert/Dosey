@@ -117,7 +117,7 @@ class ControllerReliabilityFixture {
     );
     await settings.setDeviceRole(AppDeviceRole.androidRobot);
     final robotFace = RobotFaceController(
-      settings: settings,
+      roleStream: settings.watchDeviceRole(),
       robotFaceSettings: RobotFaceSettingsRepository(database),
       controller: supervisor,
       controllerLifecycle: lifecycle,

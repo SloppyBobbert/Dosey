@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/android/robot_phone_setup_gateway.dart';
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/backup/backup_codec.dart';
 import 'package:dosey_app/core/backup/backup_file_gateway.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
+import 'package:dosey_app/core/build/app_build_profile.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
@@ -70,7 +72,9 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
     await tester.pumpAndSettle();
 
     final titles = _accordionTitles(tester);
@@ -254,7 +258,9 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Sign in with Google'), findsNothing);
@@ -278,7 +284,7 @@ void main() {
     expect(find.text('Account'), findsOneWidget);
   });
 
-  testWidgets('canceling leave Robot Mode keeps Robot Mode selected', (
+  testWidgets('Personal distribution cannot change its fixed device role', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -287,164 +293,55 @@ void main() {
 
     await tester.pumpWidget(_TestSettingsApp(database: database));
     await tester.pumpAndSettle();
-    final settings = DoseyAppScope.of(
-      tester.element(find.byType(MaterialApp)),
-    ).settings;
 
-    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
-    expect(find.text('Leave Robot Mode?'), findsOneWidget);
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
-    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
-    expect(_selectedDeviceRole(tester), AppDeviceRole.androidRobot);
-  });
-
-  testWidgets('confirmed leave Robot Mode succeeds without configured PIN', (
-    WidgetTester tester,
-  ) async {
-    final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
-    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
-
-    await tester.pumpWidget(_TestSettingsApp(database: database));
-    await tester.pumpAndSettle();
-    final settings = DoseyAppScope.of(
-      tester.element(find.byType(MaterialApp)),
-    ).settings;
-
-    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-
-    expect(await settings.getDeviceRole(), AppDeviceRole.androidPersonal);
-  });
-
-  testWidgets('entering Robot Mode does not show leave confirmation', (
-    WidgetTester tester,
-  ) async {
-    final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
-    await _markOnboardingComplete(
-      database,
-      role: AppDeviceRole.androidPersonal,
-    );
-
-    await tester.pumpWidget(_TestSettingsApp(database: database));
-    await tester.pumpAndSettle();
-    final settings = DoseyAppScope.of(
-      tester.element(find.byType(MaterialApp)),
-    ).settings;
-
-    await _chooseDeviceRole(tester, AppDeviceRole.androidRobot);
-
+    expect(find.text('Personal distribution'), findsOneWidget);
+    expect(find.byType(DropdownButton<AppDeviceRole>), findsNothing);
     expect(find.text('Leave Robot Mode?'), findsNothing);
-    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
   });
 
-  testWidgets('entering Robot Mode signs out the owner session first', (
+  testWidgets('Robot distribution exposes setup without account actions', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
-    final cloudIdentity = _FakeCloudIdentityGateway();
     addTearDown(database.close);
+    final setupGateway = _FakeRobotPhoneSetupGateway();
     await _markOnboardingComplete(
       database,
       role: AppDeviceRole.androidPersonal,
     );
 
     await tester.pumpWidget(
-      _TestSettingsApp(database: database, cloudIdentityGateway: cloudIdentity),
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.robot,
+        robotPhoneSetupGateway: setupGateway,
+      ),
     );
     await tester.pumpAndSettle();
-    final dependencies = DoseyAppScope.of(
-      tester.element(find.byType(MaterialApp)),
+    expect(find.text('Robot distribution'), findsOneWidget);
+    expect(find.text('Sign in with Google'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('Help, guided trial & setup'),
+      300,
+      scrollable: find.byType(Scrollable).first,
     );
-    await dependencies.auth.signInWithGoogle();
-
-    await _chooseDeviceRole(tester, AppDeviceRole.androidRobot);
-
-    expect(cloudIdentity.signOutCount, 1);
-    expect(
-      await dependencies.settings.getDeviceRole(),
-      AppDeviceRole.androidRobot,
+    await tester.tap(find.text('Help, guided trial & setup'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Robot phone setup'),
+      300,
+      scrollable: find.byType(Scrollable).first,
     );
-  });
 
-  testWidgets('canceling Action PIN keeps Robot Mode selected', (
-    WidgetTester tester,
-  ) async {
-    final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
-    final settings = LocalAppSettingsRepository(
-      database,
-      defaultRole: AppDeviceRole.androidPersonal,
-    );
-    await settings.setDeviceRole(AppDeviceRole.androidRobot);
-    await settings.setActionPin('1234');
-
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    expect(find.text('Robot phone setup'), findsOneWidget);
+    tester
+        .widget<OutlinedButton>(
+          find.widgetWithText(OutlinedButton, 'Open robot phone setup'),
+        )
+        .onPressed
+        ?.call();
     await tester.pumpAndSettle();
-    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    expect(find.text('Enter Action PIN'), findsOneWidget);
-
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-
-    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
-    expect(_selectedDeviceRole(tester), AppDeviceRole.androidRobot);
-  });
-
-  testWidgets('wrong Action PIN keeps Robot Mode selected', (
-    WidgetTester tester,
-  ) async {
-    final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
-    final settings = LocalAppSettingsRepository(
-      database,
-      defaultRole: AppDeviceRole.androidPersonal,
-    );
-    await settings.setDeviceRole(AppDeviceRole.androidRobot);
-    await settings.setActionPin('1234');
-
-    await tester.pumpWidget(_TestSettingsApp(database: database));
-    await tester.pumpAndSettle();
-    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('action-pin-field')), '4321');
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Wrong PIN.'), findsOneWidget);
-    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
-    expect(_selectedDeviceRole(tester), AppDeviceRole.androidRobot);
-  });
-
-  testWidgets('correct Action PIN leaves Robot Mode', (
-    WidgetTester tester,
-  ) async {
-    final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
-    final settings = LocalAppSettingsRepository(
-      database,
-      defaultRole: AppDeviceRole.androidPersonal,
-    );
-    await settings.setDeviceRole(AppDeviceRole.androidRobot);
-    await settings.setActionPin('1234');
-
-    await tester.pumpWidget(_TestSettingsApp(database: database));
-    await tester.pumpAndSettle();
-    await _chooseDeviceRole(tester, AppDeviceRole.androidPersonal);
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
-    await tester.tap(find.text('Continue'));
-    await tester.pumpAndSettle();
-
-    expect(await settings.getDeviceRole(), AppDeviceRole.androidPersonal);
+    expect(find.byType(BackButton), findsOneWidget);
   });
 
   testWidgets('robot-capable role shows robot face settings controls', (
@@ -454,7 +351,9 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
     await tester.pumpAndSettle();
     final scope = tester.element(find.byType(MaterialApp));
     await DoseyAppScope.of(
@@ -563,7 +462,9 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
     await tester.pumpAndSettle();
     final scope = tester.element(find.byType(MaterialApp));
     await DoseyAppScope.of(
@@ -777,7 +678,9 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
     await tester.pumpAndSettle();
 
     await _scrollToRobotFace(tester);
@@ -807,6 +710,7 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
+        buildProfile: AppBuildProfile.robot,
         voicePlayer: DoseyVoicePlayer(playbackGateway: liveVoiceGateway),
         previewVoicePlayer: DoseyVoicePlayer(
           playbackGateway: previewVoiceGateway,
@@ -849,6 +753,7 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
+        buildProfile: AppBuildProfile.robot,
         voicePlayer: DoseyVoicePlayer(playbackGateway: liveVoiceGateway),
         previewVoicePlayer: DoseyVoicePlayer(
           playbackGateway: previewVoiceGateway,
@@ -889,7 +794,9 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
     await tester.pumpAndSettle();
 
     await _scrollToRobotFace(tester);
@@ -1070,7 +977,9 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
     await tester.pumpAndSettle();
 
     final scope = tester.element(find.byType(MaterialApp));
@@ -1116,7 +1025,14 @@ void main() {
             ),
           );
 
-      await tester.pumpWidget(_TestSettingsApp(database: database));
+      await tester.pumpWidget(
+        _TestSettingsApp(
+          database: database,
+          sectionTarget: SettingsSection.householdAccount,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Profile & device'));
       await tester.pumpAndSettle();
 
       expect(find.text('Robot Face'), findsNothing);
@@ -1124,8 +1040,11 @@ void main() {
       expect(find.text('Dim after inactivity'), findsNothing);
       expect(find.text('Wake before dose'), findsNothing);
       expect(find.text('Stay awake after dose'), findsNothing);
-      expect(find.text('iOS can only be a personal phone.'), findsOneWidget);
-      expect(find.textContaining('iOS personal phone'), findsOneWidget);
+      expect(
+        find.text('iOS always uses the Personal distribution.'),
+        findsOneWidget,
+      );
+      expect(_findRichTextContaining('iOS personal phone'), findsOneWidget);
     } finally {
       debugDefaultTargetPlatformOverride = null;
     }
@@ -1612,6 +1531,7 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
+        buildProfile: AppBuildProfile.robot,
         sectionTarget: SettingsSection.householdAccount,
         householdSyncGateway: household,
         robotPairingGateway: pairing,
@@ -1646,6 +1566,7 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
+        buildProfile: AppBuildProfile.robot,
         sectionTarget: SettingsSection.householdAccount,
       ),
     );
@@ -1669,6 +1590,7 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
+        buildProfile: AppBuildProfile.robot,
         sectionTarget: SettingsSection.householdAccount,
         householdSyncGateway: household,
         robotPairingGateway: pairing,
@@ -1703,6 +1625,7 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
+        buildProfile: AppBuildProfile.robot,
         sectionTarget: SettingsSection.householdAccount,
         robotPairingGateway: pairing,
       ),
@@ -1739,6 +1662,7 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
+        buildProfile: AppBuildProfile.robot,
         sectionTarget: SettingsSection.householdAccount,
         robotPairingGateway: pairing,
       ),
@@ -1854,22 +1778,6 @@ Finder _findRichTextContaining(String text) {
   );
 }
 
-Future<void> _chooseDeviceRole(WidgetTester tester, AppDeviceRole role) async {
-  final dropdown = tester.widget<DropdownButton<AppDeviceRole>>(
-    find.byType(DropdownButton<AppDeviceRole>),
-  );
-  dropdown.onChanged?.call(role);
-  await tester.pumpAndSettle();
-}
-
-AppDeviceRole? _selectedDeviceRole(WidgetTester tester) {
-  return tester
-      .widget<DropdownButton<AppDeviceRole>>(
-        find.byType(DropdownButton<AppDeviceRole>),
-      )
-      .value;
-}
-
 Future<void> _scrollToRobotFace(WidgetTester tester) async {
   await tester.scrollUntilVisible(
     find.text('Robot Face options'),
@@ -1943,6 +1851,8 @@ class _TestSettingsApp extends StatelessWidget {
     this.householdManagementGateway,
     this.robotPairingGateway,
     this.gateAccountId,
+    this.buildProfile,
+    this.robotPhoneSetupGateway,
   });
 
   final DoseyDatabase database;
@@ -1956,11 +1866,14 @@ class _TestSettingsApp extends StatelessWidget {
   final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
   final String? gateAccountId;
+  final AppBuildProfile? buildProfile;
+  final RobotPhoneSetupGateway? robotPhoneSetupGateway;
 
   @override
   Widget build(BuildContext context) {
     return DoseyAppScope(
       database: database,
+      buildProfile: buildProfile,
       appClock: appClock,
       bleGateway: FakeBleGateway(),
       connectivityGateway: FakeConnectivityGateway(),
@@ -1972,6 +1885,7 @@ class _TestSettingsApp extends StatelessWidget {
       householdSyncGateway: householdSyncGateway,
       householdManagementGateway: householdManagementGateway,
       robotPairingGateway: robotPairingGateway,
+      robotPhoneSetupGateway: robotPhoneSetupGateway,
       voicePlayer: voicePlayer,
       child: Builder(
         builder: (scopeContext) {
@@ -2017,6 +1931,17 @@ class _TestSettingsApp extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FakeRobotPhoneSetupGateway implements RobotPhoneSetupGateway {
+  @override
+  Future<SetupActionResult> open(RobotPhoneSetupAction action) async =>
+      SetupActionResult.opened;
+
+  @override
+  Future<Map<RobotPhoneSetupItem, SetupReadiness>> readStatus() async => {
+    for (final item in RobotPhoneSetupItem.values) item: SetupReadiness.ready,
+  };
 }
 
 final _robotInstallation = RobotInstallation(

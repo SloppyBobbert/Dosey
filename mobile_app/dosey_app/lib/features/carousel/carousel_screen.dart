@@ -81,7 +81,7 @@ class _CarouselScreenState extends State<CarouselScreen> {
                     // Hide slots for disabled or inactive-profile schedules so
                     // this screen matches what Today can actually dispense.
                     return StreamBuilder<AppDeviceRole>(
-                      stream: dependencies.settings.watchDeviceRole(),
+                      stream: dependencies.effectiveRole.watchDeviceRole(),
                       builder: (context, roleSnapshot) {
                         return StreamBuilder<CarouselLoadSession?>(
                           stream: activeProfile == null

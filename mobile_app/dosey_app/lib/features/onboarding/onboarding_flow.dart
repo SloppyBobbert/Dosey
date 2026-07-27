@@ -1,9 +1,8 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
-import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:flutter/material.dart';
 
-enum _OnboardingStep { medicalNotice, modeSelection, signInGate }
+enum _OnboardingStep { medicalNotice, signInGate }
 
 class OnboardingFlow extends StatefulWidget {
   const OnboardingFlow({super.key, this.signInRole});
@@ -19,7 +18,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 
   late _OnboardingStep _step;
   var _noticeAcknowledged = false;
-  var _isSelectingRole = false;
   AppDeviceRole? _selectedRole;
 
   @override
@@ -64,15 +62,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                         ? _continueFromNotice
                         : null,
                   ),
-                  _OnboardingStep.modeSelection => _ModeSelectionPage(
-                    onSelected: _selectRole,
-                  ),
                   _OnboardingStep.signInGate => _SignInGatePage(
                     selectedRole: _selectedRole,
-                    onBack: () => setState(() {
-                      _isSelectingRole = false;
-                      _step = _OnboardingStep.modeSelection;
-                    }),
+                    onBack: () =>
+                        setState(() => _step = _OnboardingStep.medicalNotice),
                     onSignedIn: _completeOnboarding,
                   ),
                 },
@@ -90,47 +83,15 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     );
     if (!saved) return;
     if (!mounted) return;
-    setState(() => _step = _OnboardingStep.modeSelection);
-  }
-
-  Future<void> _selectRole(AppDeviceRole role) async {
-    if (_isSelectingRole) {
+    final dependencies = DoseyAppScope.of(context);
+    final role = await dependencies.effectiveRole.getDeviceRole();
+    if (!mounted) return;
+    _selectedRole = role;
+    if (dependencies.effectiveRole.capabilities.requiresSignIn) {
+      setState(() => _step = _OnboardingStep.signInGate);
       return;
     }
-
-    setState(() {
-      _isSelectingRole = true;
-      _selectedRole = role;
-    });
-
-    try {
-      final saved = await _saveSetupChange(
-        () => DoseyAppScope.of(context).settings.setDeviceRole(role),
-      );
-      if (!saved) {
-        if (mounted) {
-          setState(() => _isSelectingRole = false);
-        }
-        return;
-      }
-      if (!mounted) return;
-
-      if (role == AppDeviceRole.androidRobot) {
-        // The mounted robot phone can finish setup without cloud auth.
-        final completed = await _completeOnboarding();
-        if (!completed && mounted) {
-          setState(() => _isSelectingRole = false);
-        }
-        return;
-      }
-
-      setState(() => _step = _OnboardingStep.signInGate);
-    } on Object {
-      if (mounted) {
-        setState(() => _isSelectingRole = false);
-      }
-      rethrow;
-    }
+    await _completeOnboarding();
   }
 
   Future<bool> _completeOnboarding() {
@@ -286,92 +247,6 @@ class _MedicalNoticePage extends StatelessWidget {
         FilledButton(onPressed: onContinue, child: const Text('Continue')),
       ],
     );
-  }
-}
-
-class _ModeSelectionPage extends StatelessWidget {
-  const _ModeSelectionPage({required this.onSelected});
-
-  final ValueChanged<AppDeviceRole> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final platform = currentAppDevicePlatform();
-    final allowedRoles = AppDeviceRole.allowedFor(platform);
-
-    return _OnboardingFrame(
-      pageKey: const ValueKey('mode-selection'),
-      icon: Icons.phone_android_outlined,
-      eyebrow: 'Choose mode',
-      title: 'How will you use this phone?',
-      subtitle:
-          'Pick the role for this device. You can change this later from Settings.',
-      children: [
-        for (final role in allowedRoles) ...[
-          _RoleCard(role: role, onSelected: () => onSelected(role)),
-          const SizedBox(height: 12),
-        ],
-      ],
-    );
-  }
-}
-
-class _RoleCard extends StatelessWidget {
-  const _RoleCard({required this.role, required this.onSelected});
-
-  final AppDeviceRole role;
-  final VoidCallback onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Card(
-      elevation: 0,
-      color: colorScheme.surfaceContainerHighest,
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 10,
-        ),
-        leading: CircleAvatar(
-          backgroundColor: colorScheme.secondaryContainer,
-          foregroundColor: colorScheme.onSecondaryContainer,
-          child: Icon(_iconFor(role)),
-        ),
-        title: Text(_titleFor(role)),
-        subtitle: Text(_subtitleFor(role)),
-        trailing: const Icon(Icons.arrow_forward),
-        onTap: onSelected,
-      ),
-    );
-  }
-
-  static IconData _iconFor(AppDeviceRole role) {
-    return switch (role) {
-      AppDeviceRole.androidRobot => Icons.smart_toy_outlined,
-      AppDeviceRole.androidPersonal => Icons.person_outline,
-      AppDeviceRole.iosPersonal => Icons.person_outline,
-    };
-  }
-
-  static String _titleFor(AppDeviceRole role) {
-    return switch (role) {
-      AppDeviceRole.androidRobot => 'Robot Mode',
-      AppDeviceRole.androidPersonal => 'Personal Mode',
-      AppDeviceRole.iosPersonal => 'Personal Mode',
-    };
-  }
-
-  static String _subtitleFor(AppDeviceRole role) {
-    return switch (role) {
-      AppDeviceRole.androidRobot =>
-        'Mounted Dosey face and controller controls. Local-only setup available.',
-      AppDeviceRole.androidPersonal =>
-        'Your personal reminders and dose history. Requires Google sign-in.',
-      AppDeviceRole.iosPersonal =>
-        'Your personal reminders and dose history. Requires an account.',
-    };
   }
 }
 

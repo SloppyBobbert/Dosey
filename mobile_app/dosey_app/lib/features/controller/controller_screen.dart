@@ -21,7 +21,7 @@ class ControllerScreen extends StatelessWidget {
     final demoMode = DemoModeHost.maybeOf(context);
 
     return StreamBuilder<AppDeviceRole>(
-      stream: dependencies.settings.watchDeviceRole(),
+      stream: dependencies.effectiveRole.watchDeviceRole(),
       builder: (context, roleSnapshot) {
         final platform = currentAppDevicePlatform();
         final fallbackRole = AppDeviceRole.defaultFor(platform);

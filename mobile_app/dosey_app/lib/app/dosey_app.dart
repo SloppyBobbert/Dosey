@@ -1,6 +1,8 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/app/dosey_material_app.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
+import 'package:dosey_app/core/android/robot_phone_setup_gateway.dart';
+import 'package:dosey_app/core/build/app_build_profile.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
@@ -33,6 +35,8 @@ class DoseyApp extends StatelessWidget {
     this.householdSyncGateway,
     this.householdManagementGateway,
     this.robotPairingGateway,
+    this.buildProfile,
+    this.robotPhoneSetupGateway,
   });
 
   final DoseyDatabase? database;
@@ -49,6 +53,8 @@ class DoseyApp extends StatelessWidget {
   final HouseholdSyncGateway? householdSyncGateway;
   final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
+  final AppBuildProfile? buildProfile;
+  final RobotPhoneSetupGateway? robotPhoneSetupGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -73,6 +79,8 @@ class DoseyApp extends StatelessWidget {
             ? null
             : householdManagementGateway,
         robotPairingGateway: session.isDemo ? null : robotPairingGateway,
+        buildProfile: buildProfile,
+        robotPhoneSetupGateway: robotPhoneSetupGateway,
         appClock: session.clock,
         child: DoseyMaterialApp(
           home: OnboardingGate(

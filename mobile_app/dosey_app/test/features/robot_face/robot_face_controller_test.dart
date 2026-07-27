@@ -1648,7 +1648,7 @@ class _RobotFaceControllerFixture {
     );
 
     final robotFaceController = RobotFaceController(
-      settings: settings,
+      roleStream: settings.watchDeviceRole(),
       robotFaceSettings: robotFaceSettingsRepository,
       controller: controllerGateway,
       controllerLifecycle: controllerLifecycle,

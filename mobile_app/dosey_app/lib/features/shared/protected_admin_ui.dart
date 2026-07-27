@@ -33,6 +33,6 @@ Future<ProtectedAdminActionResult<T>> runProtectedAdminAction<T>(
 
 Future<String> currentAdminSourceDeviceRole(BuildContext context) async {
   final dependencies = DoseyAppScope.of(context);
-  final role = await dependencies.settings.getDeviceRole();
+  final role = await dependencies.effectiveRole.getDeviceRole();
   return role.storageValue;
 }
