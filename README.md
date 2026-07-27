@@ -59,7 +59,7 @@ Known prototype risks:
 - A user or caregiver can load the carousel incorrectly.
 - Dispensed does not mean visible, and visible does not mean taken.
 
-See [`docs/safety.md`](docs/safety.md) for the current safety notes.
+Use fake pills, candy, beads, dry beans, or vitamins only during prototype tests. Never infer that a dose was taken from controller movement alone, and stop testing on jams, unexpected movement, resets, disconnects, heat, or power faults.
 
 ## Current build direction
 
@@ -91,7 +91,7 @@ Dosey is built around four main systems:
 
 ## Hardware on hand and to confirm
 
-Track owned and missing parts in [`docs/parts.md`](docs/parts.md). Do not assume unlisted hardware is available.
+Do not assume unlisted hardware is available. Confirm each part and its exact Grove interface before wiring or testing it.
 
 Current plan-critical hardware:
 
@@ -112,13 +112,13 @@ The project should now focus on the servo/carousel rig while app MVP work contin
 
 1. **Hardware selected** — ESP32-C6, Grove Base SKU 103020312, and the eight-socket layout are selected. Verify the Grove Servo power behavior, PIR, Light Sensor, Active Buzzer, DHT20, and Dual Buttons one at a time before combined testing.
 2. **Servo and carousel rig** — Next major build. Advance the Daviky carousel one slot repeatably, prevent rollback, and align the slot with the chute/cup.
-3. **Bluetooth control** — Finish the phone-to-XIAO command/status protocol with acknowledgements, heartbeat, and status events.
-4. **Basic app MVP** — Continue Robot Mode with the face screen, schedule, loading guide, dispense, refill, history, hardware test, and local safety flows.
+3. **Bluetooth control** — Physically verify the implemented D1 phone-to-XIAO command/status protocol, acknowledgements, heartbeat, disconnect handling, and reconnect behavior.
+4. **Basic app MVP** — Continue Robot Mode with the face screen, schedule, loading guide, dispense, refill, history, hardware test, local safety flows, and Guided Trial scenarios.
 5. **LEGO body integration** — Turn the working rig into a cute, stable, serviceable LEGO robot body.
-6. **Reliability features** — Add heartbeat/offline warnings, refill warnings, missed-dose logic, PIN, error recovery, and index correction.
+6. **Reliability features** — Physically verify the app's heartbeat/offline recovery and continue refill warnings, missed-dose handling, PIN, error recovery, and index correction.
 7. **Advanced interaction** — Future voice commands, local command recognition, AI experiments, caregiver summaries, video shortcut, and face recognition.
 
-Log progress in [`docs/build_log.md`](docs/build_log.md) and criteria in [`docs/test_plan.md`](docs/test_plan.md).
+Record repeatable test results, failures, and fixes before treating any stage as complete.
 
 ## Repository map
 
@@ -128,7 +128,7 @@ Dosey/
 ├── firmware/              # XIAO bring-up programs and safe controller firmware baseline
 ├── mobile_app/            # Flutter app workspace; app lives in mobile_app/dosey_app/
 ├── mechanical/            # Daviky carousel, LEGO shell, servo rig, measurements, assembly notes
-├── docs/                  # Wiring, protocol, safety, tests, parts, decisions, logs
+├── docs/                  # Controller protocol, physical bench runbook, and backup format
 └── media/                 # Photos and videos from hardware tests
 ```
 
@@ -136,12 +136,9 @@ Useful docs:
 
 | Doc | Use it for |
 | --- | --- |
-| [`docs/wiring.md`](docs/wiring.md) | Grove ports, XIAO pin map, power paths, shared grounds |
 | [`docs/protocol.md`](docs/protocol.md) | Bluetooth command, acknowledgement, heartbeat, status, and dose-event messages |
-| [`docs/mobile_stack.md`](docs/mobile_stack.md) | Robot Mode, Personal Mode, local data, and mobile architecture notes |
-| [`docs/decisions.md`](docs/decisions.md) | Architecture and build-direction decisions |
-| [`docs/test_plan.md`](docs/test_plan.md) | Stage criteria, mobile checks, hardware tests, and failure simulations |
-| [`docs/parts.md`](docs/parts.md) | Owned, planned, and to-confirm parts |
+| [`docs/controller_bench_runbook.md`](docs/controller_bench_runbook.md) | Supervised BLE and controller bench-test gates |
+| [`docs/local_backup_format.md`](docs/local_backup_format.md) | Versioned local backup contents, validation, and restore behavior |
 
 ## Firmware
 
@@ -155,11 +152,11 @@ Build the safe-default controller image from `firmware/` with `/tmp/dosey-platfo
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the practical platform for Robot Mode because the phone lives inside Dosey; iOS remains supported for Personal Mode.
 
-The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. Mounted Robot Mode returns to Robot Face on resume and after a configurable 1, 2, 5, 10, or 15 minutes of inactivity, contains Back navigation inside the app, keeps the screen awake only while the face is active and the app is resumed, and routes local dose and shortage notification taps to the appropriate in-app surface. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Google and Apple sign-in plumbing, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
+The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. Mounted Robot Mode returns to Robot Face on resume and after a configurable 1, 2, 5, 10, or 15 minutes of inactivity, contains Back navigation inside the app, keeps the screen awake only while the face is active and the app is resumed, and routes local dose and shortage notification taps to the appropriate in-app surface. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Guided Trial scenarios, Google and Apple sign-in plumbing, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
 
 BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
 
-- `flutter_blue_plus` for BLE foundation only; the real controller protocol is still incomplete.
+- `flutter_blue_plus` for the compile-tested D1 BLE transport and staged controller gateway; physical BLE behavior remains unverified.
 - `connectivity_plus` for advisory connectivity and Wi-Fi status only; this is not Wi-Fi provisioning.
 - `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
 - `flutter_local_notifications` for local reminder notifications and sounds.
@@ -167,7 +164,7 @@ BLE, notifications, local storage, auth, and permissions sit behind app-owned in
 
 The app should grow toward two modes:
 
-- **Robot Mode:** mounted Android phone face, reminders, dispense UI, hardware test screen, controller-simulator and Bluetooth foundations, refill status, dose history, fixed prerecorded sounds, and soft in-app mounted-phone guardrails. The real Bluetooth controller protocol remains future work. It does not use Android device-owner, lock-task, or immersive kiosk provisioning.
+- **Robot Mode:** mounted Android phone face, reminders, dispense UI, hardware test screen, controller simulator, staged Bluetooth lifecycle, refill status, dose history, fixed prerecorded sounds, Guided Trial, and soft in-app mounted-phone guardrails. It does not use Android device-owner, lock-task, or immersive kiosk provisioning.
 - **Personal Mode:** patient or caregiver phone for notifications, missed dose/refill alerts, dose history, and schedule editing when permissions allow.
 
 Reminder notification channel and sound IDs are intended to stay stable once chosen. Actual custom sound assets may still need platform provisioning where required.
@@ -208,13 +205,13 @@ The Grove Servo previously moved the actual carousel from a 3.3 V socket on a di
 
 ## Project status
 
-Early prototype. The repo has a safety-first Flutter app shell, mounted-phone Robot Mode guardrails, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, local settings/auth/dose-log storage, background package foundations for BLE/connectivity/auth/notifications/permissions, a controller simulator, Google and Apple sign-in plumbing, local Android/iOS tooling, and a safe-default controller firmware baseline. It still has no physically validated integrated firmware, completed phone-to-hardware BLE lifecycle, cloud sync, push notifications, or proven repeatable Daviky carousel movement.
+Early prototype. The repo has a safety-first Flutter app shell, mounted-phone Robot Mode guardrails, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, Guided Trial scenarios, local settings/auth/dose-log storage, a compile-tested D1 BLE transport and fail-closed controller lifecycle, a controller simulator, Google and Apple sign-in plumbing, local Android/iOS tooling, and a safe-default controller firmware baseline. It still has no physically validated integrated firmware or phone-to-hardware BLE lifecycle, cloud sync, push notifications, or proven repeatable Daviky carousel movement.
 
 Near-term work:
 
 - Verify the ESP32-C6 and Grove Base wiring, pin assignments, and loaded Grove Servo power behavior.
 - Build the Stage 2 servo/carousel rig and run repeated one-slot tests.
-- Draft and test the Bluetooth command/status/heartbeat protocol against the simulator before hardware integration.
+- Physically verify D1 BLE discovery, commands, status, heartbeat, disconnect, and reconnect behavior against the bare XIAO before enabling external hardware.
 - Run mounted-phone manual QA on the Moto G Play, including inactivity return, notification routing, Back containment, screen-awake release, and role changes.
 - Add screenshots or simulator scenario notes for the current app surfaces before a broader app polish PR.
 - Integrate the working rig into a fully LEGO shell only after movement is repeatable.

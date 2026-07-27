@@ -23,6 +23,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Mounted Robot Mode behavior that returns to Robot Face on resume, Back, or configurable inactivity; routes local notification taps by role and alert type; and keeps the Android display awake only while Robot Face is active and the app is resumed, never while backgrounded.
 - Fixed WAV voice catalog for the mounted Robot Mode phone, with app-owned asset playback wiring, previews, category toggles, quiet hours, configurable repetition cooldowns, and reminder repeat policy controls for normal reminder speech.
 - Controller simulator plus a compile-tested D1 BLE transport and staged controller gateway; physical BLE behavior is still unverified.
+- Guided Trial scenarios for simulator-backed happy-path dispensing, missed-dose recognition, and offline/reconnect behavior.
 - Google and Apple sign-in through app-owned auth interfaces; no Firebase/Supabase backend yet.
 - App-owned interfaces for controller/BLE, connectivity, auth, reminders, permissions, notifications, and dose logging.
 - Drift/SQLite local database for device role settings, prescriptions, reminders, schedule profiles, carousel slots, cached auth state, refill records, dose log events, household/profile metadata, and admin audit events.
@@ -61,6 +62,7 @@ Device role rules:
 - Create, edit, and delete local prescriptions and reminders.
 - Track remaining doses, refill thresholds, refill warnings, and refill-add history locally.
 - Assign reminders to Daviky carousel slots and exercise controller flows with either the simulator or the compile-tested BLE bench path.
+- Run the Guided Trial against deterministic simulator scenarios for successful dispensing, missed-dose recognition, and offline/reconnect behavior.
 - Log Today actions separately for dispense success, dose visible, taken confirmations, already taken, early/late taken, snooze, skip, missed, and caregiver help.
 - Prevent duplicate terminal Today actions from double-logging the same dose or spending inventory twice.
 - Store device role, safety acknowledgement, cached auth state, Action PIN state, refill data, carousel state, household/profile metadata, admin audit events, and dose log events locally.
@@ -75,7 +77,7 @@ The app must not mark a dose taken because the servo moved. Dispense logging req
 - Physically verify BLE advertising, discovery, status, heartbeat, disconnect, and reconnect with the bare XIAO before attaching external hardware.
 - Run mounted-phone manual QA on the Android test device for resume, inactivity, Back, notification, screen-awake, and role-change behavior.
 - Keep Today dose actions and refill inventory behavior aligned with local-first safety rules.
-- Add heartbeat/offline detection for XIAO power loss, crash, disconnect, or missed responses.
+- Physically verify the fail-closed heartbeat/offline and reconnect lifecycle for XIAO power loss, crash, disconnect, and missed responses.
 - Keep caregiver alerts, voice commands, cloud sync, facial recognition, and local AI as later features. The current voice scope is fixed prerecorded WAV phrases only.
 
 ## Local commands

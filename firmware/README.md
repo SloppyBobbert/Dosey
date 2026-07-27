@@ -240,4 +240,4 @@ compile/test evidence.
 - `DISPENSE_TEST` is movement-only. `DISPENSE_NEXT` returns `COMMAND_DISABLED` until carousel movement meets the mechanical test gate.
 - Motors must not be powered from the phone or a XIAO GPIO pin. Prior loaded movement on the Expansion Board's 3.3 V Grove socket is preliminary cross-board evidence only; it does not validate the Grove Base's `D8/A8` power and signal path. Continue supervised final-rig testing and stop on weak movement, jitter, resets, disconnects, or heat.
 
-See `../docs/protocol.md` for the implemented serial demo and `../docs/wiring.md` for confirmed versus pending wiring.
+See [`../docs/protocol.md`](../docs/protocol.md) for the implemented D1 protocol. Confirm the Grove Base port labels, module interfaces, and shared power path against the physical rig before enabling external hardware.

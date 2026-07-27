@@ -18,7 +18,7 @@ The first mechanism to build is a servo pusher:
 4. The servo arm returns.
 5. The next dose aligns with the Daviky chute and cup.
 
-The servo has already tested strong enough for the current mechanism. The next mechanical problem is reliable mounting, alignment, one-slot indexing, rollback prevention, and repeated movement.
+The Grove Servo previously moved the carousel from a different Grove board, but that does not validate the final Grove Base `D8/A8` path. The next mechanical work is supervised power testing, reliable mounting, alignment, one-slot indexing, rollback prevention, and repeated movement.
 
 Use fake pills, candy, beads, dry beans, or vitamins only during these tests. Do not use real prescription medication in the prototype rig.
 
@@ -42,7 +42,7 @@ The LEGO shell must not block the carousel, cup, phone charging cable, controlle
 - Carousel does not roll backward.
 - Slot aligns with the chute and cup.
 - Movement works repeatedly over at least 10 cycles.
-- Failures and fixes are logged in `../docs/build_log.md`.
+- Failures and fixes are recorded alongside the test evidence.
 
 Record measurements, test photos, and repeatability notes before enclosing the rig in the LEGO shell.
 

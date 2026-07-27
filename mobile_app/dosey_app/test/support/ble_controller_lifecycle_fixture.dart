@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dosey_app/core/bluetooth/flutter_blue_plus_ble_gateway.dart';
-import 'package:dosey_app/core/carousel/carousel_dispense_coordinator.dart';
 import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/controller/ble_controller_gateway.dart';
@@ -36,7 +35,7 @@ class BleControllerLifecycleFixture {
     required this.plugin,
     required this.transport,
     required this.supervisor,
-    required this.coordinator,
+    required this.lifecycle,
     required this.commandRepository,
     required this.healthRepository,
     required this.doseLog,
@@ -51,7 +50,7 @@ class BleControllerLifecycleFixture {
   final FakeFlutterBluePlusPlugin plugin;
   final FlutterBluePlusBleGateway transport;
   final ControllerHealthSupervisor supervisor;
-  final CarouselDispenseCoordinator coordinator;
+  final ControllerLifecycleService lifecycle;
   final LocalControllerCommandRepository commandRepository;
   final LocalControllerHealthEventRepository healthRepository;
   final DriftDoseLogRepository doseLog;
@@ -106,9 +105,6 @@ class BleControllerLifecycleFixture {
       carouselSlots: LocalCarouselSlotRepository(database),
       now: () => scheduler.now,
     );
-    final coordinator = CarouselDispenseCoordinator(
-      controllerLifecycle: lifecycle,
-    );
     await _seedDatabase(database, scheduler.now);
 
     late final BleControllerLifecycleFixture fixture;
@@ -125,7 +121,7 @@ class BleControllerLifecycleFixture {
       plugin: plugin,
       transport: transport,
       supervisor: supervisor,
-      coordinator: coordinator,
+      lifecycle: lifecycle,
       commandRepository: commandRepository,
       healthRepository: healthRepository,
       doseLog: doseLog,
@@ -144,7 +140,7 @@ class BleControllerLifecycleFixture {
   }
 
   Future<void> dispense() {
-    return coordinator.dispenseLoadedSlot(
+    return lifecycle.requestDoseDispense(
       slotId: 'slot-1',
       doseId: doseId,
       scheduleId: 'schedule-1',

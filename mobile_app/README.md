@@ -23,9 +23,9 @@ This directory is the Flutter workspace. The app itself lives in `mobile_app/dos
 Current workspace-level status:
 
 - Android and iOS personal-phone support stay in scope. Robot Mode stays Android-only.
-- The app shell, local storage, refill tracking, reminder flows, Daviky carousel loading workflow, controller simulator, and fixed prerecorded Robot Mode voice prompts are in place.
+- The app shell, local storage, refill tracking, reminder flows, Daviky carousel loading workflow, controller simulator, Guided Trial scenarios, and fixed prerecorded Robot Mode voice prompts are in place.
 - Mounted Robot Mode returns to Robot Face on resume and after configurable inactivity, contains Back navigation inside the app, and keeps the display awake only while Robot Face is active and the app is resumed; it does not keep the display awake while backgrounded.
-- The D1 controller protocol now has a compile-tested Flutter BLE transport and staged gateway. Physical advertising, connection, and hardware behavior remain unverified.
+- The D1 controller protocol now has a compile-tested Flutter BLE transport, staged gateway, and foreground Robot Mode heartbeat/reconnect lifecycle. Physical advertising, connection, and hardware behavior remain unverified.
 - Google sign-in and native iOS Apple sign-in are wired behind app-owned interfaces. No backend, cloud sync, or push notifications yet.
 - First physical test device: 2024 Moto G Play.
 
