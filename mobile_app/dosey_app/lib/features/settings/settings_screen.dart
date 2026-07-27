@@ -80,6 +80,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final DoseyVoicePlayer _previewVoicePlayer;
   late Future<GuidedTrialCompletion?> _guidedTrialCompletion;
   LocalAppSettingsRepository? _guidedTrialSettings;
+  bool? _guidedTrialWasDemo;
   bool _showsRobotFaceGroup = false;
   bool _isSigningIn = false;
   String? _authMessage;
@@ -107,8 +108,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final settings =
         DemoModeHost.maybeOf(context)?.productionSettings ??
         dependencies.settings;
-    if (!identical(_guidedTrialSettings, settings)) {
+    if (!identical(_guidedTrialSettings, settings) ||
+        _guidedTrialWasDemo != dependencies.isDemo) {
       _guidedTrialSettings = settings;
+      _guidedTrialWasDemo = dependencies.isDemo;
       _guidedTrialCompletion = settings.getGuidedTrialCompletion();
     }
   }
