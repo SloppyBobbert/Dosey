@@ -77,9 +77,9 @@ npm run typecheck
 npm run build
 ```
 
-Flutter pairing configuration requires the public endpoint, project, database,
-table, and Function IDs. The app invokes Functions only; it never reads these
-server-only tables directly.
+Flutter pairing configuration requires only the public endpoint, project ID,
+and two Function IDs. Database and table IDs stay in the Function environment;
+the app never reads these server-only tables directly.
 
 The current pairing UI supports an existing robot Team: an owner can generate a
 short-lived code, and the mounted Android phone can claim it. Server-authorized

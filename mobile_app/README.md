@@ -57,9 +57,10 @@ flutter build ios --debug --no-codesign --dart-define-from-file=.env
 git diff --check
 ```
 
-The ignored `dosey_app/.env` contains public Appwrite endpoint, project,
-database, table, and Function IDs. Never put the pairing HMAC secret or an
-Appwrite dynamic API key in the Flutter environment.
+The ignored `dosey_app/.env` contains the public Appwrite endpoint, project ID,
+and two pairing Function IDs. Database and table IDs stay in the Function
+environment. Never put the pairing HMAC secret or an Appwrite dynamic API key
+in the Flutter environment.
 
 Android SDK platforms 35 and 36 and OpenJDK 17 are configured locally for the first Moto G Play builds. Xcode 26.5 is configured for local iOS no-codesign builds.
 
