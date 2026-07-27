@@ -44,9 +44,12 @@ Create a server-only database with no client row permissions.
 | `expiresAt` | datetime | yes |
 | `consumedAt` | datetime | no |
 | `mountedDeviceAccountId` | varchar | no |
+| `failedAttempts` | integer | yes |
 | `active` | boolean | yes |
 
 Add a unique index for `codeDigest` and a key index for `(robotId, active)`.
+`pairing_claims.failedAttempts` is a compatibility-only legacy column written
+as zero. The per-device `pairing_attempts` rows below are authoritative.
 
 `pairing_attempts` columns:
 
@@ -67,7 +70,9 @@ npm run typecheck
 npm run build
 ```
 
-Live setup still requires the Appwrite tables, two deployed functions, and their IDs in the Flutter configuration before pairing UI can be enabled.
+Flutter pairing configuration requires the public endpoint, project, database,
+table, and Function IDs. The app invokes Functions only; it never reads these
+server-only tables directly.
 
 The iOS URL scheme in `ios/Runner/Info.plist` must remain
 `appwrite-callback-<APPWRITE_PROJECT_ID>`. Android derives the same scheme from

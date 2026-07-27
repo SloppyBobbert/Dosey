@@ -3,6 +3,9 @@ import 'package:dosey_app/core/backup/backup_codec.dart';
 import 'package:dosey_app/core/backup/backup_file_gateway.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
+import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/robot_installation.dart';
+import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -136,7 +139,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Check database'));
+    final checkDatabaseButton = find.widgetWithText(
+      OutlinedButton,
+      'Check database',
+    );
+    await tester.ensureVisible(checkDatabaseButton);
+    await tester.pumpAndSettle();
+    await tester.tap(checkDatabaseButton);
     await tester.pumpAndSettle();
 
     expect(find.text('Enter Action PIN'), findsNothing);
@@ -1119,10 +1128,7 @@ void main() {
         find.text('Household & robot profile').hitTestable(),
         findsOneWidget,
       );
-      expect(
-        find.text('Edit household & robot profile').hitTestable(),
-        findsOneWidget,
-      );
+      expect(find.text('Profile & device').hitTestable(), findsOneWidget);
 
       await tester.pumpWidget(
         _TestSettingsApp(
@@ -1159,6 +1165,8 @@ void main() {
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Profile & device'));
+    await tester.pumpAndSettle();
 
     expect(
       _findRichTextContaining('Household: Dosey household'),
@@ -1173,7 +1181,9 @@ void main() {
     );
     expect(_findRichTextContaining('Person: Not set'), findsOneWidget);
     expect(_findRichTextContaining('Relationship: Not set'), findsOneWidget);
-    expect(_findRichTextContaining('Cloud sync: Local only'), findsOneWidget);
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    expect(_findRichTextContaining('Cloud sync: Not linked'), findsOneWidget);
   });
 
   testWidgets('household edit sheet shows optional metadata fields', (
@@ -1190,6 +1200,8 @@ void main() {
       300,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Profile & device'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit household & robot profile'));
     await tester.pumpAndSettle();
@@ -1219,6 +1231,76 @@ void main() {
     }
   });
 
+  testWidgets('robot owner can generate a temporary mounted-device code', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    final pairing = _FakeRobotPairingGateway();
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        cloudIdentityGateway: _FakeCloudIdentityGateway(
+          identity: const CloudIdentity.signedIn(
+            accountId: 'owner-1',
+            email: 'owner@example.com',
+          ),
+        ),
+        householdSyncGateway: _FakeHouseholdSyncGateway(_robotInstallation),
+        robotPairingGateway: pairing,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Generate robot pairing code'));
+    await tester.pumpAndSettle();
+
+    expect(pairing.createdForRobotId, 'robot-1');
+    expect(find.text('Pairing code: ABCD2EFGH3'), findsOneWidget);
+    expect(find.textContaining('expires'), findsOneWidget);
+  });
+
+  testWidgets('Robot Mode can claim an existing robot with a temporary code', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    final pairing = _FakeRobotPairingGateway();
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        householdSyncGateway: const DisabledHouseholdSyncGateway(),
+        robotPairingGateway: pairing,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pair this robot phone'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, '10-character pairing code'),
+      'abcd2-efgh3',
+    );
+    await tester.tap(find.text('Pair robot'));
+    await tester.pumpAndSettle();
+
+    expect(pairing.claimedCode, 'abcd2-efgh3');
+    expect(find.text('Robot phone paired.'), findsOneWidget);
+  });
+
   testWidgets('guided trial section shows saved completion status', (
     tester,
   ) async {
@@ -1240,6 +1322,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Guided Trial Run'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
 
     expect(find.text('Guided Trial Run'), findsOneWidget);
     expect(
@@ -1360,6 +1447,8 @@ class _TestSettingsApp extends StatelessWidget {
     this.backupFileGateway,
     this.appClock,
     this.cloudIdentityGateway,
+    this.householdSyncGateway,
+    this.robotPairingGateway,
   });
 
   final DoseyDatabase database;
@@ -1369,6 +1458,8 @@ class _TestSettingsApp extends StatelessWidget {
   final BackupFileGateway? backupFileGateway;
   final AppClock? appClock;
   final CloudIdentityGateway? cloudIdentityGateway;
+  final HouseholdSyncGateway? householdSyncGateway;
+  final RobotPairingGateway? robotPairingGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -1382,6 +1473,8 @@ class _TestSettingsApp extends StatelessWidget {
       missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
       backupFileGateway: backupFileGateway,
       cloudIdentityGateway: cloudIdentityGateway,
+      householdSyncGateway: householdSyncGateway,
+      robotPairingGateway: robotPairingGateway,
       voicePlayer: voicePlayer,
       child: MaterialApp(
         theme: ThemeData(
@@ -1399,7 +1492,56 @@ class _TestSettingsApp extends StatelessWidget {
   }
 }
 
+final _robotInstallation = RobotInstallation(
+  id: 'robot-1',
+  displayName: 'Kitchen Dosey',
+  ownerAccountId: 'owner-1',
+  humanAccountIds: {'owner-1'},
+  mountedDeviceId: 'mounted-1',
+);
+
+class _FakeHouseholdSyncGateway implements HouseholdSyncGateway {
+  const _FakeHouseholdSyncGateway(this.robot);
+
+  final RobotInstallation? robot;
+
+  @override
+  Stream<RobotInstallation?> watchRobot() => Stream.value(robot);
+
+  @override
+  Future<RobotInstallation> createRobot({
+    required String displayName,
+    required String ownerAccountId,
+    required String mountedDeviceId,
+  }) => throw UnimplementedError();
+}
+
+class _FakeRobotPairingGateway implements RobotPairingGateway {
+  String? createdForRobotId;
+  String? claimedCode;
+
+  @override
+  Future<RobotPairingCredential> createPairingCode({
+    required String robotId,
+  }) async {
+    createdForRobotId = robotId;
+    return RobotPairingCredential(
+      code: 'ABCD2EFGH3',
+      expiresAt: DateTime.utc(2026, 7, 26, 12, 10),
+    );
+  }
+
+  @override
+  Future<String> claimRobot({required String code}) async {
+    claimedCode = code;
+    return 'robot-1';
+  }
+}
+
 class _FakeCloudIdentityGateway implements CloudIdentityGateway {
+  _FakeCloudIdentityGateway({this.identity = const CloudIdentity.signedOut()});
+
+  final CloudIdentity identity;
   var signOutCount = 0;
 
   @override
@@ -1416,8 +1558,7 @@ class _FakeCloudIdentityGateway implements CloudIdentityGateway {
   }
 
   @override
-  Stream<CloudIdentity> watchIdentity() =>
-      Stream.value(const CloudIdentity.signedOut());
+  Stream<CloudIdentity> watchIdentity() => Stream.value(identity);
 }
 
 class _FakeBackupFileGateway implements BackupFileGateway {

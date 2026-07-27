@@ -12,6 +12,7 @@ import 'package:dosey_app/core/demo/demo_external_services.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -92,6 +93,7 @@ void main() {
     expect(dependencies.doseActions, isNotNull);
     expect(dependencies.cloudIdentity, isA<DisabledCloudIdentityGateway>());
     expect(dependencies.householdSync, isA<DisabledHouseholdSyncGateway>());
+    expect(dependencies.robotPairing, isA<DisabledRobotPairingGateway>());
 
     await tester.pumpWidget(const SizedBox());
   });

@@ -4,6 +4,8 @@ import 'package:dosey_app/core/cloud/cloud_gateway_factory.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/household/appwrite_household_sync_gateway.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/appwrite_robot_pairing_gateway.dart';
+import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,12 +19,18 @@ void main() {
 
     expect(gateways.identity, isA<DisabledCloudIdentityGateway>());
     expect(gateways.household, isA<DisabledHouseholdSyncGateway>());
+    expect(gateways.pairing, isA<DisabledRobotPairingGateway>());
   });
 
   test('uses Appwrite adapter with complete cloud configuration', () {
     final configuration = CloudConfiguration.fromValues(
       endpoint: 'https://example.appwrite.io/v1',
       projectId: 'dosey-development',
+      databaseId: 'dosey',
+      pairingClaimsTableId: 'claims',
+      pairingAttemptsTableId: 'attempts',
+      createPairingCodeFunctionId: 'create-code',
+      claimRobotFunctionId: 'claim-robot',
     );
     var factoryCalls = 0;
 
@@ -34,12 +42,25 @@ void main() {
         return _UnusedAccountApi();
       },
       teamsApiFactory: (_) => _UnusedTeamsApi(),
+      pairingApiFactory: (_) => _UnusedPairingApi(),
     );
 
     expect(gateways.identity, isA<AppwriteCloudIdentityGateway>());
     expect(gateways.household, isA<AppwriteHouseholdSyncGateway>());
+    expect(gateways.pairing, isA<AppwriteRobotPairingGateway>());
     expect(factoryCalls, 1);
   });
+}
+
+class _UnusedPairingApi implements AppwriteRobotPairingApi {
+  @override
+  Future<void> ensureAnonymousSession() => throw UnimplementedError();
+
+  @override
+  Future<PairingFunctionResponse> execute({
+    required String functionId,
+    required String body,
+  }) => throw UnimplementedError();
 }
 
 class _UnusedTeamsApi implements AppwriteTeamsApi {

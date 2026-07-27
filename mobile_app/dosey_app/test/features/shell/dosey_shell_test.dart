@@ -1015,10 +1015,9 @@ void main() {
             .sectionTarget,
         SettingsSection.householdAccount,
       );
-      await _scrollSettingsUntilVisible(
-        tester,
-        find.text('Edit household & robot profile'),
-      );
+      await _scrollSettingsUntilVisible(tester, find.text('Profile & device'));
+      await tester.tap(find.text('Profile & device'));
+      await tester.pumpAndSettle();
       expect(
         find.text('Edit household & robot profile').hitTestable(),
         findsOneWidget,

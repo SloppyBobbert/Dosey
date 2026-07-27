@@ -82,6 +82,7 @@ describe('Appwrite pairing persistence', () => {
     ]);
     assert.equal(api.rows[0]?.expiresAt, '2026-07-26T12:10:00.000Z');
     assert.equal(api.rows[0]?.active, true);
+    assert.equal(api.rows[0]?.failedAttempts, 0);
   });
 
   test('rolls back when a staged operation fails', async () => {
