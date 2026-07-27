@@ -1195,6 +1195,11 @@ void _expectRobotFaceVisible() {
 }
 
 Future<void> _openBottomDestination(WidgetTester tester, String label) async {
+  if (find.byType(NavigationBar).evaluate().isEmpty &&
+      find.byKey(RobotFaceScreen.displayFrameKey).evaluate().isNotEmpty) {
+    await tester.longPress(find.byKey(RobotFaceScreen.displayFrameKey));
+    await _pumpShellFrame(tester);
+  }
   await openBottomDestination(
     tester,
     label,
