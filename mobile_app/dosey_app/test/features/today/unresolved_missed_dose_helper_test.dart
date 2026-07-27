@@ -55,15 +55,61 @@ void main() {
       isNull,
     );
   });
+
+  test('a miss after recognition remains unresolved', () {
+    final now = DateTime(2040, 1, 2, 12);
+    final events = <DoseLogEvent>[
+      DoseLogEvent.doseMissed(
+        doseId: 'morning:2040-01-02',
+        occurredAt: DateTime(2040, 1, 2, 8, 30),
+      ),
+      DoseLogEvent.doseMissedRecognized(
+        doseId: 'morning:2040-01-02',
+        occurredAt: DateTime(2040, 1, 2, 9),
+      ),
+      DoseLogEvent.doseMissed(
+        doseId: 'morning:2040-01-02',
+        occurredAt: DateTime(2040, 1, 2, 9, 30),
+      ),
+    ];
+
+    expect(
+      UnresolvedMissedDoseHelper.latest(
+        <ReminderSchedule>[_schedule('morning', 8)],
+        events,
+        now: now,
+      )?.doseId,
+      'morning:2040-01-02',
+    );
+  });
+
+  test('disabled schedules are skipped', () {
+    final now = DateTime(2040, 1, 2, 12);
+    final events = <DoseLogEvent>[
+      DoseLogEvent.doseMissed(
+        doseId: 'morning:2040-01-02',
+        occurredAt: DateTime(2040, 1, 2, 8, 30),
+      ),
+    ];
+
+    expect(
+      UnresolvedMissedDoseHelper.latest(
+        <ReminderSchedule>[_schedule('morning', 8, isEnabled: false)],
+        events,
+        now: now,
+      ),
+      isNull,
+    );
+  });
 }
 
-ReminderSchedule _schedule(String id, int hour) {
+ReminderSchedule _schedule(String id, int hour, {bool isEnabled = true}) {
   return ReminderSchedule(
     id: id,
     label: '$id dose',
     hour: hour,
     minute: 0,
-    isEnabled: true,
+    isEnabled: isEnabled,
     createdAt: DateTime(2040),
     updatedAt: DateTime(2040),
   );

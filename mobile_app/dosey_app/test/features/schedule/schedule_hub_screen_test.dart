@@ -14,9 +14,7 @@ void main() {
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
-    final app = _TestApp(database: database);
-
-    await tester.pumpWidget(app);
+    await tester.pumpWidget(_TestApp(database: database));
     await tester.pumpAndSettle();
 
     expect(find.text('Schedule'), findsWidgets);
@@ -28,7 +26,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PrescriptionsScreen), findsOneWidget);
 
-    await tester.pumpWidget(app);
+    await tester.pumpWidget(_TestApp(database: database));
     await tester.pumpAndSettle();
     expect(find.byType(PrescriptionsScreen), findsOneWidget);
   });

@@ -32,6 +32,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_app_scope_dependencies.dart';
+import 'support/bottom_navigation_test_helper.dart';
 
 void main() {
   testWidgets('first install shows medical-device onboarding before shell', (
@@ -4080,23 +4081,11 @@ Future<void> _openSettingsAccordion(WidgetTester tester, String title) async {
 }
 
 Future<void> _openBottomDestination(WidgetTester tester, String label) async {
-  var navigationBarFinder = find.byType(NavigationBar);
-  if (navigationBarFinder.evaluate().isEmpty) {
-    await tester.pageBack();
-    await _pumpAppFrame(tester);
-    navigationBarFinder = find.byType(NavigationBar);
-  }
-  final index = const [
-    'Dashboard',
-    'Schedule',
-    'Carousel',
-    'Settings',
-  ].indexOf(label);
-  expect(index, isNonNegative, reason: 'Unknown bottom destination: $label');
-  tester.widget<NavigationBar>(navigationBarFinder).onDestinationSelected!(
-    index,
+  await openBottomDestination(
+    tester,
+    label,
+    pumpFrame: () => _pumpAppFrame(tester),
   );
-  await _pumpAppFrame(tester);
   expect(
     find.descendant(of: find.byType(AppBar), matching: find.text(label)),
     findsOneWidget,
@@ -4156,8 +4145,10 @@ Future<void> _openToday(WidgetTester tester) async {
 Future<void> _openDoseHistory(WidgetTester tester) async {
   await _openBottomDestination(tester, 'Settings');
   await _scrollSettingsUntilVisible(tester, find.text('History & data'));
-  await tester.tap(find.text('History & data').hitTestable());
-  await _pumpAppFrame(tester);
+  if (find.text('Open dose history').evaluate().isEmpty) {
+    await tester.tap(find.text('History & data').hitTestable());
+    await _pumpAppFrame(tester);
+  }
   await _scrollSettingsUntilVisible(tester, find.text('Open dose history'));
   await tester.tap(find.text('Open dose history').hitTestable());
   await _pumpAppFrame(tester);
@@ -4176,7 +4167,7 @@ Future<void> _scrollSettingsUntilVisible(
     await tester.drag(scrollable, Offset(0, -delta));
     await tester.pump();
   }
-  expect(finder, findsWidgets);
+  expect(finder.hitTestable(), findsWidgets);
   await _pumpAppFrame(tester);
 }
 

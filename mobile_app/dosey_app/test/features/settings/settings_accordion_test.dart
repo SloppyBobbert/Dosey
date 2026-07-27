@@ -9,6 +9,14 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
+    var semanticsDisposed = false;
+    void disposeSemantics() {
+      if (semanticsDisposed) return;
+      semantics.dispose();
+      semanticsDisposed = true;
+    }
+
+    addTearDown(disposeSemantics);
 
     await tester.pumpWidget(
       const MaterialApp(
@@ -38,7 +46,7 @@ void main() {
           .isExpanded,
       Tristate.isTrue,
     );
-    semantics.dispose();
+    disposeSemantics();
   });
 
   testWidgets('accordions expand independently', (tester) async {

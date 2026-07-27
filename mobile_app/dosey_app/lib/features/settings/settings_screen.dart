@@ -78,6 +78,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   late final ScrollController _scrollController;
   late final DoseyVoicePlayer _previewVoicePlayer;
+  late Future<GuidedTrialCompletion?> _guidedTrialCompletion;
+  LocalAppSettingsRepository? _guidedTrialSettings;
+  bool _showsRobotFaceGroup = false;
   bool _isSigningIn = false;
   String? _authMessage;
   final Set<_SettingsGroup> _expandedGroups = {
@@ -95,6 +98,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final target = widget.sectionTarget;
     if (target != null) _expandedGroups.add(_groupFor(target));
     _scrollToTargetAfterBuild();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final dependencies = DoseyAppScope.of(context);
+    final settings =
+        DemoModeHost.maybeOf(context)?.productionSettings ??
+        dependencies.settings;
+    if (!identical(_guidedTrialSettings, settings)) {
+      _guidedTrialSettings = settings;
+      _guidedTrialCompletion = settings.getGuidedTrialCompletion();
+    }
   }
 
   @override
@@ -143,20 +159,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   double _estimatedSectionOffset(SettingsSection section) {
-    return switch (section) {
-      SettingsSection.account => 120,
-      SettingsSection.deviceMode => 320,
-      SettingsSection.actionPin => 500,
-      SettingsSection.householdAccount => 700,
-      SettingsSection.adminHistory => 720,
-      SettingsSection.backupDatabase => 800,
-      SettingsSection.robotFace => 950,
-      SettingsSection.notifications => 1100,
-      SettingsSection.safety => 1250,
-      SettingsSection.helpAbout => 1400,
-      SettingsSection.guidedTrial => 1550,
-      SettingsSection.setup => 1700,
-    };
+    const listHeaderExtent = 52.0;
+    const collapsedAccordionExtent = 84.0;
+    final visibleGroups = _SettingsGroup.values
+        .where(
+          (group) => group != _SettingsGroup.robotFace || _showsRobotFaceGroup,
+        )
+        .toList();
+    final groupIndex = visibleGroups.indexOf(_groupFor(section));
+    return listHeaderExtent + groupIndex * collapsedAccordionExtent;
   }
 
   _SettingsGroup _groupFor(SettingsSection section) {
@@ -199,6 +210,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _targeted(SettingsSection section, Widget child) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         SizedBox(key: _sectionKeys[section]),
         child,
@@ -221,6 +233,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final role = storedRole != null && allowedRoles.contains(storedRole)
             ? storedRole
             : AppDeviceRole.defaultFor(platform);
+        _showsRobotFaceGroup = role.canHostRobot;
 
         return StreamBuilder<AuthSession>(
           stream: dependencies.auth.watchSession(),
@@ -237,6 +250,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   group: _SettingsGroup.profile,
                   title: 'Profile, account & device',
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _ProfileSummaryCard(session: session, platform: platform),
                       if (!role.canHostRobot) ...[
@@ -303,6 +317,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   group: _SettingsGroup.history,
                   title: 'History & data',
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _DoseHistoryCard(),
                       const SizedBox(height: 12),
@@ -357,18 +372,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   group: _SettingsGroup.help,
                   title: 'Help, guided trial & setup',
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _targeted(SettingsSection.helpAbout, _HelpAboutCard()),
                       const SizedBox(height: 12),
                       _targeted(
                         SettingsSection.guidedTrial,
                         _GuidedTrialSettingsCard(
-                          completion:
-                              (DemoModeHost.maybeOf(
-                                        context,
-                                      )?.productionSettings ??
-                                      dependencies.settings)
-                                  .getGuidedTrialCompletion(),
+                          completion: _guidedTrialCompletion,
                           onStart: DemoModeHost.maybeOf(
                             context,
                           )?.startGuidedTrial,

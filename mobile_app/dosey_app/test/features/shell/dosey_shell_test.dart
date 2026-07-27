@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_app_scope_dependencies.dart';
+import '../../support/bottom_navigation_test_helper.dart';
 
 void main() {
   for (final role in AppDeviceRole.values) {
@@ -50,6 +51,8 @@ void main() {
     (tester) async {
       final database = DoseyDatabase.inMemory();
       addTearDown(database.close);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
       await _setDeviceRole(database, AppDeviceRole.androidPersonal);
 
       for (final width in [320.0, 360.0]) {
@@ -84,8 +87,6 @@ void main() {
           expect(tester.takeException(), isNull);
         }
       }
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
     },
   );
 
@@ -996,12 +997,11 @@ Finder _appBarTitle(String title) {
 }
 
 Future<void> _openBottomDestination(WidgetTester tester, String label) async {
-  await tester.tap(
-    find
-        .descendant(of: find.byType(NavigationBar), matching: find.text(label))
-        .hitTestable(),
+  await openBottomDestination(
+    tester,
+    label,
+    pumpFrame: () => _pumpShellFrame(tester),
   );
-  await _pumpShellFrame(tester);
 }
 
 Future<void> _openControllerHub(WidgetTester tester) async {

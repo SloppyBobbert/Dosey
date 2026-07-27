@@ -355,6 +355,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
       _settingsNavigationRequest += 1;
       _selectedTabId = _ShellTabId.settings;
     });
+    _stopFaceAwakeWindow();
     _restartInactivityTimer();
     _syncScreenAwake();
   }

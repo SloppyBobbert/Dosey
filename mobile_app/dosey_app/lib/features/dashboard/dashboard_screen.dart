@@ -186,14 +186,18 @@ class _DashboardContent extends StatelessWidget {
               dense: true,
               leading: const Icon(Icons.error_outline),
               title: Text(
-                '${failedSessions.length} controller command failure',
+                '${failedSessions.length} controller command '
+                'failure${failedSessions.length == 1 ? '' : 's'}',
               ),
             ),
           if (reviewSlots.isNotEmpty)
             ListTile(
               dense: true,
               leading: const Icon(Icons.inventory_2_outlined),
-              title: Text('${reviewSlots.length} carousel slot needs review'),
+              title: Text(
+                '${reviewSlots.length} carousel '
+                'slot${reviewSlots.length == 1 ? '' : 's'} need${reviewSlots.length == 1 ? 's' : ''} review',
+              ),
             ),
           if (hasHealthIssue)
             const ListTile(

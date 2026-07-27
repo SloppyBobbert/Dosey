@@ -57,10 +57,9 @@ void main() {
       'Safety & limitations',
     ]);
     expect(find.text('Device mode'), findsOneWidget);
-    final accordions = _accordions(tester);
-    expect(accordions[0].expanded, isTrue);
-    expect(accordions[4].expanded, isTrue);
-    expect(accordions[1].expanded, isFalse);
+    expect(_accordion(tester, 'Profile, account & device').expanded, isTrue);
+    expect(_accordion(tester, 'Reminder notifications').expanded, isTrue);
+    expect(_accordion(tester, 'Household & robot profile').expanded, isFalse);
     expect(find.text('No local admin changes recorded yet.'), findsNothing);
   });
 
@@ -1843,6 +1842,12 @@ List<SettingsAccordion> _accordions(WidgetTester tester) {
   return children.whereType<SettingsAccordion>().toList();
 }
 
+SettingsAccordion _accordion(WidgetTester tester, String title) {
+  return _accordions(
+    tester,
+  ).singleWhere((accordion) => accordion.title == title);
+}
+
 Finder _findRichTextContaining(String text) {
   return find.byWidgetPredicate(
     (widget) => widget is RichText && widget.text.toPlainText().contains(text),
@@ -1872,8 +1877,10 @@ Future<void> _scrollToRobotFace(WidgetTester tester) async {
     scrollable: find.byType(Scrollable).first,
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Robot Face options'));
-  await tester.pumpAndSettle();
+  if (find.text('Robot Face').evaluate().isEmpty) {
+    await tester.tap(find.text('Robot Face options'));
+    await tester.pumpAndSettle();
+  }
   await tester.scrollUntilVisible(
     find.text('Robot Face'),
     300,
