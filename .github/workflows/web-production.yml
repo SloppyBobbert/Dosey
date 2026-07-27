@@ -1,0 +1,167 @@
+name: Web Production Sites
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full 40-character main commit SHA to build
+        required: true
+        type: string
+      mode:
+        description: Upload without activation, or explicitly activate an existing deployment
+        required: true
+        type: choice
+        options:
+          - upload
+          - activate
+        default: upload
+      deployment_id:
+        description: Required only for activate mode; never inferred from an upload
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+  APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+  APPWRITE_SITE_ID: ${{ vars.APPWRITE_PRODUCTION_SITE_ID }}
+
+jobs:
+  upload:
+    if: inputs.mode == 'upload'
+    name: Upload production deployment without activation
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        working-directory: mobile_app/dosey_app
+    steps:
+      - name: Check out selected main commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+      - name: Verify selected SHA is on origin/main
+        working-directory: .
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || {
+            printf 'source_sha must be a full 40-character commit SHA\n' >&2
+            exit 1
+          }
+          git fetch --no-tags origin main
+          git rev-parse --verify "${SOURCE_SHA}^{commit}"
+          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.44.1'
+          channel: stable
+          cache: true
+      - name: Install locked dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Build auth-enabled production web release
+        run: |
+          flutter build web --release --target=lib/main_web.dart \
+            --dart-define=DOSEY_BUILD_PROFILE=personal \
+            --dart-define=WEB_AUTH_ENABLED=true \
+            --dart-define=WEB_APP_ORIGIN=https://dosey.dev \
+            --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
+            --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID"
+      - name: Verify and archive web contents
+        run: |
+          set -euo pipefail
+          test -s build/web/index.html
+          test -s build/web/auth.html
+          test -s build/web/flutter_bootstrap.js
+          test -s build/web/manifest.json
+          tar -czf "$GITHUB_WORKSPACE/dosey-web-production.tar.gz" -C build/web .
+          tar -tzf "$GITHUB_WORKSPACE/dosey-web-production.tar.gz" | grep -Fx './index.html'
+          tar -tzf "$GITHUB_WORKSPACE/dosey-web-production.tar.gz" | grep -Fx './auth.html'
+      - name: Upload production archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dosey-web-production-${{ inputs.source_sha }}
+          path: dosey-web-production.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create Appwrite production deployment
+        env:
+          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
+        run: |
+          set -euo pipefail
+          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
+            printf 'Unexpected Appwrite endpoint\n' >&2
+            exit 1
+          }
+          test -n "$APPWRITE_ENDPOINT"; test -n "$APPWRITE_PROJECT_ID"; test -n "$APPWRITE_SITE_ID"; test -n "$APPWRITE_SITES_API_KEY"
+          response="$GITHUB_WORKSPACE/production-deployment-response.json"
+          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --request POST "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments" \
+            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
+            --form "code=@$GITHUB_WORKSPACE/dosey-web-production.tar.gz" \
+            --form 'installCommand=' --form 'buildCommand=' --form 'outputDirectory=' \
+            --form 'activate=false')"
+          REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
+          [ "${status#2}" != "$status" ] || { printf 'Appwrite production upload failed with HTTP %s\n' "$status" >&2; exit 1; }
+          printf 'Production deployment uploaded with activate=false. Verify it before any separate activation run.\n'
+      - name: Preserve Appwrite response
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dosey-web-production-response-${{ inputs.source_sha }}
+          path: ${{ github.workspace }}/production-deployment-response.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  activate:
+    if: inputs.mode == 'activate'
+    name: Explicitly activate production deployment
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Validate explicit deployment ID
+        env:
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
+            printf 'deployment_id has an invalid format\n' >&2
+            exit 1
+          }
+      - name: Activate selected production deployment
+        env:
+          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
+            printf 'Unexpected Appwrite endpoint\n' >&2
+            exit 1
+          }
+          [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
+            printf 'deployment_id has an invalid format\n' >&2
+            exit 1
+          }
+          response="$GITHUB_WORKSPACE/production-activation-response.json"
+          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --request PATCH "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployment" \
+            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
+            --header 'Content-Type: application/json' \
+            --data-raw "{\"deploymentId\":\"$DEPLOYMENT_ID\"}")"
+          REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
+          [ "${status#2}" != "$status" ] || { printf 'Production activation failed with HTTP %s\n' "$status" >&2; exit 1; }
+      - name: Preserve activation response
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dosey-web-production-activation-response
+          path: ${{ github.workspace }}/production-activation-response.json
+          if-no-files-found: warn
+          retention-days: 30

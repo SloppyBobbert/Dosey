@@ -104,4 +104,40 @@ jobs:
 
       - name: Remove temporary configuration
         if: always()
-        run: rm -f .env
+        run: unlink .env 2>/dev/null || true
+
+  flutter-ios:
+    name: Flutter native iOS build
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile_app/dosey_app
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.44.1'
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Prepare public Appwrite configuration
+        uses: ./.github/actions/prepare-appwrite-env
+        env:
+          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+          APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID }}
+          APPWRITE_CLAIM_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CLAIM_ROBOT_FUNCTION_ID }}
+
+      - name: Build iOS debug app
+        run: flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
+
+      - name: Remove temporary configuration
+        if: always()
+        run: unlink .env 2>/dev/null || true

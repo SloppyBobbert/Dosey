@@ -1,0 +1,67 @@
+name: Web Preview CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Validate auth-disabled web build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile_app/dosey_app
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.44.1'
+          channel: stable
+          cache: true
+
+      - name: Install locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Check formatting
+        run: dart format --set-exit-if-changed .
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Build auth-disabled web release
+        run: |
+          flutter build web --release --target=lib/main_web.dart \
+            --dart-define=DOSEY_BUILD_PROFILE=personal \
+            --dart-define=WEB_AUTH_ENABLED=false
+
+      - name: Verify static web files and archive contents
+        run: |
+          set -euo pipefail
+          test -s build/web/index.html
+          test -s build/web/auth.html
+          test -s build/web/flutter_bootstrap.js
+          test -s build/web/manifest.json
+          test ! -e build/web/.env
+          tar -czf "$GITHUB_WORKSPACE/dosey-web-preview.tar.gz" -C build/web .
+          tar -tzf "$GITHUB_WORKSPACE/dosey-web-preview.tar.gz" | grep -Fx './index.html'
+          tar -tzf "$GITHUB_WORKSPACE/dosey-web-preview.tar.gz" | grep -Fx './auth.html'
+
+      - name: Upload web preview artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dosey-web-preview
+          path: dosey-web-preview.tar.gz
+          if-no-files-found: error
+          retention-days: 3
