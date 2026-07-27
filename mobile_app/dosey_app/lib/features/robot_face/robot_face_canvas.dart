@@ -392,17 +392,13 @@ class _RobotFacePainter extends CustomPainter {
     );
     final baseEyes = _baseEyeRects(size, centerY: size.height * 0.48);
     return <String, Object>{
-      'drawsInternalFeatures': false,
       'baseAspectRatio': baseEyes.first.width / baseEyes.first.height,
       'eyeOffset': frame.eyeOffset,
-      'eyeLift': frame.eyeLift,
-      'leftScale': frame.eyeScale,
-      'rightScale': frame.eyeScale,
+      'eyeLift': frame.cue.eyeLift,
       'blink': frame.blink,
       'leftTilt': frame.concernTilt * -1,
       'rightTilt': frame.concernTilt,
       'leftGlowBoost': frame.glowBoost,
-      'rightGlowBoost': frame.glowBoost,
     };
   }
 
@@ -911,27 +907,26 @@ class _RobotFacePainter extends CustomPainter {
         state.mode == RobotFaceMode.missed ||
         state.mode == RobotFaceMode.error ||
         controllerCondition == RobotFaceControllerCondition.fault;
-    final suppressIdlePersonality =
-        reducedMotion ||
-        safetyFace ||
-        isPreparing ||
-        isSpeaking ||
-        animationCue != null;
-    final ambientOffset = suppressIdlePersonality
-        ? Offset.zero
-        : _eyeOffsetFor(state, size, framePhase, controllerCondition);
-    final glowPulse = suppressIdlePersonality
-        ? 0.0
-        : ((math.sin(framePhase * math.pi * 2) + 1) / 2) * 0.035;
+    final strictlySuppressIdlePersonality =
+        reducedMotion || safetyFace || isPreparing || isSpeaking;
+    final cueExitWeight = animationCue == null
+        ? 1.0
+        : Curves.easeInOutCubic.transform(
+            ((frameCueProgress - 0.65) / 0.35).clamp(0.0, 1.0),
+          );
+    final ambientWeight = strictlySuppressIdlePersonality ? 0.0 : cueExitWeight;
+    final ambientOffset =
+        _eyeOffsetFor(state, size, framePhase, controllerCondition) *
+        ambientWeight;
+    final glowPulse =
+        ((math.sin(framePhase * math.pi * 2) + 1) / 2) * 0.035 * ambientWeight;
     return _FaceMotionFrame(
       cue: cue,
       eyeOffset: ambientOffset + cue.eyeOffset,
-      blink: suppressIdlePersonality ? 0.0 : _blinkValue(framePhase),
+      blink: _blinkValue(framePhase) * ambientWeight,
       concernTilt:
           _concernTiltFor(state.mode, controllerCondition) + cue.concernTilt,
       ambientGlowPulse: glowPulse,
-      eyeLift: cue.eyeLift,
-      eyeScale: 1 + cue.eyeScale,
       glowBoost: cue.glowBoost + glowPulse,
     );
   }
@@ -1462,8 +1457,6 @@ class _FaceMotionFrame {
     required this.blink,
     required this.concernTilt,
     required this.ambientGlowPulse,
-    required this.eyeLift,
-    required this.eyeScale,
     required this.glowBoost,
   });
 
@@ -1472,7 +1465,5 @@ class _FaceMotionFrame {
   final double blink;
   final double concernTilt;
   final double ambientGlowPulse;
-  final double eyeLift;
-  final double eyeScale;
   final double glowBoost;
 }

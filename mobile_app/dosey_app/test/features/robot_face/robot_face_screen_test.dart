@@ -238,11 +238,8 @@ void main() {
       final glance = await frameAt(0.32);
       final settle = await frameAt(0.58);
 
-      expect(start['drawsInternalFeatures'], isFalse);
       expect(glance['eyeOffset'], isNot(start['eyeOffset']));
       expect(settle['eyeOffset'], isNot(glance['eyeOffset']));
-      expect(glance['leftScale'], glance['rightScale']);
-      expect(glance['leftGlowBoost'], glance['rightGlowBoost']);
       expect(glance['baseAspectRatio'], closeTo(0.79, 0.02));
     },
   );
@@ -397,6 +394,55 @@ void main() {
       Offset.zero,
     );
     expect(await offsetFor(state: missed), Offset.zero);
+  });
+
+  testWidgets('idle personality eases back before an active cue completes', (
+    WidgetTester tester,
+  ) async {
+    const state = RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: RobotFaceCanvas(
+          isActive: true,
+          state: state,
+          animationCue: RobotFaceAnimationCue.focus,
+          animationRevision: 1,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final customPaint = tester.widget<CustomPaint>(
+      find.descendant(
+        of: find.byType(RobotFaceCanvas),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+    final dynamic painter = customPaint.painter;
+    Map<String, Object> frame(double cueProgress) =>
+        painter.debugMotionFrame(
+              const Size(800, 400),
+              phase: 0.32,
+              cueProgress: cueProgress,
+            )
+            as Map<String, Object>;
+
+    final startOffset = frame(0.0)['eyeOffset']! as Offset;
+    final exitOffset = frame(0.8)['eyeOffset']! as Offset;
+    final completedOffset = frame(1.0)['eyeOffset']! as Offset;
+
+    expect(startOffset, Offset.zero);
+    expect(exitOffset.dx, greaterThan(0));
+    expect(exitOffset.dx, lessThan(completedOffset.dx));
+    expect(completedOffset.dx, greaterThan(4));
   });
 
   testWidgets(
