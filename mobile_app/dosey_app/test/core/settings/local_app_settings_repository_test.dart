@@ -1,10 +1,60 @@
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/settings/app_theme_preference.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('theme preference defaults to dark', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    expect(
+      await repository.watchThemePreference().first,
+      AppThemePreference.dark,
+    );
+  });
+
+  test('theme preferences round-trip and emit updates', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    for (final preference in AppThemePreference.values) {
+      final update = repository.watchThemePreference().firstWhere(
+        (value) => value == preference,
+      );
+
+      await repository.setThemePreference(preference);
+
+      expect(await update, preference);
+      expect(await repository.watchThemePreference().first, preference);
+    }
+  });
+
+  test('malformed theme preference falls back to dark', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    await database.setAppSetting('theme_preference', 'sepia');
+
+    expect(
+      await repository.watchThemePreference().first,
+      AppThemePreference.dark,
+    );
+  });
+
   test('guided trial is incomplete by default', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);

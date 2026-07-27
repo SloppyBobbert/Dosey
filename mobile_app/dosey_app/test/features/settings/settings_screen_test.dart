@@ -24,6 +24,7 @@ import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dar
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/onboarding/household_membership_gate.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
+import 'package:dosey_app/features/settings/settings_accordion.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -31,6 +32,62 @@ import 'package:flutter_test/flutter_test.dart';
 import '../../support/fake_app_scope_dependencies.dart';
 
 void main() {
+  testWidgets('personal settings use eight accordions in the required order', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    final titles = _accordionTitles(tester);
+    expect(titles, const [
+      'Profile, account & device',
+      'Household & robot profile',
+      'History & data',
+      'Action PIN',
+      'Reminder notifications',
+      'Appearance',
+      'Help, guided trial & setup',
+      'Safety & limitations',
+    ]);
+    expect(find.text('Device mode'), findsOneWidget);
+    final accordions = _accordions(tester);
+    expect(accordions[0].expanded, isTrue);
+    expect(accordions[4].expanded, isTrue);
+    expect(accordions[1].expanded, isFalse);
+    expect(find.text('No local admin changes recorded yet.'), findsNothing);
+  });
+
+  testWidgets('robot settings add Robot Face options in the required order', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpAndSettle();
+
+    final titles = _accordionTitles(tester);
+    expect(titles, const [
+      'Profile, account & device',
+      'Household & robot profile',
+      'History & data',
+      'Action PIN',
+      'Reminder notifications',
+      'Appearance',
+      'Robot Face options',
+      'Help, guided trial & setup',
+      'Safety & limitations',
+    ]);
+  });
+
   testWidgets('backup database section exposes local maintenance actions', (
     WidgetTester tester,
   ) async {
@@ -494,51 +551,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Robot Face'), findsNothing);
+    expect(find.text('Robot Face options'), findsNothing);
     expect(find.text('Flip face 180°'), findsNothing);
     expect(find.text('Dim after inactivity'), findsNothing);
-
-    await tester.scrollUntilVisible(
-      find.text('Household & robot profile'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Household & robot profile').hitTestable(),
-      findsOneWidget,
-    );
-
-    await tester.scrollUntilVisible(
-      find.text('Admin history'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('Admin history').hitTestable(), findsOneWidget);
-    expect(find.text('No local admin changes recorded yet.'), findsOneWidget);
-
-    final listView = tester.widget<ListView>(find.byType(ListView));
-    final children =
-        (listView.childrenDelegate as SliverChildListDelegate).children;
-    final childTypes = children
-        .map((child) => child.runtimeType.toString())
-        .toList();
-    final actionPinIndex = childTypes.indexOf('_ActionPinCard');
-    final householdIndex = childTypes.indexOf('_HouseholdAccountCard');
-    final adminHistoryIndex = childTypes.indexOf('_AdminHistoryCard');
-    final robotFaceIndex = childTypes.indexOf('_RobotFaceSettingsSection');
-    final reminderIndex = childTypes.indexOf('_ReminderNotificationCard');
-
-    expect(actionPinIndex, isNonNegative);
-    expect(householdIndex, greaterThan(actionPinIndex));
-    expect(adminHistoryIndex, greaterThan(householdIndex));
-    expect(robotFaceIndex, greaterThan(adminHistoryIndex));
-    expect(reminderIndex, greaterThan(robotFaceIndex));
-
-    expect(children[householdIndex - 1], isA<SizedBox>());
-    expect((children[householdIndex - 1] as SizedBox).height, 12);
-    expect(children[adminHistoryIndex - 1], isA<SizedBox>());
-    expect((children[adminHistoryIndex - 1] as SizedBox).height, 12);
+    expect(_accordionTitles(tester), isNot(contains('Robot Face options')));
   });
 
   testWidgets('robot face controls persist and update state', (
@@ -924,7 +940,7 @@ void main() {
     final settings = DoseyAppScope.of(scope).settings;
 
     await _scrollToActionPin(tester);
-    expect(find.text('Action PIN'), findsOneWidget);
+    expect(find.text('Action PIN'), findsWidgets);
     expect(find.text('PIN is off'), findsOneWidget);
 
     await tester.tap(find.text('Enable PIN'));
@@ -1132,7 +1148,7 @@ void main() {
 
       expect(
         find.text('Household & robot profile').hitTestable(),
-        findsOneWidget,
+        findsWidgets,
       );
       expect(find.text('Profile & device').hitTestable(), findsOneWidget);
 
@@ -1162,15 +1178,14 @@ void main() {
       role: AppDeviceRole.androidPersonal,
     );
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
-    await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(
-      find.text('Household & robot profile'),
-      300,
-      scrollable: find.byType(Scrollable).first,
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+      ),
     );
     await tester.pumpAndSettle();
+
     await tester.tap(find.text('Profile & device'));
     await tester.pumpAndSettle();
 
@@ -1198,15 +1213,14 @@ void main() {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
-    await tester.pumpAndSettle();
-
-    await tester.scrollUntilVisible(
-      find.text('Household & robot profile'),
-      300,
-      scrollable: find.byType(Scrollable).first,
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+      ),
     );
     await tester.pumpAndSettle();
+
     await tester.tap(find.text('Profile & device'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Edit household & robot profile'));
@@ -1818,6 +1832,17 @@ void main() {
   });
 }
 
+List<String> _accordionTitles(WidgetTester tester) {
+  return _accordions(tester).map((accordion) => accordion.title).toList();
+}
+
+List<SettingsAccordion> _accordions(WidgetTester tester) {
+  final listView = tester.widget<ListView>(find.byType(ListView));
+  final children =
+      (listView.childrenDelegate as SliverChildListDelegate).children;
+  return children.whereType<SettingsAccordion>().toList();
+}
+
 Finder _findRichTextContaining(String text) {
   return find.byWidgetPredicate(
     (widget) => widget is RichText && widget.text.toPlainText().contains(text),
@@ -1842,6 +1867,14 @@ AppDeviceRole? _selectedDeviceRole(WidgetTester tester) {
 
 Future<void> _scrollToRobotFace(WidgetTester tester) async {
   await tester.scrollUntilVisible(
+    find.text('Robot Face options'),
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Robot Face options'));
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
     find.text('Robot Face'),
     300,
     scrollable: find.byType(Scrollable).first,
@@ -1856,6 +1889,11 @@ Future<void> _scrollToActionPin(WidgetTester tester) async {
     scrollable: find.byType(Scrollable).first,
   );
   await tester.pumpAndSettle();
+  if (find.text('PIN is off').evaluate().isEmpty &&
+      find.text('PIN is on').evaluate().isEmpty) {
+    await tester.tap(find.text('Action PIN').first);
+    await tester.pumpAndSettle();
+  }
 }
 
 Future<void> _setDropdownValue<T>(

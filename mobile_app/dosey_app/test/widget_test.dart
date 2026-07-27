@@ -25,6 +25,8 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
+import 'package:dosey_app/features/carousel/carousel_hub_screen.dart';
+import 'package:dosey_app/features/schedule/schedule_hub_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -119,8 +121,8 @@ void main() {
     await tester.tap(find.text('Robot Mode'));
     await _pumpAppFrame(tester);
 
-    expect(find.text('Dosey'), findsOneWidget);
-    expect(find.text('Controller'), findsOneWidget);
+    expect(find.text('Robot Face'), findsOneWidget);
+    expect(find.text('Dashboard'), findsWidgets);
     expect(find.text('Sign in to continue'), findsNothing);
   });
 
@@ -229,14 +231,10 @@ void main() {
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
 
-    await tester.tap(find.text('Settings'));
+    await _openBottomDestination(tester, 'Settings');
     await _pumpAppFrame(tester);
-    await tester.scrollUntilVisible(
-      find.text('Start over setup'),
-      200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await _pumpAppFrame(tester);
+    await _openSettingsAccordion(tester, 'Help, guided trial & setup');
+    await _scrollSettingsUntilVisible(tester, find.text('Start over setup'));
     await tester.tap(find.text('Start over setup').hitTestable());
     await _pumpAppFrame(tester);
 
@@ -257,7 +255,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Settings'));
+    await _openBottomDestination(tester, 'Settings');
     await _pumpAppFrame(tester);
 
     expect(find.text('Profile'), findsOneWidget);
@@ -269,8 +267,8 @@ void main() {
 
     expect(find.text('Device mode'), findsOneWidget);
     expect(find.text('Android personal phone'), findsOneWidget);
-    await tester.scrollUntilVisible(find.text('Prototype safety'), 200);
-    await _pumpAppFrame(tester);
+    await _openSettingsAccordion(tester, 'Safety & limitations');
+    await _scrollSettingsUntilVisible(tester, find.text('Prototype safety'));
 
     expect(find.text('Prototype safety'), findsOneWidget);
     expect(
@@ -294,7 +292,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Settings'));
+    await _openBottomDestination(tester, 'Settings');
     await _pumpAppFrame(tester);
 
     expect(find.text('Dosey Tester'), findsOneWidget);
@@ -318,15 +316,13 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await _openSettingsMenu(tester);
-    await tester.tap(find.text('Reminder notifications').hitTestable());
-    await _pumpAppFrame(tester);
+    await _openReminderSettings(tester);
+
     await _scrollSettingsUntilVisible(
       tester,
       find.text('Reminder notifications'),
     );
-
-    expect(find.text('Reminder notifications'), findsOneWidget);
+    expect(find.text('Reminder notifications'), findsWidgets);
     expect(find.text('Notifications allowed'), findsOneWidget);
     expect(
       find.text(
@@ -361,13 +357,7 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await _openSettingsMenu(tester);
-    await tester.tap(find.text('Reminder notifications').hitTestable());
-    await _pumpAppFrame(tester);
-    await _scrollSettingsUntilVisible(
-      tester,
-      find.text('Reminder notifications'),
-    );
+    await _openReminderSettings(tester);
 
     expect(find.text('Notifications allowed'), findsOneWidget);
 
@@ -396,13 +386,7 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await _openSettingsMenu(tester);
-    await tester.tap(find.text('Reminder notifications').hitTestable());
-    await _pumpAppFrame(tester);
-    await _scrollSettingsUntilVisible(
-      tester,
-      find.text('Reminder notifications'),
-    );
+    await _openReminderSettings(tester);
 
     expect(find.text('Notifications blocked'), findsOneWidget);
 
@@ -427,13 +411,7 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await _openSettingsMenu(tester);
-    await tester.tap(find.text('Reminder notifications').hitTestable());
-    await _pumpAppFrame(tester);
-    await _scrollSettingsUntilVisible(
-      tester,
-      find.text('Reminder notifications'),
-    );
+    await _openReminderSettings(tester);
 
     expect(find.text('Notification status unknown'), findsOneWidget);
     expect(
@@ -463,13 +441,7 @@ void main() {
       ),
     );
     await _pumpAppFrame(tester);
-    await _openSettingsMenu(tester);
-    await tester.tap(find.text('Reminder notifications').hitTestable());
-    await _pumpAppFrame(tester);
-    await _scrollSettingsUntilVisible(
-      tester,
-      find.text('Reminder notifications'),
-    );
+    await _openReminderSettings(tester);
 
     await tester.tap(find.text('Send test notification'));
     await _pumpAppFrame(tester);
@@ -503,13 +475,7 @@ void main() {
       ),
     );
     await _pumpAppFrame(tester);
-    await _openSettingsMenu(tester);
-    await tester.tap(find.text('Reminder notifications').hitTestable());
-    await _pumpAppFrame(tester);
-    await _scrollSettingsUntilVisible(
-      tester,
-      find.text('Reminder notifications'),
-    );
+    await _openReminderSettings(tester);
 
     await tester.tap(find.text('Send test notification'));
     await _pumpAppFrame(tester);
@@ -546,13 +512,7 @@ void main() {
       ),
     );
     await _pumpAppFrame(tester);
-    await _openSettingsMenu(tester);
-    await tester.tap(find.text('Reminder notifications').hitTestable());
-    await _pumpAppFrame(tester);
-    await _scrollSettingsUntilVisible(
-      tester,
-      find.text('Reminder notifications'),
-    );
+    await _openReminderSettings(tester);
 
     await tester.tap(find.text('Send test notification'));
     await _pumpAppFrame(tester);
@@ -562,7 +522,7 @@ void main() {
     expect(scheduler.scheduledReminders, isEmpty);
   });
 
-  testWidgets('settings menu opens the full settings screen', (
+  testWidgets('Settings destination opens the full settings screen', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -577,17 +537,18 @@ void main() {
     await _pumpAppFrame(tester);
     await _openSettingsMenu(tester);
 
-    expect(find.text('Account'), findsWidgets);
-    expect(find.text('Device mode'), findsWidgets);
-    expect(find.text('Reminder notifications'), findsWidgets);
-    expect(find.text('Help & About'), findsOneWidget);
-    expect(find.text('Start over setup'), findsOneWidget);
-
-    await tester.tap(find.text('All settings'));
-    await _pumpAppFrame(tester);
-
     expect(find.text('Account'), findsOneWidget);
     expect(find.text('Cloud sync is not active yet.'), findsOneWidget);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Reminder notifications'),
+    );
+    expect(find.text('Reminder notifications'), findsWidgets);
+    await _scrollSettingsUntilVisible(
+      tester,
+      find.text('Help, guided trial & setup'),
+    );
+    expect(find.text('Help, guided trial & setup'), findsOneWidget);
   });
 
   testWidgets('settings menu opens account section and signs out', (
@@ -631,23 +592,17 @@ void main() {
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
 
-    expect(
-      find.descendant(of: find.byType(AppBar), matching: find.text('Today')),
-      findsOneWidget,
-    );
+    expect(find.text('Robot Face'), findsWidgets);
 
-    await tester.tap(find.text('Prescriptions'));
+    await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
 
     expect(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.text('Prescriptions'),
-      ),
+      find.descendant(of: find.byType(AppBar), matching: find.text('Schedule')),
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Settings'));
+    await _openBottomDestination(tester, 'Settings');
     await _pumpAppFrame(tester);
 
     expect(
@@ -666,19 +621,15 @@ void main() {
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
 
-    expect(find.text('Dosey'), findsOneWidget);
-    expect(find.text('Today'), findsWidgets);
-    expect(find.text('Prescriptions'), findsOneWidget);
-    expect(find.text('Schedule'), findsOneWidget);
-    expect(find.text('Carousel'), findsOneWidget);
-    expect(find.text('Controller'), findsOneWidget);
-    expect(find.text('Log'), findsOneWidget);
-    expect(find.text('Settings'), findsOneWidget);
-    expect(find.text('Prototype safety'), findsOneWidget);
-    expect(
-      find.text('Use candy, beads, dry beans, vitamins, or fake pills.'),
-      findsOneWidget,
-    );
+    final navigationBar = find.byType(NavigationBar);
+    for (final label in ['Dashboard', 'Schedule', 'Carousel', 'Settings']) {
+      expect(
+        find.descendant(of: navigationBar, matching: find.text(label)),
+        findsOneWidget,
+      );
+    }
+    expect(find.text('Today'), findsNothing);
+    expect(find.text('Log'), findsNothing);
   });
 
   testWidgets('Carousel screen shows loading safety empty state', (
@@ -690,7 +641,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Guided carousel loading'), findsOneWidget);
@@ -714,10 +665,10 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
 
-    await tester.tap(find.widgetWithText(FilledButton, 'Start refill/loading'));
+    await _openRefillFlow(tester);
     await tester.pumpAndSettle();
 
     expect(find.text('Choose a refill path'), findsOneWidget);
@@ -743,7 +694,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Loading bay'), findsOneWidget);
@@ -792,7 +743,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
     await tester.scrollUntilVisible(find.text('Refill countdown'), 220);
     await _pumpAppFrame(tester);
@@ -841,7 +792,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
     await tester.scrollUntilVisible(find.text('Review refill'), 220);
     await _pumpAppFrame(tester);
@@ -889,12 +840,10 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Carousel'));
+      await _openCarouselHub(tester);
       await _pumpAppFrame(tester);
 
-      await tester.tap(
-        find.widgetWithText(FilledButton, 'Start refill/loading'),
-      );
+      await _openRefillFlow(tester);
       await tester.pumpAndSettle();
 
       expect(find.text('Choose a refill path'), findsOneWidget);
@@ -931,7 +880,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Slot 1'), findsNothing);
@@ -1012,11 +961,10 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
-    await _pumpAppFrame(tester);
+    await _openControllerHub(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Today'));
+    await _openToday(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Dispense from slot 1'), findsOneWidget);
@@ -1126,11 +1074,11 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Controller'));
+      await _openControllerHub(tester);
       await _pumpAppFrame(tester);
       await tester.tap(find.text('Connect controller'));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Today'));
+      await _openToday(tester);
       await _pumpAppFrame(tester);
 
       await tester.ensureVisible(find.text('Dispense from slot 1'));
@@ -1207,6 +1155,7 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
+      await _openToday(tester);
       await tester.ensureVisible(find.text('Confirm taken'));
       await tester.tap(find.text('Confirm taken'));
       await _pumpAppFrame(tester);
@@ -1299,11 +1248,11 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Controller'));
+      await _openControllerHub(tester);
       await _pumpAppFrame(tester);
       await tester.tap(find.text('Connect controller'));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Today'));
+      await _openToday(tester);
       await _pumpAppFrame(tester);
 
       expect(find.text('Dispense from slot 2'), findsOneWidget);
@@ -1383,11 +1332,11 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Controller'));
+      await _openControllerHub(tester);
       await _pumpAppFrame(tester);
       await tester.tap(find.text('Connect controller'));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Today'));
+      await _openToday(tester);
       await _pumpAppFrame(tester);
 
       await tester.ensureVisible(find.text('Dispense from slot 1'));
@@ -1428,11 +1377,10 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
-    await _pumpAppFrame(tester);
+    await _openControllerHub(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Today'));
+    await _openToday(tester);
     await _pumpAppFrame(tester);
 
     final dispenseButton = tester.widget<FilledButton>(
@@ -1460,11 +1408,10 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
-    await _pumpAppFrame(tester);
+    await _openControllerHub(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Today'));
+    await _openToday(tester);
     await _pumpAppFrame(tester);
 
     final dispenseButton = tester.widget<FilledButton>(
@@ -1472,7 +1419,7 @@ void main() {
     );
     expect(dispenseButton.onPressed, isNotNull);
     await DoseyAppScope.of(
-      tester.element(find.byType(OnboardingGate)),
+      tester.element(find.byType(MaterialApp)),
     ).controller.disconnect();
 
     await _runAsyncCallback(dispenseButton.onPressed!);
@@ -1497,11 +1444,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Today'));
+    await _openToday(tester);
     await _pumpAppFrame(tester);
 
     final dispenseButton = tester.widget<FilledButton>(
@@ -1555,6 +1502,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     final confirmButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Confirm taken'),
@@ -1605,11 +1553,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Today'));
+    await _openToday(tester);
     await _pumpAppFrame(tester);
 
     final dispenseButton = tester.widget<FilledButton>(
@@ -1641,6 +1589,7 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
+      await _openToday(tester);
 
       final confirmButton = tester.widget<FilledButton>(
         find.widgetWithText(FilledButton, 'Confirm taken'),
@@ -1677,6 +1626,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     final confirmButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Confirm taken'),
@@ -1715,6 +1665,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     final confirmButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Confirm taken'),
@@ -1751,11 +1702,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Today'));
+    await _openToday(tester);
     await _pumpAppFrame(tester);
 
     await tester.ensureVisible(find.text('Dispense from slot 1'));
@@ -1789,11 +1740,11 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Controller'));
+      await _openControllerHub(tester);
       await _pumpAppFrame(tester);
       await tester.tap(find.text('Connect controller'));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Today'));
+      await _openToday(tester);
       await _pumpAppFrame(tester);
 
       await tester.ensureVisible(find.text('Dispense from slot 1'));
@@ -1828,6 +1779,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     await tester.ensureVisible(find.text('Confirm taken'));
     await tester.tap(find.widgetWithText(FilledButton, 'Confirm taken'));
@@ -1839,7 +1791,7 @@ void main() {
             .getSingle();
     expect(slot.status, CarouselSlotStatus.needsReview.storageValue);
 
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
     await tester.scrollUntilVisible(find.text('Slot 1'), 420);
     await _pumpAppFrame(tester);
@@ -1871,6 +1823,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     await tester.ensureVisible(find.text('Confirm taken'));
     await tester.tap(find.widgetWithText(FilledButton, 'Confirm taken'));
@@ -1903,6 +1856,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     await tester.ensureVisible(find.text('Confirm taken'));
     await tester.tap(find.widgetWithText(FilledButton, 'Confirm taken'));
@@ -1928,6 +1882,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     await tester.ensureVisible(find.text('Skip dose'));
     await tester.tap(find.text('Skip dose'));
@@ -1952,6 +1907,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     await tester.ensureVisible(find.text('Dispense from slot 1'));
     await _pumpAppFrame(tester);
@@ -1978,11 +1934,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Today'));
+    await _openToday(tester);
     await _pumpAppFrame(tester);
 
     await tester.ensureVisible(find.text('Dispense from slot 1'));
@@ -2006,11 +1962,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
     await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
     await _pumpAppFrame(tester);
@@ -2051,11 +2007,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
     await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
     await _pumpAppFrame(tester);
@@ -2091,11 +2047,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
     await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
     await _pumpAppFrame(tester);
@@ -2125,11 +2081,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
     await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
     await _pumpAppFrame(tester);
@@ -2139,7 +2095,7 @@ void main() {
     );
     expect(dispenseButton.onPressed, isNotNull);
     await DoseyAppScope.of(
-      tester.element(find.byType(OnboardingGate)),
+      tester.element(find.byType(MaterialApp)),
     ).controller.disconnect();
 
     await _runAsyncCallback(dispenseButton.onPressed!);
@@ -2164,7 +2120,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
     await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
     await _pumpAppFrame(tester);
@@ -2191,11 +2147,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Connect controller'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Carousel'));
+    await _openCarouselHub(tester);
     await _pumpAppFrame(tester);
     await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
     await _pumpAppFrame(tester);
@@ -2218,11 +2174,11 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Controller'));
+      await _openControllerHub(tester);
       await _pumpAppFrame(tester);
       await tester.tap(find.text('Connect controller'));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Carousel'));
+      await _openCarouselHub(tester);
       await _pumpAppFrame(tester);
       await tester.scrollUntilVisible(find.text('Dispense slot'), 420);
       await _pumpAppFrame(tester);
@@ -2260,7 +2216,7 @@ void main() {
 
     await _pumpAppFrame(tester);
 
-    expect(find.text('Dosey is ready for your day'), findsOneWidget);
+    expect(find.text('Robot Face'), findsOneWidget);
   });
 
   testWidgets('Today screen shows polished empty reminder landing', (
@@ -2272,11 +2228,12 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     expect(find.text('Dosey is ready for your day'), findsOneWidget);
-    expect(find.text('Local-only'), findsOneWidget);
-    expect(find.text('Prototype-safe'), findsOneWidget);
-    expect(find.text('Manual confirmation'), findsOneWidget);
+    expect(find.text('Local-only'), findsNothing);
+    expect(find.text('Prototype-safe'), findsNothing);
+    expect(find.text('Manual confirmation'), findsNothing);
     expect(find.text('No reminders scheduled for today.'), findsOneWidget);
     expect(
       find.text('Add your first schedule from the Schedule tab.'),
@@ -2304,6 +2261,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     expect(find.text('Scheduled reminders'), findsOneWidget);
     expect(find.text('08:30'), findsOneWidget);
@@ -2322,6 +2280,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     expect(find.text('Next dose'), findsOneWidget);
     expect(find.text('Vitamin D'), findsWidgets);
@@ -2356,6 +2315,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     await tester.scrollUntilVisible(find.text('Next schedule timeline'), 220);
     await _pumpAppFrame(tester);
@@ -2400,6 +2360,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.scrollUntilVisible(find.text('Next schedule timeline'), 220);
     await _pumpAppFrame(tester);
 
@@ -2428,6 +2389,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     expect(find.text('10:00 · Vitamin D'), findsOneWidget);
     expect(find.text('08:30 · Vitamin D'), findsNothing);
@@ -2455,6 +2417,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     expect(find.text('Current dose'), findsOneWidget);
     expect(find.text('08:30 · Vitamin D'), findsOneWidget);
@@ -2491,6 +2454,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     expect(find.text('Current dose'), findsOneWidget);
     expect(find.text('08:30 · Vitamin D3'), findsOneWidget);
@@ -2526,6 +2490,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     expect(find.text('Current dose'), findsOneWidget);
     expect(find.text('12:00 · Allergy pill'), findsOneWidget);
@@ -2546,6 +2511,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     expect(find.text('Current dose'), findsOneWidget);
     expect(find.text('08:30 · Vitamin D'), findsOneWidget);
@@ -2573,6 +2539,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Log snooze'));
     await tester.tap(find.text('Log snooze'));
     await _pumpAppFrame(tester);
@@ -2600,10 +2567,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Confirm taken'));
     await tester.tap(find.text('Confirm taken'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Log'));
+    await _openDoseHistory(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Dose taken confirmed'), findsOneWidget);
@@ -2621,6 +2589,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Confirm taken'));
     await tester.tap(find.text('Confirm taken'));
     await _pumpAppFrame(tester);
@@ -2641,6 +2610,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Already taken'));
     await tester.tap(find.text('Already taken'));
     await _pumpAppFrame(tester);
@@ -2664,6 +2634,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Already taken'));
     await tester.tap(find.text('Already taken'));
     await _pumpAppFrame(tester);
@@ -2684,6 +2655,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Taken early'));
     await tester.tap(find.text('Taken early'));
     await _pumpAppFrame(tester);
@@ -2707,6 +2679,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Taken early'));
     await tester.tap(find.text('Taken early'));
     await _pumpAppFrame(tester);
@@ -2727,6 +2700,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Taken late'));
     await tester.tap(find.text('Taken late'));
     await _pumpAppFrame(tester);
@@ -2750,6 +2724,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Taken late'));
     await tester.tap(find.text('Taken late'));
     await _pumpAppFrame(tester);
@@ -2770,6 +2745,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Ask caregiver'));
     await tester.tap(find.text('Ask caregiver'));
     await _pumpAppFrame(tester);
@@ -2799,6 +2775,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Skip dose'));
     await tester.tap(find.text('Skip dose'));
     await _pumpAppFrame(tester);
@@ -2808,7 +2785,7 @@ void main() {
       (event) => event.kind == DoseLogEventKind.doseSkipped.name,
     );
 
-    await tester.tap(find.text('Log'));
+    await _openDoseHistory(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Dose skipped'), findsOneWidget);
@@ -2826,10 +2803,11 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
+      await _openToday(tester);
       await tester.ensureVisible(find.text('Skip dose'));
       await tester.tap(find.text('Skip dose'));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Log'));
+      await _openDoseHistory(tester);
       await _pumpAppFrame(tester);
 
       final prescription = await (database.select(
@@ -2849,6 +2827,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Mark missed'));
     await tester.tap(find.text('Mark missed'));
     await _pumpAppFrame(tester);
@@ -2860,7 +2839,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.text('Log'));
+    await _openDoseHistory(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Dose missed'), findsOneWidget);
@@ -2878,10 +2857,11 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.ensureVisible(find.text('Mark missed'));
     await tester.tap(find.text('Mark missed'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Log'));
+    await _openDoseHistory(tester);
     await _pumpAppFrame(tester);
 
     final prescription = await (database.select(
@@ -2917,6 +2897,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     expect(find.text('Confirm dose taken manually'), findsNothing);
     expect(await database.select(database.doseLogEvents).get(), isEmpty);
@@ -2932,9 +2913,10 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
     await tester.tap(find.text('Confirm dose taken manually'));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Log'));
+    await _openDoseHistory(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Dose taken confirmed'), findsOneWidget);
@@ -2953,6 +2935,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
+    await _openToday(tester);
 
     final heroButton = tester.widget<FilledButton>(
       find.widgetWithText(FilledButton, 'Confirm dose taken manually'),
@@ -3003,7 +2986,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Log'));
+    await _openDoseHistory(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Dose history'), findsOneWidget);
@@ -3023,7 +3006,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Prescriptions'));
+    await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('No prescriptions yet.'), findsOneWidget);
@@ -3076,7 +3059,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Prescriptions'));
+    await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
 
     await tester.tap(find.text('Add prescription'));
@@ -3136,7 +3119,7 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Prescriptions'));
+      await _openPrescriptions(tester);
       await _pumpAppFrame(tester);
 
       await tester.tap(find.byTooltip('Edit prescription'));
@@ -3178,7 +3161,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Prescriptions'));
+    await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Medication cabinet'), findsOneWidget);
@@ -3202,7 +3185,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Prescriptions'));
+    await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
 
     await tester.tap(find.byTooltip('Schedule prescription'));
@@ -3217,7 +3200,9 @@ void main() {
     await tester.tap(find.text('Save schedule'));
     await _pumpAppFrame(tester);
 
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
+    await _pumpAppFrame(tester);
+    await tester.scrollUntilVisible(find.text('Vitamin D'), 220);
     await _pumpAppFrame(tester);
 
     expect(find.text('Vitamin D'), findsOneWidget);
@@ -3245,7 +3230,9 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Prescriptions'));
+    await _openPrescriptions(tester);
+    await _pumpAppFrame(tester);
+    await tester.scrollUntilVisible(find.text('Vitamin D'), 220);
     await _pumpAppFrame(tester);
 
     expect(find.text('Vitamin D'), findsOneWidget);
@@ -3274,7 +3261,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Prescriptions'));
+    await _openPrescriptions(tester);
     await _pumpAppFrame(tester);
 
     await tester.tap(find.byTooltip('View schedule details'));
@@ -3301,7 +3288,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(
@@ -3335,7 +3322,9 @@ void main() {
 
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Schedule'));
+      await _openSchedule(tester);
+      await _pumpAppFrame(tester);
+      await tester.scrollUntilVisible(find.text('Legacy reminder'), 220);
       await _pumpAppFrame(tester);
 
       expect(find.text('Legacy reminder'), findsOneWidget);
@@ -3355,7 +3344,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('No schedules yet.'), findsOneWidget);
@@ -3367,6 +3356,8 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
     await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
     await tester.tap(find.text('Save schedule'));
+    await _pumpAppFrame(tester);
+    await tester.scrollUntilVisible(find.text('Vitamin D'), 220);
     await _pumpAppFrame(tester);
 
     expect(find.text('Vitamin D'), findsOneWidget);
@@ -3388,7 +3379,7 @@ void main() {
       DoseyApp(database: database, reminderScheduler: scheduler),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     await tester.tap(find.text('Add schedule'));
@@ -3396,6 +3387,8 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
     await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
     await tester.tap(find.text('Save schedule'));
+    await _pumpAppFrame(tester);
+    await tester.scrollUntilVisible(find.text('Vitamin D'), 220);
     await _pumpAppFrame(tester);
 
     expect(find.text('Vitamin D'), findsWidgets);
@@ -3421,7 +3414,7 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Notification alerts are blocked'), findsOneWidget);
@@ -3453,7 +3446,7 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Notification alert status unknown'), findsOneWidget);
@@ -3481,7 +3474,7 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Notification alerts are blocked'), findsOneWidget);
@@ -3508,7 +3501,7 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Notification alerts look ready'), findsOneWidget);
@@ -3541,7 +3534,7 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Notification alerts look ready'), findsOneWidget);
@@ -3574,7 +3567,7 @@ void main() {
       DoseyApp(database: database, permissionGateway: permissions),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Notification alert status unknown'), findsOneWidget);
@@ -3605,12 +3598,12 @@ void main() {
       DoseyApp(database: database, notificationTapController: notificationTaps),
     );
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
-      2,
+      1,
     );
     final prescriptionBeforeTap = await (database.select(
       database.prescriptions,
@@ -3661,7 +3654,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Routine builder'), findsOneWidget);
@@ -3688,11 +3681,13 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Active schedule'), findsOneWidget);
     expect(find.text('Schedule 1'), findsWidgets);
+    await tester.scrollUntilVisible(find.text('Vitamin D'), 220);
+    await _pumpAppFrame(tester);
     expect(find.text('Vitamin D'), findsOneWidget);
 
     await tester.tap(find.text('Add schedule profile'));
@@ -3732,7 +3727,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Schedule 1 · 1 schedule'), findsOneWidget);
@@ -3763,7 +3758,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     await tester.tap(find.text('Add schedule'));
@@ -3795,7 +3790,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Controller disconnected'), findsOneWidget);
@@ -3832,7 +3827,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Controller'));
+    await _openControllerHub(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('Hardware bench'), findsOneWidget);
@@ -3857,7 +3852,7 @@ void main() {
     try {
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Settings'));
+      await _openBottomDestination(tester, 'Settings');
       await _pumpAppFrame(tester);
 
       expect(find.text('iOS personal phone'), findsOneWidget);
@@ -3880,7 +3875,7 @@ void main() {
     try {
       await tester.pumpWidget(DoseyApp(database: database));
       await _pumpAppFrame(tester);
-      await tester.tap(find.text('Settings'));
+      await _openBottomDestination(tester, 'Settings');
       await _pumpAppFrame(tester);
       await tester.tap(find.text('Sign out'));
       await _pumpAppFrame(tester);
@@ -3903,7 +3898,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     expect(find.text('No schedules yet.'), findsOneWidget);
@@ -3914,6 +3909,8 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Hour'), '8');
     await tester.enterText(find.widgetWithText(TextFormField, 'Minute'), '30');
     await tester.tap(find.text('Save schedule'));
+    await _pumpAppFrame(tester);
+    await tester.scrollUntilVisible(find.text('Vitamin D'), 220);
     await _pumpAppFrame(tester);
 
     expect(find.text('Vitamin D'), findsOneWidget);
@@ -3971,7 +3968,9 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
+    await _pumpAppFrame(tester);
+    await tester.scrollUntilVisible(find.text('Legacy reminder'), 220);
     await _pumpAppFrame(tester);
 
     expect(find.text('Legacy reminder'), findsOneWidget);
@@ -3995,7 +3994,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     await tester.tap(find.text('Add schedule'));
@@ -4033,7 +4032,7 @@ void main() {
 
     await tester.pumpWidget(DoseyApp(database: database));
     await _pumpAppFrame(tester);
-    await tester.tap(find.text('Schedule'));
+    await _openSchedule(tester);
     await _pumpAppFrame(tester);
 
     await tester.tap(find.text('Add schedule'));
@@ -4054,7 +4053,113 @@ Future<void> _acceptMedicalNotice(WidgetTester tester) async {
 }
 
 Future<void> _openSettingsMenu(WidgetTester tester) async {
-  await tester.tap(find.byTooltip('Open settings menu'));
+  await _openBottomDestination(tester, 'Settings');
+}
+
+Future<void> _openReminderSettings(WidgetTester tester) async {
+  await _openBottomDestination(tester, 'Settings');
+  await _scrollSettingsUntilVisible(
+    tester,
+    find.text('Send test notification'),
+  );
+}
+
+Future<void> _openRefillFlow(WidgetTester tester) async {
+  final button = find.widgetWithText(FilledButton, 'Start refill/loading');
+  tester.widget<FilledButton>(button).onPressed!();
+  await _pumpAppFrame(tester);
+}
+
+Future<void> _openSettingsAccordion(WidgetTester tester, String title) async {
+  final titleFinder = find.text(title);
+  await _scrollSettingsUntilVisible(tester, titleFinder);
+  await tester.ensureVisible(titleFinder.first);
+  await tester.pump();
+  await tester.tap(titleFinder.first);
+  await _pumpAppFrame(tester);
+}
+
+Future<void> _openBottomDestination(WidgetTester tester, String label) async {
+  var navigationBarFinder = find.byType(NavigationBar);
+  if (navigationBarFinder.evaluate().isEmpty) {
+    await tester.pageBack();
+    await _pumpAppFrame(tester);
+    navigationBarFinder = find.byType(NavigationBar);
+  }
+  final index = const [
+    'Dashboard',
+    'Schedule',
+    'Carousel',
+    'Settings',
+  ].indexOf(label);
+  expect(index, isNonNegative, reason: 'Unknown bottom destination: $label');
+  tester.widget<NavigationBar>(navigationBarFinder).onDestinationSelected!(
+    index,
+  );
+  await _pumpAppFrame(tester);
+  expect(
+    find.descendant(of: find.byType(AppBar), matching: find.text(label)),
+    findsOneWidget,
+  );
+}
+
+Future<void> _openControllerHub(WidgetTester tester) async {
+  await _openBottomDestination(tester, 'Carousel');
+  await tester.tap(
+    find.descendant(
+      of: find.byType(SegmentedButton<CarouselHubSegment>),
+      matching: find.text('Controller'),
+    ),
+  );
+  await _pumpAppFrame(tester);
+}
+
+Future<void> _openCarouselHub(WidgetTester tester) async {
+  await _openBottomDestination(tester, 'Carousel');
+  await tester.tap(
+    find.descendant(
+      of: find.byType(SegmentedButton<CarouselHubSegment>),
+      matching: find.text('Carousel'),
+    ),
+  );
+  await _pumpAppFrame(tester);
+}
+
+Future<void> _openSchedule(WidgetTester tester) async {
+  await _openBottomDestination(tester, 'Schedule');
+  await tester.tap(
+    find.descendant(
+      of: find.byType(SegmentedButton<ScheduleHubSegment>),
+      matching: find.text('Schedule'),
+    ),
+  );
+  await _pumpAppFrame(tester);
+}
+
+Future<void> _openPrescriptions(WidgetTester tester) async {
+  await _openBottomDestination(tester, 'Schedule');
+  await tester.tap(
+    find.descendant(
+      of: find.byType(SegmentedButton<ScheduleHubSegment>),
+      matching: find.text('Prescriptions'),
+    ),
+  );
+  await _pumpAppFrame(tester);
+}
+
+Future<void> _openToday(WidgetTester tester) async {
+  await _openBottomDestination(tester, 'Dashboard');
+  await tester.tap(find.text("Today's doses").hitTestable());
+  await _pumpAppFrame(tester);
+}
+
+Future<void> _openDoseHistory(WidgetTester tester) async {
+  await _openBottomDestination(tester, 'Settings');
+  await _scrollSettingsUntilVisible(tester, find.text('History & data'));
+  await tester.tap(find.text('History & data').hitTestable());
+  await _pumpAppFrame(tester);
+  await _scrollSettingsUntilVisible(tester, find.text('Open dose history'));
+  await tester.tap(find.text('Open dose history').hitTestable());
   await _pumpAppFrame(tester);
 }
 
@@ -4063,11 +4168,15 @@ Future<void> _scrollSettingsUntilVisible(
   Finder finder, {
   double delta = 200,
 }) async {
-  await tester.scrollUntilVisible(
-    finder,
-    delta,
-    scrollable: find.byType(Scrollable).first,
-  );
+  for (var attempt = 0; attempt < 20; attempt += 1) {
+    if (finder.hitTestable().evaluate().isNotEmpty) {
+      break;
+    }
+    final scrollable = find.byType(Scrollable).hitTestable().first;
+    await tester.drag(scrollable, Offset(0, -delta));
+    await tester.pump();
+  }
+  expect(finder, findsWidgets);
   await _pumpAppFrame(tester);
 }
 

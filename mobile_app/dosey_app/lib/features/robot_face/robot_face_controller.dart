@@ -18,6 +18,7 @@ import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:dosey_app/features/today/today_next_dose_helper.dart';
+import 'package:dosey_app/features/today/unresolved_missed_dose_helper.dart';
 
 class RobotFaceController {
   RobotFaceController({
@@ -531,74 +532,18 @@ class RobotFaceController {
     };
   }
 
-  bool _hasActiveMissedAlert(String doseId) {
-    DateTime? missedAt;
-    DateTime? recognizedAt;
-    for (final event in _events) {
-      if (event.doseId != doseId) {
-        continue;
-      }
-      switch (event.kind) {
-        case DoseLogEventKind.doseMissed:
-          missedAt = missedAt == null || event.occurredAt.isAfter(missedAt)
-              ? event.occurredAt
-              : missedAt;
-        case DoseLogEventKind.doseMissedRecognized:
-          recognizedAt =
-              recognizedAt == null || event.occurredAt.isAfter(recognizedAt)
-              ? event.occurredAt
-              : recognizedAt;
-        default:
-          break;
-      }
-    }
-
-    return missedAt != null &&
-        (recognizedAt == null || recognizedAt.isBefore(missedAt));
-  }
-
   _RobotFaceDisplayDose? _activeMissedAlertDose(DateTime now) {
-    _RobotFaceDisplayDose? activeDose;
-    DateTime? activeScheduledTime;
-    final today = now.isUtc
-        ? DateTime.utc(now.year, now.month, now.day)
-        : DateTime(now.year, now.month, now.day);
-    final candidateDates = <DateTime>[
-      today.subtract(const Duration(days: 1)),
-      today,
-    ];
-
-    for (final schedule in _activeSchedules) {
-      if (!schedule.isEnabled) {
-        continue;
-      }
-
-      for (final doseDate in candidateDates) {
-        final scheduledTime = TodayNextDoseHelper.scheduledTimeForDate(
-          schedule,
-          doseDate,
-        );
-        if (scheduledTime.isAfter(now)) {
-          continue;
-        }
-
-        final doseId = TodayNextDoseHelper.doseIdForDate(schedule.id, doseDate);
-        if (!_hasActiveMissedAlert(doseId)) {
-          continue;
-        }
-
-        if (activeScheduledTime == null ||
-            scheduledTime.isAfter(activeScheduledTime)) {
-          activeScheduledTime = scheduledTime;
-          activeDose = _RobotFaceDisplayDose(
-            schedule: schedule,
-            doseId: doseId,
+    final missed = UnresolvedMissedDoseHelper.latest(
+      _activeSchedules,
+      _events,
+      now: now,
+    );
+    return missed == null
+        ? null
+        : _RobotFaceDisplayDose(
+            schedule: missed.schedule,
+            doseId: missed.doseId,
           );
-        }
-      }
-    }
-
-    return activeDose;
   }
 
   ReminderSchedule? _scheduleForPostMissedRecognition(

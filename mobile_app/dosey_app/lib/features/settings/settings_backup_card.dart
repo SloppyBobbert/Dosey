@@ -1,7 +1,7 @@
 part of 'settings_screen.dart';
 
 class _BackupDatabaseCard extends StatefulWidget {
-  const _BackupDatabaseCard({super.key});
+  const _BackupDatabaseCard();
 
   @override
   State<_BackupDatabaseCard> createState() => _BackupDatabaseCardState();
