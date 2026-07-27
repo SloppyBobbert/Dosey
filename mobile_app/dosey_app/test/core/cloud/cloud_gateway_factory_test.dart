@@ -28,6 +28,34 @@ void main() {
     expect(gateways.pairing, isA<DisabledRobotPairingGateway>());
   });
 
+  test('web identity factory uses only the injected account API', () {
+    final configuration = CloudConfiguration.fromValues(
+      endpoint: 'https://example.appwrite.io/v1',
+      projectId: 'dosey-development',
+    );
+    var factoryCalls = 0;
+
+    final gateway = createWebCloudIdentityGateway(
+      configuration,
+      accountApiFactory: (receivedConfiguration) {
+        factoryCalls += 1;
+        expect(identical(receivedConfiguration, configuration), isTrue);
+        return _UnusedAccountApi();
+      },
+    );
+
+    expect(gateway, isA<AppwriteCloudIdentityGateway>());
+    expect(factoryCalls, 1);
+  });
+
+  test('web identity factory disables identity without configuration', () {
+    final gateway = createWebCloudIdentityGateway(
+      CloudConfiguration.fromValues(),
+    );
+
+    expect(gateway, isA<DisabledCloudIdentityGateway>());
+  });
+
   test('uses Appwrite adapter with complete cloud configuration', () {
     final configuration = CloudConfiguration.fromValues(
       endpoint: 'https://example.appwrite.io/v1',
@@ -94,8 +122,20 @@ class _UnusedAccountApi implements AppwriteAccountApi {
   Future<CloudIdentity?> getCurrentIdentity() => throw UnimplementedError();
 
   @override
-  Future<void> signInWithGoogle({required List<String> scopes}) =>
-      throw UnimplementedError();
+  Future<void> signInWithGoogle({
+    required List<String> scopes,
+    String? successUrl,
+    String? failureUrl,
+  }) => throw UnimplementedError();
+
+  @override
+  Future<String> requestEmailOtp(String email) => throw UnimplementedError();
+
+  @override
+  Future<void> completeEmailOtp({
+    required String userId,
+    required String secret,
+  }) => throw UnimplementedError();
 
   @override
   Future<void> signOutCurrentSession() => throw UnimplementedError();

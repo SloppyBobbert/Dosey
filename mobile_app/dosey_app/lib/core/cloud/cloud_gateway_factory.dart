@@ -11,6 +11,21 @@ import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 
 typedef AppwriteAccountApiFactory =
     AppwriteAccountApi Function(CloudConfiguration configuration);
+
+CloudIdentityGateway createWebCloudIdentityGateway(
+  CloudConfiguration configuration, {
+  AppwriteAccountApiFactory? accountApiFactory,
+}) {
+  if (!configuration.isEnabled) {
+    return const DisabledCloudIdentityGateway();
+  }
+
+  final accountApi = accountApiFactory != null
+      ? accountApiFactory(configuration)
+      : _createAppwriteAccountApi(configuration);
+  return AppwriteCloudIdentityGateway(accountApi);
+}
+
 typedef AppwriteTeamsApiFactory =
     AppwriteTeamsApi Function(CloudConfiguration configuration);
 typedef AppwritePairingApiFactory =

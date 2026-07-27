@@ -40,7 +40,19 @@ abstract interface class CloudIdentityGateway {
   // should replace its adapter rather than leak SDK account models into UI code.
   Stream<CloudIdentity> watchIdentity();
 
-  Future<CloudIdentity> signInWithGoogle({List<String> scopes = const []});
+  Future<CloudIdentity> signInWithGoogle({
+    List<String> scopes = const [],
+    String? successUrl,
+    String? failureUrl,
+  });
+
+  Future<String> requestEmailOtp(String email) =>
+      Future.error(const CloudNotConfiguredException());
+
+  Future<CloudIdentity> completeEmailOtp({
+    required String userId,
+    required String secret,
+  }) => Future.error(const CloudNotConfiguredException());
 
   Future<void> signOut();
 }
@@ -53,8 +65,21 @@ class DisabledCloudIdentityGateway implements CloudIdentityGateway {
       Stream.value(const CloudIdentity.signedOut());
 
   @override
-  Future<CloudIdentity> signInWithGoogle({List<String> scopes = const []}) =>
+  Future<CloudIdentity> signInWithGoogle({
+    List<String> scopes = const [],
+    String? successUrl,
+    String? failureUrl,
+  }) => Future.error(const CloudNotConfiguredException());
+
+  @override
+  Future<String> requestEmailOtp(String email) =>
       Future.error(const CloudNotConfiguredException());
+
+  @override
+  Future<CloudIdentity> completeEmailOtp({
+    required String userId,
+    required String secret,
+  }) => Future.error(const CloudNotConfiguredException());
 
   @override
   Future<void> signOut() async {}

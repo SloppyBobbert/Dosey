@@ -45,11 +45,23 @@ class _FakeCloudIdentityGateway implements CloudIdentityGateway {
   @override
   Future<CloudIdentity> signInWithGoogle({
     List<String> scopes = const [],
+    String? successUrl,
+    String? failureUrl,
   }) async {
     signInCount += 1;
     lastScopes = scopes;
     return identity;
   }
+
+  @override
+  Future<String> requestEmailOtp(String email) =>
+      Future.error(UnimplementedError());
+
+  @override
+  Future<CloudIdentity> completeEmailOtp({
+    required String userId,
+    required String secret,
+  }) => Future.error(UnimplementedError());
 
   @override
   Future<void> signOut() async {}
