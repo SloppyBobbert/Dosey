@@ -898,7 +898,7 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
                                   ).textTheme.titleMedium,
                                 ),
                                 Text(
-                                  'Code expires ${_formatExpiry(credential.expiresAt)}.',
+                                  'Code expires ${_formatExpiry(context, credential.expiresAt)}.',
                                 ),
                               ],
                             ],
@@ -940,28 +940,46 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
 
   Future<void> _showClaimDialog() async {
     var enteredCode = '';
+    String? validationMessage;
     final code = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Pair this robot phone'),
-        content: TextField(
-          onChanged: (value) => enteredCode = value,
-          textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(
-            labelText: '10-character pairing code',
-            border: OutlineInputBorder(),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Pair this robot phone'),
+          content: TextField(
+            onChanged: (value) {
+              enteredCode = value;
+              if (validationMessage != null && value.trim().isNotEmpty) {
+                setDialogState(() => validationMessage = null);
+              }
+            },
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              labelText: '10-character pairing code',
+              errorText: validationMessage,
+              border: const OutlineInputBorder(),
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final normalized = enteredCode.trim();
+                if (normalized.isEmpty) {
+                  setDialogState(
+                    () => validationMessage = 'Enter a pairing code.',
+                  );
+                  return;
+                }
+                Navigator.pop(context, normalized);
+              },
+              child: const Text('Pair robot'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, enteredCode),
-            child: const Text('Pair robot'),
-          ),
-        ],
       ),
     );
     if (!mounted || code == null) return;
@@ -983,10 +1001,12 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
     }
   }
 
-  String _formatExpiry(DateTime value) {
+  String _formatExpiry(BuildContext context, DateTime value) {
     final local = value.toLocal();
-    final minute = local.minute.toString().padLeft(2, '0');
-    return 'at ${local.hour}:$minute';
+    final formatted = MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(local));
+    return 'at $formatted';
   }
 
   void _showPairingError(

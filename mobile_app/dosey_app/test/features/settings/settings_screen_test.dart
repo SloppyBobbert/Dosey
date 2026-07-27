@@ -1301,6 +1301,75 @@ void main() {
     expect(find.text('Robot phone paired.'), findsOneWidget);
   });
 
+  testWidgets('Robot Mode keeps the pairing dialog open for a blank code', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    final pairing = _FakeRobotPairingGateway();
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        robotPairingGateway: pairing,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pair this robot phone'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, '10-character pairing code'),
+      '   ',
+    );
+    await tester.tap(find.text('Pair robot'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.text('Enter a pairing code.'), findsOneWidget);
+    expect(pairing.claimedCode, isNull);
+  });
+
+  testWidgets('Robot Mode shows the blocked-device pairing error', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    final pairing = _FakeRobotPairingGateway(
+      claimFailure: const RobotPairingException(
+        RobotPairingFailureReason.blockedDevice,
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        robotPairingGateway: pairing,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pair this robot phone'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, '10-character pairing code'),
+      'ABCD2EFGH3',
+    );
+    await tester.tap(find.text('Pair robot'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Too many attempts. Wait 15 minutes and try again.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('guided trial section shows saved completion status', (
     tester,
   ) async {
@@ -1517,6 +1586,9 @@ class _FakeHouseholdSyncGateway implements HouseholdSyncGateway {
 }
 
 class _FakeRobotPairingGateway implements RobotPairingGateway {
+  _FakeRobotPairingGateway({this.claimFailure});
+
+  final RobotPairingException? claimFailure;
   String? createdForRobotId;
   String? claimedCode;
 
@@ -1534,6 +1606,7 @@ class _FakeRobotPairingGateway implements RobotPairingGateway {
   @override
   Future<String> claimRobot({required String code}) async {
     claimedCode = code;
+    if (claimFailure case final failure?) throw failure;
     return 'robot-1';
   }
 }

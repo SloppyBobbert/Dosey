@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:appwrite/appwrite.dart';
 import 'package:appwrite/enums.dart' as appwrite_enums;
+import 'package:appwrite/models.dart' as models;
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 
 class PairingFunctionResponse {
@@ -28,11 +29,23 @@ class AppwriteRobotPairingApiAdapter implements AppwriteRobotPairingApi {
 
   @override
   Future<void> ensureAnonymousSession() async {
+    models.User user;
     try {
-      await _account.get();
+      user = await _account.get();
     } on AppwriteException catch (error) {
       if (error.code != 401) rethrow;
       await _account.createAnonymousSession();
+      user = await _account.get();
+    }
+
+    if (user.email.trim().isNotEmpty || user.phone.trim().isNotEmpty) {
+      await _account.deleteSession(sessionId: 'current');
+      await _account.createAnonymousSession();
+      user = await _account.get();
+    }
+
+    if (user.email.trim().isNotEmpty || user.phone.trim().isNotEmpty) {
+      throw AppwriteException('Dedicated anonymous session unavailable');
     }
   }
 
@@ -69,9 +82,9 @@ class AppwriteRobotPairingGateway implements RobotPairingGateway {
   Future<RobotPairingCredential> createPairingCode({
     required String robotId,
   }) async {
-    final response = await _api.execute(
-      functionId: _createPairingCodeFunctionId,
-      body: jsonEncode({'robotId': robotId}),
+    final response = await _execute(
+      _createPairingCodeFunctionId,
+      jsonEncode({'robotId': robotId}),
     );
     final body = _successfulBody(response);
     try {
@@ -88,11 +101,17 @@ class AppwriteRobotPairingGateway implements RobotPairingGateway {
 
   @override
   Future<String> claimRobot({required String code}) async {
-    await _api.ensureAnonymousSession();
+    try {
+      await _api.ensureAnonymousSession();
+    } on AppwriteException {
+      throw const RobotPairingException(
+        RobotPairingFailureReason.functionFailure,
+      );
+    }
     final normalized = code.trim().toUpperCase().replaceAll('-', '');
-    final response = await _api.execute(
-      functionId: _claimRobotFunctionId,
-      body: jsonEncode({'code': normalized}),
+    final response = await _execute(
+      _claimRobotFunctionId,
+      jsonEncode({'code': normalized}),
     );
     final body = _successfulBody(response);
     final robotId = body['robotId'];
@@ -102,6 +121,19 @@ class AppwriteRobotPairingGateway implements RobotPairingGateway {
       );
     }
     return robotId;
+  }
+
+  Future<PairingFunctionResponse> _execute(
+    String functionId,
+    String body,
+  ) async {
+    try {
+      return await _api.execute(functionId: functionId, body: body);
+    } on AppwriteException {
+      throw const RobotPairingException(
+        RobotPairingFailureReason.functionFailure,
+      );
+    }
   }
 
   Map<String, dynamic> _successfulBody(PairingFunctionResponse response) {

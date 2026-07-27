@@ -7,7 +7,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 ![Flutter](https://img.shields.io/badge/Flutter-3.44.1-02569B?logo=flutter&logoColor=white)
 ![Dart](https://img.shields.io/badge/Dart-3.12.1-0175C2?logo=dart&logoColor=white)
 ![Local data](https://img.shields.io/badge/local%20data-Drift%20%2F%20SQLite-336791)
-![Backend](https://img.shields.io/badge/backend-none%20yet-lightgrey)
+![Backend](https://img.shields.io/badge/backend-Appwrite-F02E65?logo=appwrite&logoColor=white)
 
 ## Current scope
 
@@ -15,7 +15,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Safety-first copy and local safety acknowledgement storage.
 - Local prescription storage with remaining-dose counts, refill thresholds, refill-add history, and medication-type display.
 - Local reminder schedule storage with add/edit/delete controls, enabled/disabled state, duplicate-time checks, and schedule profiles.
-- Local-only household/profile scaffold with robot phone metadata. Cloud sync, invites, and shared household state are not active yet.
+- Local household/profile metadata plus Appwrite-backed robot ownership and mounted-phone pairing. Human invitations and shared medication data are not active yet.
 - Four-digit Action PIN gating for protected admin edits, plus a separate local admin audit history for prescription, schedule, carousel, household/profile, and PIN lifecycle changes.
 - Carousel loading workflow with Daviky slot assignment, loaded/dispensed/review states, and controller-gated dispense actions.
 - Today dose-state logging that keeps dispense, visible, taken, skipped, missed, and caregiver/help actions separate.
@@ -24,15 +24,16 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Fixed WAV voice catalog for the mounted Robot Mode phone, with app-owned asset playback wiring, previews, category toggles, quiet hours, configurable repetition cooldowns, and reminder repeat policy controls for normal reminder speech.
 - Controller simulator plus a compile-tested D1 BLE transport and staged controller gateway; physical BLE behavior is still unverified.
 - Guided Trial scenarios for simulator-backed happy-path dispensing, missed-dose recognition, and offline/reconnect behavior.
-- Google and Apple sign-in through app-owned auth interfaces; no Firebase/Supabase backend yet.
-- App-owned interfaces for controller/BLE, connectivity, auth, reminders, permissions, notifications, and dose logging.
+- Appwrite-backed Google identity and robot linking plus native iOS Apple sign-in, all behind app-owned interfaces.
+- App-owned interfaces for controller/BLE, connectivity, auth, robot pairing, reminders, permissions, notifications, and dose logging.
 - Drift/SQLite local database for device role settings, prescriptions, reminders, schedule profiles, carousel slots, cached auth state, refill records, dose log events, household/profile metadata, and admin audit events.
 
 Selected background packages:
 
 - `flutter_blue_plus` for filtered Dosey discovery, GATT service discovery, notifications, and bounded D1 writes.
 - `connectivity_plus` for advisory connectivity/Wi-Fi status only, not provisioning.
-- `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
+- `appwrite` for Google identity, robot ownership, and server-authorized mounted-phone pairing.
+- `google_sign_in` plus a native iOS Apple sign-in bridge for local/provider-specific auth paths.
 - `flutter_local_notifications` for local reminder notifications and sounds.
 - `permission_handler` for runtime permission requests/checks. Android 12 and
   newer request nearby Bluetooth scan/connect access; Android 11 and older map
@@ -40,7 +41,28 @@ Selected background packages:
 
 Notification channel IDs and sound IDs are intended to stay stable. Custom reminder sound assets may still need platform provisioning on Android/iOS.
 
-No cloud sync, push notifications, Firebase, or Supabase are in the app yet.
+Appwrite currently stores account, robot ownership, membership, and pairing
+state. Prescriptions, schedules, dose history, and inventory remain local in
+Drift. Remote push notifications and medication-data cloud sync are not active.
+
+## Appwrite setup
+
+Local configured builds read seven public values from the ignored `.env` file:
+
+```text
+APPWRITE_ENDPOINT
+APPWRITE_PROJECT_ID
+APPWRITE_DATABASE_ID
+APPWRITE_PAIRING_CLAIMS_TABLE_ID
+APPWRITE_PAIRING_ATTEMPTS_TABLE_ID
+APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID
+APPWRITE_CLAIM_ROBOT_FUNCTION_ID
+```
+
+The app invokes the pairing Functions; it does not read pairing tables
+directly. Never add the server pairing HMAC secret or a Function dynamic API key
+to this file. See [`../../backend/appwrite/README.md`](../../backend/appwrite/README.md)
+for server schema and deployment details.
 
 ## Target product model
 
@@ -68,6 +90,7 @@ Device role rules:
 - Store device role, safety acknowledgement, cached auth state, Action PIN state, refill data, carousel state, household/profile metadata, admin audit events, and dose log events locally.
 - Return mounted Robot Mode to Robot Face after 1, 2, 5, 10, or 15 minutes of inactivity, with 2 minutes as the default; pause the timer in the background and defer it while a dialog or sheet is open.
 - Route local dose reminders to Robot Face in Robot Mode and Today in Personal Mode, route shortage alerts to Carousel, and run missed-dose reconciliation when the app resumes.
+- Sign in with Google through Appwrite, restore robot membership, generate an owner-authorized ten-minute pairing code, and claim a robot from the mounted Android phone with a dedicated anonymous device identity.
 - Run Android debug APK and iOS no-codesign debug builds on this machine.
 
 The app must not mark a dose taken because the servo moved. Dispense logging requires a controller success event, and the app separately tracks dose visible and dose taken confirmation.
@@ -78,7 +101,8 @@ The app must not mark a dose taken because the servo moved. Dispense logging req
 - Run mounted-phone manual QA on the Android test device for resume, inactivity, Back, notification, screen-awake, and role-change behavior.
 - Keep Today dose actions and refill inventory behavior aligned with local-first safety rules.
 - Physically verify the fail-closed heartbeat/offline and reconnect lifecycle for XIAO power loss, crash, disconnect, and missed responses.
-- Keep caregiver alerts, voice commands, cloud sync, facial recognition, and local AI as later features. The current voice scope is fixed prerecorded WAV phrases only.
+- Add server-authorized robot creation, invitations, and seven-account enforcement before exposing broader household management.
+- Keep caregiver alerts, medication-data cloud sync, remote push notifications, voice commands, facial recognition, and local AI as later features. The current voice scope is fixed prerecorded WAV phrases only.
 
 ## Local commands
 
@@ -91,8 +115,8 @@ dart run build_runner build
 git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
-flutter build apk --debug
-flutter build ios --debug --no-codesign
+flutter build apk --debug --dart-define-from-file=.env
+flutter build ios --debug --no-codesign --dart-define-from-file=.env
 git diff --check
 ```
 

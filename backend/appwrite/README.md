@@ -2,6 +2,10 @@
 
 This package contains the server-authorized robot pairing foundation. It does not schedule doses, command dispensing, or mark doses taken.
 
+The deployed development setup uses Appwrite Teams for robot ownership,
+TablesDB for pairing state, and two Node.js Functions. Flutter reaches pairing
+state only through those Functions.
+
 ## Functions
 
 - `src/entrypoints/create-pairing-code.ts`: creates a ten-minute, single-use pairing code for an authenticated robot owner.
@@ -29,7 +33,10 @@ DOSEY_PAIRING_HMAC_SECRET
 
 Generate `DOSEY_PAIRING_HMAC_SECRET` with at least 32 random characters. Store it only in Appwrite Function environment variables.
 
-The dynamic API key needs the minimum TablesDB row read/write and Teams read/write scopes required by these handlers. Function execution access should require an authenticated Appwrite user. The mounted phone must use its own anonymous account; it must not retain the owner's Google session.
+The dynamic API key needs only `rows.read`, `rows.write`, `teams.read`, and
+`teams.write`. Function execution access should require an authenticated
+Appwrite user. The mounted phone must use its own anonymous account; the app
+replaces an active human session before invoking the claim Function.
 
 ## Tables
 
@@ -73,6 +80,11 @@ npm run build
 Flutter pairing configuration requires the public endpoint, project, database,
 table, and Function IDs. The app invokes Functions only; it never reads these
 server-only tables directly.
+
+The current pairing UI supports an existing robot Team: an owner can generate a
+short-lived code, and the mounted Android phone can claim it. Server-authorized
+robot creation, human invitations, and the seven-account limit remain follow-up
+work and must not be implemented through direct client-side Team mutation.
 
 The iOS URL scheme in `ios/Runner/Info.plist` must remain
 `appwrite-callback-<APPWRITE_PROJECT_ID>`. Android derives the same scheme from
