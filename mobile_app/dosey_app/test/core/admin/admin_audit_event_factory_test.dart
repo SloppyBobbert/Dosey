@@ -67,4 +67,83 @@ void main() {
       expect(details['newActiveProfileName'], 'School');
     },
   );
+
+  test('household lifecycle audits use household targets', () {
+    final occurredAt = DateTime.utc(2026, 7, 26, 14);
+
+    final events = [
+      factory.householdCreated(
+        actor: actor,
+        sourceDeviceRole: 'androidPersonal',
+        targetId: 'robot-1',
+        summary: 'Created household.',
+        robotDisplayName: 'Kitchen Dosey',
+        occurredAt: occurredAt,
+      ),
+      factory.householdInvitationGenerated(
+        actor: actor,
+        sourceDeviceRole: 'androidPersonal',
+        targetId: 'robot-1',
+        summary: 'Generated household invitation.',
+        invitedEmail: 'member@example.com',
+        expiresAt: DateTime.utc(2026, 7, 27, 14),
+        occurredAt: occurredAt,
+      ),
+      factory.householdMemberRemoved(
+        actor: actor,
+        sourceDeviceRole: 'androidPersonal',
+        targetId: 'robot-1',
+        summary: 'Removed household member.',
+        removedAccountId: 'member-1',
+        removedLabel: 'Member Person',
+        occurredAt: occurredAt,
+      ),
+      factory.householdLeft(
+        actor: actor,
+        sourceDeviceRole: 'iosPersonal',
+        targetId: 'robot-1',
+        summary: 'Left household.',
+        occurredAt: occurredAt,
+      ),
+    ];
+
+    expect(
+      events.map((event) => event.eventType).toSet(),
+      AdminAuditEventType.values
+          .where(
+            (type) => {
+              AdminAuditEventType.householdCreated,
+              AdminAuditEventType.householdInvitationGenerated,
+              AdminAuditEventType.householdMemberRemoved,
+              AdminAuditEventType.householdLeft,
+            }.contains(type),
+          )
+          .toSet(),
+    );
+    for (final event in events) {
+      expect(event.targetType, AdminAuditTargetType.household);
+      expect(event.targetId, 'robot-1');
+    }
+  });
+
+  test('household invitation audit cannot contain its plaintext code', () {
+    final event = factory.householdInvitationGenerated(
+      actor: actor,
+      sourceDeviceRole: 'androidPersonal',
+      targetId: 'robot-1',
+      summary: 'Generated household invitation.',
+      invitedEmail: 'member@example.com',
+      expiresAt: DateTime.utc(2026, 7, 27, 14),
+    );
+
+    final details = jsonDecode(event.detailsJson!) as Map<String, Object?>;
+
+    expect(details, {
+      'invitedEmail': 'member@example.com',
+      'expiresAt': '2026-07-27T14:00:00.000Z',
+    });
+    expect(event.detailsJson, isNot(contains('ABCD')));
+    expect(event.detailsJson, isNot(contains('code')));
+    expect(event.detailsJson, isNot(contains('digest')));
+  });
 }

@@ -1,24 +1,46 @@
+enum HouseholdRole { owner, member }
+
+class HouseholdMember {
+  const HouseholdMember({
+    required this.accountId,
+    required this.label,
+    required this.role,
+  });
+
+  final String accountId;
+  final String label;
+  final HouseholdRole role;
+}
+
 class RobotInstallation {
   factory RobotInstallation({
     required String id,
     required String displayName,
     required String ownerAccountId,
-    required Set<String> humanAccountIds,
-    required String mountedDeviceId,
+    required List<HouseholdMember> members,
+    required HouseholdRole currentRole,
+    required String? mountedDeviceId,
   }) {
-    if (humanAccountIds.isEmpty || !humanAccountIds.contains(ownerAccountId)) {
+    final memberIds = members.map((member) => member.accountId).toSet();
+    final owners = members.where(
+      (member) => member.role == HouseholdRole.owner,
+    );
+    if (members.isEmpty ||
+        memberIds.length != members.length ||
+        owners.length != 1 ||
+        owners.single.accountId != ownerAccountId) {
       throw ArgumentError(
         'The robot owner must be an accepted human member.',
-        'humanAccountIds',
+        'members',
       );
     }
-    if (humanAccountIds.length > maxHumanAccounts) {
+    if (members.length > maxHumanAccounts) {
       throw ArgumentError(
         'A robot supports at most $maxHumanAccounts human accounts.',
-        'humanAccountIds',
+        'members',
       );
     }
-    if (humanAccountIds.contains(mountedDeviceId)) {
+    if (mountedDeviceId != null && memberIds.contains(mountedDeviceId)) {
       throw ArgumentError(
         'The mounted robot identity cannot be a human member.',
         'mountedDeviceId',
@@ -28,7 +50,8 @@ class RobotInstallation {
       id: id,
       displayName: displayName,
       ownerAccountId: ownerAccountId,
-      humanAccountIds: Set.unmodifiable(humanAccountIds),
+      members: List.unmodifiable(members),
+      currentRole: currentRole,
       mountedDeviceId: mountedDeviceId,
     );
   }
@@ -37,7 +60,8 @@ class RobotInstallation {
     required this.id,
     required this.displayName,
     required this.ownerAccountId,
-    required this.humanAccountIds,
+    required this.members,
+    required this.currentRole,
     required this.mountedDeviceId,
   });
 
@@ -46,9 +70,13 @@ class RobotInstallation {
   final String id;
   final String displayName;
   final String ownerAccountId;
-  final Set<String> humanAccountIds;
-  final String mountedDeviceId;
+  final List<HouseholdMember> members;
+  final HouseholdRole currentRole;
+  final String? mountedDeviceId;
 
-  int get humanAccountCount => humanAccountIds.length;
+  Set<String> get humanAccountIds =>
+      Set.unmodifiable(members.map((member) => member.accountId));
+  int get humanAccountCount => members.length;
   bool get isSinglePerson => humanAccountCount == 1;
+  bool get isCurrentAccountOwner => currentRole == HouseholdRole.owner;
 }

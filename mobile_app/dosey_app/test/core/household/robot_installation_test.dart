@@ -7,7 +7,8 @@ void main() {
       id: 'robot-1',
       displayName: 'Kitchen Dosey',
       ownerAccountId: 'owner-1',
-      humanAccountIds: {'owner-1'},
+      members: [_member('owner-1', HouseholdRole.owner)],
+      currentRole: HouseholdRole.owner,
       mountedDeviceId: 'mounted-android-1',
     );
 
@@ -21,16 +22,13 @@ void main() {
       id: 'robot-1',
       displayName: 'Kitchen Dosey',
       ownerAccountId: 'owner-1',
-      humanAccountIds: {
-        'owner-1',
-        'member-2',
-        'member-3',
-        'member-4',
-        'member-5',
-        'member-6',
-        'member-7',
-      },
-      mountedDeviceId: 'mounted-android-1',
+      members: [
+        _member('owner-1', HouseholdRole.owner),
+        for (var index = 2; index <= 7; index += 1)
+          _member('member-$index', HouseholdRole.member),
+      ],
+      currentRole: HouseholdRole.member,
+      mountedDeviceId: null,
     );
 
     expect(installation.humanAccountCount, RobotInstallation.maxHumanAccounts);
@@ -43,16 +41,12 @@ void main() {
         id: 'robot-1',
         displayName: 'Kitchen Dosey',
         ownerAccountId: 'owner-1',
-        humanAccountIds: {
-          'owner-1',
-          'member-2',
-          'member-3',
-          'member-4',
-          'member-5',
-          'member-6',
-          'member-7',
-          'member-8',
-        },
+        members: [
+          _member('owner-1', HouseholdRole.owner),
+          for (var index = 2; index <= 8; index += 1)
+            _member('member-$index', HouseholdRole.member),
+        ],
+        currentRole: HouseholdRole.owner,
         mountedDeviceId: 'mounted-android-1',
       ),
       throwsArgumentError,
@@ -65,8 +59,26 @@ void main() {
         id: 'robot-1',
         displayName: 'Kitchen Dosey',
         ownerAccountId: 'owner-1',
-        humanAccountIds: {'member-2'},
+        members: [_member('member-2', HouseholdRole.member)],
+        currentRole: HouseholdRole.member,
         mountedDeviceId: 'mounted-android-1',
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('robot rejects an owner role assigned to another member', () {
+    expect(
+      () => RobotInstallation(
+        id: 'robot-1',
+        displayName: 'Kitchen Dosey',
+        ownerAccountId: 'owner-1',
+        members: [
+          _member('owner-1', HouseholdRole.owner),
+          _member('member-2', HouseholdRole.owner),
+        ],
+        currentRole: HouseholdRole.owner,
+        mountedDeviceId: null,
       ),
       throwsArgumentError,
     );
@@ -78,10 +90,17 @@ void main() {
         id: 'robot-1',
         displayName: 'Kitchen Dosey',
         ownerAccountId: 'owner-1',
-        humanAccountIds: {'owner-1', 'mounted-android-1'},
+        members: [
+          _member('owner-1', HouseholdRole.owner),
+          _member('mounted-android-1', HouseholdRole.member),
+        ],
+        currentRole: HouseholdRole.owner,
         mountedDeviceId: 'mounted-android-1',
       ),
       throwsArgumentError,
     );
   });
 }
+
+HouseholdMember _member(String accountId, HouseholdRole role) =>
+    HouseholdMember(accountId: accountId, label: accountId, role: role);

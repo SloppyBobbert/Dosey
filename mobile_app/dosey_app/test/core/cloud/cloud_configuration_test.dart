@@ -16,6 +16,10 @@ void main() {
       projectId: 'dosey-development',
       createPairingCodeFunctionId: 'create-code',
       claimRobotFunctionId: 'claim-robot',
+      createRobotFunctionId: 'create-robot',
+      createHouseholdInvitationFunctionId: 'create-invitation',
+      acceptHouseholdInvitationFunctionId: 'accept-invitation',
+      removeHouseholdMemberFunctionId: 'remove-member',
     );
 
     expect(configuration.isEnabled, isTrue);
@@ -24,6 +28,7 @@ void main() {
     expect(configuration.projectId, 'dosey-development');
     expect(configuration.createPairingCodeFunctionId, 'create-code');
     expect(configuration.claimRobotFunctionId, 'claim-robot');
+    expect(configuration.isHouseholdManagementEnabled, isTrue);
   });
 
   test(
@@ -39,6 +44,17 @@ void main() {
       expect(configuration.isPairingEnabled, isFalse);
     },
   );
+
+  test('incomplete household Function setup stays disabled', () {
+    final configuration = CloudConfiguration.fromValues(
+      endpoint: 'https://nyc.cloud.appwrite.io/v1',
+      projectId: 'dosey-development',
+      createRobotFunctionId: 'create-robot',
+    );
+
+    expect(configuration.isEnabled, isTrue);
+    expect(configuration.isHouseholdManagementEnabled, isFalse);
+  });
 
   test('cloud configuration rejects a partial Appwrite setup', () {
     expect(

@@ -9413,6 +9413,886 @@ class AdminAuditEventsCompanion extends UpdateCompanion<AdminAuditEventRow> {
   }
 }
 
+class $CachedRobotInstallationsTable extends CachedRobotInstallations
+    with TableInfo<$CachedRobotInstallationsTable, CachedRobotInstallationRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CachedRobotInstallationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<String> accountId = GeneratedColumn<String>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _robotIdMeta = const VerificationMeta(
+    'robotId',
+  );
+  @override
+  late final GeneratedColumn<String> robotId = GeneratedColumn<String>(
+    'robot_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _displayNameMeta = const VerificationMeta(
+    'displayName',
+  );
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ownerAccountIdMeta = const VerificationMeta(
+    'ownerAccountId',
+  );
+  @override
+  late final GeneratedColumn<String> ownerAccountId = GeneratedColumn<String>(
+    'owner_account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _currentRoleMeta = const VerificationMeta(
+    'currentRole',
+  );
+  @override
+  late final GeneratedColumn<String> currentRole = GeneratedColumn<String>(
+    'current_role',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _mountedDeviceIdMeta = const VerificationMeta(
+    'mountedDeviceId',
+  );
+  @override
+  late final GeneratedColumn<String> mountedDeviceId = GeneratedColumn<String>(
+    'mounted_device_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _confirmedAtMeta = const VerificationMeta(
+    'confirmedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> confirmedAt = GeneratedColumn<DateTime>(
+    'confirmed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountId,
+    robotId,
+    displayName,
+    ownerAccountId,
+    currentRole,
+    mountedDeviceId,
+    confirmedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cached_robot_installations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CachedRobotInstallationRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('robot_id')) {
+      context.handle(
+        _robotIdMeta,
+        robotId.isAcceptableOrUnknown(data['robot_id']!, _robotIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_robotIdMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+        _displayNameMeta,
+        displayName.isAcceptableOrUnknown(
+          data['display_name']!,
+          _displayNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_displayNameMeta);
+    }
+    if (data.containsKey('owner_account_id')) {
+      context.handle(
+        _ownerAccountIdMeta,
+        ownerAccountId.isAcceptableOrUnknown(
+          data['owner_account_id']!,
+          _ownerAccountIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_ownerAccountIdMeta);
+    }
+    if (data.containsKey('current_role')) {
+      context.handle(
+        _currentRoleMeta,
+        currentRole.isAcceptableOrUnknown(
+          data['current_role']!,
+          _currentRoleMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_currentRoleMeta);
+    }
+    if (data.containsKey('mounted_device_id')) {
+      context.handle(
+        _mountedDeviceIdMeta,
+        mountedDeviceId.isAcceptableOrUnknown(
+          data['mounted_device_id']!,
+          _mountedDeviceIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('confirmed_at')) {
+      context.handle(
+        _confirmedAtMeta,
+        confirmedAt.isAcceptableOrUnknown(
+          data['confirmed_at']!,
+          _confirmedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_confirmedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountId};
+  @override
+  CachedRobotInstallationRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CachedRobotInstallationRow(
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_id'],
+      )!,
+      robotId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}robot_id'],
+      )!,
+      displayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}display_name'],
+      )!,
+      ownerAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_account_id'],
+      )!,
+      currentRole: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}current_role'],
+      )!,
+      mountedDeviceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mounted_device_id'],
+      ),
+      confirmedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}confirmed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CachedRobotInstallationsTable createAlias(String alias) {
+    return $CachedRobotInstallationsTable(attachedDatabase, alias);
+  }
+}
+
+class CachedRobotInstallationRow extends DataClass
+    implements Insertable<CachedRobotInstallationRow> {
+  final String accountId;
+  final String robotId;
+  final String displayName;
+  final String ownerAccountId;
+  final String currentRole;
+  final String? mountedDeviceId;
+  final DateTime confirmedAt;
+  const CachedRobotInstallationRow({
+    required this.accountId,
+    required this.robotId,
+    required this.displayName,
+    required this.ownerAccountId,
+    required this.currentRole,
+    this.mountedDeviceId,
+    required this.confirmedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_id'] = Variable<String>(accountId);
+    map['robot_id'] = Variable<String>(robotId);
+    map['display_name'] = Variable<String>(displayName);
+    map['owner_account_id'] = Variable<String>(ownerAccountId);
+    map['current_role'] = Variable<String>(currentRole);
+    if (!nullToAbsent || mountedDeviceId != null) {
+      map['mounted_device_id'] = Variable<String>(mountedDeviceId);
+    }
+    map['confirmed_at'] = Variable<DateTime>(confirmedAt);
+    return map;
+  }
+
+  CachedRobotInstallationsCompanion toCompanion(bool nullToAbsent) {
+    return CachedRobotInstallationsCompanion(
+      accountId: Value(accountId),
+      robotId: Value(robotId),
+      displayName: Value(displayName),
+      ownerAccountId: Value(ownerAccountId),
+      currentRole: Value(currentRole),
+      mountedDeviceId: mountedDeviceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mountedDeviceId),
+      confirmedAt: Value(confirmedAt),
+    );
+  }
+
+  factory CachedRobotInstallationRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CachedRobotInstallationRow(
+      accountId: serializer.fromJson<String>(json['accountId']),
+      robotId: serializer.fromJson<String>(json['robotId']),
+      displayName: serializer.fromJson<String>(json['displayName']),
+      ownerAccountId: serializer.fromJson<String>(json['ownerAccountId']),
+      currentRole: serializer.fromJson<String>(json['currentRole']),
+      mountedDeviceId: serializer.fromJson<String?>(json['mountedDeviceId']),
+      confirmedAt: serializer.fromJson<DateTime>(json['confirmedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountId': serializer.toJson<String>(accountId),
+      'robotId': serializer.toJson<String>(robotId),
+      'displayName': serializer.toJson<String>(displayName),
+      'ownerAccountId': serializer.toJson<String>(ownerAccountId),
+      'currentRole': serializer.toJson<String>(currentRole),
+      'mountedDeviceId': serializer.toJson<String?>(mountedDeviceId),
+      'confirmedAt': serializer.toJson<DateTime>(confirmedAt),
+    };
+  }
+
+  CachedRobotInstallationRow copyWith({
+    String? accountId,
+    String? robotId,
+    String? displayName,
+    String? ownerAccountId,
+    String? currentRole,
+    Value<String?> mountedDeviceId = const Value.absent(),
+    DateTime? confirmedAt,
+  }) => CachedRobotInstallationRow(
+    accountId: accountId ?? this.accountId,
+    robotId: robotId ?? this.robotId,
+    displayName: displayName ?? this.displayName,
+    ownerAccountId: ownerAccountId ?? this.ownerAccountId,
+    currentRole: currentRole ?? this.currentRole,
+    mountedDeviceId: mountedDeviceId.present
+        ? mountedDeviceId.value
+        : this.mountedDeviceId,
+    confirmedAt: confirmedAt ?? this.confirmedAt,
+  );
+  CachedRobotInstallationRow copyWithCompanion(
+    CachedRobotInstallationsCompanion data,
+  ) {
+    return CachedRobotInstallationRow(
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      robotId: data.robotId.present ? data.robotId.value : this.robotId,
+      displayName: data.displayName.present
+          ? data.displayName.value
+          : this.displayName,
+      ownerAccountId: data.ownerAccountId.present
+          ? data.ownerAccountId.value
+          : this.ownerAccountId,
+      currentRole: data.currentRole.present
+          ? data.currentRole.value
+          : this.currentRole,
+      mountedDeviceId: data.mountedDeviceId.present
+          ? data.mountedDeviceId.value
+          : this.mountedDeviceId,
+      confirmedAt: data.confirmedAt.present
+          ? data.confirmedAt.value
+          : this.confirmedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedRobotInstallationRow(')
+          ..write('accountId: $accountId, ')
+          ..write('robotId: $robotId, ')
+          ..write('displayName: $displayName, ')
+          ..write('ownerAccountId: $ownerAccountId, ')
+          ..write('currentRole: $currentRole, ')
+          ..write('mountedDeviceId: $mountedDeviceId, ')
+          ..write('confirmedAt: $confirmedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    accountId,
+    robotId,
+    displayName,
+    ownerAccountId,
+    currentRole,
+    mountedDeviceId,
+    confirmedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CachedRobotInstallationRow &&
+          other.accountId == this.accountId &&
+          other.robotId == this.robotId &&
+          other.displayName == this.displayName &&
+          other.ownerAccountId == this.ownerAccountId &&
+          other.currentRole == this.currentRole &&
+          other.mountedDeviceId == this.mountedDeviceId &&
+          other.confirmedAt == this.confirmedAt);
+}
+
+class CachedRobotInstallationsCompanion
+    extends UpdateCompanion<CachedRobotInstallationRow> {
+  final Value<String> accountId;
+  final Value<String> robotId;
+  final Value<String> displayName;
+  final Value<String> ownerAccountId;
+  final Value<String> currentRole;
+  final Value<String?> mountedDeviceId;
+  final Value<DateTime> confirmedAt;
+  final Value<int> rowid;
+  const CachedRobotInstallationsCompanion({
+    this.accountId = const Value.absent(),
+    this.robotId = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.ownerAccountId = const Value.absent(),
+    this.currentRole = const Value.absent(),
+    this.mountedDeviceId = const Value.absent(),
+    this.confirmedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CachedRobotInstallationsCompanion.insert({
+    required String accountId,
+    required String robotId,
+    required String displayName,
+    required String ownerAccountId,
+    required String currentRole,
+    this.mountedDeviceId = const Value.absent(),
+    required DateTime confirmedAt,
+    this.rowid = const Value.absent(),
+  }) : accountId = Value(accountId),
+       robotId = Value(robotId),
+       displayName = Value(displayName),
+       ownerAccountId = Value(ownerAccountId),
+       currentRole = Value(currentRole),
+       confirmedAt = Value(confirmedAt);
+  static Insertable<CachedRobotInstallationRow> custom({
+    Expression<String>? accountId,
+    Expression<String>? robotId,
+    Expression<String>? displayName,
+    Expression<String>? ownerAccountId,
+    Expression<String>? currentRole,
+    Expression<String>? mountedDeviceId,
+    Expression<DateTime>? confirmedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountId != null) 'account_id': accountId,
+      if (robotId != null) 'robot_id': robotId,
+      if (displayName != null) 'display_name': displayName,
+      if (ownerAccountId != null) 'owner_account_id': ownerAccountId,
+      if (currentRole != null) 'current_role': currentRole,
+      if (mountedDeviceId != null) 'mounted_device_id': mountedDeviceId,
+      if (confirmedAt != null) 'confirmed_at': confirmedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CachedRobotInstallationsCompanion copyWith({
+    Value<String>? accountId,
+    Value<String>? robotId,
+    Value<String>? displayName,
+    Value<String>? ownerAccountId,
+    Value<String>? currentRole,
+    Value<String?>? mountedDeviceId,
+    Value<DateTime>? confirmedAt,
+    Value<int>? rowid,
+  }) {
+    return CachedRobotInstallationsCompanion(
+      accountId: accountId ?? this.accountId,
+      robotId: robotId ?? this.robotId,
+      displayName: displayName ?? this.displayName,
+      ownerAccountId: ownerAccountId ?? this.ownerAccountId,
+      currentRole: currentRole ?? this.currentRole,
+      mountedDeviceId: mountedDeviceId ?? this.mountedDeviceId,
+      confirmedAt: confirmedAt ?? this.confirmedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountId.present) {
+      map['account_id'] = Variable<String>(accountId.value);
+    }
+    if (robotId.present) {
+      map['robot_id'] = Variable<String>(robotId.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (ownerAccountId.present) {
+      map['owner_account_id'] = Variable<String>(ownerAccountId.value);
+    }
+    if (currentRole.present) {
+      map['current_role'] = Variable<String>(currentRole.value);
+    }
+    if (mountedDeviceId.present) {
+      map['mounted_device_id'] = Variable<String>(mountedDeviceId.value);
+    }
+    if (confirmedAt.present) {
+      map['confirmed_at'] = Variable<DateTime>(confirmedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedRobotInstallationsCompanion(')
+          ..write('accountId: $accountId, ')
+          ..write('robotId: $robotId, ')
+          ..write('displayName: $displayName, ')
+          ..write('ownerAccountId: $ownerAccountId, ')
+          ..write('currentRole: $currentRole, ')
+          ..write('mountedDeviceId: $mountedDeviceId, ')
+          ..write('confirmedAt: $confirmedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $CachedHouseholdMembersTable extends CachedHouseholdMembers
+    with TableInfo<$CachedHouseholdMembersTable, CachedHouseholdMemberRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CachedHouseholdMembersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<String> accountId = GeneratedColumn<String>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _memberAccountIdMeta = const VerificationMeta(
+    'memberAccountId',
+  );
+  @override
+  late final GeneratedColumn<String> memberAccountId = GeneratedColumn<String>(
+    'member_account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _roleMeta = const VerificationMeta('role');
+  @override
+  late final GeneratedColumn<String> role = GeneratedColumn<String>(
+    'role',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _positionMeta = const VerificationMeta(
+    'position',
+  );
+  @override
+  late final GeneratedColumn<int> position = GeneratedColumn<int>(
+    'position',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountId,
+    memberAccountId,
+    label,
+    role,
+    position,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cached_household_members';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CachedHouseholdMemberRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('member_account_id')) {
+      context.handle(
+        _memberAccountIdMeta,
+        memberAccountId.isAcceptableOrUnknown(
+          data['member_account_id']!,
+          _memberAccountIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_memberAccountIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelMeta);
+    }
+    if (data.containsKey('role')) {
+      context.handle(
+        _roleMeta,
+        role.isAcceptableOrUnknown(data['role']!, _roleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_roleMeta);
+    }
+    if (data.containsKey('position')) {
+      context.handle(
+        _positionMeta,
+        position.isAcceptableOrUnknown(data['position']!, _positionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountId, memberAccountId};
+  @override
+  CachedHouseholdMemberRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CachedHouseholdMemberRow(
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_id'],
+      )!,
+      memberAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}member_account_id'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      )!,
+      role: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}role'],
+      )!,
+      position: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position'],
+      )!,
+    );
+  }
+
+  @override
+  $CachedHouseholdMembersTable createAlias(String alias) {
+    return $CachedHouseholdMembersTable(attachedDatabase, alias);
+  }
+}
+
+class CachedHouseholdMemberRow extends DataClass
+    implements Insertable<CachedHouseholdMemberRow> {
+  final String accountId;
+  final String memberAccountId;
+  final String label;
+  final String role;
+  final int position;
+  const CachedHouseholdMemberRow({
+    required this.accountId,
+    required this.memberAccountId,
+    required this.label,
+    required this.role,
+    required this.position,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_id'] = Variable<String>(accountId);
+    map['member_account_id'] = Variable<String>(memberAccountId);
+    map['label'] = Variable<String>(label);
+    map['role'] = Variable<String>(role);
+    map['position'] = Variable<int>(position);
+    return map;
+  }
+
+  CachedHouseholdMembersCompanion toCompanion(bool nullToAbsent) {
+    return CachedHouseholdMembersCompanion(
+      accountId: Value(accountId),
+      memberAccountId: Value(memberAccountId),
+      label: Value(label),
+      role: Value(role),
+      position: Value(position),
+    );
+  }
+
+  factory CachedHouseholdMemberRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CachedHouseholdMemberRow(
+      accountId: serializer.fromJson<String>(json['accountId']),
+      memberAccountId: serializer.fromJson<String>(json['memberAccountId']),
+      label: serializer.fromJson<String>(json['label']),
+      role: serializer.fromJson<String>(json['role']),
+      position: serializer.fromJson<int>(json['position']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountId': serializer.toJson<String>(accountId),
+      'memberAccountId': serializer.toJson<String>(memberAccountId),
+      'label': serializer.toJson<String>(label),
+      'role': serializer.toJson<String>(role),
+      'position': serializer.toJson<int>(position),
+    };
+  }
+
+  CachedHouseholdMemberRow copyWith({
+    String? accountId,
+    String? memberAccountId,
+    String? label,
+    String? role,
+    int? position,
+  }) => CachedHouseholdMemberRow(
+    accountId: accountId ?? this.accountId,
+    memberAccountId: memberAccountId ?? this.memberAccountId,
+    label: label ?? this.label,
+    role: role ?? this.role,
+    position: position ?? this.position,
+  );
+  CachedHouseholdMemberRow copyWithCompanion(
+    CachedHouseholdMembersCompanion data,
+  ) {
+    return CachedHouseholdMemberRow(
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      memberAccountId: data.memberAccountId.present
+          ? data.memberAccountId.value
+          : this.memberAccountId,
+      label: data.label.present ? data.label.value : this.label,
+      role: data.role.present ? data.role.value : this.role,
+      position: data.position.present ? data.position.value : this.position,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedHouseholdMemberRow(')
+          ..write('accountId: $accountId, ')
+          ..write('memberAccountId: $memberAccountId, ')
+          ..write('label: $label, ')
+          ..write('role: $role, ')
+          ..write('position: $position')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(accountId, memberAccountId, label, role, position);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CachedHouseholdMemberRow &&
+          other.accountId == this.accountId &&
+          other.memberAccountId == this.memberAccountId &&
+          other.label == this.label &&
+          other.role == this.role &&
+          other.position == this.position);
+}
+
+class CachedHouseholdMembersCompanion
+    extends UpdateCompanion<CachedHouseholdMemberRow> {
+  final Value<String> accountId;
+  final Value<String> memberAccountId;
+  final Value<String> label;
+  final Value<String> role;
+  final Value<int> position;
+  final Value<int> rowid;
+  const CachedHouseholdMembersCompanion({
+    this.accountId = const Value.absent(),
+    this.memberAccountId = const Value.absent(),
+    this.label = const Value.absent(),
+    this.role = const Value.absent(),
+    this.position = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CachedHouseholdMembersCompanion.insert({
+    required String accountId,
+    required String memberAccountId,
+    required String label,
+    required String role,
+    required int position,
+    this.rowid = const Value.absent(),
+  }) : accountId = Value(accountId),
+       memberAccountId = Value(memberAccountId),
+       label = Value(label),
+       role = Value(role),
+       position = Value(position);
+  static Insertable<CachedHouseholdMemberRow> custom({
+    Expression<String>? accountId,
+    Expression<String>? memberAccountId,
+    Expression<String>? label,
+    Expression<String>? role,
+    Expression<int>? position,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountId != null) 'account_id': accountId,
+      if (memberAccountId != null) 'member_account_id': memberAccountId,
+      if (label != null) 'label': label,
+      if (role != null) 'role': role,
+      if (position != null) 'position': position,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CachedHouseholdMembersCompanion copyWith({
+    Value<String>? accountId,
+    Value<String>? memberAccountId,
+    Value<String>? label,
+    Value<String>? role,
+    Value<int>? position,
+    Value<int>? rowid,
+  }) {
+    return CachedHouseholdMembersCompanion(
+      accountId: accountId ?? this.accountId,
+      memberAccountId: memberAccountId ?? this.memberAccountId,
+      label: label ?? this.label,
+      role: role ?? this.role,
+      position: position ?? this.position,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountId.present) {
+      map['account_id'] = Variable<String>(accountId.value);
+    }
+    if (memberAccountId.present) {
+      map['member_account_id'] = Variable<String>(memberAccountId.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (role.present) {
+      map['role'] = Variable<String>(role.value);
+    }
+    if (position.present) {
+      map['position'] = Variable<int>(position.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedHouseholdMembersCompanion(')
+          ..write('accountId: $accountId, ')
+          ..write('memberAccountId: $memberAccountId, ')
+          ..write('label: $label, ')
+          ..write('role: $role, ')
+          ..write('position: $position, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$DoseyDatabase extends GeneratedDatabase {
   _$DoseyDatabase(QueryExecutor e) : super(e);
   $DoseyDatabaseManager get managers => $DoseyDatabaseManager(this);
@@ -9444,6 +10324,10 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
   late final $AdminAuditEventsTable adminAuditEvents = $AdminAuditEventsTable(
     this,
   );
+  late final $CachedRobotInstallationsTable cachedRobotInstallations =
+      $CachedRobotInstallationsTable(this);
+  late final $CachedHouseholdMembersTable cachedHouseholdMembers =
+      $CachedHouseholdMembersTable(this);
   late final Index controllerHealthEventsOccurredAtIdx = Index(
     'controller_health_events_occurred_at_idx',
     'CREATE INDEX controller_health_events_occurred_at_idx ON controller_health_events (occurred_at DESC)',
@@ -9469,6 +10353,8 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     controllerCommandEvents,
     controllerHealthEvents,
     adminAuditEvents,
+    cachedRobotInstallations,
+    cachedHouseholdMembers,
     controllerHealthEventsOccurredAtIdx,
   ];
 }
@@ -14241,6 +15127,494 @@ typedef $$AdminAuditEventsTableProcessedTableManager =
       AdminAuditEventRow,
       PrefetchHooks Function()
     >;
+typedef $$CachedRobotInstallationsTableCreateCompanionBuilder =
+    CachedRobotInstallationsCompanion Function({
+      required String accountId,
+      required String robotId,
+      required String displayName,
+      required String ownerAccountId,
+      required String currentRole,
+      Value<String?> mountedDeviceId,
+      required DateTime confirmedAt,
+      Value<int> rowid,
+    });
+typedef $$CachedRobotInstallationsTableUpdateCompanionBuilder =
+    CachedRobotInstallationsCompanion Function({
+      Value<String> accountId,
+      Value<String> robotId,
+      Value<String> displayName,
+      Value<String> ownerAccountId,
+      Value<String> currentRole,
+      Value<String?> mountedDeviceId,
+      Value<DateTime> confirmedAt,
+      Value<int> rowid,
+    });
+
+class $$CachedRobotInstallationsTableFilterComposer
+    extends Composer<_$DoseyDatabase, $CachedRobotInstallationsTable> {
+  $$CachedRobotInstallationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get robotId => $composableBuilder(
+    column: $table.robotId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ownerAccountId => $composableBuilder(
+    column: $table.ownerAccountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get currentRole => $composableBuilder(
+    column: $table.currentRole,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mountedDeviceId => $composableBuilder(
+    column: $table.mountedDeviceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get confirmedAt => $composableBuilder(
+    column: $table.confirmedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CachedRobotInstallationsTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $CachedRobotInstallationsTable> {
+  $$CachedRobotInstallationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get robotId => $composableBuilder(
+    column: $table.robotId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ownerAccountId => $composableBuilder(
+    column: $table.ownerAccountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get currentRole => $composableBuilder(
+    column: $table.currentRole,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get mountedDeviceId => $composableBuilder(
+    column: $table.mountedDeviceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get confirmedAt => $composableBuilder(
+    column: $table.confirmedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CachedRobotInstallationsTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $CachedRobotInstallationsTable> {
+  $$CachedRobotInstallationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<String> get robotId =>
+      $composableBuilder(column: $table.robotId, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get ownerAccountId => $composableBuilder(
+    column: $table.ownerAccountId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get currentRole => $composableBuilder(
+    column: $table.currentRole,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get mountedDeviceId => $composableBuilder(
+    column: $table.mountedDeviceId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get confirmedAt => $composableBuilder(
+    column: $table.confirmedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$CachedRobotInstallationsTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $CachedRobotInstallationsTable,
+          CachedRobotInstallationRow,
+          $$CachedRobotInstallationsTableFilterComposer,
+          $$CachedRobotInstallationsTableOrderingComposer,
+          $$CachedRobotInstallationsTableAnnotationComposer,
+          $$CachedRobotInstallationsTableCreateCompanionBuilder,
+          $$CachedRobotInstallationsTableUpdateCompanionBuilder,
+          (
+            CachedRobotInstallationRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $CachedRobotInstallationsTable,
+              CachedRobotInstallationRow
+            >,
+          ),
+          CachedRobotInstallationRow,
+          PrefetchHooks Function()
+        > {
+  $$CachedRobotInstallationsTableTableManager(
+    _$DoseyDatabase db,
+    $CachedRobotInstallationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CachedRobotInstallationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CachedRobotInstallationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CachedRobotInstallationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> accountId = const Value.absent(),
+                Value<String> robotId = const Value.absent(),
+                Value<String> displayName = const Value.absent(),
+                Value<String> ownerAccountId = const Value.absent(),
+                Value<String> currentRole = const Value.absent(),
+                Value<String?> mountedDeviceId = const Value.absent(),
+                Value<DateTime> confirmedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CachedRobotInstallationsCompanion(
+                accountId: accountId,
+                robotId: robotId,
+                displayName: displayName,
+                ownerAccountId: ownerAccountId,
+                currentRole: currentRole,
+                mountedDeviceId: mountedDeviceId,
+                confirmedAt: confirmedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountId,
+                required String robotId,
+                required String displayName,
+                required String ownerAccountId,
+                required String currentRole,
+                Value<String?> mountedDeviceId = const Value.absent(),
+                required DateTime confirmedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CachedRobotInstallationsCompanion.insert(
+                accountId: accountId,
+                robotId: robotId,
+                displayName: displayName,
+                ownerAccountId: ownerAccountId,
+                currentRole: currentRole,
+                mountedDeviceId: mountedDeviceId,
+                confirmedAt: confirmedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CachedRobotInstallationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $CachedRobotInstallationsTable,
+      CachedRobotInstallationRow,
+      $$CachedRobotInstallationsTableFilterComposer,
+      $$CachedRobotInstallationsTableOrderingComposer,
+      $$CachedRobotInstallationsTableAnnotationComposer,
+      $$CachedRobotInstallationsTableCreateCompanionBuilder,
+      $$CachedRobotInstallationsTableUpdateCompanionBuilder,
+      (
+        CachedRobotInstallationRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $CachedRobotInstallationsTable,
+          CachedRobotInstallationRow
+        >,
+      ),
+      CachedRobotInstallationRow,
+      PrefetchHooks Function()
+    >;
+typedef $$CachedHouseholdMembersTableCreateCompanionBuilder =
+    CachedHouseholdMembersCompanion Function({
+      required String accountId,
+      required String memberAccountId,
+      required String label,
+      required String role,
+      required int position,
+      Value<int> rowid,
+    });
+typedef $$CachedHouseholdMembersTableUpdateCompanionBuilder =
+    CachedHouseholdMembersCompanion Function({
+      Value<String> accountId,
+      Value<String> memberAccountId,
+      Value<String> label,
+      Value<String> role,
+      Value<int> position,
+      Value<int> rowid,
+    });
+
+class $$CachedHouseholdMembersTableFilterComposer
+    extends Composer<_$DoseyDatabase, $CachedHouseholdMembersTable> {
+  $$CachedHouseholdMembersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get memberAccountId => $composableBuilder(
+    column: $table.memberAccountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CachedHouseholdMembersTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $CachedHouseholdMembersTable> {
+  $$CachedHouseholdMembersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get memberAccountId => $composableBuilder(
+    column: $table.memberAccountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get role => $composableBuilder(
+    column: $table.role,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get position => $composableBuilder(
+    column: $table.position,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CachedHouseholdMembersTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $CachedHouseholdMembersTable> {
+  $$CachedHouseholdMembersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<String> get memberAccountId => $composableBuilder(
+    column: $table.memberAccountId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<String> get role =>
+      $composableBuilder(column: $table.role, builder: (column) => column);
+
+  GeneratedColumn<int> get position =>
+      $composableBuilder(column: $table.position, builder: (column) => column);
+}
+
+class $$CachedHouseholdMembersTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $CachedHouseholdMembersTable,
+          CachedHouseholdMemberRow,
+          $$CachedHouseholdMembersTableFilterComposer,
+          $$CachedHouseholdMembersTableOrderingComposer,
+          $$CachedHouseholdMembersTableAnnotationComposer,
+          $$CachedHouseholdMembersTableCreateCompanionBuilder,
+          $$CachedHouseholdMembersTableUpdateCompanionBuilder,
+          (
+            CachedHouseholdMemberRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $CachedHouseholdMembersTable,
+              CachedHouseholdMemberRow
+            >,
+          ),
+          CachedHouseholdMemberRow,
+          PrefetchHooks Function()
+        > {
+  $$CachedHouseholdMembersTableTableManager(
+    _$DoseyDatabase db,
+    $CachedHouseholdMembersTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CachedHouseholdMembersTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CachedHouseholdMembersTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CachedHouseholdMembersTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> accountId = const Value.absent(),
+                Value<String> memberAccountId = const Value.absent(),
+                Value<String> label = const Value.absent(),
+                Value<String> role = const Value.absent(),
+                Value<int> position = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CachedHouseholdMembersCompanion(
+                accountId: accountId,
+                memberAccountId: memberAccountId,
+                label: label,
+                role: role,
+                position: position,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountId,
+                required String memberAccountId,
+                required String label,
+                required String role,
+                required int position,
+                Value<int> rowid = const Value.absent(),
+              }) => CachedHouseholdMembersCompanion.insert(
+                accountId: accountId,
+                memberAccountId: memberAccountId,
+                label: label,
+                role: role,
+                position: position,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CachedHouseholdMembersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $CachedHouseholdMembersTable,
+      CachedHouseholdMemberRow,
+      $$CachedHouseholdMembersTableFilterComposer,
+      $$CachedHouseholdMembersTableOrderingComposer,
+      $$CachedHouseholdMembersTableAnnotationComposer,
+      $$CachedHouseholdMembersTableCreateCompanionBuilder,
+      $$CachedHouseholdMembersTableUpdateCompanionBuilder,
+      (
+        CachedHouseholdMemberRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $CachedHouseholdMembersTable,
+          CachedHouseholdMemberRow
+        >,
+      ),
+      CachedHouseholdMemberRow,
+      PrefetchHooks Function()
+    >;
 
 class $DoseyDatabaseManager {
   final _$DoseyDatabase _db;
@@ -14292,4 +15666,14 @@ class $DoseyDatabaseManager {
       );
   $$AdminAuditEventsTableTableManager get adminAuditEvents =>
       $$AdminAuditEventsTableTableManager(_db, _db.adminAuditEvents);
+  $$CachedRobotInstallationsTableTableManager get cachedRobotInstallations =>
+      $$CachedRobotInstallationsTableTableManager(
+        _db,
+        _db.cachedRobotInstallations,
+      );
+  $$CachedHouseholdMembersTableTableManager get cachedHouseholdMembers =>
+      $$CachedHouseholdMembersTableTableManager(
+        _db,
+        _db.cachedHouseholdMembers,
+      );
 }

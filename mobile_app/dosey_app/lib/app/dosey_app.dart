@@ -4,6 +4,7 @@ import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
@@ -29,6 +30,7 @@ class DoseyApp extends StatelessWidget {
     this.demoDatabaseFactory,
     this.cloudIdentityGateway,
     this.householdSyncGateway,
+    this.householdManagementGateway,
     this.robotPairingGateway,
   });
 
@@ -44,6 +46,7 @@ class DoseyApp extends StatelessWidget {
   final DemoDatabaseFactory? demoDatabaseFactory;
   final CloudIdentityGateway? cloudIdentityGateway;
   final HouseholdSyncGateway? householdSyncGateway;
+  final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
 
   @override
@@ -67,6 +70,9 @@ class DoseyApp extends StatelessWidget {
         connectivityGateway: connectivityGateway,
         cloudIdentityGateway: session.isDemo ? null : cloudIdentityGateway,
         householdSyncGateway: session.isDemo ? null : householdSyncGateway,
+        householdManagementGateway: session.isDemo
+            ? null
+            : householdManagementGateway,
         robotPairingGateway: session.isDemo ? null : robotPairingGateway,
         appClock: session.clock,
         child: MaterialApp(

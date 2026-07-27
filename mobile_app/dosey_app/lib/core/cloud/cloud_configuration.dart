@@ -4,6 +4,10 @@ class CloudConfiguration {
     String? projectId,
     String? createPairingCodeFunctionId,
     String? claimRobotFunctionId,
+    String? createRobotFunctionId,
+    String? createHouseholdInvitationFunctionId,
+    String? acceptHouseholdInvitationFunctionId,
+    String? removeHouseholdMemberFunctionId,
   }) {
     final normalizedEndpoint = _normalize(endpoint);
     final normalizedProjectId = _normalize(projectId);
@@ -17,6 +21,16 @@ class CloudConfiguration {
       projectId: normalizedProjectId,
       createPairingCodeFunctionId: _normalize(createPairingCodeFunctionId),
       claimRobotFunctionId: _normalize(claimRobotFunctionId),
+      createRobotFunctionId: _normalize(createRobotFunctionId),
+      createHouseholdInvitationFunctionId: _normalize(
+        createHouseholdInvitationFunctionId,
+      ),
+      acceptHouseholdInvitationFunctionId: _normalize(
+        acceptHouseholdInvitationFunctionId,
+      ),
+      removeHouseholdMemberFunctionId: _normalize(
+        removeHouseholdMemberFunctionId,
+      ),
     );
   }
 
@@ -25,6 +39,10 @@ class CloudConfiguration {
     this.projectId,
     this.createPairingCodeFunctionId,
     this.claimRobotFunctionId,
+    this.createRobotFunctionId,
+    this.createHouseholdInvitationFunctionId,
+    this.acceptHouseholdInvitationFunctionId,
+    this.removeHouseholdMemberFunctionId,
   });
 
   static final fromEnvironment = CloudConfiguration.fromValues(
@@ -36,18 +54,40 @@ class CloudConfiguration {
     claimRobotFunctionId: const String.fromEnvironment(
       'APPWRITE_CLAIM_ROBOT_FUNCTION_ID',
     ),
+    createRobotFunctionId: const String.fromEnvironment(
+      'APPWRITE_CREATE_ROBOT_FUNCTION_ID',
+    ),
+    createHouseholdInvitationFunctionId: const String.fromEnvironment(
+      'APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID',
+    ),
+    acceptHouseholdInvitationFunctionId: const String.fromEnvironment(
+      'APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID',
+    ),
+    removeHouseholdMemberFunctionId: const String.fromEnvironment(
+      'APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID',
+    ),
   );
 
   final String? endpoint;
   final String? projectId;
   final String? createPairingCodeFunctionId;
   final String? claimRobotFunctionId;
+  final String? createRobotFunctionId;
+  final String? createHouseholdInvitationFunctionId;
+  final String? acceptHouseholdInvitationFunctionId;
+  final String? removeHouseholdMemberFunctionId;
 
   bool get isEnabled => endpoint != null && projectId != null;
   bool get isPairingEnabled =>
       isEnabled &&
       createPairingCodeFunctionId != null &&
       claimRobotFunctionId != null;
+  bool get isHouseholdManagementEnabled =>
+      isEnabled &&
+      createRobotFunctionId != null &&
+      createHouseholdInvitationFunctionId != null &&
+      acceptHouseholdInvitationFunctionId != null &&
+      removeHouseholdMemberFunctionId != null;
 
   static String? _normalize(String? value) {
     final normalized = value?.trim();

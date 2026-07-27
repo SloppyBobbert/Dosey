@@ -1,8 +1,12 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/onboarding/onboarding_flow.dart';
+import 'package:dosey_app/features/onboarding/household_membership_gate.dart';
+import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:dosey_app/features/shell/dosey_shell.dart';
 import 'package:flutter/material.dart';
 
@@ -106,7 +110,36 @@ class _CompletedOnboardingGate extends StatelessWidget {
             }
 
             if (authSnapshot.data!.isSignedIn) {
-              return DoseyShell(forceTodayTab: shellForceTodayTab);
+              final user = authSnapshot.data!.user!;
+              return HouseholdMembershipGate(
+                accountId: user.id,
+                sync: dependencies.householdSync,
+                management: dependencies.householdManagement,
+                membership: dependencies.householdMembership,
+                cache: dependencies.householdCache,
+                runProtectedMutation: (action) async {
+                  final result =
+                      await runProtectedAdminAction<RobotInstallation>(
+                        context,
+                        action: action,
+                      );
+                  return result.isSuccess ? result.value : null;
+                },
+                now: dependencies.appClock.now,
+                onHouseholdCreated: (robot, actor) async {
+                  await dependencies.adminAudit.addEvent(
+                    const AdminAuditEventFactory().householdCreated(
+                      actor: actor,
+                      sourceDeviceRole: role.storageValue,
+                      targetId: robot.id,
+                      summary: 'Created a robot household.',
+                      robotDisplayName: robot.displayName,
+                      occurredAt: dependencies.appClock.now(),
+                    ),
+                  );
+                },
+                child: DoseyShell(forceTodayTab: shellForceTodayTab),
+              );
             }
 
             return OnboardingFlow(signInRole: role);

@@ -349,6 +349,44 @@ class AdminAuditEvents extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('CachedRobotInstallationRow')
+class CachedRobotInstallations extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get robotId => text()();
+  TextColumn get displayName => text()();
+  TextColumn get ownerAccountId => text()();
+  TextColumn get currentRole => text()();
+  TextColumn get mountedDeviceId => text().nullable()();
+  DateTimeColumn get confirmedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {accountId};
+
+  @override
+  List<String> get customConstraints => const [
+    "CHECK (current_role IN ('owner', 'member'))",
+  ];
+}
+
+@DataClassName('CachedHouseholdMemberRow')
+class CachedHouseholdMembers extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get memberAccountId => text()();
+  TextColumn get label => text()();
+  TextColumn get role => text()();
+  IntColumn get position => integer()();
+
+  @override
+  Set<Column> get primaryKey => {accountId, memberAccountId};
+
+  @override
+  List<String> get customConstraints => const [
+    "CHECK (role IN ('owner', 'member'))",
+    'CHECK (position >= 0 AND position < 7)',
+    'UNIQUE (account_id, position)',
+  ];
+}
+
 @DriftDatabase(
   tables: [
     AppSettings,
@@ -367,6 +405,8 @@ class AdminAuditEvents extends Table {
     ControllerCommandEvents,
     ControllerHealthEvents,
     AdminAuditEvents,
+    CachedRobotInstallations,
+    CachedHouseholdMembers,
   ],
 )
 class DoseyDatabase extends _$DoseyDatabase {
@@ -390,7 +430,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   final bool isDemo;
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -471,6 +511,10 @@ class DoseyDatabase extends _$DoseyDatabase {
       if (from < 15) {
         await migrator.createTable(controllerHealthEvents);
         await migrator.createIndex(controllerHealthEventsOccurredAtIdx);
+      }
+      if (from < 16) {
+        await migrator.createTable(cachedRobotInstallations);
+        await migrator.createTable(cachedHouseholdMembers);
       }
     },
   );
