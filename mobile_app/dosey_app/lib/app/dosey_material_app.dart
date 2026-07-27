@@ -1,5 +1,6 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/settings/app_theme_preference.dart';
+import 'package:dosey_app/features/shell/dosey_shell.dart';
 import 'package:flutter/material.dart';
 
 class DoseyMaterialApp extends StatelessWidget {
@@ -20,6 +21,7 @@ class DoseyMaterialApp extends StatelessWidget {
         return MaterialApp(
           title: 'Dosey',
           debugShowCheckedModeBanner: false,
+          navigatorObservers: [doseyRouteObserver],
           themeMode: switch (preference) {
             AppThemePreference.dark => ThemeMode.dark,
             AppThemePreference.light => ThemeMode.light,

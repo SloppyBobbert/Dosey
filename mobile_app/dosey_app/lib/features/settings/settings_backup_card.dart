@@ -102,15 +102,29 @@ class _BackupDatabaseCardState extends State<_BackupDatabaseCard> {
     );
     if (acknowledged != true || !mounted) return;
     await _runProtected(
-      () => DoseyAppScope.of(context).backups.export(),
+      () =>
+          _runExternalAction(() => DoseyAppScope.of(context).backups.export()),
       successMessage: 'Backup ready to share.',
     );
   }
 
   Future<void> _pickAndRestore() async {
     await _runProtectedPreview(
-      () => DoseyAppScope.of(context).backups.pickBackupForRestore(),
+      () => _runExternalAction(
+        () => DoseyAppScope.of(context).backups.pickBackupForRestore(),
+      ),
     );
+  }
+
+  Future<T> _runExternalAction<T>(Future<T> Function() action) async {
+    final lease = DoseyAppScope.of(
+      context,
+    ).externalActionResumeGuard.begin('settings');
+    try {
+      return await action();
+    } finally {
+      lease.complete();
+    }
   }
 
   Future<void> _restoreRecovery() async {

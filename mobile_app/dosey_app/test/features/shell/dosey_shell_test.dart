@@ -1,6 +1,7 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/display/screen_awake_gateway.dart';
+import 'package:dosey_app/core/display/system_ui_gateway.dart';
 import 'package:dosey_app/core/controller/simulated_controller_gateway.dart';
 import 'package:dosey_app/core/demo/demo_data_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
@@ -33,6 +34,11 @@ void main() {
       await _setDeviceRole(database, role);
 
       await _pumpShell(tester, _TestShellApp(database: database));
+
+      if (role.canHostRobot) {
+        await tester.longPress(find.byKey(RobotFaceScreen.displayFrameKey));
+        await _pumpShellFrame(tester);
+      }
 
       final navigationBar = tester.widget<NavigationBar>(
         find.byType(NavigationBar),
@@ -97,13 +103,8 @@ void main() {
 
     await _pumpShell(tester, _TestShellApp(database: database));
 
-    expect(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.text('Robot Face'),
-      ),
-      findsOneWidget,
-    );
+    expect(find.byType(AppBar), findsNothing);
+    expect(find.byType(NavigationBar), findsNothing);
     expect(
       find.descendant(
         of: find.byType(NavigationBar),
@@ -120,6 +121,193 @@ void main() {
           .isActive,
       isTrue,
     );
+  });
+
+  testWidgets('Robot Mode launches directly to Dashboard in portrait', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(tester, _TestShellApp(database: database));
+
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(AppBar),
+        matching: find.text('Dashboard'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<RobotFaceScreen>(
+            find.byType(RobotFaceScreen, skipOffstage: false),
+          )
+          .isActive,
+      isFalse,
+    );
+
+    await tester.tap(find.text('Robot Face').hitTestable());
+    await _pumpShellFrame(tester);
+    expect(
+      find.text('Rotate to landscape to open Robot Face.'),
+      findsOneWidget,
+    );
+    expect(_appBarTitle('Dashboard'), findsOneWidget);
+  });
+
+  testWidgets('Robot Mode resume stays on Dashboard in portrait', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await _pumpShell(tester, _TestShellApp(database: database));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Dashboard'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
+  testWidgets('Face requests full screen and Dashboard restores app UI', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final systemUi = _FakeSystemUiGateway();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, systemUiGateway: systemUi),
+    );
+
+    expect(systemUi.states.last, isTrue);
+    await tester.longPress(find.byKey(RobotFaceScreen.displayFrameKey));
+    await _pumpShellFrame(tester);
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(systemUi.states.last, isFalse);
+  });
+
+  testWidgets('portrait to landscape reopens Face only from Dashboard', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await _pumpShell(tester, _TestShellApp(database: database));
+
+    tester.view.physicalSize = const Size(900, 600);
+    await _pumpShellFrame(tester);
+    _expectRobotFaceVisible();
+
+    await tester.longPress(find.byKey(RobotFaceScreen.displayFrameKey));
+    await _pumpShellFrame(tester);
+    expect(_appBarTitle('Dashboard'), findsOneWidget);
+    await _pumpShellFrame(tester);
+    expect(_appBarTitle('Dashboard'), findsOneWidget);
+
+    await _openBottomDestination(tester, 'Schedule');
+    tester.view.physicalSize = const Size(600, 900);
+    await _pumpShellFrame(tester);
+    tester.view.physicalSize = const Size(900, 600);
+    await _pumpShellFrame(tester);
+    expect(_appBarTitle('Schedule'), findsOneWidget);
+  });
+
+  testWidgets('cold-start notification wins over default Face routing', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final notificationTaps = ReminderNotificationTapController();
+    addTearDown(database.close);
+    addTearDown(notificationTaps.dispose);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    notificationTaps.handleTap('shortage:shortage-1|slot:2');
+
+    await _pumpShell(
+      tester,
+      _TestShellApp(
+        database: database,
+        notificationTapController: notificationTaps,
+      ),
+    );
+
+    expect(_appBarTitle('Carousel'), findsOneWidget);
+    expect(notificationTaps.takePendingTap(), isNull);
+  });
+
+  testWidgets('nested route restores chrome and returning Face re-enters', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final systemUi = _FakeSystemUiGateway();
+    addTearDown(database.close);
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await _pumpShell(
+      tester,
+      _TestShellApp(database: database, systemUiGateway: systemUi),
+    );
+    final shellContext = tester.element(find.byType(DoseyShell));
+
+    Navigator.of(shellContext).push<void>(
+      MaterialPageRoute(builder: (_) => const Scaffold(body: Text('Nested'))),
+    );
+    await _pumpShellFrame(tester);
+    expect(systemUi.states.last, isFalse);
+
+    await tester.binding.handlePopRoute();
+    await _pumpShellFrame(tester);
+    expect(systemUi.states.last, isTrue);
+  });
+
+  testWidgets('external action return preserves its initiating destination', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    addTearDown(
+      () => tester.binding.handleAppLifecycleStateChanged(
+        AppLifecycleState.resumed,
+      ),
+    );
+    await _setDeviceRole(database, AppDeviceRole.androidRobot);
+    await _pumpShell(tester, _TestShellApp(database: database));
+    await _openBottomDestination(tester, 'Settings');
+    final dependencies = DoseyAppScope.of(
+      tester.element(find.byType(DoseyShell)),
+    );
+    dependencies.externalActionResumeGuard.begin('settings');
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await _pumpShellFrame(tester);
+
+    expect(_appBarTitle('Settings'), findsOneWidget);
   });
 
   testWidgets('demo launch opens Controller before Robot Face', (
@@ -227,7 +415,7 @@ void main() {
           .isActive,
       isTrue,
     );
-    expect(find.text('Robot Face'), findsOneWidget);
+    _expectRobotFaceVisible();
 
     await _openControllerHub(tester);
 
@@ -259,7 +447,7 @@ void main() {
     await tester.pump(const Duration(minutes: 1));
     await _pumpShellFrame(tester);
 
-    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    _expectRobotFaceVisible();
   });
 
   testWidgets('guided trial stays on Controller after inactivity', (
@@ -314,7 +502,7 @@ void main() {
 
     await tester.pump(const Duration(seconds: 29));
     await _pumpShellFrame(tester);
-    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    _expectRobotFaceVisible();
   });
 
   testWidgets('Personal Mode does not auto-return after inactivity', (
@@ -372,7 +560,7 @@ void main() {
     await _pumpShellFrame(tester);
     await tester.pump(const Duration(seconds: 1));
     await _pumpShellFrame(tester);
-    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    _expectRobotFaceVisible();
   });
 
   testWidgets('Robot Mode Back returns another tab to Robot Face', (
@@ -389,7 +577,7 @@ void main() {
     await _pumpShellFrame(tester);
 
     expect(find.byType(DoseyShell), findsOneWidget);
-    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    _expectRobotFaceVisible();
   });
 
   testWidgets('Robot Mode Back is consumed on Robot Face', (
@@ -404,7 +592,7 @@ void main() {
     await _pumpShellFrame(tester);
 
     expect(find.byType(DoseyShell), findsOneWidget);
-    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    _expectRobotFaceVisible();
   });
 
   testWidgets('Personal Mode allows normal route popping', (
@@ -492,7 +680,7 @@ void main() {
     controller.emitWakeFace();
     await _pumpShellFrame(tester);
 
-    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    _expectRobotFaceVisible();
     expect(screenAwake.wakeCalls, 1);
     expect(screenAwake.states.last, isTrue);
 
@@ -659,7 +847,7 @@ void main() {
       _TestShellApp(database: database, screenAwakeGateway: screenAwake),
     );
 
-    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    _expectRobotFaceVisible();
     expect(tester.takeException(), isNull);
   });
 
@@ -690,7 +878,7 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await _pumpShellFrame(tester);
 
-    expect(_appBarTitle('Robot Face'), findsOneWidget);
+    _expectRobotFaceVisible();
     expect(reconciliation.reconcileCalls, baselineCalls + 1);
   });
 
@@ -786,12 +974,11 @@ void main() {
       notificationTaps.handleTap('dose-17');
       await _pumpShellFrame(tester);
 
-      expect(
-        _appBarTitle(
-          role == AppDeviceRole.androidRobot ? 'Robot Face' : 'Dashboard',
-        ),
-        findsOneWidget,
-      );
+      if (role.canHostRobot) {
+        _expectRobotFaceVisible();
+      } else {
+        expect(_appBarTitle('Dashboard'), findsOneWidget);
+      }
 
       notificationTaps.dispose();
       await database.close();
@@ -866,8 +1053,7 @@ void main() {
 
     await _pumpShell(tester, _TestShellApp(database: database));
 
-    await tester.tap(find.text('Settings'));
-    await tester.pumpAndSettle();
+    await _openBottomDestination(tester, 'Settings');
 
     final shellContext = tester.element(find.byType(DoseyShell));
     await DoseyAppScope.of(
@@ -996,7 +1182,24 @@ Finder _appBarTitle(String title) {
   return find.descendant(of: find.byType(AppBar), matching: find.text(title));
 }
 
+void _expectRobotFaceVisible() {
+  expect(
+    find.byWidgetPredicate(
+      (widget) => widget is RobotFaceScreen && widget.isActive,
+      skipOffstage: false,
+    ),
+    findsOneWidget,
+  );
+  expect(find.byType(AppBar), findsNothing);
+  expect(find.byType(NavigationBar), findsNothing);
+}
+
 Future<void> _openBottomDestination(WidgetTester tester, String label) async {
+  if (find.byType(NavigationBar).evaluate().isEmpty &&
+      find.byKey(RobotFaceScreen.displayFrameKey).evaluate().isNotEmpty) {
+    await tester.longPress(find.byKey(RobotFaceScreen.displayFrameKey));
+    await _pumpShellFrame(tester);
+  }
   await openBottomDestination(
     tester,
     label,
@@ -1039,6 +1242,7 @@ class _TestShellApp extends StatelessWidget {
     this.notificationTapController,
     this.missedDoseReconciliationService,
     this.screenAwakeGateway,
+    this.systemUiGateway,
     this.startOnController = false,
     this.appClock,
     this.useRealMissedDoseReconciliation = false,
@@ -1049,6 +1253,7 @@ class _TestShellApp extends StatelessWidget {
   final ReminderNotificationTapController? notificationTapController;
   final FakeMissedDoseReconciliationService? missedDoseReconciliationService;
   final ScreenAwakeGateway? screenAwakeGateway;
+  final SystemUiGateway? systemUiGateway;
   final bool startOnController;
   final AppClock? appClock;
   final bool useRealMissedDoseReconciliation;
@@ -1069,7 +1274,9 @@ class _TestShellApp extends StatelessWidget {
           : missedDoseReconciliationService ??
                 FakeMissedDoseReconciliationService(),
       screenAwakeGateway: screenAwakeGateway,
+      systemUiGateway: systemUiGateway,
       child: MaterialApp(
+        navigatorObservers: [doseyRouteObserver],
         builder: textScaler == null
             ? null
             : (context, child) => MediaQuery(
@@ -1080,6 +1287,16 @@ class _TestShellApp extends StatelessWidget {
       ),
     );
   }
+}
+
+class _FakeSystemUiGateway implements SystemUiGateway {
+  final List<bool> states = <bool>[];
+
+  @override
+  Future<void> enterRobotFace() async => states.add(true);
+
+  @override
+  Future<void> restoreAppUi() async => states.add(false);
 }
 
 class _FakeScreenAwakeGateway implements ScreenAwakeGateway {

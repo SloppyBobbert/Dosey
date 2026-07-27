@@ -2134,6 +2134,30 @@ void main() {
     },
   );
 
+  testWidgets('long pressing the display uses the shell exit callback', (
+    WidgetTester tester,
+  ) async {
+    final harness = _RobotFaceInteractionControllerHarness();
+    var exits = 0;
+    addTearDown(harness.dispose);
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        controller: harness.controller,
+        onLongPress: () => exits += 1,
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.byKey(RobotFaceScreen.displayFrameKey));
+    await tester.pump();
+    expect(exits, 0);
+
+    await tester.longPress(find.byKey(RobotFaceScreen.displayFrameKey));
+    await tester.pump();
+    expect(exits, 1);
+  });
+
   testWidgets(
     'tapping the Robot Face display records interaction through the app-owned controller',
     (WidgetTester tester) async {
@@ -3111,6 +3135,7 @@ class _RobotFaceTestApp extends StatefulWidget {
     this.appClock,
     this.voicePlayer,
     this.enableDemoFaceLab = false,
+    this.onLongPress,
   });
 
   final DoseyDatabase? database;
@@ -3123,6 +3148,7 @@ class _RobotFaceTestApp extends StatefulWidget {
   final AppClock? appClock;
   final DoseyVoicePlayer? voicePlayer;
   final bool enableDemoFaceLab;
+  final VoidCallback? onLongPress;
 
   @override
   State<_RobotFaceTestApp> createState() => _RobotFaceTestAppState();
@@ -3149,6 +3175,7 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
         initialState: widget.initialState,
         isActive: widget.isActive,
         doseActionLogger: widget.doseActionLogger,
+        onLongPress: widget.onLongPress,
       );
     }
 
