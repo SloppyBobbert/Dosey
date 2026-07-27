@@ -3,6 +3,8 @@ import 'package:dosey_app/core/auth/apple_auth_service.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/auth/google_auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
+import 'package:dosey_app/core/household/local_household_cache_repository.dart';
+import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -106,6 +108,47 @@ void main() {
     expect(googleGateway.signOutCallCount, 0);
     expect(appleGateway.signOutCallCount, 1);
   });
+
+  test(
+    'sign out clears only the current cloud account household cache',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final localAuth = LocalAuthRepository(database);
+      final householdCache = LocalHouseholdCacheRepository(database);
+      final service = AppAuthService(
+        localAuth: localAuth,
+        householdCache: householdCache,
+        googleAuthService: GoogleAuthService(
+          localAuth,
+          googleAccountGateway: _TrackingGoogleGateway(),
+        ),
+      );
+      await service.signInWithGoogle();
+      await householdCache.replaceForAccount(
+        'google-123',
+        RobotInstallation(
+          id: 'robot-1',
+          displayName: 'Dosey',
+          ownerAccountId: 'google-123',
+          members: const [
+            HouseholdMember(
+              accountId: 'google-123',
+              label: 'Dosey Tester',
+              role: HouseholdRole.owner,
+            ),
+          ],
+          currentRole: HouseholdRole.owner,
+          mountedDeviceId: null,
+        ),
+        confirmedAt: DateTime.utc(2026, 7, 26),
+      );
+
+      await service.signOut();
+
+      expect(await householdCache.readForAccount('google-123'), isNull);
+    },
+  );
 }
 
 class _SuccessfulGoogleGateway implements GoogleAccountGateway {

@@ -18,28 +18,6 @@ void main() {
     expect(robot?.isSinglePerson, isTrue);
   });
 
-  test('publishes a newly created single-person robot', () async {
-    final api = _FakeAppwriteTeamsApi();
-    final gateway = AppwriteHouseholdSyncGateway(api);
-    final changes = StreamIterator(gateway.watchRobot());
-    addTearDown(() {
-      changes.cancel();
-    });
-    expect(await changes.moveNext(), isTrue);
-    expect(changes.current, isNull);
-
-    final created = await gateway.createRobot(
-      displayName: 'Kitchen Dosey',
-      ownerAccountId: 'owner-1',
-      mountedDeviceId: 'mounted-android-1',
-    );
-
-    expect(created.isSinglePerson, isTrue);
-    expect(await changes.moveNext(), isTrue);
-    expect(changes.current?.id, created.id);
-    expect(api.createCalls, 1);
-  });
-
   test(
     'refresh publishes membership changes made by a cloud function',
     () async {
@@ -60,21 +38,6 @@ void main() {
       expect(changes.current?.id, 'robot-1');
     },
   );
-
-  test('rejects creating a second robot for the account', () async {
-    final api = _FakeAppwriteTeamsApi(robots: [_robot(id: 'robot-1')]);
-    final gateway = AppwriteHouseholdSyncGateway(api);
-
-    await expectLater(
-      gateway.createRobot(
-        displayName: 'Second Dosey',
-        ownerAccountId: 'owner-1',
-        mountedDeviceId: 'mounted-android-2',
-      ),
-      throwsA(isA<RobotAlreadyExistsException>()),
-    );
-    expect(api.createCalls, 0);
-  });
 
   test('rejects ambiguous membership in multiple Dosey robots', () async {
     final api = _FakeAppwriteTeamsApi(
@@ -106,18 +69,40 @@ void main() {
       'family-1',
     });
   });
+
+  test('maps accepted member labels and roles with privacy fallbacks', () {
+    final members = acceptedHouseholdMembers([
+      _membership(
+        userId: 'owner-1',
+        roles: const ['owner'],
+        userName: 'Owner Person',
+      ),
+      _membership(
+        userId: 'member-1',
+        roles: const ['member'],
+        userEmail: 'member@example.com',
+      ),
+    ], mountedDeviceId: null);
+
+    expect(members.first.label, 'Owner Person');
+    expect(members.first.role, HouseholdRole.owner);
+    expect(members.last.label, 'member@example.com');
+    expect(members.last.role, HouseholdRole.member);
+  });
 }
 
 models.Membership _membership({
   required String userId,
   required List<String> roles,
+  String userName = '',
+  String userEmail = '',
 }) => models.Membership(
   $id: 'membership-$userId',
   $createdAt: '2026-07-26T12:00:00.000Z',
   $updatedAt: '2026-07-26T12:00:00.000Z',
   userId: userId,
-  userName: userId,
-  userEmail: '',
+  userName: userName,
+  userEmail: userEmail,
   userPhone: '',
   teamId: 'robot-1',
   teamName: 'Kitchen Dosey',
@@ -133,7 +118,14 @@ RobotInstallation _robot({required String id}) => RobotInstallation(
   id: id,
   displayName: 'Kitchen Dosey',
   ownerAccountId: 'owner-1',
-  humanAccountIds: {'owner-1'},
+  members: const [
+    HouseholdMember(
+      accountId: 'owner-1',
+      label: 'Owner Person',
+      role: HouseholdRole.owner,
+    ),
+  ],
+  currentRole: HouseholdRole.owner,
   mountedDeviceId: 'mounted-android-1',
 );
 
@@ -142,25 +134,6 @@ class _FakeAppwriteTeamsApi implements AppwriteTeamsApi {
     : robots = robots ?? [];
 
   final List<RobotInstallation> robots;
-  var createCalls = 0;
-
-  @override
-  Future<RobotInstallation> createRobotTeam({
-    required String displayName,
-    required String ownerAccountId,
-    required String mountedDeviceId,
-  }) async {
-    createCalls += 1;
-    final robot = RobotInstallation(
-      id: 'robot-created',
-      displayName: displayName,
-      ownerAccountId: ownerAccountId,
-      humanAccountIds: {ownerAccountId},
-      mountedDeviceId: mountedDeviceId,
-    );
-    robots.add(robot);
-    return robot;
-  }
 
   @override
   Future<List<RobotInstallation>> listRobotTeams() async => List.of(robots);

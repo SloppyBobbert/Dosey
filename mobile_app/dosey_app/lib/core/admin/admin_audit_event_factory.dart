@@ -239,6 +239,84 @@ class AdminAuditEventFactory {
     );
   }
 
+  AdminAuditEvent householdCreated({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    required String robotDisplayName,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.householdCreated,
+    targetType: AdminAuditTargetType.household,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    targetId: targetId,
+    summary: summary,
+    details: {'robotDisplayName': robotDisplayName},
+    occurredAt: occurredAt,
+  );
+
+  AdminAuditEvent householdInvitationGenerated({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    required String invitedEmail,
+    required DateTime expiresAt,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.householdInvitationGenerated,
+    targetType: AdminAuditTargetType.household,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    targetId: targetId,
+    summary: summary,
+    details: {
+      'invitedEmail': invitedEmail,
+      'expiresAt': expiresAt.toUtc().toIso8601String(),
+    },
+    occurredAt: occurredAt,
+  );
+
+  AdminAuditEvent householdMemberRemoved({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    required String removedAccountId,
+    required String removedLabel,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.householdMemberRemoved,
+    targetType: AdminAuditTargetType.household,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    targetId: targetId,
+    summary: summary,
+    details: {
+      'removedAccountId': removedAccountId,
+      'removedLabel': removedLabel,
+    },
+    occurredAt: occurredAt,
+  );
+
+  AdminAuditEvent householdLeft({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String targetId,
+    required String summary,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.householdLeft,
+    targetType: AdminAuditTargetType.household,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    targetId: targetId,
+    summary: summary,
+    occurredAt: occurredAt,
+  );
+
   AdminAuditEvent pairingCodeGenerated({
     required AdminAuditActorIdentity actor,
     required String sourceDeviceRole,

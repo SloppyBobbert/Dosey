@@ -31,7 +31,9 @@ import 'package:dosey_app/core/demo/demo_external_services.dart';
 import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/household/local_household_repository.dart';
+import 'package:dosey_app/core/household/local_household_cache_repository.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
@@ -77,6 +79,7 @@ class DoseyAppScope extends StatefulWidget {
     this.controllerGateway,
     this.cloudIdentityGateway,
     this.householdSyncGateway,
+    this.householdManagementGateway,
     this.robotPairingGateway,
     this.enableDemoFaceLab = false,
   });
@@ -97,6 +100,7 @@ class DoseyAppScope extends StatefulWidget {
   final StagedControllerGateway? controllerGateway;
   final CloudIdentityGateway? cloudIdentityGateway;
   final HouseholdSyncGateway? householdSyncGateway;
+  final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
   final bool enableDemoFaceLab;
 
@@ -168,10 +172,14 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     final adminAudit = LocalAdminAuditRepository(_database);
     final localAuth = LocalAuthRepository(_database);
     final household = LocalHouseholdRepository(_database);
+    final householdCache = LocalHouseholdCacheRepository(_database);
     final cloudIdentity =
         widget.cloudIdentityGateway ?? const DisabledCloudIdentityGateway();
     final householdSync =
         widget.householdSyncGateway ?? const DisabledHouseholdSyncGateway();
+    final householdManagement =
+        widget.householdManagementGateway ??
+        const DisabledHouseholdManagementGateway();
     final robotPairing =
         widget.robotPairingGateway ?? const DisabledRobotPairingGateway();
     final cloudGoogleAuth = cloudIdentity is DisabledCloudIdentityGateway
@@ -350,12 +358,15 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       doseLog: doseLog,
       adminAudit: adminAudit,
       household: household,
+      householdCache: householdCache,
       cloudIdentity: cloudIdentity,
       householdSync: householdSync,
+      householdManagement: householdManagement,
       robotPairing: robotPairing,
       localAuth: localAuth,
       auth: AppAuthService(
         localAuth: localAuth,
+        householdCache: householdCache,
         googleAuthService: cloudGoogleAuth,
       ),
       controller: controller,
@@ -536,8 +547,10 @@ class DoseyAppDependencies {
     required this.doseLog,
     required this.adminAudit,
     required this.household,
+    required this.householdCache,
     required this.cloudIdentity,
     required this.householdSync,
+    required this.householdManagement,
     required this.robotPairing,
     required this.localAuth,
     required this.auth,
@@ -575,8 +588,10 @@ class DoseyAppDependencies {
   final DriftDoseLogRepository doseLog;
   final AdminAuditRepository adminAudit;
   final LocalHouseholdRepository household;
+  final LocalHouseholdCacheRepository householdCache;
   final CloudIdentityGateway cloudIdentity;
   final HouseholdSyncGateway householdSync;
+  final HouseholdManagementGateway householdManagement;
   final RobotPairingGateway robotPairing;
   final LocalAuthRepository localAuth;
   final AuthService auth;

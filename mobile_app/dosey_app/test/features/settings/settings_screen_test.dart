@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
@@ -6,7 +7,9 @@ import 'package:dosey_app/core/backup/backup_codec.dart';
 import 'package:dosey_app/core/backup/backup_file_gateway.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
+import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/local_household_cache_repository.dart';
 import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
@@ -1263,6 +1266,8 @@ void main() {
 
     await tester.tap(find.text('Robot linking'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Generate robot pairing code'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Generate robot pairing code'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
@@ -1311,6 +1316,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Robot linking'));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Generate robot pairing code'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Generate robot pairing code'));
     await tester.pumpAndSettle();
 
@@ -1318,6 +1325,165 @@ void main() {
       find.text('Sign in again to generate a pairing code.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('owner lists members and generates an email-bound invitation', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    final management = _FakeHouseholdManagementGateway();
+    final robot = _robotInstallationWithMember();
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        cloudIdentityGateway: _FakeCloudIdentityGateway(
+          identity: const CloudIdentity.signedIn(
+            accountId: 'owner-1',
+            email: 'owner@example.com',
+          ),
+        ),
+        householdSyncGateway: _FakeHouseholdSyncGateway(robot),
+        householdManagementGateway: management,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Owner Person (Owner)'), findsOneWidget);
+    expect(find.text('Member Person (Member)'), findsOneWidget);
+    expect(find.text('Remove Member Person'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Generate member invitation'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Generate member invitation'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Invited Google account email'),
+      ' Member@Example.com ',
+    );
+    await tester.tap(find.text('Generate invitation'));
+    await tester.pumpAndSettle();
+
+    expect(management.invitedRobotId, 'robot-1');
+    expect(management.invitedEmail, 'member@example.com');
+    expect(find.text('Invitation code: ABCD2345EFGH6789'), findsOneWidget);
+    final auditRows = await database.select(database.adminAuditEvents).get();
+    expect(auditRows, hasLength(1));
+    expect(
+      auditRows.single.eventType,
+      AdminAuditEventType.householdInvitationGenerated.name,
+    );
+    final details = jsonDecode(auditRows.single.detailsJson!);
+    expect(details['invitedEmail'], 'member@example.com');
+    expect(auditRows.single.detailsJson, isNot(contains('ABCD2345EFGH6789')));
+  });
+
+  testWidgets('owner removal updates the household cache and audit', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    final robot = _robotInstallationWithMember();
+    final management = _FakeHouseholdManagementGateway(
+      removalResult: _robotInstallation,
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        cloudIdentityGateway: _FakeCloudIdentityGateway(
+          identity: const CloudIdentity.signedIn(
+            accountId: 'owner-1',
+            email: 'owner@example.com',
+          ),
+        ),
+        householdSyncGateway: _FakeHouseholdSyncGateway(robot),
+        householdManagementGateway: management,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove Member Person'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove member'));
+    await tester.pumpAndSettle();
+
+    expect(management.removedAccountId, 'member-1');
+    expect(find.text('Member Person (Member)'), findsNothing);
+    final cached = await LocalHouseholdCacheRepository(
+      database,
+    ).readForAccount('owner-1');
+    expect(cached?.installation.members, hasLength(1));
+    final auditRows = await database.select(database.adminAuditEvents).get();
+    expect(
+      auditRows.single.eventType,
+      AdminAuditEventType.householdMemberRemoved.name,
+    );
+  });
+
+  testWidgets('non-owner can leave and clears only their household cache', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    final robot = _memberRobotInstallation();
+    final cache = LocalHouseholdCacheRepository(database);
+    await cache.replaceForAccount(
+      'member-1',
+      robot,
+      confirmedAt: DateTime.utc(2026, 7, 26, 12),
+    );
+    final management = _FakeHouseholdManagementGateway();
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        cloudIdentityGateway: _FakeCloudIdentityGateway(
+          identity: const CloudIdentity.signedIn(
+            accountId: 'member-1',
+            email: 'member@example.com',
+          ),
+        ),
+        householdSyncGateway: _FakeHouseholdSyncGateway(robot),
+        householdManagementGateway: management,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Generate member invitation'), findsNothing);
+    expect(find.textContaining('Remove '), findsNothing);
+    await tester.ensureVisible(find.text('Leave household'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Leave household'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Leave'));
+    await tester.pumpAndSettle();
+
+    expect(management.leftRobotId, 'robot-1');
+    expect(await cache.readForAccount('member-1'), isNull);
+    final auditRows = await database.select(database.adminAuditEvents).get();
+    expect(auditRows.single.eventType, AdminAuditEventType.householdLeft.name);
   });
 
   testWidgets('Robot Mode can claim an existing robot with a temporary code', (
@@ -1628,6 +1794,7 @@ class _TestSettingsApp extends StatelessWidget {
     this.appClock,
     this.cloudIdentityGateway,
     this.householdSyncGateway,
+    this.householdManagementGateway,
     this.robotPairingGateway,
   });
 
@@ -1639,6 +1806,7 @@ class _TestSettingsApp extends StatelessWidget {
   final AppClock? appClock;
   final CloudIdentityGateway? cloudIdentityGateway;
   final HouseholdSyncGateway? householdSyncGateway;
+  final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
 
   @override
@@ -1654,6 +1822,7 @@ class _TestSettingsApp extends StatelessWidget {
       backupFileGateway: backupFileGateway,
       cloudIdentityGateway: cloudIdentityGateway,
       householdSyncGateway: householdSyncGateway,
+      householdManagementGateway: householdManagementGateway,
       robotPairingGateway: robotPairingGateway,
       voicePlayer: voicePlayer,
       child: MaterialApp(
@@ -1676,9 +1845,41 @@ final _robotInstallation = RobotInstallation(
   id: 'robot-1',
   displayName: 'Kitchen Dosey',
   ownerAccountId: 'owner-1',
-  humanAccountIds: {'owner-1'},
+  members: const [
+    HouseholdMember(
+      accountId: 'owner-1',
+      label: 'Owner Person',
+      role: HouseholdRole.owner,
+    ),
+  ],
+  currentRole: HouseholdRole.owner,
   mountedDeviceId: 'mounted-1',
 );
+
+RobotInstallation _robotInstallationWithMember({
+  HouseholdRole currentRole = HouseholdRole.owner,
+}) => RobotInstallation(
+  id: 'robot-1',
+  displayName: 'Kitchen Dosey',
+  ownerAccountId: 'owner-1',
+  members: const [
+    HouseholdMember(
+      accountId: 'owner-1',
+      label: 'Owner Person',
+      role: HouseholdRole.owner,
+    ),
+    HouseholdMember(
+      accountId: 'member-1',
+      label: 'Member Person',
+      role: HouseholdRole.member,
+    ),
+  ],
+  currentRole: currentRole,
+  mountedDeviceId: 'mounted-1',
+);
+
+RobotInstallation _memberRobotInstallation() =>
+    _robotInstallationWithMember(currentRole: HouseholdRole.member);
 
 class _FakeHouseholdSyncGateway implements HouseholdSyncGateway {
   const _FakeHouseholdSyncGateway(this.robot);
@@ -1690,13 +1891,6 @@ class _FakeHouseholdSyncGateway implements HouseholdSyncGateway {
 
   @override
   Future<RobotInstallation?> refreshRobot() async => robot;
-
-  @override
-  Future<RobotInstallation> createRobot({
-    required String displayName,
-    required String ownerAccountId,
-    required String mountedDeviceId,
-  }) => throw UnimplementedError();
 }
 
 class _RefreshingHouseholdSyncGateway implements HouseholdSyncGateway {
@@ -1720,13 +1914,6 @@ class _RefreshingHouseholdSyncGateway implements HouseholdSyncGateway {
     _changes.add(robot);
     return robot;
   }
-
-  @override
-  Future<RobotInstallation> createRobot({
-    required String displayName,
-    required String ownerAccountId,
-    required String mountedDeviceId,
-  }) => throw UnimplementedError();
 }
 
 class _FakeRobotPairingGateway implements RobotPairingGateway {
@@ -1762,6 +1949,56 @@ class _FakeRobotPairingGateway implements RobotPairingGateway {
     claimedCode = code;
     if (claimFailure case final failure?) throw failure;
     return claimedRobotId;
+  }
+}
+
+class _FakeHouseholdManagementGateway implements HouseholdManagementGateway {
+  _FakeHouseholdManagementGateway({this.removalResult});
+
+  final RobotInstallation? removalResult;
+  String? invitedRobotId;
+  String? invitedEmail;
+  String? removedRobotId;
+  String? removedAccountId;
+  String? leftRobotId;
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<RobotInstallation> acceptInvitation(String code) =>
+      throw UnimplementedError();
+
+  @override
+  Future<HouseholdInvitationCredential> createInvitation(
+    String robotId,
+    String email,
+  ) async {
+    invitedRobotId = robotId;
+    invitedEmail = email;
+    return HouseholdInvitationCredential(
+      code: 'ABCD2345EFGH6789',
+      expiresAt: DateTime.utc(2026, 7, 27, 12),
+    );
+  }
+
+  @override
+  Future<RobotInstallation> createRobot(String displayName) =>
+      throw UnimplementedError();
+
+  @override
+  Future<void> leaveRobot(String robotId) async {
+    leftRobotId = robotId;
+  }
+
+  @override
+  Future<RobotInstallation> removeMember(
+    String robotId,
+    String accountId,
+  ) async {
+    removedRobotId = robotId;
+    removedAccountId = accountId;
+    return removalResult ?? _robotInstallation;
   }
 }
 

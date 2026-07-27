@@ -9,88 +9,58 @@ abstract interface class AppwriteTeamsApi {
   // This seam contains Appwrite's Team representation so household consumers
   // remain independent of the selected cloud provider.
   Future<List<RobotInstallation>> listRobotTeams();
-
-  Future<RobotInstallation> createRobotTeam({
-    required String displayName,
-    required String ownerAccountId,
-    required String mountedDeviceId,
-  });
 }
 
 class AppwriteTeamsApiAdapter implements AppwriteTeamsApi {
-  AppwriteTeamsApiAdapter(this._teams);
+  AppwriteTeamsApiAdapter(this._teams, this._account);
 
-  static const _schemaVersion = 1;
   static const _robotMarkerKey = 'doseyRobot';
-  static const _schemaVersionKey = 'doseySchemaVersion';
   static const _ownerAccountIdKey = 'ownerAccountId';
   static const _mountedDeviceIdKey = 'mountedDeviceId';
 
   final Teams _teams;
+  final Account _account;
 
   @override
   Future<List<RobotInstallation>> listRobotTeams() async {
+    final currentAccountId = (await _account.get()).$id;
     final result = await _teams.list();
     final robots = <RobotInstallation>[];
     for (final team in result.teams) {
       if (team.prefs.data[_robotMarkerKey] != true) continue;
-      robots.add(await _toRobotInstallation(team));
+      robots.add(await _toRobotInstallation(team, currentAccountId));
     }
     return robots;
   }
 
-  @override
-  Future<RobotInstallation> createRobotTeam({
-    required String displayName,
-    required String ownerAccountId,
-    required String mountedDeviceId,
-  }) async {
-    final team = await _teams.create(teamId: ID.unique(), name: displayName);
-    try {
-      await _teams.updatePrefs(
-        teamId: team.$id,
-        prefs: {
-          _robotMarkerKey: true,
-          _schemaVersionKey: _schemaVersion,
-          _ownerAccountIdKey: ownerAccountId,
-          _mountedDeviceIdKey: mountedDeviceId,
-        },
-      );
-    } catch (_) {
-      try {
-        await _teams.delete(teamId: team.$id);
-      } catch (_) {
-        // Preserve the setup failure; a later restore ignores an unmarked team.
-      }
-      rethrow;
-    }
-
-    return RobotInstallation(
-      id: team.$id,
-      displayName: team.name,
-      ownerAccountId: ownerAccountId,
-      humanAccountIds: {ownerAccountId},
-      mountedDeviceId: mountedDeviceId,
-    );
-  }
-
-  Future<RobotInstallation> _toRobotInstallation(models.Team team) async {
+  Future<RobotInstallation> _toRobotInstallation(
+    models.Team team,
+    String currentAccountId,
+  ) async {
     final ownerAccountId = team.prefs.data[_ownerAccountIdKey];
     final mountedDeviceId = team.prefs.data[_mountedDeviceIdKey];
-    if (ownerAccountId is! String || mountedDeviceId is! String) {
+    if (ownerAccountId is! String ||
+        (mountedDeviceId != null && mountedDeviceId is! String)) {
       throw StateError('Dosey robot team ${team.$id} has invalid preferences.');
     }
 
     final memberships = await _teams.listMemberships(teamId: team.$id);
-    final acceptedHumanIds = acceptedHumanAccountIds(
+    final members = acceptedHouseholdMembers(
       memberships.memberships,
       mountedDeviceId: mountedDeviceId,
     );
+    final currentMember = members
+        .where((member) => member.accountId == currentAccountId)
+        .firstOrNull;
+    if (currentMember == null) {
+      throw StateError('The current account is not an accepted human member.');
+    }
     return RobotInstallation(
       id: team.$id,
       displayName: team.name,
       ownerAccountId: ownerAccountId,
-      humanAccountIds: acceptedHumanIds,
+      members: members,
+      currentRole: currentMember.role,
       mountedDeviceId: mountedDeviceId,
     );
   }
@@ -98,7 +68,15 @@ class AppwriteTeamsApiAdapter implements AppwriteTeamsApi {
 
 Set<String> acceptedHumanAccountIds(
   Iterable<models.Membership> memberships, {
-  required String mountedDeviceId,
+  required String? mountedDeviceId,
+}) => acceptedHouseholdMembers(
+  memberships,
+  mountedDeviceId: mountedDeviceId,
+).map((member) => member.accountId).toSet();
+
+List<HouseholdMember> acceptedHouseholdMembers(
+  Iterable<models.Membership> memberships, {
+  required String? mountedDeviceId,
 }) => memberships
     .where(
       (membership) =>
@@ -107,8 +85,27 @@ Set<String> acceptedHumanAccountIds(
           !(membership.roles.length == 1 &&
               membership.roles.single == 'robot-device'),
     )
-    .map((membership) => membership.userId)
-    .toSet();
+    .map((membership) {
+      final role = membership.roles.contains('owner')
+          ? HouseholdRole.owner
+          : membership.roles.contains('member')
+          ? HouseholdRole.member
+          : null;
+      if (role == null) return null;
+      final name = membership.userName.trim();
+      final email = membership.userEmail.trim();
+      return HouseholdMember(
+        accountId: membership.userId,
+        label: name.isNotEmpty
+            ? name
+            : email.isNotEmpty
+            ? email
+            : membership.userId,
+        role: role,
+      );
+    })
+    .nonNulls
+    .toList(growable: false);
 
 class AppwriteHouseholdSyncGateway implements HouseholdSyncGateway {
   AppwriteHouseholdSyncGateway(this._teams);
@@ -116,7 +113,6 @@ class AppwriteHouseholdSyncGateway implements HouseholdSyncGateway {
   final AppwriteTeamsApi _teams;
   final StreamController<RobotInstallation?> _changes =
       StreamController<RobotInstallation?>.broadcast();
-  Future<RobotInstallation>? _createInFlight;
   var _revision = 0;
 
   @override
@@ -150,37 +146,6 @@ class AppwriteHouseholdSyncGateway implements HouseholdSyncGateway {
     return robot;
   }
 
-  @override
-  Future<RobotInstallation> createRobot({
-    required String displayName,
-    required String ownerAccountId,
-    required String mountedDeviceId,
-  }) {
-    return _createInFlight ??= _createRobot(
-      displayName: displayName,
-      ownerAccountId: ownerAccountId,
-      mountedDeviceId: mountedDeviceId,
-    ).whenComplete(() => _createInFlight = null);
-  }
-
-  Future<RobotInstallation> _createRobot({
-    required String displayName,
-    required String ownerAccountId,
-    required String mountedDeviceId,
-  }) async {
-    if (await _restoreRobot() != null) {
-      throw const RobotAlreadyExistsException();
-    }
-    final robot = await _teams.createRobotTeam(
-      displayName: displayName,
-      ownerAccountId: ownerAccountId,
-      mountedDeviceId: mountedDeviceId,
-    );
-    _revision += 1;
-    _changes.add(robot);
-    return robot;
-  }
-
   Future<RobotInstallation?> _restoreRobot() async {
     final robots = await _teams.listRobotTeams();
     if (robots.length > 1) {
@@ -188,11 +153,4 @@ class AppwriteHouseholdSyncGateway implements HouseholdSyncGateway {
     }
     return robots.firstOrNull;
   }
-}
-
-class RobotAlreadyExistsException implements Exception {
-  const RobotAlreadyExistsException();
-
-  @override
-  String toString() => 'This account already belongs to a Dosey robot.';
 }

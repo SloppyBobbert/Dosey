@@ -9,6 +9,8 @@ import 'package:dosey_app/core/carousel/guided_carousel_load_plan.dart';
 import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
+import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
@@ -4221,8 +4223,42 @@ class DoseyApp extends StatelessWidget {
       missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
       bleGateway: FakeBleGateway(),
       connectivityGateway: FakeConnectivityGateway(),
+      householdSyncGateway: database == null
+          ? null
+          : _LinkedTestHouseholdSyncGateway(database!),
       shellForceTodayTab: true,
     );
+  }
+}
+
+class _LinkedTestHouseholdSyncGateway implements HouseholdSyncGateway {
+  const _LinkedTestHouseholdSyncGateway(this.database);
+
+  final DoseyDatabase database;
+
+  @override
+  Future<RobotInstallation?> refreshRobot() async {
+    final user = await LocalAuthRepository(database).readCurrentUser();
+    if (user == null) return null;
+    return RobotInstallation(
+      id: 'test-robot',
+      displayName: 'Test robot',
+      ownerAccountId: user.id,
+      members: [
+        HouseholdMember(
+          accountId: user.id,
+          label: user.displayName ?? user.email,
+          role: HouseholdRole.owner,
+        ),
+      ],
+      currentRole: HouseholdRole.owner,
+      mountedDeviceId: null,
+    );
+  }
+
+  @override
+  Stream<RobotInstallation?> watchRobot() async* {
+    yield await refreshRobot();
   }
 }
 

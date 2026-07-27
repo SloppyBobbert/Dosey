@@ -3,6 +3,8 @@ import 'package:dosey_app/core/cloud/cloud_configuration.dart';
 import 'package:dosey_app/core/cloud/cloud_gateway_factory.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/household/appwrite_household_sync_gateway.dart';
+import 'package:dosey_app/core/household/appwrite_household_management_gateway.dart';
+import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/appwrite_robot_pairing_gateway.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
@@ -19,6 +21,10 @@ void main() {
 
     expect(gateways.identity, isA<DisabledCloudIdentityGateway>());
     expect(gateways.household, isA<DisabledHouseholdSyncGateway>());
+    expect(
+      gateways.householdManagement,
+      isA<DisabledHouseholdManagementGateway>(),
+    );
     expect(gateways.pairing, isA<DisabledRobotPairingGateway>());
   });
 
@@ -28,6 +34,10 @@ void main() {
       projectId: 'dosey-development',
       createPairingCodeFunctionId: 'create-code',
       claimRobotFunctionId: 'claim-robot',
+      createRobotFunctionId: 'create-robot',
+      createHouseholdInvitationFunctionId: 'create-invitation',
+      acceptHouseholdInvitationFunctionId: 'accept-invitation',
+      removeHouseholdMemberFunctionId: 'remove-member',
     );
     var factoryCalls = 0;
 
@@ -40,13 +50,26 @@ void main() {
       },
       teamsApiFactory: (_) => _UnusedTeamsApi(),
       pairingApiFactory: (_) => _UnusedPairingApi(),
+      householdFunctionsApiFactory: (_) => _UnusedHouseholdFunctionsApi(),
     );
 
     expect(gateways.identity, isA<AppwriteCloudIdentityGateway>());
     expect(gateways.household, isA<AppwriteHouseholdSyncGateway>());
     expect(gateways.pairing, isA<AppwriteRobotPairingGateway>());
+    expect(
+      gateways.householdManagement,
+      isA<AppwriteHouseholdManagementGateway>(),
+    );
     expect(factoryCalls, 1);
   });
+}
+
+class _UnusedHouseholdFunctionsApi implements AppwriteHouseholdFunctionsApi {
+  @override
+  Future<HouseholdFunctionResponse> execute({
+    required String functionId,
+    required String body,
+  }) => throw UnimplementedError();
 }
 
 class _UnusedPairingApi implements AppwriteRobotPairingApi {
@@ -61,13 +84,6 @@ class _UnusedPairingApi implements AppwriteRobotPairingApi {
 }
 
 class _UnusedTeamsApi implements AppwriteTeamsApi {
-  @override
-  Future<RobotInstallation> createRobotTeam({
-    required String displayName,
-    required String ownerAccountId,
-    required String mountedDeviceId,
-  }) => throw UnimplementedError();
-
   @override
   Future<List<RobotInstallation>> listRobotTeams() =>
       throw UnimplementedError();
