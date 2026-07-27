@@ -2,7 +2,6 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/household/robot_installation.dart';
-import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/onboarding/onboarding_flow.dart';
 import 'package:dosey_app/features/onboarding/household_membership_gate.dart';
@@ -82,10 +81,7 @@ class _CompletedOnboardingGate extends StatelessWidget {
           return const _SetupLoading();
         }
 
-        final platform = currentAppDevicePlatform();
-        final role = snapshot.data!.isAllowedOn(platform)
-            ? snapshot.data!
-            : AppDeviceRole.defaultFor(platform);
+        final role = snapshot.data!;
         // Robot Mode is local-only; personal phones must pass through sign-in.
         if (role.canHostRobot) {
           return DoseyShell(

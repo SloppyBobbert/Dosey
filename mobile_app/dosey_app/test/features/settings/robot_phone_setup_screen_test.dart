@@ -71,6 +71,22 @@ void main() {
 
     expect(gateway.readCount, 2);
   });
+
+  testWidgets('keeps the last status when a refresh fails', (tester) async {
+    final gateway = _FakeSetupGateway();
+    await tester.pumpWidget(_TestApp(gateway: gateway));
+    await tester.pumpAndSettle();
+    expect(find.text('Bluetooth ready'), findsOneWidget);
+
+    gateway.readError = StateError('unavailable');
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bluetooth ready'), findsOneWidget);
+    expect(find.text('Robot phone status could not be checked.'), findsNothing);
+  });
 }
 
 class _TestApp extends StatelessWidget {
@@ -105,6 +121,7 @@ class _FakeSetupGateway implements RobotPhoneSetupGateway {
   final Completer<SetupActionResult>? openCompleter;
   final List<RobotPhoneSetupAction> actions = [];
   int readCount = 0;
+  Object? readError;
 
   @override
   Future<SetupActionResult> open(RobotPhoneSetupAction action) async {
@@ -115,6 +132,7 @@ class _FakeSetupGateway implements RobotPhoneSetupGateway {
   @override
   Future<Map<RobotPhoneSetupItem, SetupReadiness>> readStatus() async {
     readCount += 1;
+    if (readError case final error?) throw error;
     return status;
   }
 }

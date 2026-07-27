@@ -29,6 +29,10 @@ void main() {
 
     expect(await source.getDeviceRole(), AppDeviceRole.androidPersonal);
     expect(await source.watchDeviceRole().first, AppDeviceRole.androidPersonal);
+    expect(
+      await source.getLegacyRoleForDiagnostics(),
+      AppDeviceRole.androidRobot,
+    );
     expect(source.capabilities.canHostRobot, isFalse);
   });
 

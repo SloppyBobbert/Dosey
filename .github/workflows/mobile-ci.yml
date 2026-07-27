@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
@@ -38,13 +38,13 @@ jobs:
           fi
 
       - name: Set up Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4.8.0
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: '3.44.1'
           channel: stable
@@ -54,25 +54,12 @@ jobs:
         run: flutter pub get
 
       - name: Prepare public Appwrite configuration
+        uses: ./.github/actions/prepare-appwrite-env
         env:
           APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID }}
           APPWRITE_CLAIM_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CLAIM_ROBOT_FUNCTION_ID }}
-        run: |
-          set -euo pipefail
-          for name in APPWRITE_ENDPOINT APPWRITE_PROJECT_ID APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID APPWRITE_CLAIM_ROBOT_FUNCTION_ID; do
-            if [ -z "${!name}" ]; then
-              echo "Missing required repository variable: $name" >&2
-              exit 1
-            fi
-          done
-          umask 077
-          printf '%s=%s\n' \
-            APPWRITE_ENDPOINT "$APPWRITE_ENDPOINT" \
-            APPWRITE_PROJECT_ID "$APPWRITE_PROJECT_ID" \
-            APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID "$APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID" \
-            APPWRITE_CLAIM_ROBOT_FUNCTION_ID "$APPWRITE_CLAIM_ROBOT_FUNCTION_ID" > .env
 
       - name: Verify generated Drift code
         run: |
@@ -100,7 +87,7 @@ jobs:
           cp build/app/outputs/flutter-apk/app-robot-debug.apk build/app/outputs/flutter-apk/dosey-robot-debug.apk
 
       - name: Upload Personal debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dosey-personal-debug-apk
           path: mobile_app/dosey_app/build/app/outputs/flutter-apk/dosey-personal-debug.apk
@@ -108,7 +95,7 @@ jobs:
           retention-days: 7
 
       - name: Upload Robot debug APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dosey-robot-debug-apk
           path: mobile_app/dosey_app/build/app/outputs/flutter-apk/dosey-robot-debug.apk

@@ -4,7 +4,6 @@ import 'package:dosey_app/core/controller/local_controller_command_repository.da
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
-import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/controller/controller_diagnostics_card.dart';
 import 'package:dosey_app/features/guided_trial/guided_trial.dart';
@@ -23,12 +22,9 @@ class ControllerScreen extends StatelessWidget {
     return StreamBuilder<AppDeviceRole>(
       stream: dependencies.effectiveRole.watchDeviceRole(),
       builder: (context, roleSnapshot) {
-        final platform = currentAppDevicePlatform();
-        final fallbackRole = AppDeviceRole.defaultFor(platform);
-        final storedRole = roleSnapshot.data;
-        final role = storedRole != null && storedRole.isAllowedOn(platform)
-            ? storedRole
-            : fallbackRole;
+        final role =
+            roleSnapshot.data ??
+            dependencies.effectiveRole.capabilities.fixedRole;
         if (dependencies.isDemo && dependencies.demoScenarios != null) {
           return _ActiveGuidedTrialScreen(
             scenarios: dependencies.demoScenarios!,

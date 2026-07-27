@@ -92,6 +92,10 @@ void main() {
   });
 
   test('is unsupported outside Android without invoking the channel', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          throw StateError('Channel invoked outside Android: ${call.method}');
+        });
     final gateway = MethodChannelRobotPhoneSetupGateway(
       permissions: const _PermissionGateway(AppPermissionState.granted),
       isAndroid: false,

@@ -1,4 +1,6 @@
 import java.util.Base64
+import org.gradle.api.Action
+import org.gradle.api.execution.TaskExecutionGraph
 
 plugins {
     id("com.android.application")
@@ -24,12 +26,6 @@ val requiredPublicKeys = listOf(
     "APPWRITE_CLAIM_ROBOT_FUNCTION_ID",
 )
 val publicConfiguration = requiredPublicKeys.associateWith { key -> dotenvValue(key) }
-val requestedTasks = gradle.startParameter.taskNames.joinToString(" ").lowercase()
-val requestedFlavor = when {
-    "personal" in requestedTasks -> "personal"
-    "robot" in requestedTasks -> "robot"
-    else -> null
-}
 val dartDefines = providers.gradleProperty("dart-defines").orNull
     ?.split(',')
     ?.mapNotNull { encoded ->
@@ -39,30 +35,51 @@ val dartDefines = providers.gradleProperty("dart-defines").orNull
     .orEmpty()
 val configuredProfile = dartDefines["DOSEY_BUILD_PROFILE"]
 
-if (requestedFlavor != null) {
-    val missingKeys = publicConfiguration.filterValues { it == null }.keys
-    if (missingKeys.isNotEmpty()) {
-        throw GradleException(
-            "Missing required public Appwrite values in .env: ${missingKeys.joinToString()}",
-        )
-    }
-    if (configuredProfile !in setOf("personal", "robot")) {
-        throw GradleException(
-            "DOSEY_BUILD_PROFILE must be explicitly set to personal or robot for Android flavor builds.",
-        )
-    }
-    if (configuredProfile != requestedFlavor) {
-        throw GradleException(
-            "Android flavor '$requestedFlavor' does not match DOSEY_BUILD_PROFILE='$configuredProfile'.",
-        )
-    }
-}
-
 val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
 val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
 val keyAliasValue = System.getenv("ANDROID_KEY_ALIAS")
 val keyPasswordValue = System.getenv("ANDROID_KEY_PASSWORD")
 val signingValues = listOf(keystorePath, keystorePassword, keyAliasValue, keyPasswordValue)
+
+gradle.taskGraph.whenReady(Action<TaskExecutionGraph> {
+    val resolvedTasks = allTasks.map { it.path.lowercase() }
+    val variantTasks = resolvedTasks.map { it.substringAfterLast(':') }
+    val requestedFlavors = buildSet {
+        if (variantTasks.any { it.startsWith("assemblepersonal") || it.startsWith("bundlepersonal") }) {
+            add("personal")
+        }
+        if (variantTasks.any { it.startsWith("assemblerobot") || it.startsWith("bundlerobot") }) {
+            add("robot")
+        }
+    }
+    if (requestedFlavors.isNotEmpty()) {
+        val missingKeys = publicConfiguration.filterValues { it == null }.keys
+        if (missingKeys.isNotEmpty()) {
+            throw GradleException(
+                "Missing required public Appwrite values in .env: ${missingKeys.joinToString()}",
+            )
+        }
+        if (configuredProfile !in setOf("personal", "robot")) {
+            throw GradleException(
+                "DOSEY_BUILD_PROFILE must be explicitly set to personal or robot for Android flavor builds.",
+            )
+        }
+        if (requestedFlavors.size != 1 || configuredProfile !in requestedFlavors) {
+            throw GradleException(
+                "Android flavor '${requestedFlavors.joinToString()}' does not match " +
+                    "DOSEY_BUILD_PROFILE='$configuredProfile'.",
+            )
+        }
+        if (variantTasks.any { (it.startsWith("assemble") || it.startsWith("bundle")) && "release" in it } &&
+            signingValues.any { it == null }
+        ) {
+            throw GradleException(
+                "Release signing requires ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, " +
+                    "ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD.",
+            )
+        }
+    }
+})
 
 android {
     namespace = "com.sloppybobbert.dosey_app"
@@ -112,13 +129,6 @@ android {
             signingConfig = signingConfigs.findByName("release")
         }
     }
-}
-
-if (requestedFlavor != null && "release" in requestedTasks && signingValues.any { it == null }) {
-    throw GradleException(
-        "Release signing requires ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, " +
-            "ANDROID_KEY_ALIAS, and ANDROID_KEY_PASSWORD.",
-    )
 }
 
 kotlin {

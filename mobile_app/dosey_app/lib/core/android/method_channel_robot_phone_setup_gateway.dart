@@ -37,7 +37,16 @@ class MethodChannelRobotPhoneSetupGateway implements RobotPhoneSetupGateway {
   @override
   Future<SetupActionResult> open(RobotPhoneSetupAction action) async {
     if (!_isAndroid) return SetupActionResult.unsupported;
-    final opened = await _channel.invokeMethod<bool>(_actionMethods[action]!);
+    final method = switch (action) {
+      RobotPhoneSetupAction.bluetoothSettings => 'openBluetoothSettings',
+      RobotPhoneSetupAction.wifiSettings => 'openWifiSettings',
+      RobotPhoneSetupAction.notificationSettings => 'openNotificationSettings',
+      RobotPhoneSetupAction.batteryOptimizationSettings =>
+        'openBatteryOptimizationSettings',
+      RobotPhoneSetupAction.securitySettings => 'openSecuritySettings',
+      RobotPhoneSetupAction.appDetails => 'openAppDetails',
+    };
+    final opened = await _channel.invokeMethod<bool>(method);
     return opened == true
         ? SetupActionResult.opened
         : SetupActionResult.unsupported;
@@ -46,16 +55,6 @@ class MethodChannelRobotPhoneSetupGateway implements RobotPhoneSetupGateway {
   static final _unsupportedStatus = {
     for (final item in RobotPhoneSetupItem.values)
       item: SetupReadiness.unsupported,
-  };
-
-  static const _actionMethods = {
-    RobotPhoneSetupAction.bluetoothSettings: 'openBluetoothSettings',
-    RobotPhoneSetupAction.wifiSettings: 'openWifiSettings',
-    RobotPhoneSetupAction.notificationSettings: 'openNotificationSettings',
-    RobotPhoneSetupAction.batteryOptimizationSettings:
-        'openBatteryOptimizationSettings',
-    RobotPhoneSetupAction.securitySettings: 'openSecuritySettings',
-    RobotPhoneSetupAction.appDetails: 'openAppDetails',
   };
 
   SetupReadiness _decodeReadiness(String? value) {

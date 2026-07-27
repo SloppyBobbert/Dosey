@@ -44,7 +44,12 @@ void main() {
       role: AppDeviceRole.androidPersonal,
     );
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.personal,
+      ),
+    );
     await tester.pumpAndSettle();
 
     final titles = _accordionTitles(tester);
@@ -291,7 +296,12 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
 
-    await tester.pumpWidget(_TestSettingsApp(database: database));
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.personal,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Personal distribution'), findsOneWidget);
@@ -334,14 +344,16 @@ void main() {
     );
 
     expect(find.text('Robot phone setup'), findsOneWidget);
-    tester
-        .widget<OutlinedButton>(
-          find.widgetWithText(OutlinedButton, 'Open robot phone setup'),
-        )
-        .onPressed
-        ?.call();
+    final openSetup = find.widgetWithText(
+      OutlinedButton,
+      'Open robot phone setup',
+    );
+    await tester.ensureVisible(openSetup);
     await tester.pumpAndSettle();
-    expect(find.byType(BackButton), findsOneWidget);
+    expect(openSetup.hitTestable(), findsOneWidget);
+    await tester.tap(openSetup);
+    await tester.pumpAndSettle();
+    expect(find.text('Bluetooth ready'), findsOneWidget);
   });
 
   testWidgets('robot-capable role shows robot face settings controls', (

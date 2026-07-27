@@ -90,7 +90,7 @@ class _RobotPhoneSetupScreenState extends State<RobotPhoneSetupScreen>
             const SizedBox(height: 16),
             if (_status == null && _error == null)
               const Center(child: CircularProgressIndicator())
-            else if (_error != null)
+            else if (_error != null && _status == null)
               _SetupErrorCard(onRetry: _refresh)
             else
               for (final item in RobotPhoneSetupItem.values) ...[
@@ -124,7 +124,33 @@ class _SetupItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final details = _details[item]!;
+    final details = switch (item) {
+      RobotPhoneSetupItem.bluetooth => const _SetupItemDetails(
+        'Bluetooth',
+        'Open Bluetooth',
+        RobotPhoneSetupAction.bluetoothSettings,
+      ),
+      RobotPhoneSetupItem.wifi => const _SetupItemDetails(
+        'Wi-Fi',
+        'Open Wi-Fi',
+        RobotPhoneSetupAction.wifiSettings,
+      ),
+      RobotPhoneSetupItem.notifications => const _SetupItemDetails(
+        'Notifications',
+        'Open notifications',
+        RobotPhoneSetupAction.notificationSettings,
+      ),
+      RobotPhoneSetupItem.batteryOptimization => const _SetupItemDetails(
+        'Battery optimization',
+        'Open battery settings',
+        RobotPhoneSetupAction.batteryOptimizationSettings,
+      ),
+      RobotPhoneSetupItem.secureLock => const _SetupItemDetails(
+        'Secure lock',
+        'Open security',
+        RobotPhoneSetupAction.securitySettings,
+      ),
+    };
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -196,31 +222,3 @@ class _SetupItemDetails {
   final String buttonLabel;
   final RobotPhoneSetupAction action;
 }
-
-const _details = {
-  RobotPhoneSetupItem.bluetooth: _SetupItemDetails(
-    'Bluetooth',
-    'Open Bluetooth',
-    RobotPhoneSetupAction.bluetoothSettings,
-  ),
-  RobotPhoneSetupItem.wifi: _SetupItemDetails(
-    'Wi-Fi',
-    'Open Wi-Fi',
-    RobotPhoneSetupAction.wifiSettings,
-  ),
-  RobotPhoneSetupItem.notifications: _SetupItemDetails(
-    'Notifications',
-    'Open notifications',
-    RobotPhoneSetupAction.notificationSettings,
-  ),
-  RobotPhoneSetupItem.batteryOptimization: _SetupItemDetails(
-    'Battery optimization',
-    'Open battery settings',
-    RobotPhoneSetupAction.batteryOptimizationSettings,
-  ),
-  RobotPhoneSetupItem.secureLock: _SetupItemDetails(
-    'Secure lock',
-    'Open security',
-    RobotPhoneSetupAction.securitySettings,
-  ),
-};
