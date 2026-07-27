@@ -11,7 +11,7 @@ The app lives in `mobile_app/dosey_app/` and keeps Android and iOS personal-phon
 | App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus Robot Face in Android Robot Mode |
 | Local storage | Drift/SQLite on the phone app only |
 | Prescriptions and schedules | Local prescriptions, refill inventory tracking, schedule profiles, schedule editing, and enabled state |
-| Auth | Google + Apple wrappers, no backend yet |
+| Accounts and robot linking | Appwrite-backed Google identity, robot ownership, and short-lived mounted-phone pairing; native iOS Apple sign-in remains available |
 | Carousel and controller | Daviky loading workflow, simulator, and compile-tested D1 BLE bench path; physical BLE and movement tests pending |
 | Mounted Robot Mode | Face-first resume and Back behavior, configurable inactivity return, role-aware local notification routing, and screen-awake control only while Robot Face is active and the app is resumed |
 | Builds | Android debug APK and iOS no-codesign debug build run locally |
@@ -26,7 +26,7 @@ Current workspace-level status:
 - The app shell, local storage, refill tracking, reminder flows, Daviky carousel loading workflow, controller simulator, Guided Trial scenarios, and fixed prerecorded Robot Mode voice prompts are in place.
 - Mounted Robot Mode returns to Robot Face on resume and after configurable inactivity, contains Back navigation inside the app, and keeps the display awake only while Robot Face is active and the app is resumed; it does not keep the display awake while backgrounded.
 - The D1 controller protocol now has a compile-tested Flutter BLE transport, staged gateway, and foreground Robot Mode heartbeat/reconnect lifecycle. Physical advertising, connection, and hardware behavior remain unverified.
-- Google sign-in and native iOS Apple sign-in are wired behind app-owned interfaces. No backend, cloud sync, or push notifications yet.
+- Appwrite-backed Google identity, robot ownership, and short-lived mounted-phone pairing are wired behind app-owned interfaces. Native iOS Apple sign-in remains available. Medication schedules and dose state remain local, and remote push notifications are not implemented.
 - First physical test device: 2024 Moto G Play.
 
 ## Target app direction
@@ -52,10 +52,15 @@ dart run build_runner build
 git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
-flutter build apk --debug
-flutter build ios --debug --no-codesign
+flutter build apk --debug --dart-define-from-file=.env
+flutter build ios --debug --no-codesign --dart-define-from-file=.env
 git diff --check
 ```
+
+The ignored `dosey_app/.env` contains the public Appwrite endpoint, project ID,
+and two pairing Function IDs. Database and table IDs stay in the Function
+environment. Never put the pairing HMAC secret or an Appwrite dynamic API key
+in the Flutter environment.
 
 Android SDK platforms 35 and 36 and OpenJDK 17 are configured locally for the first Moto G Play builds. Xcode 26.5 is configured for local iOS no-codesign builds.
 

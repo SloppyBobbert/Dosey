@@ -248,6 +248,8 @@ function claimToRow(record: PairingClaimRecord): PairingRow {
     expiresAt: record.expiresAt.toISOString(),
     consumedAt: record.consumedAt?.toISOString() ?? null,
     mountedDeviceAccountId: record.mountedDeviceAccountId ?? null,
+    // Legacy live-schema field. Per-device attempt rows are authoritative.
+    failedAttempts: 0,
     active: true,
   };
 }

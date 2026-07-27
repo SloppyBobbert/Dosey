@@ -6,6 +6,8 @@ abstract interface class HouseholdSyncGateway {
   // Provider adapters are responsible for translating between the two.
   Stream<RobotInstallation?> watchRobot();
 
+  Future<RobotInstallation?> refreshRobot();
+
   Future<RobotInstallation> createRobot({
     required String displayName,
     required String ownerAccountId,
@@ -18,6 +20,9 @@ class DisabledHouseholdSyncGateway implements HouseholdSyncGateway {
 
   @override
   Stream<RobotInstallation?> watchRobot() => Stream.value(null);
+
+  @override
+  Future<RobotInstallation?> refreshRobot() async => null;
 
   @override
   Future<RobotInstallation> createRobot({

@@ -4,6 +4,7 @@ import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
@@ -28,6 +29,7 @@ class DoseyApp extends StatelessWidget {
     this.demoDatabaseFactory,
     this.cloudIdentityGateway,
     this.householdSyncGateway,
+    this.robotPairingGateway,
   });
 
   final DoseyDatabase? database;
@@ -42,6 +44,7 @@ class DoseyApp extends StatelessWidget {
   final DemoDatabaseFactory? demoDatabaseFactory;
   final CloudIdentityGateway? cloudIdentityGateway;
   final HouseholdSyncGateway? householdSyncGateway;
+  final RobotPairingGateway? robotPairingGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +67,7 @@ class DoseyApp extends StatelessWidget {
         connectivityGateway: connectivityGateway,
         cloudIdentityGateway: session.isDemo ? null : cloudIdentityGateway,
         householdSyncGateway: session.isDemo ? null : householdSyncGateway,
+        robotPairingGateway: session.isDemo ? null : robotPairingGateway,
         appClock: session.clock,
         child: MaterialApp(
           title: 'Dosey',

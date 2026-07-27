@@ -40,6 +40,27 @@ void main() {
     expect(api.createCalls, 1);
   });
 
+  test(
+    'refresh publishes membership changes made by a cloud function',
+    () async {
+      final api = _FakeAppwriteTeamsApi();
+      final gateway = AppwriteHouseholdSyncGateway(api);
+      final changes = StreamIterator(gateway.watchRobot());
+      addTearDown(() {
+        changes.cancel();
+      });
+      expect(await changes.moveNext(), isTrue);
+      expect(changes.current, isNull);
+      api.robots.add(_robot(id: 'robot-1'));
+
+      final refreshed = await gateway.refreshRobot();
+
+      expect(refreshed?.id, 'robot-1');
+      expect(await changes.moveNext(), isTrue);
+      expect(changes.current?.id, 'robot-1');
+    },
+  );
+
   test('rejects creating a second robot for the account', () async {
     final api = _FakeAppwriteTeamsApi(robots: [_robot(id: 'robot-1')]);
     final gateway = AppwriteHouseholdSyncGateway(api);

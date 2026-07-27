@@ -44,7 +44,7 @@ The project is intended to explore whether an inexpensive, expressive, and repai
 | Expansion hardware | Seeed Studio Grove Base for XIAO with battery management, SKU 103020312 |
 | Mechanism | Grove Servo pusher with a ratchet or physical stop; prior movement from a different 3.3 V Grove board is preliminary evidence only, and the final Grove Base `D8/A8` path remains unverified |
 | Shell | Fully LEGO body around the carousel, phone, electronics, cup opening, and service panels |
-| App data | Drift/SQLite on the phone only; no backend or cloud sync yet |
+| App data | Drift/SQLite remains local-first; Appwrite provides Google identity, robot ownership, and mounted-phone pairing foundations |
 | App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus a face-first mounted experience in Android Robot Mode |
 | Safety status | Fake-pill testing only; not for real medication |
 
@@ -76,7 +76,8 @@ Dosey is built around four main systems:
    - Robot Mode runs only on Android.
    - Personal Mode runs on Android and iOS phones for patient or caregiver use.
    - Robot Mode returns to Robot Face on resume, after configurable inactivity, or when Back is pressed from another app tab. The screen stays awake only while Robot Face is active and the app is resumed.
-   - The phone handles schedules, medication data, refill logic, dose history, PIN rules, caregiver logic, UI, reminders, Bluetooth commands, fixed prerecorded Robot Mode voice prompts, and future cloud, voice-command, or local AI features.
+   - The phone handles schedules, medication data, refill logic, dose history, PIN rules, caregiver logic, UI, reminders, Bluetooth commands, fixed prerecorded Robot Mode voice prompts, and future voice-command or local AI features.
+   - Appwrite currently handles Google cloud identity, robot ownership records, and short-lived mounted-phone pairing. Medication schedules and dose state remain local in Drift.
 
 3. **XIAO and Grove controller**
    - The controller handles direct hardware only: servo movement, PIR, LEDs, buzzer/vibration, buttons, sensor readings, status, and Bluetooth messages.
@@ -125,6 +126,7 @@ Record repeatable test results, failures, and fixes before treating any stage as
 ```text
 Dosey/
 ├── README.md
+├── backend/appwrite/       # Appwrite Functions for server-authorized robot pairing
 ├── firmware/              # XIAO bring-up programs and safe controller firmware baseline
 ├── mobile_app/            # Flutter app workspace; app lives in mobile_app/dosey_app/
 ├── mechanical/            # Daviky carousel, LEGO shell, servo rig, measurements, assembly notes
@@ -152,13 +154,14 @@ Build the safe-default controller image from `firmware/` with `/tmp/dosey-platfo
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the practical platform for Robot Mode because the phone lives inside Dosey; iOS remains supported for Personal Mode.
 
-The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. Mounted Robot Mode returns to Robot Face on resume and after a configurable 1, 2, 5, 10, or 15 minutes of inactivity, contains Back navigation inside the app, keeps the screen awake only while the face is active and the app is resumed, and routes local dose and shortage notification taps to the appropriate in-app surface. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Guided Trial scenarios, Google and Apple sign-in plumbing, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, and dose logging.
+The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. Mounted Robot Mode returns to Robot Face on resume and after a configurable 1, 2, 5, 10, or 15 minutes of inactivity, contains Back navigation inside the app, keeps the screen awake only while the face is active and the app is resumed, and routes local dose and shortage notification taps to the appropriate in-app surface. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Guided Trial scenarios, Appwrite-backed Google identity and robot pairing, native iOS Apple sign-in, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, pairing, and dose logging.
 
 BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
 
 - `flutter_blue_plus` for the compile-tested D1 BLE transport and staged controller gateway; physical BLE behavior remains unverified.
 - `connectivity_plus` for advisory connectivity and Wi-Fi status only; this is not Wi-Fi provisioning.
-- `google_sign_in` plus a native iOS Apple sign-in bridge for Google/Apple-only auth.
+- `appwrite` for Google cloud identity, robot ownership, and server-authorized mounted-phone pairing behind Dosey-owned interfaces.
+- `google_sign_in` and a native iOS Apple sign-in bridge remain available for local/provider-specific auth paths.
 - `flutter_local_notifications` for local reminder notifications and sounds.
 - `permission_handler` for runtime permissions.
 
@@ -205,7 +208,7 @@ The Grove Servo previously moved the actual carousel from a 3.3 V socket on a di
 
 ## Project status
 
-Early prototype. The repo has a safety-first Flutter app shell, mounted-phone Robot Mode guardrails, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, Guided Trial scenarios, local settings/auth/dose-log storage, a compile-tested D1 BLE transport and fail-closed controller lifecycle, a controller simulator, Google and Apple sign-in plumbing, local Android/iOS tooling, and a safe-default controller firmware baseline. It still has no physically validated integrated firmware or phone-to-hardware BLE lifecycle, cloud sync, push notifications, or proven repeatable Daviky carousel movement.
+Early prototype. The repo has a safety-first Flutter app shell, mounted-phone Robot Mode guardrails, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, Guided Trial scenarios, local settings/dose-log storage, Appwrite-backed Google identity and mounted-phone pairing foundations, a compile-tested D1 BLE transport and fail-closed controller lifecycle, a controller simulator, local Android/iOS tooling, and a safe-default controller firmware baseline. It still has no physically validated integrated firmware or phone-to-hardware BLE lifecycle, medication schedule/dose cloud sync, remote push notifications, or proven repeatable Daviky carousel movement.
 
 Near-term work:
 

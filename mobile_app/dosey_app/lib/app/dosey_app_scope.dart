@@ -32,6 +32,7 @@ import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/household/local_household_repository.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
@@ -76,6 +77,7 @@ class DoseyAppScope extends StatefulWidget {
     this.controllerGateway,
     this.cloudIdentityGateway,
     this.householdSyncGateway,
+    this.robotPairingGateway,
     this.enableDemoFaceLab = false,
   });
 
@@ -95,6 +97,7 @@ class DoseyAppScope extends StatefulWidget {
   final StagedControllerGateway? controllerGateway;
   final CloudIdentityGateway? cloudIdentityGateway;
   final HouseholdSyncGateway? householdSyncGateway;
+  final RobotPairingGateway? robotPairingGateway;
   final bool enableDemoFaceLab;
 
   static DoseyAppDependencies of(BuildContext context) {
@@ -169,6 +172,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
         widget.cloudIdentityGateway ?? const DisabledCloudIdentityGateway();
     final householdSync =
         widget.householdSyncGateway ?? const DisabledHouseholdSyncGateway();
+    final robotPairing =
+        widget.robotPairingGateway ?? const DisabledRobotPairingGateway();
     final cloudGoogleAuth = cloudIdentity is DisabledCloudIdentityGateway
         ? null
         : GoogleAuthService(
@@ -347,6 +352,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       household: household,
       cloudIdentity: cloudIdentity,
       householdSync: householdSync,
+      robotPairing: robotPairing,
       localAuth: localAuth,
       auth: AppAuthService(
         localAuth: localAuth,
@@ -532,6 +538,7 @@ class DoseyAppDependencies {
     required this.household,
     required this.cloudIdentity,
     required this.householdSync,
+    required this.robotPairing,
     required this.localAuth,
     required this.auth,
     required this.controller,
@@ -570,6 +577,7 @@ class DoseyAppDependencies {
   final LocalHouseholdRepository household;
   final CloudIdentityGateway cloudIdentity;
   final HouseholdSyncGateway householdSync;
+  final RobotPairingGateway robotPairing;
   final LocalAuthRepository localAuth;
   final AuthService auth;
   final ControllerGateway controller;

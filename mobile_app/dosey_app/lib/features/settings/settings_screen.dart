@@ -5,7 +5,10 @@ import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
 import 'package:dosey_app/core/backup/local_backup_service.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
+import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/core/household/household_account_state.dart';
+import 'package:dosey_app/core/household/robot_installation.dart';
+import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
@@ -117,14 +120,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       SettingsSection.deviceMode => 320,
       SettingsSection.actionPin => 500,
       SettingsSection.householdAccount => 700,
-      SettingsSection.adminHistory => 920,
-      SettingsSection.backupDatabase => 1140,
-      SettingsSection.robotFace => 1400,
-      SettingsSection.notifications => 1660,
-      SettingsSection.safety => 1840,
-      SettingsSection.helpAbout => 2020,
-      SettingsSection.guidedTrial => 2220,
-      SettingsSection.setup => 2440,
+      SettingsSection.adminHistory => 720,
+      SettingsSection.backupDatabase => 800,
+      SettingsSection.robotFace => 950,
+      SettingsSection.notifications => 1100,
+      SettingsSection.safety => 1250,
+      SettingsSection.helpAbout => 1400,
+      SettingsSection.guidedTrial => 1550,
+      SettingsSection.setup => 1700,
     };
   }
 
@@ -758,10 +761,18 @@ class _ReminderNotificationCard extends StatefulWidget {
       _ReminderNotificationCardState();
 }
 
-class _HouseholdAccountCard extends StatelessWidget {
+class _HouseholdAccountCard extends StatefulWidget {
   const _HouseholdAccountCard({super.key, required this.platform});
 
   final AppDevicePlatform platform;
+
+  @override
+  State<_HouseholdAccountCard> createState() => _HouseholdAccountCardState();
+}
+
+class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
+  RobotPairingCredential? _pairingCredential;
+  bool _pairingBusy = false;
 
   @override
   Widget build(BuildContext context) {
@@ -769,61 +780,297 @@ class _HouseholdAccountCard extends StatelessWidget {
     return StreamBuilder<AppDeviceRole>(
       stream: dependencies.settings.watchDeviceRole(),
       builder: (context, roleSnapshot) {
-        final allowedRoles = AppDeviceRole.allowedFor(platform);
-        final fallbackRole = AppDeviceRole.defaultFor(platform);
+        final allowedRoles = AppDeviceRole.allowedFor(widget.platform);
+        final fallbackRole = AppDeviceRole.defaultFor(widget.platform);
         final storedRole = roleSnapshot.data;
         final role = storedRole != null && allowedRoles.contains(storedRole)
             ? storedRole
             : fallbackRole;
 
-        return StreamBuilder<HouseholdAccountState>(
-          stream: dependencies.household.watchState(),
-          builder: (context, snapshot) {
-            final state = snapshot.data ?? const HouseholdAccountState();
-            return _SettingsSectionCard(
-              icon: Icons.home_outlined,
-              title: 'Household & robot profile',
-              children: [
-                _HouseholdMetadataRow(
-                  label: 'Household',
-                  value: state.householdDisplayName,
-                ),
-                _HouseholdMetadataRow(
-                  label: 'Robot',
-                  value: state.robotHubDisplayName,
-                ),
-                _HouseholdMetadataRow(
-                  label: 'This device',
-                  value: _deviceLabel(role),
-                ),
-                _HouseholdMetadataRow(
-                  label: 'Person',
-                  value: state.profileDisplayName ?? 'Not set',
-                ),
-                _HouseholdMetadataRow(
-                  label: 'Relationship',
-                  value: state.relationshipLabel ?? 'Not set',
-                ),
-                const _HouseholdMetadataRow(
-                  label: 'Cloud sync',
-                  value: 'Local only',
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'This profile stays local on this device only. Cloud household sync, invites, and roles are not active yet.',
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: () => _showHouseholdEditSheet(context, state),
-                  icon: const Icon(Icons.edit_outlined),
-                  label: const Text('Edit household & robot profile'),
-                ),
-              ],
+        return StreamBuilder<RobotInstallation?>(
+          stream: dependencies.householdSync.watchRobot(),
+          builder: (context, robotSnapshot) {
+            final robot = robotSnapshot.data;
+            return StreamBuilder<CloudIdentity>(
+              stream: dependencies.cloudIdentity.watchIdentity(),
+              builder: (context, identitySnapshot) {
+                final identity = identitySnapshot.data;
+                return StreamBuilder<HouseholdAccountState>(
+                  stream: dependencies.household.watchState(),
+                  builder: (context, snapshot) {
+                    final state =
+                        snapshot.data ?? const HouseholdAccountState();
+                    return _SettingsSectionCard(
+                      icon: Icons.home_outlined,
+                      title: 'Household & robot profile',
+                      children: [
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: const EdgeInsets.only(bottom: 12),
+                          title: const Text('Profile & device'),
+                          children: [
+                            _HouseholdMetadataRow(
+                              label: 'Household',
+                              value: state.householdDisplayName,
+                            ),
+                            _HouseholdMetadataRow(
+                              label: 'Robot',
+                              value: state.robotHubDisplayName,
+                            ),
+                            _HouseholdMetadataRow(
+                              label: 'This device',
+                              value: _deviceLabel(role),
+                            ),
+                            _HouseholdMetadataRow(
+                              label: 'Person',
+                              value: state.profileDisplayName ?? 'Not set',
+                            ),
+                            _HouseholdMetadataRow(
+                              label: 'Relationship',
+                              value: state.relationshipLabel ?? 'Not set',
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: () =>
+                                  _showHouseholdEditSheet(context, state),
+                              icon: const Icon(Icons.edit_outlined),
+                              label: const Text(
+                                'Edit household & robot profile',
+                              ),
+                            ),
+                          ],
+                        ),
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: const EdgeInsets.only(bottom: 12),
+                          title: const Text('Robot linking'),
+                          children: [
+                            _HouseholdMetadataRow(
+                              label: 'Cloud sync',
+                              value: robot == null ? 'Not linked' : 'Linked',
+                            ),
+                            if (robot != null) ...[
+                              _HouseholdMetadataRow(
+                                label: 'Cloud robot',
+                                value: robot.displayName,
+                              ),
+                              _HouseholdMetadataRow(
+                                label: 'People',
+                                value:
+                                    '${robot.humanAccountCount} of ${RobotInstallation.maxHumanAccounts}',
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+                            Text(
+                              robot == null
+                                  ? 'Local profile data remains available. Link this device to enable cloud robot membership.'
+                                  : 'This device is linked to the robot household. Local medication data remains on this device.',
+                            ),
+                            if (!dependencies.robotPairing.isAvailable) ...[
+                              const SizedBox(height: 12),
+                              const Text('Robot pairing is not configured.'),
+                            ] else if (role.canHostRobot) ...[
+                              const SizedBox(height: 12),
+                              FilledButton.icon(
+                                onPressed: _pairingBusy
+                                    ? null
+                                    : _showClaimDialog,
+                                icon: const Icon(Icons.link),
+                                label: const Text('Pair this robot phone'),
+                              ),
+                            ] else if (robot != null &&
+                                identity?.accountId ==
+                                    robot.ownerAccountId) ...[
+                              const SizedBox(height: 12),
+                              FilledButton.icon(
+                                onPressed: _pairingBusy
+                                    ? null
+                                    : () => _createPairingCode(robot),
+                                icon: const Icon(Icons.qr_code_2),
+                                label: const Text(
+                                  'Generate robot pairing code',
+                                ),
+                              ),
+                              if (_pairingCredential
+                                  case final credential?) ...[
+                                const SizedBox(height: 12),
+                                SelectableText(
+                                  'Pairing code: ${credential.code}',
+                                  style: Theme.of(
+                                    context,
+                                  ).textTheme.titleMedium,
+                                ),
+                                Text(
+                                  'Code expires ${_formatExpiry(context, credential.expiresAt)}.',
+                                ),
+                              ],
+                            ],
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                );
+              },
             );
           },
         );
       },
     );
+  }
+
+  Future<void> _createPairingCode(RobotInstallation robot) async {
+    setState(() => _pairingBusy = true);
+    try {
+      final dependencies = DoseyAppScope.of(context);
+      final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+      if (!mounted) return;
+      final result = await runProtectedAdminAction<RobotPairingCredential>(
+        context,
+        action: (actor) async {
+          final credential = await dependencies.robotPairing.createPairingCode(
+            robotId: robot.id,
+          );
+          await dependencies.adminAudit.addEvent(
+            const AdminAuditEventFactory().pairingCodeGenerated(
+              actor: actor,
+              sourceDeviceRole: sourceDeviceRole,
+              targetId: robot.id,
+              summary: 'Generated a temporary mounted-device pairing code.',
+              details: {
+                'expiresAt': credential.expiresAt.toUtc().toIso8601String(),
+              },
+            ),
+          );
+          return credential;
+        },
+      );
+      if (!mounted || !result.isSuccess) return;
+      setState(() => _pairingCredential = result.value);
+    } on RobotPairingException catch (error) {
+      if (mounted) {
+        _showPairingError(context, error.reason, creatingCode: true);
+      }
+    } on Object {
+      if (mounted) {
+        _showPairingError(context, RobotPairingFailureReason.functionFailure);
+      }
+    } finally {
+      if (mounted) setState(() => _pairingBusy = false);
+    }
+  }
+
+  Future<void> _showClaimDialog() async {
+    var enteredCode = '';
+    String? validationMessage;
+    final code = await showDialog<String>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Pair this robot phone'),
+          content: TextField(
+            onChanged: (value) {
+              enteredCode = value;
+              if (validationMessage != null && value.trim().isNotEmpty) {
+                setDialogState(() => validationMessage = null);
+              }
+            },
+            textCapitalization: TextCapitalization.characters,
+            decoration: InputDecoration(
+              labelText: '10-character pairing code',
+              errorText: validationMessage,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final normalized = enteredCode.trim();
+                if (normalized.isEmpty) {
+                  setDialogState(
+                    () => validationMessage = 'Enter a pairing code.',
+                  );
+                  return;
+                }
+                Navigator.pop(context, normalized);
+              },
+              child: const Text('Pair robot'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || code == null) return;
+    setState(() => _pairingBusy = true);
+    try {
+      final claimedRobotId = await DoseyAppScope.of(
+        context,
+      ).robotPairing.claimRobot(code: code);
+      if (!mounted) return;
+      var refreshedClaim = false;
+      try {
+        final robot = await DoseyAppScope.of(
+          context,
+        ).householdSync.refreshRobot();
+        refreshedClaim = robot?.id == claimedRobotId;
+      } on Object {
+        // The server-side claim succeeded; a display refresh cannot undo it.
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            refreshedClaim
+                ? 'Robot phone paired.'
+                : 'Robot phone paired, but linked status could not refresh.',
+          ),
+        ),
+      );
+    } on RobotPairingException catch (error) {
+      if (mounted) _showPairingError(context, error.reason);
+    } on Object {
+      if (mounted) {
+        _showPairingError(context, RobotPairingFailureReason.functionFailure);
+      }
+    } finally {
+      if (mounted) setState(() => _pairingBusy = false);
+    }
+  }
+
+  String _formatExpiry(BuildContext context, DateTime value) {
+    final local = value.toLocal();
+    final formatted = MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(local));
+    return 'at $formatted';
+  }
+
+  void _showPairingError(
+    BuildContext context,
+    RobotPairingFailureReason reason, {
+    bool creatingCode = false,
+  }) {
+    final message = switch (reason) {
+      RobotPairingFailureReason.invalidCode => 'That pairing code is invalid.',
+      RobotPairingFailureReason.missingSession =>
+        creatingCode
+            ? 'Sign in again to generate a pairing code.'
+            : 'Could not create the restricted robot session.',
+      RobotPairingFailureReason.consumedCode =>
+        'That pairing code has already been used.',
+      RobotPairingFailureReason.expiredCode => 'That pairing code has expired.',
+      RobotPairingFailureReason.blockedDevice =>
+        'Too many attempts. Wait 15 minutes and try again.',
+      RobotPairingFailureReason.functionFailure =>
+        'Robot pairing is temporarily unavailable.',
+    };
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   String _deviceLabel(AppDeviceRole role) {

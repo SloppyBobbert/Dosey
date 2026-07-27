@@ -11,6 +11,7 @@ void main() {
     DoseyApp(
       cloudIdentityGateway: cloud.identity,
       householdSyncGateway: cloud.household,
+      robotPairingGateway: cloud.pairing,
     ),
   );
 }
