@@ -32,6 +32,7 @@ class RobotFaceScreen extends StatefulWidget {
     this.initialState,
     this.isActive = true,
     this.doseActionLogger,
+    this.onLongPress,
   });
 
   static const canvasKey = ValueKey<String>('robot-face-canvas');
@@ -96,6 +97,7 @@ class RobotFaceScreen extends StatefulWidget {
   final RobotFaceState? initialState;
   final bool isActive;
   final RobotFaceDoseActionLogger? doseActionLogger;
+  final VoidCallback? onLongPress;
 
   @override
   State<RobotFaceScreen> createState() => _RobotFaceScreenState();
@@ -289,6 +291,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                                   ? faceLab?.completeAnimation
                                   : _completeInteractionAnimation,
                               onInteraction: _handleInteraction,
+                              onLongPress: widget.onLongPress,
                               doseActionLogger: widget.doseActionLogger,
                             );
 
@@ -892,6 +895,7 @@ class _RobotFaceFrame extends StatelessWidget {
     required this.animationRevision,
     required this.onAnimationCompleted,
     required this.onInteraction,
+    this.onLongPress,
     this.doseActionLogger,
   });
 
@@ -903,6 +907,7 @@ class _RobotFaceFrame extends StatelessWidget {
   final void Function(RobotFaceAnimationCue cue, int revision)?
   onAnimationCompleted;
   final VoidCallback onInteraction;
+  final VoidCallback? onLongPress;
   final RobotFaceDoseActionLogger? doseActionLogger;
 
   @override
@@ -926,6 +931,7 @@ class _RobotFaceFrame extends StatelessWidget {
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTapDown: (_) => onInteraction(),
+                  onLongPress: onLongPress,
                   child: Stack(
                     fit: StackFit.expand,
                     children: <Widget>[

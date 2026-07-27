@@ -55,9 +55,12 @@ import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
+import 'package:dosey_app/core/display/flutter_system_ui_gateway.dart';
+import 'package:dosey_app/core/display/system_ui_gateway.dart';
 import 'package:dosey_app/features/robot_face/demo_face_lab_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_controller.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
+import 'package:dosey_app/features/shell/external_action_resume_guard.dart';
 import 'package:dosey_app/features/doses/dose_action_service.dart';
 import 'package:flutter/widgets.dart';
 
@@ -75,6 +78,7 @@ class DoseyAppScope extends StatefulWidget {
     this.connectivityGateway,
     this.voicePlayer,
     this.screenAwakeGateway,
+    this.systemUiGateway,
     this.backupFileGateway,
     this.appClock,
     this.controllerGateway,
@@ -96,6 +100,7 @@ class DoseyAppScope extends StatefulWidget {
   final ConnectivityGateway? connectivityGateway;
   final DoseyVoicePlayer? voicePlayer;
   final ScreenAwakeGateway? screenAwakeGateway;
+  final SystemUiGateway? systemUiGateway;
   final BackupFileGateway? backupFileGateway;
   final AppClock? appClock;
   final StagedControllerGateway? controllerGateway;
@@ -411,6 +416,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       // the network, notification, and backup effects disabled in demo mode.
       screenAwake:
           widget.screenAwakeGateway ?? const MethodChannelScreenAwakeGateway(),
+      systemUi: widget.systemUiGateway ?? FlutterSystemUiGateway(),
+      externalActionResumeGuard: ExternalActionResumeGuard<String>(),
       runMissedDoseReconciliation: _runMissedDoseReconciliation,
     );
     _dependenciesInitialized = true;
@@ -579,6 +586,8 @@ class DoseyAppDependencies {
     required this.notificationTaps,
     required this.permissions,
     required this.screenAwake,
+    required this.systemUi,
+    required this.externalActionResumeGuard,
     required this.runMissedDoseReconciliation,
   });
 
@@ -622,6 +631,8 @@ class DoseyAppDependencies {
   final ReminderNotificationTapController notificationTaps;
   final AppPermissionGateway permissions;
   final ScreenAwakeGateway screenAwake;
+  final SystemUiGateway systemUi;
+  final ExternalActionResumeGuard<String> externalActionResumeGuard;
   final Future<void> Function() runMissedDoseReconciliation;
 }
 

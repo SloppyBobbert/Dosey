@@ -41,6 +41,22 @@ void main() {
     expect(tap, const ReminderNotificationTap.doseReminder('dose-42'));
   });
 
+  test('pending cold-start tap can be consumed atomically', () async {
+    final controller = ReminderNotificationTapController();
+    addTearDown(controller.dispose);
+    controller.handleTap('dose-cold-start');
+
+    expect(
+      controller.takePendingTap(),
+      const ReminderNotificationTap.doseReminder('dose-cold-start'),
+    );
+    expect(controller.takePendingTap(), isNull);
+    await expectLater(
+      controller.taps.first.timeout(const Duration(milliseconds: 50)),
+      throwsA(isA<TimeoutException>()),
+    );
+  });
+
   test('blank taps are ignored', () async {
     final controller = ReminderNotificationTapController();
     addTearDown(controller.dispose);

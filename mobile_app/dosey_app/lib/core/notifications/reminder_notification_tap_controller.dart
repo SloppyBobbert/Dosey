@@ -14,6 +14,12 @@ class ReminderNotificationTapController {
 
   Stream<ReminderNotificationTap> get taps => _controller.stream;
 
+  ReminderNotificationTap? takePendingTap() {
+    final tap = _pendingTap;
+    _pendingTap = null;
+    return tap;
+  }
+
   void handleTap(String payload) {
     final tap = ReminderNotificationTap.fromPayload(payload);
     if (tap == null) return;

@@ -18,6 +18,7 @@ class DashboardScreen extends StatelessWidget {
     required this.onOpenCarousel,
     required this.onOpenSettings,
     this.onOpenRobotFace,
+    this.onOpenToday,
   });
 
   final bool showRobotFaceShortcut;
@@ -25,6 +26,7 @@ class DashboardScreen extends StatelessWidget {
   final VoidCallback onOpenCarousel;
   final VoidCallback onOpenSettings;
   final VoidCallback? onOpenRobotFace;
+  final VoidCallback? onOpenToday;
 
   @override
   Widget build(BuildContext context) {
@@ -68,6 +70,7 @@ class DashboardScreen extends StatelessWidget {
                               onOpenCarousel: onOpenCarousel,
                               onOpenSettings: onOpenSettings,
                               onOpenRobotFace: onOpenRobotFace,
+                              onOpenToday: onOpenToday,
                             );
                           },
                         );
@@ -97,6 +100,7 @@ class _DashboardContent extends StatelessWidget {
     required this.onOpenCarousel,
     required this.onOpenSettings,
     required this.onOpenRobotFace,
+    required this.onOpenToday,
   });
 
   final List<ReminderSchedule> schedules;
@@ -110,6 +114,7 @@ class _DashboardContent extends StatelessWidget {
   final VoidCallback onOpenCarousel;
   final VoidCallback onOpenSettings;
   final VoidCallback? onOpenRobotFace;
+  final VoidCallback? onOpenToday;
 
   @override
   Widget build(BuildContext context) {
@@ -234,14 +239,16 @@ class _DashboardContent extends StatelessWidget {
         const SizedBox(height: 12),
         Card(
           child: InkWell(
-            onTap: () => Navigator.of(context).push<void>(
-              MaterialPageRoute<void>(
-                builder: (_) => Scaffold(
-                  appBar: AppBar(title: const Text('Today')),
-                  body: const TodayScreen(),
+            onTap:
+                onOpenToday ??
+                () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(title: const Text('Today')),
+                      body: const TodayScreen(),
+                    ),
+                  ),
                 ),
-              ),
-            ),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(

@@ -15,7 +15,11 @@ import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/schedule/schedule_hub_screen.dart';
+import 'package:dosey_app/features/shell/robot_face_shell_controller.dart';
+import 'package:dosey_app/features/today/today_screen.dart';
 import 'package:flutter/material.dart';
+
+final doseyRouteObserver = RouteObserver<ModalRoute<void>>();
 
 class DoseyShell extends StatefulWidget {
   const DoseyShell({
@@ -31,7 +35,8 @@ class DoseyShell extends StatefulWidget {
   State<DoseyShell> createState() => _DoseyShellState();
 }
 
-class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
+class _DoseyShellState extends State<DoseyShell>
+    with WidgetsBindingObserver, RouteAware {
   _ShellTabId? _selectedTabId;
   SettingsSection? _settingsSectionTarget;
   int _settingsNavigationRequest = 0;
@@ -64,6 +69,13 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   ScreenAwakeGateway? _screenAwake;
   bool? _screenAwakeRequested;
   Future<void> _screenAwakeUpdate = Future<void>.value();
+  static const _robotFaceShellController = RobotFaceShellController();
+  RobotFaceShellOrientation? _previousOrientation;
+  RobotFaceShellOrientation? _currentOrientation;
+  bool? _systemUiFaceRequested;
+  ModalRoute<void>? _subscribedRoute;
+  int _authoritativeNavigationGeneration = 0;
+  bool _authoritativeNavigationPending = false;
 
   @override
   void initState() {
@@ -123,23 +135,42 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
         _handleDemoScenarioChanged,
       );
     }
+    final route = ModalRoute.of(context);
+    if (route != null && !identical(route, _subscribedRoute)) {
+      if (_subscribedRoute != null) doseyRouteObserver.unsubscribe(this);
+      _subscribedRoute = route;
+      doseyRouteObserver.subscribe(this, route);
+    }
     final notificationTaps = dependencies.notificationTaps;
     if (identical(notificationTaps, _notificationTaps)) {
       return;
     }
     _notificationTapSubscription?.cancel();
     _notificationTaps = notificationTaps;
+    final pendingTap = notificationTaps.takePendingTap();
+    if (pendingTap != null) {
+      _beginNotificationRouting(pendingTap);
+    }
     _notificationTapSubscription = notificationTaps.taps.listen(
       _handleNotificationTap,
     );
   }
 
   @override
+  void deactivate() {
+    _syncSystemUi(false);
+    _requestScreenAwake(false);
+    super.deactivate();
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    doseyRouteObserver.unsubscribe(this);
     _inactivityTimer?.cancel();
     _faceAwakeTimer?.cancel();
     _requestScreenAwake(false);
+    unawaited(_dependencies?.systemUi.restoreAppUi());
     unawaited(_deviceRoleSubscription?.cancel());
     unawaited(_robotFaceSettingsSubscription?.cancel());
     unawaited(_controllerEventSubscription?.cancel());
@@ -152,11 +183,13 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lifecycleState = state;
+    _dependencies?.externalActionResumeGuard.didChangeLifecycleState(state);
     if (state != AppLifecycleState.resumed) {
       _inactivityTimer?.cancel();
       _inactivityTimer = null;
       _stopFaceAwakeWindow();
       _syncScreenAwake();
+      _syncSystemUi(false);
       return;
     }
 
@@ -178,13 +211,26 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
       stream: roleStream,
       builder: (context, roleSnapshot) {
         final role = _resolvedRole(roleSnapshot.data, platform);
+        final orientation = _shellOrientationOf(context);
+        _currentOrientation = orientation;
+        final previousOrientation = _previousOrientation;
+        _previousOrientation = orientation;
         final tabs = _buildTabs(role);
-        final selectedIndex = _selectedIndexForTabs(tabs, role);
+        final selectedIndex = _selectedIndexForTabs(tabs, role, orientation);
         final navigationTabs = tabs
             .where((tab) => tab.destination != null)
             .toList();
 
         final activeTab = tabs[selectedIndex];
+        final faceVisible = activeTab.id == _ShellTabId.robotFace;
+        if (previousOrientation != null && previousOrientation != orientation) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _handleOrientationChanged(previousOrientation, orientation);
+          });
+        }
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _syncSystemUi(faceVisible);
+        });
         final selectedNavigationIndex = navigationTabs.indexWhere(
           (tab) => tab.id == activeTab.id,
         );
@@ -202,7 +248,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
               }
             },
             child: Scaffold(
-              appBar: _wasPresenting
+              appBar: _wasPresenting || faceVisible
                   ? null
                   : AppBar(
                       title: Column(
@@ -227,7 +273,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
                     tabs[index].buildScreen(selectedIndex, index),
                 ],
               ),
-              bottomNavigationBar: _wasPresenting
+              bottomNavigationBar: _wasPresenting || faceVisible
                   ? null
                   : NavigationBar(
                       labelBehavior:
@@ -238,7 +284,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
                           ? 0
                           : selectedNavigationIndex,
                       onDestinationSelected: (index) =>
-                          _selectTab(navigationTabs[index].id),
+                          _selectVisibleTab(navigationTabs[index].id),
                       destinations: navigationTabs
                           .map((tab) => tab.destination!)
                           .toList(),
@@ -268,12 +314,13 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
         ),
         screenBuilder: (selectedIndex, tabIndex) => DashboardScreen(
           showRobotFaceShortcut: role.canHostRobot,
-          onOpenSchedule: () => _selectTab(_ShellTabId.schedule),
+          onOpenSchedule: () => _selectVisibleTab(_ShellTabId.schedule),
           onOpenCarousel: () => _openCarousel(CarouselHubSegment.carousel),
           onOpenSettings: () => _openSettings(),
           onOpenRobotFace: role.canHostRobot
-              ? () => _selectTab(_ShellTabId.robotFace)
+              ? _openRobotFaceFromDashboard
               : null,
+          onOpenToday: _openTodayDetails,
         ),
       ),
       _ShellTab(
@@ -288,11 +335,14 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
       ),
       // iOS and Personal Mode never expose the mounted robot face tab.
       if (role.canHostRobot)
-        const _ShellTab(
+        _ShellTab(
           id: _ShellTabId.robotFace,
           title: 'Robot Face',
           destination: null,
-          screenBuilder: _buildRobotFaceScreen,
+          screenBuilder: (selectedIndex, tabIndex) => RobotFaceScreen(
+            isActive: selectedIndex == tabIndex,
+            onLongPress: _handleLongPressExit,
+          ),
         ),
       _ShellTab(
         id: _ShellTabId.carousel,
@@ -349,6 +399,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
   }
 
   void _openSettings({SettingsSection? section}) {
+    _markAuthoritativeNavigationThroughNextFrame();
     setState(() {
       // Bump the key so repeated settings deep links scroll again.
       _settingsSectionTarget = section;
@@ -360,7 +411,8 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     _syncScreenAwake();
   }
 
-  void _openCarousel(CarouselHubSegment segment) {
+  void _openCarousel(CarouselHubSegment segment, {bool authoritative = true}) {
+    if (authoritative) _markAuthoritativeNavigationThroughNextFrame();
     setState(() {
       _carouselSegment = segment;
       _carouselNavigationRequest += 1;
@@ -385,6 +437,69 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     }
     _restartInactivityTimer();
     _syncScreenAwake();
+  }
+
+  void _selectVisibleTab(_ShellTabId nextTabId) {
+    _markAuthoritativeNavigationThroughNextFrame();
+    _selectTab(nextTabId);
+  }
+
+  void _markAuthoritativeNavigationThroughNextFrame() {
+    final generation = ++_authoritativeNavigationGeneration;
+    _authoritativeNavigationPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || generation != _authoritativeNavigationGeneration) return;
+      _authoritativeNavigationPending = false;
+    });
+  }
+
+  void _openTodayDetails() {
+    _markAuthoritativeNavigationThroughNextFrame();
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: const Text('Today')),
+            body: const TodayScreen(),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openRobotFaceFromDashboard() {
+    if (_currentOrientation == RobotFaceShellOrientation.portrait) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Rotate to landscape to open Robot Face.'),
+        ),
+      );
+      return;
+    }
+    _selectTab(_ShellTabId.robotFace);
+  }
+
+  void _handleLongPressExit() {
+    final role = _currentRole;
+    final orientation = _currentOrientation;
+    if (role == null || orientation == null) return;
+    final decision = _robotFaceShellController.decide(
+      RobotFaceShellInput(
+        role: role,
+        event: RobotFaceShellEvent.longPressExit,
+        currentDestination: RobotFaceShellDestination.robotFace,
+        orientation: orientation,
+        shellRouteCurrent: ModalRoute.of(context)?.isCurrent == true,
+        nestedRouteVisible: ModalRoute.of(context)?.isCurrent != true,
+        lifecycleResumed: _isLifecycleResumed,
+        authoritativeNavigationPending: _authoritativeNavigationPending,
+        externalActionReturnPending: false,
+      ),
+    );
+    final destination = decision.destination;
+    if (destination != null) {
+      _selectTab(_tabForControllerDestination(destination));
+    }
   }
 
   void _handleDeviceRoleChanged(AppDeviceRole storedRole) {
@@ -463,6 +578,7 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     _requestScreenAwake(
       role?.canHostRobot == true &&
           selectedTabId == _ShellTabId.robotFace &&
+          ModalRoute.of(context)?.isCurrent == true &&
           isResumed &&
           (_faceAwakeWindowActive || _scheduledDoseAwake),
     );
@@ -579,26 +695,41 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
       _handledNotificationWhileBackgrounded = true;
     }
 
-    unawaited(_routeNotificationTap(tap));
+    _beginNotificationRouting(tap);
   }
 
-  Future<void> _routeNotificationTap(ReminderNotificationTap tap) async {
+  void _beginNotificationRouting(ReminderNotificationTap tap) {
+    final generation = ++_authoritativeNavigationGeneration;
+    _authoritativeNavigationPending = true;
+    if (tap.kind == ReminderNotificationTapKind.shortage && mounted) {
+      _openCarousel(CarouselHubSegment.carousel, authoritative: false);
+    }
+    unawaited(_routeNotificationTap(tap, generation));
+  }
+
+  Future<void> _routeNotificationTap(
+    ReminderNotificationTap tap,
+    int generation,
+  ) async {
     final dependencies = _dependencies;
     if (dependencies == null) {
       return;
     }
 
     final storedRole = await dependencies.settings.getDeviceRole();
-    if (!mounted) {
+    if (!mounted || generation != _authoritativeNavigationGeneration) {
       return;
     }
     final role = _resolvedRole(storedRole, currentAppDevicePlatform());
     if (tap.kind == ReminderNotificationTapKind.shortage) {
-      _openCarousel(CarouselHubSegment.carousel);
+      _openCarousel(CarouselHubSegment.carousel, authoritative: false);
     } else {
       _selectTab(
         role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.dashboard,
       );
+    }
+    if (generation == _authoritativeNavigationGeneration) {
+      _authoritativeNavigationPending = false;
     }
   }
 
@@ -609,6 +740,12 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
     }
 
     unawaited(dependencies.runMissedDoseReconciliation());
+    final externalTarget = dependencies.externalActionResumeGuard
+        .consumeResumeTarget();
+    if (externalTarget == 'settings') {
+      _openSettings();
+      return;
+    }
     if (preserveNotificationDestination || dependencies.isDemo) {
       return;
     }
@@ -618,25 +755,147 @@ class _DoseyShellState extends State<DoseyShell> with WidgetsBindingObserver {
       return;
     }
     final role = _resolvedRole(storedRole, currentAppDevicePlatform());
-    if (role.canHostRobot) {
-      _selectTab(_ShellTabId.robotFace);
+    final orientation = _currentOrientation;
+    if (orientation == null) return;
+    final currentTab = _selectedTabId ?? _defaultTabIdFor(role);
+    final decision = _robotFaceShellController.decide(
+      RobotFaceShellInput(
+        role: role,
+        event: RobotFaceShellEvent.resume,
+        currentDestination: _controllerDestinationFor(currentTab),
+        orientation: orientation,
+        shellRouteCurrent: ModalRoute.of(context)?.isCurrent == true,
+        nestedRouteVisible: ModalRoute.of(context)?.isCurrent != true,
+        lifecycleResumed: _isLifecycleResumed,
+        authoritativeNavigationPending: _authoritativeNavigationPending,
+        externalActionReturnPending: false,
+      ),
+    );
+    final destination = decision.destination;
+    if (destination != null) {
+      _selectTab(_tabForControllerDestination(destination));
     }
   }
 
-  int _selectedIndexForTabs(List<_ShellTab> tabs, AppDeviceRole role) {
-    final selectedTabId = _selectedTabId ?? _defaultTabIdFor(role);
+  int _selectedIndexForTabs(
+    List<_ShellTab> tabs,
+    AppDeviceRole role,
+    RobotFaceShellOrientation orientation,
+  ) {
+    final selectedTabId =
+        _selectedTabId ?? _defaultTabIdFor(role, orientation: orientation);
     final selectedIndex = tabs.indexWhere((tab) => tab.id == selectedTabId);
     return selectedIndex >= 0 ? selectedIndex : 0;
   }
 
-  _ShellTabId _defaultTabIdFor(AppDeviceRole role) {
+  _ShellTabId _defaultTabIdFor(
+    AppDeviceRole role, {
+    RobotFaceShellOrientation? orientation,
+  }) {
     if (widget.forceTodayTab) {
       return _ShellTabId.dashboard;
     }
     if (widget.startOnController) {
       return _ShellTabId.carousel;
     }
-    return role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.dashboard;
+    if (!role.canHostRobot) return _ShellTabId.dashboard;
+    return orientation == RobotFaceShellOrientation.portrait
+        ? _ShellTabId.dashboard
+        : _ShellTabId.robotFace;
+  }
+
+  RobotFaceShellOrientation _shellOrientationOf(BuildContext context) {
+    return MediaQuery.orientationOf(context) == Orientation.portrait
+        ? RobotFaceShellOrientation.portrait
+        : RobotFaceShellOrientation.landscape;
+  }
+
+  void _handleOrientationChanged(
+    RobotFaceShellOrientation previous,
+    RobotFaceShellOrientation current,
+  ) {
+    if (!mounted || _currentRole == null) return;
+    final currentTab =
+        _selectedTabId ?? _defaultTabIdFor(_currentRole!, orientation: current);
+    final decision = _robotFaceShellController.decide(
+      RobotFaceShellInput(
+        role: _currentRole!,
+        event: RobotFaceShellEvent.orientationChanged,
+        currentDestination: _controllerDestinationFor(currentTab),
+        orientation: current,
+        previousOrientation: previous,
+        shellRouteCurrent: ModalRoute.of(context)?.isCurrent == true,
+        nestedRouteVisible: ModalRoute.of(context)?.isCurrent != true,
+        lifecycleResumed:
+            _lifecycleState == null ||
+            _lifecycleState == AppLifecycleState.resumed,
+        authoritativeNavigationPending: _authoritativeNavigationPending,
+        externalActionReturnPending: false,
+      ),
+    );
+    final destination = decision.destination;
+    if (destination != null) {
+      _selectTab(_tabForControllerDestination(destination));
+    }
+  }
+
+  RobotFaceShellDestination _controllerDestinationFor(_ShellTabId tab) {
+    return switch (tab) {
+      _ShellTabId.dashboard => RobotFaceShellDestination.dashboard,
+      _ShellTabId.schedule => RobotFaceShellDestination.schedule,
+      _ShellTabId.carousel => RobotFaceShellDestination.carousel,
+      _ShellTabId.settings => RobotFaceShellDestination.settings,
+      _ShellTabId.robotFace => RobotFaceShellDestination.robotFace,
+    };
+  }
+
+  _ShellTabId _tabForControllerDestination(
+    RobotFaceShellDestination destination,
+  ) {
+    return switch (destination) {
+      RobotFaceShellDestination.dashboard ||
+      RobotFaceShellDestination.todayDetails => _ShellTabId.dashboard,
+      RobotFaceShellDestination.schedule => _ShellTabId.schedule,
+      RobotFaceShellDestination.carousel => _ShellTabId.carousel,
+      RobotFaceShellDestination.settings => _ShellTabId.settings,
+      RobotFaceShellDestination.robotFace => _ShellTabId.robotFace,
+    };
+  }
+
+  void _syncSystemUi(bool faceVisible) {
+    if (!mounted) return;
+    final routeCurrent = ModalRoute.of(context)?.isCurrent == true;
+    final resumed =
+        _lifecycleState == null || _lifecycleState == AppLifecycleState.resumed;
+    final shouldEnter = faceVisible && routeCurrent && resumed;
+    if (_systemUiFaceRequested == shouldEnter) return;
+    _systemUiFaceRequested = shouldEnter;
+    unawaited(
+      shouldEnter
+          ? _dependencies?.systemUi.enterRobotFace()
+          : _dependencies?.systemUi.restoreAppUi(),
+    );
+  }
+
+  bool get _isLifecycleResumed =>
+      _lifecycleState == null || _lifecycleState == AppLifecycleState.resumed;
+
+  bool get _isFaceSelected {
+    final role = _currentRole;
+    if (role == null) return _selectedTabId == _ShellTabId.robotFace;
+    return (_selectedTabId ?? _defaultTabIdFor(role)) == _ShellTabId.robotFace;
+  }
+
+  @override
+  void didPushNext() {
+    _syncSystemUi(false);
+    _syncScreenAwake();
+  }
+
+  @override
+  void didPopNext() {
+    _syncSystemUi(_isFaceSelected);
+    _syncScreenAwake();
   }
 }
 
@@ -661,6 +920,3 @@ class _ShellTab {
     return screenBuilder(selectedIndex, tabIndex);
   }
 }
-
-Widget _buildRobotFaceScreen(int selectedIndex, int tabIndex) =>
-    RobotFaceScreen(isActive: selectedIndex == tabIndex);
