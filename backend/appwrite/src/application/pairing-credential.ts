@@ -28,7 +28,6 @@ export function issuePairingCredential(input: {
       robotId: input.robotId,
       codeDigest: digestPairingCode(code, input.secret),
       expiresAt: new Date(input.now.getTime() + pairingCodeLifetimeMs),
-      failedAttempts: 0,
       consumedAt: null,
     },
   };

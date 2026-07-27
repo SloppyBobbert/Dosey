@@ -48,6 +48,13 @@ export interface AppwritePairingTableConfiguration {
   readonly pairingAttemptsTableId: string;
 }
 
+export class PairingTransactionConflictError extends Error {
+  constructor() {
+    super('The pairing transaction conflicted with another request.');
+    this.name = 'PairingTransactionConflictError';
+  }
+}
+
 export class AppwritePairingRowsApi implements PairingRowsApi {
   constructor(
     private readonly tables: TablesDB,
@@ -151,7 +158,10 @@ export class AppwritePairingRowsApi implements PairingRowsApi {
 }
 
 export class AppwritePairingPersistence implements PairingPersistence {
-  constructor(private readonly rows: PairingRowsApi) {}
+  constructor(
+    private readonly rows: PairingRowsApi,
+    private readonly reportRollbackFailure: (error: unknown) => void = () => {},
+  ) {}
 
   async transaction<T>(
     operation: (transaction: PairingTransaction) => Promise<T>,
@@ -165,12 +175,22 @@ export class AppwritePairingPersistence implements PairingPersistence {
     } catch (error) {
       try {
         await this.rows.rollbackTransaction(transactionId);
-      } catch (_) {
-        // Preserve the operation or commit failure that caused the rollback.
+      } catch (rollbackError) {
+        this.reportRollbackFailure(rollbackError);
       }
+      if (isConflict(error)) throw new PairingTransactionConflictError();
       throw error;
     }
   }
+}
+
+function isConflict(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error != null &&
+    'code' in error &&
+    error.code === 409
+  );
 }
 
 class AppwritePairingTransaction implements PairingTransaction {
@@ -226,7 +246,6 @@ function claimToRow(record: PairingClaimRecord): PairingRow {
     robotId: record.robotId,
     codeDigest: record.codeDigest,
     expiresAt: record.expiresAt.toISOString(),
-    failedAttempts: record.failedAttempts,
     consumedAt: record.consumedAt?.toISOString() ?? null,
     mountedDeviceAccountId: record.mountedDeviceAccountId ?? null,
     active: true,
@@ -243,7 +262,6 @@ function claimFromRow(row: PairingRow): PairingClaimRecord {
     robotId: requiredString(row, 'robotId'),
     codeDigest: requiredString(row, 'codeDigest'),
     expiresAt: requiredDate(row, 'expiresAt'),
-    failedAttempts: requiredNumber(row, 'failedAttempts'),
     consumedAt: optionalDate(row, 'consumedAt'),
     ...(mountedDeviceAccountId == null ? {} : { mountedDeviceAccountId }),
   };

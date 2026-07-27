@@ -4,6 +4,7 @@ import { describe, test } from 'node:test';
 import {
   ClaimRobotApplicationService,
   CreatePairingCodeApplicationService,
+  PairingCodeConflictError,
   type PairingClaimStore,
   type PairingCredentialStore,
   type RobotAccessDirectory,
@@ -19,6 +20,7 @@ describe('pairing application services', () => {
     };
     const robots: RobotAccessDirectory = {
       isOwner: async ({ accountId }) => accountId === 'owner-1',
+      canMountDevice: async () => true,
       mountDevice: async () => {},
     };
     const service = new CreatePairingCodeApplicationService({
@@ -44,13 +46,46 @@ describe('pairing application services', () => {
     assert.equal(saved.length, 1);
   });
 
+  test('regenerates a pairing code after a digest conflict', async () => {
+    let saveCount = 0;
+    const service = new CreatePairingCodeApplicationService({
+      store: {
+        replaceActive: async () => {
+          saveCount += 1;
+          if (saveCount === 1) throw new PairingCodeConflictError();
+        },
+      },
+      robots: {
+        isOwner: async () => true,
+        canMountDevice: async () => true,
+        mountDevice: async () => {},
+      },
+      secret: 'server-only-secret-at-least-32-bytes',
+      createId: () => `claim-${saveCount + 1}`,
+      now: () => new Date('2026-07-26T12:00:00.000Z'),
+      selectIndex: () => saveCount,
+    });
+
+    const issued = await service.create({
+      robotId: 'robot-1',
+      ownerAccountId: 'owner-1',
+    });
+
+    assert.equal(saveCount, 2);
+    assert.equal(issued.code, 'BBBBBBBBBB');
+  });
+
   test('mounts the authenticated device only after an accepted claim', async () => {
     const mounted: unknown[] = [];
     const store: PairingClaimStore = {
-      claimAtomically: async () => ({ status: 'accepted', robotId: 'robot-1' }),
+      claimAtomically: async (input) => {
+        assert.equal(await input.canClaim('robot-1'), true);
+        return { status: 'accepted', robotId: 'robot-1' };
+      },
     };
     const robots: RobotAccessDirectory = {
       isOwner: async () => false,
+      canMountDevice: async () => true,
       mountDevice: async (input) => {
         mounted.push(input);
       },
@@ -82,6 +117,7 @@ describe('pairing application services', () => {
       store,
       robots: {
         isOwner: async () => false,
+        canMountDevice: async () => true,
         mountDevice: async () => {
           mounted = true;
         },
@@ -96,6 +132,38 @@ describe('pairing application services', () => {
     });
 
     assert.deepEqual(result, { status: 'rejected', reason: 'expired' });
+    assert.equal(mounted, false);
+  });
+
+  test('rejects an owner before consuming or mounting the claim', async () => {
+    let mounted = false;
+    const store: PairingClaimStore = {
+      claimAtomically: async (input) => {
+        const allowed = await input.canClaim('robot-1');
+        return allowed
+          ? { status: 'accepted', robotId: 'robot-1' }
+          : { status: 'rejected', reason: 'invalid' };
+      },
+    };
+    const service = new ClaimRobotApplicationService({
+      store,
+      robots: {
+        isOwner: async () => false,
+        canMountDevice: async ({ accountId }) => accountId !== 'owner-1',
+        mountDevice: async () => {
+          mounted = true;
+        },
+      },
+      secret: 'server-only-secret-at-least-32-bytes',
+      now: () => new Date('2026-07-26T12:00:00.000Z'),
+    });
+
+    const result = await service.claimRobot({
+      code: 'ABCD2EFGH3',
+      mountedDeviceAccountId: 'owner-1',
+    });
+
+    assert.deepEqual(result, { status: 'rejected', reason: 'invalid' });
     assert.equal(mounted, false);
   });
 });

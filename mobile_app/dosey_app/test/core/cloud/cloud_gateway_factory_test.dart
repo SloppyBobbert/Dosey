@@ -60,7 +60,8 @@ class _UnusedAccountApi implements AppwriteAccountApi {
   Future<CloudIdentity?> getCurrentIdentity() => throw UnimplementedError();
 
   @override
-  Future<void> signInWithGoogle() => throw UnimplementedError();
+  Future<void> signInWithGoogle({required List<String> scopes}) =>
+      throw UnimplementedError();
 
   @override
   Future<void> signOutCurrentSession() => throw UnimplementedError();

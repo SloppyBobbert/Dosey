@@ -1,4 +1,4 @@
-import { Client, ID, TablesDB, Teams } from 'node-appwrite';
+import { Account, Client, ID, TablesDB, Teams } from 'node-appwrite';
 
 import {
   ClaimRobotApplicationService,
@@ -13,22 +13,38 @@ import {
   AppwriteRobotTeamsApi,
 } from '../infrastructure/appwrite-robot-access-directory.js';
 import { TransactionalPairingStore } from '../infrastructure/transactional-pairing-store.js';
+import { AppwriteFunctionIdentityVerifier } from '../functions/function-identity.js';
 
-export function createPairingRuntime(environment = process.env) {
+export function createPairingRuntime(
+  headers: Readonly<Record<string, string | undefined>>,
+  environment = process.env,
+  reportError: (message: string) => void = () => {},
+) {
+  const endpoint = required(
+    environment.APPWRITE_FUNCTION_API_ENDPOINT ?? environment.APPWRITE_ENDPOINT,
+    'APPWRITE_FUNCTION_API_ENDPOINT',
+  );
+  const projectId = required(
+    environment.APPWRITE_FUNCTION_PROJECT_ID ?? environment.APPWRITE_PROJECT_ID,
+    'APPWRITE_FUNCTION_PROJECT_ID',
+  );
   const client = new Client()
     .setEndpoint(
-      required(
-        environment.APPWRITE_FUNCTION_API_ENDPOINT ?? environment.APPWRITE_ENDPOINT,
-        'APPWRITE_FUNCTION_API_ENDPOINT',
-      ),
+      endpoint,
     )
-    .setProject(
-      required(
-        environment.APPWRITE_FUNCTION_PROJECT_ID ?? environment.APPWRITE_PROJECT_ID,
-        'APPWRITE_FUNCTION_PROJECT_ID',
-      ),
-    )
-    .setKey(required(environment.APPWRITE_FUNCTION_API_KEY, 'APPWRITE_FUNCTION_API_KEY'));
+    .setProject(projectId)
+    .setKey(required(headers['x-appwrite-key'], 'x-appwrite-key'));
+
+  const userJwt = headers['x-appwrite-user-jwt'];
+  const identity = new AppwriteFunctionIdentityVerifier({
+    async getCurrentAccountId() {
+      if (!userJwt) throw new Error('Authenticated user JWT is required.');
+      const user = await new Account(
+        new Client().setEndpoint(endpoint).setProject(projectId).setJWT(userJwt),
+      ).get();
+      return user.$id;
+    },
+  });
 
   const tables = new AppwritePairingRowsApi(new TablesDB(client), {
     databaseId: required(environment.DOSEY_DATABASE_ID, 'DOSEY_DATABASE_ID'),
@@ -42,7 +58,10 @@ export function createPairingRuntime(environment = process.env) {
     ),
   });
   const store = new TransactionalPairingStore(
-    new AppwritePairingPersistence(tables),
+    new AppwritePairingPersistence(tables, (error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      reportError(`Pairing transaction rollback failed: ${message}`);
+    }),
   );
   const robots = new AppwriteRobotAccessDirectory(
     new AppwriteRobotTeamsApi(new Teams(client)),
@@ -50,6 +69,7 @@ export function createPairingRuntime(environment = process.env) {
   const secret = required(environment.DOSEY_PAIRING_HMAC_SECRET, 'DOSEY_PAIRING_HMAC_SECRET');
 
   return {
+    identity,
     createPairingCode: new CreatePairingCodeApplicationService({
       store,
       robots,

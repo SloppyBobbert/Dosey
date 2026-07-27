@@ -1,6 +1,7 @@
 import type { IssuedPairingCredential } from '../application/pairing-credential.js';
 import { RobotOwnerRequiredError } from '../application/pairing-services.js';
 import type { FunctionContext } from './claim-robot.js';
+import type { FunctionIdentityVerifier } from './function-identity.js';
 
 export interface CreatePairingCodeService {
   create(input: {
@@ -9,13 +10,16 @@ export interface CreatePairingCodeService {
   }): Promise<IssuedPairingCredential>;
 }
 
-export function createPairingCodeHandler(service: CreatePairingCodeService) {
+export function createPairingCodeHandler(
+  service: CreatePairingCodeService,
+  identity: FunctionIdentityVerifier,
+) {
   return async (context: FunctionContext) => {
     if (context.req.method !== 'POST') {
       return context.res.json({ error: 'method_not_allowed' }, 405);
     }
-    const ownerAccountId = context.req.headers['x-appwrite-user-id'];
-    if (ownerAccountId == null || ownerAccountId.length === 0) {
+    const ownerAccountId = await identity.verify(context.req.headers);
+    if (ownerAccountId == null) {
       return context.res.json({ error: 'authentication_required' }, 401);
     }
 

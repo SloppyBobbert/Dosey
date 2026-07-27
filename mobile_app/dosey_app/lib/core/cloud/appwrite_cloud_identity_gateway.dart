@@ -10,7 +10,7 @@ abstract interface class AppwriteAccountApi {
   // in this file and makes the Dosey gateway testable without network calls.
   Future<CloudIdentity?> getCurrentIdentity();
 
-  Future<void> signInWithGoogle();
+  Future<void> signInWithGoogle({required List<String> scopes});
 
   Future<void> signOutCurrentSession();
 }
@@ -33,8 +33,8 @@ class AppwriteAccountApiAdapter implements AppwriteAccountApi {
   }
 
   @override
-  Future<void> signInWithGoogle() =>
-      _account.createOAuth2Session(provider: OAuthProvider.google);
+  Future<void> signInWithGoogle({required List<String> scopes}) => _account
+      .createOAuth2Session(provider: OAuthProvider.google, scopes: scopes);
 
   @override
   Future<void> signOutCurrentSession() =>
@@ -68,20 +68,28 @@ class AppwriteCloudIdentityGateway implements CloudIdentityGateway {
       listener.onCancel = subscription.cancel;
 
       unawaited(() async {
-        final restored =
-            await _account.getCurrentIdentity() ??
-            const CloudIdentity.signedOut();
-        // A sign-in or sign-out that finished during restoration is newer.
-        if (_revision == startingRevision) {
-          listener.add(restored);
+        try {
+          final restored =
+              await _account.getCurrentIdentity() ??
+              const CloudIdentity.signedOut();
+          // A sign-in or sign-out that finished during restoration is newer.
+          if (_revision == startingRevision) {
+            listener.add(restored);
+          }
+        } catch (error, stackTrace) {
+          if (_revision == startingRevision) {
+            listener.addError(error, stackTrace);
+          }
         }
       }());
     });
   }
 
   @override
-  Future<CloudIdentity> signInWithGoogle() async {
-    await _account.signInWithGoogle();
+  Future<CloudIdentity> signInWithGoogle({
+    List<String> scopes = const [],
+  }) async {
+    await _account.signInWithGoogle(scopes: scopes);
     final identity = await _account.getCurrentIdentity();
     if (identity == null) {
       throw StateError('Appwrite Google sign-in did not create a session.');

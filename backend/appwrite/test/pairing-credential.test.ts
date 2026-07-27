@@ -28,7 +28,6 @@ describe('pairing credential issuance', () => {
       credential.record.expiresAt.getTime(),
       now.getTime() + pairingCodeLifetimeMs,
     );
-    assert.equal(credential.record.failedAttempts, 0);
     assert.equal(credential.record.consumedAt, null);
   });
 });

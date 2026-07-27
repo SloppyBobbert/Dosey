@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 
 import {
   AppwriteRobotAccessDirectory,
+  isRevocableRobotDeviceMembership,
   type RobotTeam,
   type RobotTeamsApi,
 } from '../src/infrastructure/appwrite-robot-access-directory.js';
@@ -29,6 +30,7 @@ describe('Appwrite robot access directory', () => {
       isDoseyRobot: true,
       ownerAccountId: 'owner-1',
       mountedDeviceAccountId: null,
+      humanAccountIds: ['owner-1'],
     });
     const directory = new AppwriteRobotAccessDirectory(api);
 
@@ -49,6 +51,7 @@ describe('Appwrite robot access directory', () => {
       isDoseyRobot: false,
       ownerAccountId: 'owner-1',
       mountedDeviceAccountId: null,
+      humanAccountIds: ['owner-1'],
     });
     const directory = new AppwriteRobotAccessDirectory(api);
 
@@ -72,6 +75,7 @@ describe('Appwrite robot access directory', () => {
       isDoseyRobot: true,
       ownerAccountId: 'owner-1',
       mountedDeviceAccountId: 'old-device',
+      humanAccountIds: ['owner-1'],
     });
     const directory = new AppwriteRobotAccessDirectory(api);
 
@@ -83,5 +87,54 @@ describe('Appwrite robot access directory', () => {
     assert.deepEqual(api.replacements, [
       { robotId: 'robot-1', deviceId: 'new-device' },
     ]);
+  });
+
+  test('does not allow an owner or accepted human to mount as the robot device', async () => {
+    const api = new FakeRobotTeamsApi();
+    api.teams.set('robot-1', {
+      id: 'robot-1',
+      isDoseyRobot: true,
+      ownerAccountId: 'owner-1',
+      mountedDeviceAccountId: null,
+      humanAccountIds: ['owner-1', 'family-1'],
+    });
+    const directory = new AppwriteRobotAccessDirectory(api);
+
+    assert.equal(
+      await directory.canMountDevice({ robotId: 'robot-1', accountId: 'owner-1' }),
+      false,
+    );
+    assert.equal(
+      await directory.canMountDevice({ robotId: 'robot-1', accountId: 'family-1' }),
+      false,
+    );
+    assert.equal(
+      await directory.canMountDevice({ robotId: 'robot-1', accountId: 'device-1' }),
+      true,
+    );
+  });
+
+  test('never selects a human membership for mounted-device revocation', () => {
+    assert.equal(
+      isRevocableRobotDeviceMembership(
+        { userId: 'owner-1', roles: ['owner'] },
+        'owner-1',
+      ),
+      false,
+    );
+    assert.equal(
+      isRevocableRobotDeviceMembership(
+        { userId: 'old-device', roles: ['robot-device'] },
+        'old-device',
+      ),
+      true,
+    );
+    assert.equal(
+      isRevocableRobotDeviceMembership(
+        { userId: 'old-device', roles: ['robot-device', 'owner'] },
+        'old-device',
+      ),
+      false,
+    );
   });
 });

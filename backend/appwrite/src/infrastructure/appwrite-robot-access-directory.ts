@@ -12,6 +12,7 @@ export interface RobotTeam {
   readonly isDoseyRobot: boolean;
   readonly ownerAccountId: string | null;
   readonly mountedDeviceAccountId: string | null;
+  readonly humanAccountIds: readonly string[];
 }
 
 export interface RobotTeamsApi {
@@ -32,6 +33,18 @@ export class AppwriteRobotAccessDirectory implements RobotAccessDirectory {
     const robot = await this.teams.getRobot(input.robotId);
     return (
       robot?.isDoseyRobot === true && robot.ownerAccountId === input.accountId
+    );
+  }
+
+  async canMountDevice(input: {
+    robotId: string;
+    accountId: string;
+  }): Promise<boolean> {
+    const robot = await this.teams.getRobot(input.robotId);
+    return (
+      robot?.isDoseyRobot === true &&
+      robot.ownerAccountId !== input.accountId &&
+      !robot.humanAccountIds.includes(input.accountId)
     );
   }
 
@@ -57,6 +70,7 @@ export class AppwriteRobotTeamsApi implements RobotTeamsApi {
     try {
       const team = await this.teams.get({ teamId: robotId });
       const preferences = preferencesOf(team);
+      const memberships = await this.teams.listMemberships({ teamId: robotId });
       return {
         id: team.$id,
         isDoseyRobot: preferences[robotMarkerKey] === true,
@@ -65,6 +79,13 @@ export class AppwriteRobotTeamsApi implements RobotTeamsApi {
           preferences,
           mountedDeviceIdKey,
         ),
+        humanAccountIds: memberships.memberships
+          .filter(
+            (membership) =>
+              membership.confirm &&
+              !hasOnlyRobotDeviceRole(membership.roles),
+          )
+          .map((membership) => membership.userId),
       };
     } catch (error) {
       if (isNotFound(error)) return null;
@@ -100,6 +121,12 @@ export class AppwriteRobotTeamsApi implements RobotTeamsApi {
     let newMembership = memberships.memberships.find(
       (membership) => membership.userId === mountedDeviceAccountId,
     );
+    if (
+      newMembership != null &&
+      !hasOnlyRobotDeviceRole(newMembership.roles)
+    ) {
+      throw new Error('A human team member cannot become the mounted device.');
+    }
     const createdMembership = newMembership == null;
     if (newMembership == null) {
       newMembership = await this.teams.createMembership({
@@ -115,7 +142,10 @@ export class AppwriteRobotTeamsApi implements RobotTeamsApi {
     try {
       // Revoke the old credential before making the replacement authoritative.
       // If the preference update then fails, the consumed code can safely retry.
-      if (oldMembership != null) {
+      if (
+        oldMembership != null &&
+        isRevocableRobotDeviceMembership(oldMembership, oldDeviceId)
+      ) {
         await this.teams.deleteMembership({
           teamId: robotId,
           membershipId: oldMembership.$id,
@@ -137,6 +167,21 @@ export class AppwriteRobotTeamsApi implements RobotTeamsApi {
       throw error;
     }
   }
+}
+
+export function isRevocableRobotDeviceMembership(
+  membership: Pick<Models.Membership, 'userId' | 'roles'>,
+  mountedDeviceAccountId: string | null,
+): boolean {
+  return (
+    mountedDeviceAccountId != null &&
+    membership.userId === mountedDeviceAccountId &&
+    hasOnlyRobotDeviceRole(membership.roles)
+  );
+}
+
+function hasOnlyRobotDeviceRole(roles: readonly string[]): boolean {
+  return roles.length === 1 && roles[0] === robotDeviceRole;
 }
 
 function preferencesOf(team: Models.Team): Record<string, unknown> {

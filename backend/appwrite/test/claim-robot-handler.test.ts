@@ -8,14 +8,19 @@ import {
 } from '../src/functions/claim-robot.js';
 
 function context(input: {
+  method?: string;
   userId?: string;
+  userJwt?: string;
   body?: unknown;
 }): FunctionContext & { responses: Array<{ body: unknown; status: number }> } {
   const responses: Array<{ body: unknown; status: number }> = [];
   return {
     req: {
-      method: 'POST',
-      headers: input.userId == null ? {} : { 'x-appwrite-user-id': input.userId },
+      method: input.method ?? 'POST',
+      headers: {
+        'x-appwrite-user-id': input.userId,
+        'x-appwrite-user-jwt': input.userJwt,
+      },
       bodyJson: input.body,
     },
     res: {
@@ -31,10 +36,34 @@ function context(input: {
 }
 
 describe('claim robot function boundary', () => {
+  const identity = {
+    verify: async (headers: Readonly<Record<string, string | undefined>>) =>
+      headers['x-appwrite-user-id'] ?? null,
+  };
+
+  test('rejects non-POST requests without calling the service', async () => {
+    let called = false;
+    const handler = createClaimRobotHandler(
+      {
+        claimRobot: async () => {
+          called = true;
+          return { status: 'accepted', robotId: 'robot-1' };
+        },
+      },
+      identity,
+    );
+    const response = (await handler(
+      context({ method: 'GET', userId: 'device-1' }),
+    )) as { body: unknown; status: number };
+
+    assert.equal(response.status, 405);
+    assert.equal(called, false);
+  });
+
   test('requires an authenticated device account', async () => {
     const handler = createClaimRobotHandler({
       claimRobot: async () => ({ status: 'accepted', robotId: 'robot-1' }),
-    });
+    }, identity);
     const request = context({ body: { code: 'ABCD2EFGH3' } });
 
     const response = (await handler(request)) as {
@@ -46,6 +75,26 @@ describe('claim robot function boundary', () => {
     assert.deepEqual(response.body, { error: 'authentication_required' });
   });
 
+  test('rejects a user header that the JWT verifier does not authenticate', async () => {
+    let called = false;
+    const handler = createClaimRobotHandler(
+      {
+        claimRobot: async () => {
+          called = true;
+          return { status: 'accepted', robotId: 'robot-1' };
+        },
+      },
+      { verify: async () => null },
+    );
+
+    const response = (await handler(
+      context({ userId: 'forged-device', userJwt: 'invalid' }),
+    )) as { body: unknown; status: number };
+
+    assert.equal(response.status, 401);
+    assert.equal(called, false);
+  });
+
   test('rejects malformed codes before calling the service', async () => {
     let called = false;
     const handler = createClaimRobotHandler({
@@ -53,7 +102,7 @@ describe('claim robot function boundary', () => {
         called = true;
         return { status: 'accepted', robotId: 'robot-1' };
       },
-    });
+    }, identity);
     const request = context({ userId: 'device-1', body: { code: '123' } });
 
     const response = (await handler(request)) as {
@@ -73,7 +122,7 @@ describe('claim robot function boundary', () => {
         input = value;
         return { status: 'accepted', robotId: 'robot-1' };
       },
-    });
+    }, identity);
     const request = context({
       userId: 'device-1',
       body: { code: 'abcd2-efgh3' },
@@ -109,7 +158,7 @@ describe('claim robot function boundary', () => {
     for (const testCase of cases) {
       const handler = createClaimRobotHandler({
         claimRobot: async () => ({ status: 'rejected', reason: testCase.reason }),
-      });
+      }, identity);
       const response = (await handler(
         context({ userId: 'device-1', body: { code: 'ABCD2EFGH3' } }),
       )) as { body: unknown; status: number };

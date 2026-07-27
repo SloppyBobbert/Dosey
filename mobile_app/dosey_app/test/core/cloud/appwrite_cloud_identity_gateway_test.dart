@@ -30,6 +30,14 @@ void main() {
     );
   });
 
+  test('watchIdentity reports restoration failures to subscribers', () async {
+    final gateway = AppwriteCloudIdentityGateway(
+      _FakeAppwriteAccountApi(restoreError: StateError('restore failed')),
+    );
+
+    await expectLater(gateway.watchIdentity().first, throwsStateError);
+  });
+
   test('Google sign-in publishes the authenticated identity', () async {
     const signedIn = CloudIdentity.signedIn(
       accountId: 'account-1',
@@ -41,12 +49,13 @@ void main() {
     expect(await identities.moveNext(), isTrue);
     final changed = identities.moveNext();
 
-    final result = await gateway.signInWithGoogle();
+    final result = await gateway.signInWithGoogle(scopes: const ['email']);
 
     expect(result, signedIn);
     expect(await changed, isTrue);
     expect(identities.current, signedIn);
     expect(account.googleSignInCount, 1);
+    expect(account.lastScopes, const ['email']);
     unawaited(identities.cancel());
   });
 
@@ -67,19 +76,29 @@ void main() {
 }
 
 class _FakeAppwriteAccountApi implements AppwriteAccountApi {
-  _FakeAppwriteAccountApi({this.currentIdentity, this.identityAfterSignIn});
+  _FakeAppwriteAccountApi({
+    this.currentIdentity,
+    this.identityAfterSignIn,
+    this.restoreError,
+  });
 
   CloudIdentity? currentIdentity;
   final CloudIdentity? identityAfterSignIn;
+  final Object? restoreError;
   int googleSignInCount = 0;
+  List<String>? lastScopes;
   int signOutCount = 0;
 
   @override
-  Future<CloudIdentity?> getCurrentIdentity() async => currentIdentity;
+  Future<CloudIdentity?> getCurrentIdentity() async {
+    if (restoreError case final error?) throw error;
+    return currentIdentity;
+  }
 
   @override
-  Future<void> signInWithGoogle() async {
+  Future<void> signInWithGoogle({required List<String> scopes}) async {
     googleSignInCount += 1;
+    lastScopes = scopes;
     currentIdentity = identityAfterSignIn;
   }
 

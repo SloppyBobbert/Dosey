@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 
 import {
   AppwritePairingPersistence,
+  PairingTransactionConflictError,
   type PairingRowsApi,
   type PairingRow,
 } from '../src/infrastructure/appwrite-pairing-persistence.js';
@@ -69,7 +70,6 @@ describe('Appwrite pairing persistence', () => {
         robotId: 'robot-1',
         codeDigest: 'digest',
         expiresAt: new Date('2026-07-26T12:10:00.000Z'),
-        failedAttempts: 0,
         consumedAt: null,
       });
     });
@@ -112,5 +112,37 @@ describe('Appwrite pairing persistence', () => {
       ),
       /Multiple active pairing claims/,
     );
+  });
+
+  test('maps Appwrite 409 transaction failures to a typed conflict', async () => {
+    const api = new FakeRowsApi();
+    api.commitTransaction = async () => {
+      throw { code: 409 };
+    };
+    const persistence = new AppwritePairingPersistence(api);
+
+    await assert.rejects(
+      persistence.transaction(async () => {}),
+      PairingTransactionConflictError,
+    );
+  });
+
+  test('reports rollback failure while preserving the original error', async () => {
+    const api = new FakeRowsApi();
+    const rollbackErrors: unknown[] = [];
+    api.rollbackTransaction = async () => {
+      throw new Error('rollback failed');
+    };
+    const persistence = new AppwritePairingPersistence(api, (error) => {
+      rollbackErrors.push(error);
+    });
+
+    await assert.rejects(
+      persistence.transaction(async () => {
+        throw new Error('operation failed');
+      }),
+      /operation failed/,
+    );
+    assert.equal((rollbackErrors[0] as Error).message, 'rollback failed');
   });
 });

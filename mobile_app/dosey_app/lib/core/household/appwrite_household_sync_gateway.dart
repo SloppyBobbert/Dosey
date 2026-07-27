@@ -82,10 +82,10 @@ class AppwriteTeamsApiAdapter implements AppwriteTeamsApi {
     }
 
     final memberships = await _teams.listMemberships(teamId: team.$id);
-    final acceptedHumanIds = memberships.memberships
-        .where((membership) => membership.confirm)
-        .map((membership) => membership.userId)
-        .toSet();
+    final acceptedHumanIds = acceptedHumanAccountIds(
+      memberships.memberships,
+      mountedDeviceId: mountedDeviceId,
+    );
     return RobotInstallation(
       id: team.$id,
       displayName: team.name,
@@ -95,6 +95,20 @@ class AppwriteTeamsApiAdapter implements AppwriteTeamsApi {
     );
   }
 }
+
+Set<String> acceptedHumanAccountIds(
+  Iterable<models.Membership> memberships, {
+  required String mountedDeviceId,
+}) => memberships
+    .where(
+      (membership) =>
+          membership.confirm &&
+          membership.userId != mountedDeviceId &&
+          !(membership.roles.length == 1 &&
+              membership.roles.single == 'robot-device'),
+    )
+    .map((membership) => membership.userId)
+    .toSet();
 
 class AppwriteHouseholdSyncGateway implements HouseholdSyncGateway {
   AppwriteHouseholdSyncGateway(this._teams);

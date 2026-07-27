@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import { createPairingCodeHandler } from '../src/functions/create-pairing-code.js';
+import { RobotOwnerRequiredError } from '../src/application/pairing-services.js';
 
 function context(input: {
   method?: string;
@@ -29,11 +30,16 @@ function context(input: {
 }
 
 describe('create pairing code function boundary', () => {
+  const identity = {
+    verify: async (headers: Readonly<Record<string, string | undefined>>) =>
+      headers['x-appwrite-user-id'] ?? null,
+  };
+
   test('requires an authenticated owner', async () => {
     const request = context({ body: { robotId: 'robot-1' } });
     const handler = createPairingCodeHandler({
       create: () => Promise.reject(new Error('must not run')),
-    });
+    }, identity);
 
     await handler(request.value);
 
@@ -59,12 +65,11 @@ describe('create pairing code function boundary', () => {
             robotId: 'robot-1',
             codeDigest: 'secret-digest',
             expiresAt: new Date('2026-07-26T12:10:00.000Z'),
-            failedAttempts: 0,
             consumedAt: null,
           },
         });
       },
-    });
+    }, identity);
 
     await handler(request.value);
 
@@ -77,6 +82,48 @@ describe('create pairing code function boundary', () => {
         expiresAt: '2026-07-26T12:10:00.000Z',
       },
       status: 200,
+    });
+  });
+
+  test('rejects missing and blank robot IDs before calling the service', async () => {
+    for (const body of [{}, { robotId: '   ' }]) {
+      let called = false;
+      const request = context({ userId: 'owner-1', body });
+      const handler = createPairingCodeHandler(
+        {
+          create: async () => {
+            called = true;
+            throw new Error('must not run');
+          },
+        },
+        identity,
+      );
+
+      await handler(request.value);
+
+      assert.equal(called, false);
+      assert.deepEqual(request.response(), {
+        body: { error: 'invalid_robot_id' },
+        status: 400,
+      });
+    }
+  });
+
+  test('maps owner authorization failures to a safe response', async () => {
+    const request = context({
+      userId: 'not-owner',
+      body: { robotId: 'robot-1' },
+    });
+    const handler = createPairingCodeHandler(
+      { create: async () => { throw new RobotOwnerRequiredError(); } },
+      identity,
+    );
+
+    await handler(request.value);
+
+    assert.deepEqual(request.response(), {
+      body: { error: 'owner_required' },
+      status: 403,
     });
   });
 });

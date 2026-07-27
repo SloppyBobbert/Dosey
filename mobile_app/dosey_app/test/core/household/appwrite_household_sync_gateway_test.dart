@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:appwrite/models.dart' as models;
 import 'package:dosey_app/core/household/appwrite_household_sync_gateway.dart';
 import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -65,7 +66,47 @@ void main() {
 
     await expectLater(gateway.watchRobot().first, throwsStateError);
   });
+
+  test('excludes a confirmed robot-device membership from human accounts', () {
+    final humanIds = acceptedHumanAccountIds([
+      _membership(userId: 'owner-1', roles: ['owner']),
+      _membership(userId: 'device-1', roles: ['robot-device']),
+    ], mountedDeviceId: 'device-1');
+
+    expect(humanIds, {'owner-1'});
+  });
+
+  test('keeps mixed-role memberships in the human account set', () {
+    final memberships = [
+      _membership(userId: 'family-1', roles: const ['member', 'robot-device']),
+    ];
+
+    expect(acceptedHumanAccountIds(memberships, mountedDeviceId: 'device-1'), {
+      'family-1',
+    });
+  });
 }
+
+models.Membership _membership({
+  required String userId,
+  required List<String> roles,
+}) => models.Membership(
+  $id: 'membership-$userId',
+  $createdAt: '2026-07-26T12:00:00.000Z',
+  $updatedAt: '2026-07-26T12:00:00.000Z',
+  userId: userId,
+  userName: userId,
+  userEmail: '',
+  userPhone: '',
+  teamId: 'robot-1',
+  teamName: 'Kitchen Dosey',
+  invited: '2026-07-26T12:00:00.000Z',
+  joined: '2026-07-26T12:00:00.000Z',
+  confirm: true,
+  mfa: false,
+  userAccessedAt: '2026-07-26T12:00:00.000Z',
+  roles: roles,
+);
 
 RobotInstallation _robot({required String id}) => RobotInstallation(
   id: id,

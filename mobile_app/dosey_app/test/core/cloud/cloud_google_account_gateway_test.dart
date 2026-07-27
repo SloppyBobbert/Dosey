@@ -21,6 +21,7 @@ void main() {
       expect(account.email, 'owner@example.com');
       expect(account.displayName, 'Owner');
       expect(cloud.signInCount, 1);
+      expect(cloud.lastScopes, const ['email']);
     },
   );
 
@@ -39,10 +40,14 @@ class _FakeCloudIdentityGateway implements CloudIdentityGateway {
 
   final CloudIdentity identity;
   int signInCount = 0;
+  List<String>? lastScopes;
 
   @override
-  Future<CloudIdentity> signInWithGoogle() async {
+  Future<CloudIdentity> signInWithGoogle({
+    List<String> scopes = const [],
+  }) async {
     signInCount += 1;
+    lastScopes = scopes;
     return identity;
   }
 

@@ -3,6 +3,7 @@ import {
   normalizePairingCode,
 } from '../domain/pairing-code.js';
 import type { PairingClaimRejectionReason } from '../domain/pairing-claim.js';
+import type { FunctionIdentityVerifier } from './function-identity.js';
 
 export interface ClaimRobotService {
   claimRobot(input: {
@@ -30,13 +31,16 @@ export interface FunctionContext {
   readonly error: (message: string) => void;
 }
 
-export function createClaimRobotHandler(service: ClaimRobotService) {
+export function createClaimRobotHandler(
+  service: ClaimRobotService,
+  identity: FunctionIdentityVerifier,
+) {
   return async (context: FunctionContext) => {
     if (context.req.method !== 'POST') {
       return context.res.json({ error: 'method_not_allowed' }, 405);
     }
-    const mountedDeviceAccountId = context.req.headers['x-appwrite-user-id'];
-    if (mountedDeviceAccountId == null || mountedDeviceAccountId.length === 0) {
+    const mountedDeviceAccountId = await identity.verify(context.req.headers);
+    if (mountedDeviceAccountId == null) {
       return context.res.json({ error: 'authentication_required' }, 401);
     }
 

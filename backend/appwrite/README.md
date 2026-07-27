@@ -10,8 +10,8 @@ This package contains the server-authorized robot pairing foundation. It does no
 Build with `npm ci && npm run build`. Configure each Appwrite Function with the corresponding compiled entrypoint:
 
 ```text
-dist/src/entrypoints/create-pairing-code.js
-dist/src/entrypoints/claim-robot.js
+dist/entrypoints/create-pairing-code.js
+dist/entrypoints/claim-robot.js
 ```
 
 Use Node.js 22 or newer. Do not expose either function's dynamic API key or the HMAC secret to Flutter.
@@ -42,12 +42,11 @@ Create a server-only database with no client row permissions.
 | `robotId` | varchar | yes |
 | `codeDigest` | varchar(64) | yes |
 | `expiresAt` | datetime | yes |
-| `failedAttempts` | integer | yes |
 | `consumedAt` | datetime | no |
 | `mountedDeviceAccountId` | varchar | no |
 | `active` | boolean | yes |
 
-Add indexes for `(codeDigest, active)` and `(robotId, active)`.
+Add a unique index for `codeDigest` and a key index for `(robotId, active)`.
 
 `pairing_attempts` columns:
 
@@ -57,7 +56,7 @@ Add indexes for `(codeDigest, active)` and `(robotId, active)`.
 | `failedAttempts` | integer | yes |
 | `blockedUntil` | datetime | no |
 
-The attempt row ID is the mounted-device account ID. Appwrite transactions make code replacement, consumption, and attempt updates atomic. A new owner-issued code invalidates the previous code. Five failed claims block that device account for fifteen minutes.
+The attempt row ID is the mounted-device account ID. Appwrite transactions make code replacement, consumption, and attempt updates atomic. A new owner-issued code invalidates the previous code. Five failed claims block that device account for fifteen minutes. A consumed code can retry only from the same mounted-device account and only until its original ten-minute expiry, allowing short recovery from a Teams update failure without creating a permanent remount credential.
 
 ## Verification
 
@@ -69,3 +68,8 @@ npm run build
 ```
 
 Live setup still requires the Appwrite tables, two deployed functions, and their IDs in the Flutter configuration before pairing UI can be enabled.
+
+The iOS URL scheme in `ios/Runner/Info.plist` must remain
+`appwrite-callback-<APPWRITE_PROJECT_ID>`. Android derives the same scheme from
+the ignored `.env` file at build time; update the iOS value manually if the
+Appwrite project changes.

@@ -18,7 +18,7 @@ class CloudGoogleAccountGateway implements GoogleAccountGateway {
   Future<GoogleAccountInfo> authenticate({
     required List<String> scopeHint,
   }) async {
-    final identity = await _cloudIdentity.signInWithGoogle();
+    final identity = await _cloudIdentity.signInWithGoogle(scopes: scopeHint);
     return _toGoogleAccountInfo(identity) ??
         (throw StateError('Cloud sign-in returned a signed-out identity.'));
   }
