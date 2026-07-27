@@ -198,6 +198,530 @@ void main() {
     expect(glows.first.center.dy, closeTo(glows[1].center.dy, 0.01));
   });
 
+  testWidgets(
+    'idle motion moves the Classic eye pair without changing identity',
+    (WidgetTester tester) async {
+      Future<Map<String, Object>> frameAt(double phase) async {
+        await tester.pumpWidget(
+          const MaterialApp(
+            home: SizedBox(
+              width: 800,
+              height: 400,
+              child: RobotFaceCanvas(
+                isActive: false,
+                state: RobotFaceState(
+                  mode: RobotFaceMode.idle,
+                  nextEventLabel: 'No reminders scheduled',
+                  isFlipped: false,
+                  isLandscapeOnly: true,
+                  rampProgress: 0,
+                  isInAwakeWindow: true,
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+
+        final customPaint = tester.widget<CustomPaint>(
+          find.descendant(
+            of: find.byType(RobotFaceCanvas),
+            matching: find.byType(CustomPaint),
+          ),
+        );
+        final dynamic painter = customPaint.painter;
+        return painter.debugMotionFrame(const Size(800, 400), phase: phase)
+            as Map<String, Object>;
+      }
+
+      final start = await frameAt(0);
+      final glance = await frameAt(0.32);
+      final settle = await frameAt(0.58);
+
+      expect(glance['eyeOffset'], isNot(start['eyeOffset']));
+      expect(settle['eyeOffset'], isNot(glance['eyeOffset']));
+      expect(glance['baseAspectRatio'], closeTo(0.79, 0.02));
+    },
+  );
+
+  testWidgets('idle cycle includes a deterministic double blink', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: RobotFaceCanvas(
+          isActive: false,
+          state: RobotFaceState(
+            mode: RobotFaceMode.idle,
+            nextEventLabel: 'No reminders scheduled',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 0,
+            isInAwakeWindow: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final customPaint = tester.widget<CustomPaint>(
+      find.descendant(
+        of: find.byType(RobotFaceCanvas),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+    final dynamic painter = customPaint.painter;
+    Map<String, Object> frame(double phase) =>
+        painter.debugMotionFrame(const Size(800, 400), phase: phase)
+            as Map<String, Object>;
+
+    expect(frame(0.18)['blink'], greaterThan(0.8));
+    expect(frame(0.205)['blink'], lessThan(0.2));
+    expect(frame(0.23)['blink'], greaterThan(0.8));
+    expect(frame(0.3)['blink'], 0.0);
+  });
+
+  testWidgets('idle personality pauses, glances both ways, and recenters', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: RobotFaceCanvas(
+          isActive: false,
+          state: RobotFaceState(
+            mode: RobotFaceMode.idle,
+            nextEventLabel: 'No reminders scheduled',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 0,
+            isInAwakeWindow: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final customPaint = tester.widget<CustomPaint>(
+      find.descendant(
+        of: find.byType(RobotFaceCanvas),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+    final dynamic painter = customPaint.painter;
+    Offset offsetAt(double phase) =>
+        (painter.debugMotionFrame(const Size(800, 400), phase: phase)
+                as Map<String, Object>)['eyeOffset']
+            as Offset;
+
+    final centered = offsetAt(0.04);
+    final firstGlance = offsetAt(0.32);
+    final firstDwell = offsetAt(0.38);
+    final oppositeGlance = offsetAt(0.62);
+    final recentered = offsetAt(0.94);
+
+    expect(centered.dx.abs(), lessThan(1));
+    expect(firstGlance.dx, greaterThan(4));
+    expect(firstDwell.dx, closeTo(firstGlance.dx, 0.5));
+    expect(oppositeGlance.dx, lessThan(-4));
+    expect(recentered.dx.abs(), lessThan(1));
+  });
+
+  testWidgets('busy and safety faces suppress idle personality drift', (
+    WidgetTester tester,
+  ) async {
+    Future<Offset> offsetFor({
+      required RobotFaceState state,
+      bool isPreparing = false,
+      bool isSpeaking = false,
+      RobotFaceAnimationCue? cue,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RobotFaceCanvas(
+            key: ValueKey<Object?>(<Object?>[
+              state.mode,
+              isPreparing,
+              isSpeaking,
+              cue,
+            ]),
+            isActive: cue != null,
+            state: state,
+            isPreparing: isPreparing,
+            isSpeaking: isSpeaking,
+            animationCue: cue,
+            animationRevision: cue == null ? 0 : 1,
+          ),
+        ),
+      );
+      await tester.pump();
+      final customPaint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(RobotFaceCanvas),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      final dynamic painter = customPaint.painter;
+      return (painter.debugMotionFrame(
+                const Size(800, 400),
+                phase: 0.32,
+                cueProgress: 0.0,
+              )
+              as Map<String, Object>)['eyeOffset']
+          as Offset;
+    }
+
+    const idle = RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+    const missed = RobotFaceState(
+      mode: RobotFaceMode.missed,
+      nextEventLabel: 'Missed dose',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 1,
+      isInAwakeWindow: true,
+    );
+
+    expect(await offsetFor(state: idle, isPreparing: true), Offset.zero);
+    expect(await offsetFor(state: idle, isSpeaking: true), Offset.zero);
+    expect(
+      await offsetFor(state: idle, cue: RobotFaceAnimationCue.focus),
+      Offset.zero,
+    );
+    expect(await offsetFor(state: missed), Offset.zero);
+  });
+
+  testWidgets('idle personality eases back before an active cue completes', (
+    WidgetTester tester,
+  ) async {
+    const state = RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: RobotFaceCanvas(
+          isActive: true,
+          state: state,
+          animationCue: RobotFaceAnimationCue.focus,
+          animationRevision: 1,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final customPaint = tester.widget<CustomPaint>(
+      find.descendant(
+        of: find.byType(RobotFaceCanvas),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+    final dynamic painter = customPaint.painter;
+    Map<String, Object> frame(double cueProgress) =>
+        painter.debugMotionFrame(
+              const Size(800, 400),
+              phase: 0.32,
+              cueProgress: cueProgress,
+            )
+            as Map<String, Object>;
+
+    final startOffset = frame(0.0)['eyeOffset']! as Offset;
+    final exitOffset = frame(0.8)['eyeOffset']! as Offset;
+    final completedOffset = frame(1.0)['eyeOffset']! as Offset;
+
+    expect(startOffset, Offset.zero);
+    expect(exitOffset.dx, greaterThan(0));
+    expect(exitOffset.dx, lessThan(completedOffset.dx));
+    expect(completedOffset.dx, greaterThan(4));
+  });
+
+  testWidgets(
+    'an interrupted cue preserves its pose on the replacement frame',
+    (WidgetTester tester) async {
+      const canvasKey = ValueKey<String>('interruptible-face');
+      const state = RobotFaceState(
+        mode: RobotFaceMode.idle,
+        nextEventLabel: 'No reminders scheduled',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 0,
+        isInAwakeWindow: true,
+      );
+      final completions = <(RobotFaceAnimationCue, int)>[];
+
+      Future<void> pumpCue(RobotFaceAnimationCue cue, int revision) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SizedBox(
+              width: 800,
+              height: 400,
+              child: RobotFaceCanvas(
+                key: canvasKey,
+                state: state,
+                animationCue: cue,
+                animationRevision: revision,
+                onAnimationCompleted: (cue, revision) {
+                  completions.add((cue, revision));
+                },
+              ),
+            ),
+          ),
+        );
+      }
+
+      Offset currentOffset() {
+        final customPaint = tester.widget<CustomPaint>(
+          find.descendant(
+            of: find.byType(RobotFaceCanvas),
+            matching: find.byType(CustomPaint),
+          ),
+        );
+        final dynamic painter = customPaint.painter;
+        return (painter.debugMotionFrame(const Size(800, 400))
+                as Map<String, Object>)['eyeOffset']
+            as Offset;
+      }
+
+      await pumpCue(RobotFaceAnimationCue.track, 1);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 220));
+      final outgoingPose = currentOffset();
+
+      await pumpCue(RobotFaceAnimationCue.concern, 2);
+      await tester.pump();
+      final replacementPose = currentOffset();
+
+      expect((replacementPose - outgoingPose).distance, lessThan(2));
+      await tester.pump(const Duration(milliseconds: 821));
+      await tester.pump();
+      expect(completions, <(RobotFaceAnimationCue, int)>[
+        (RobotFaceAnimationCue.concern, 2),
+      ]);
+    },
+  );
+
+  testWidgets('rapid cue replacements complete only the final cue', (
+    WidgetTester tester,
+  ) async {
+    const canvasKey = ValueKey<String>('rapid-cue-face');
+    const state = RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+    final completions = <(RobotFaceAnimationCue, int)>[];
+
+    Future<void> pumpCue(RobotFaceAnimationCue cue, int revision) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: RobotFaceCanvas(
+            key: canvasKey,
+            state: state,
+            animationCue: cue,
+            animationRevision: revision,
+            onAnimationCompleted: (cue, revision) {
+              completions.add((cue, revision));
+            },
+          ),
+        ),
+      );
+    }
+
+    await pumpCue(RobotFaceAnimationCue.notice, 1);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    await pumpCue(RobotFaceAnimationCue.track, 2);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 90));
+    await pumpCue(RobotFaceAnimationCue.recover, 3);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 781));
+    await tester.pump();
+
+    expect(completions, <(RobotFaceAnimationCue, int)>[
+      (RobotFaceAnimationCue.recover, 3),
+    ]);
+  });
+
+  testWidgets('deactivation during a blend cancels every cue callback', (
+    WidgetTester tester,
+  ) async {
+    const canvasKey = ValueKey<String>('deactivated-cue-face');
+    const state = RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+    final completions = <(RobotFaceAnimationCue, int)>[];
+
+    Future<void> pumpFace({
+      required RobotFaceAnimationCue cue,
+      required int revision,
+      bool isActive = true,
+    }) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: RobotFaceCanvas(
+            key: canvasKey,
+            state: state,
+            isActive: isActive,
+            animationCue: cue,
+            animationRevision: revision,
+            onAnimationCompleted: (cue, revision) {
+              completions.add((cue, revision));
+            },
+          ),
+        ),
+      );
+    }
+
+    await pumpFace(cue: RobotFaceAnimationCue.track, revision: 1);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 180));
+    await pumpFace(cue: RobotFaceAnimationCue.concern, revision: 2);
+    await tester.pump();
+    await pumpFace(
+      cue: RobotFaceAnimationCue.concern,
+      revision: 2,
+      isActive: false,
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(completions, isEmpty);
+  });
+
+  testWidgets('switching to reduced motion completes only the active cue', (
+    WidgetTester tester,
+  ) async {
+    const canvasKey = ValueKey<String>('reduced-motion-cue-face');
+    const state = RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+    final completions = <(RobotFaceAnimationCue, int)>[];
+
+    Future<void> pumpFace({required bool disableAnimations}) {
+      return tester.pumpWidget(
+        MaterialApp(
+          home: MediaQuery(
+            data: MediaQueryData(disableAnimations: disableAnimations),
+            child: RobotFaceCanvas(
+              key: canvasKey,
+              state: state,
+              animationCue: RobotFaceAnimationCue.celebrate,
+              animationRevision: 1,
+              onAnimationCompleted: (cue, revision) {
+                completions.add((cue, revision));
+              },
+            ),
+          ),
+        ),
+      );
+    }
+
+    await pumpFace(disableAnimations: false);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200));
+    await pumpFace(disableAnimations: true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 921));
+
+    expect(completions, <(RobotFaceAnimationCue, int)>[
+      (RobotFaceAnimationCue.celebrate, 1),
+    ]);
+  });
+
+  testWidgets('one-shot cues use distinct layered choreography', (
+    WidgetTester tester,
+  ) async {
+    Future<Map<String, Object>> cueFrame(
+      RobotFaceAnimationCue cue,
+      double progress,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: RobotFaceCanvas(
+            key: ValueKey('$cue-$progress'),
+            state: const RobotFaceState(
+              mode: RobotFaceMode.idle,
+              nextEventLabel: 'No reminders scheduled',
+              isFlipped: false,
+              isLandscapeOnly: true,
+              rampProgress: 0,
+              isInAwakeWindow: true,
+            ),
+            animationCue: cue,
+            animationRevision: 1,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final customPaint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(RobotFaceCanvas),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      final dynamic painter = customPaint.painter;
+      return painter.debugMotionFrame(
+            const Size(800, 400),
+            cueProgress: progress,
+          )
+          as Map<String, Object>;
+    }
+
+    final wakeStart = await cueFrame(RobotFaceAnimationCue.wake, 0.05);
+    final wakePeak = await cueFrame(RobotFaceAnimationCue.wake, 0.48);
+    expect(wakePeak['eyeLift'], greaterThan(wakeStart['eyeLift'] as double));
+    expect(
+      wakePeak['leftGlowBoost'],
+      greaterThan(wakeStart['leftGlowBoost'] as double),
+    );
+
+    final trackLeft = await cueFrame(RobotFaceAnimationCue.track, 0.25);
+    final trackRight = await cueFrame(RobotFaceAnimationCue.track, 0.75);
+    expect((trackLeft['eyeOffset'] as Offset).dx, greaterThan(0));
+    expect((trackRight['eyeOffset'] as Offset).dx, lessThan(0));
+
+    final celebrateFirst = await cueFrame(
+      RobotFaceAnimationCue.celebrate,
+      0.25,
+    );
+    final celebrateSecond = await cueFrame(
+      RobotFaceAnimationCue.celebrate,
+      0.68,
+    );
+    expect(celebrateFirst['eyeLift'], greaterThan(0));
+    expect(celebrateSecond['eyeLift'], greaterThan(0));
+    expect(celebrateFirst['eyeLift'], isNot(celebrateSecond['eyeLift']));
+
+    final concern = await cueFrame(RobotFaceAnimationCue.concern, 0.5);
+    expect(concern['eyeLift'], lessThan(0));
+    expect(concern['leftTilt'], lessThan(0));
+    expect(concern['rightTilt'], greaterThan(0));
+  });
+
   testWidgets('renders large eyes and next event card', (
     WidgetTester tester,
   ) async {
@@ -884,6 +1408,18 @@ void main() {
     expect(canvas.debugActiveCue, RobotFaceAnimationCue.focus);
     expect(canvas.debugIsCueAnimating, isFalse);
     expect(canvas.debugCueProgress, greaterThan(0));
+
+    final customPaint = tester.widget<CustomPaint>(
+      find.descendant(
+        of: find.byType(RobotFaceCanvas),
+        matching: find.byType(CustomPaint),
+      ),
+    );
+    final dynamic painter = customPaint.painter;
+    final first = painter.debugMotionFrame(const Size(800, 400), phase: 0.2);
+    final later = painter.debugMotionFrame(const Size(800, 400), phase: 0.8);
+    expect(first, later);
+    expect(first['blink'], 0.0);
 
     await tester.pump(const Duration(milliseconds: 700));
     expect(canvas.debugActiveCue, isNull);
