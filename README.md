@@ -1,5 +1,9 @@
 # Dosey
 
+<p align="center">
+  <img src="media/dosey-logo-01-classic.png" alt="Dosey robot face logo" width="160">
+</p>
+
 [![Status](https://img.shields.io/badge/status-early%20prototype-orange)](#project-status)
 [![Flutter](https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Dart](https://img.shields.io/badge/Dart-0175C2?logo=dart&logoColor=white)](https://dart.dev/)
