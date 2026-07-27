@@ -42,6 +42,7 @@ export class AppwriteHouseholdTeams implements HouseholdTeams {
     robotId: string;
     displayName: string;
     ownerAccountId: string;
+    resumeProvisioning: boolean;
   }): Promise<void> {
     let team = await this.api.getTeam(input.robotId);
     if (team == null) {
@@ -49,7 +50,8 @@ export class AppwriteHouseholdTeams implements HouseholdTeams {
     } else {
       const marker = team.preferences.doseyRobot;
       const owner = optionalString(team.preferences.ownerAccountId);
-      const isUnmarkedReservation = Object.keys(team.preferences).length === 0;
+      const isUnmarkedReservation =
+        input.resumeProvisioning && Object.keys(team.preferences).length === 0;
       if (!isUnmarkedReservation && (marker !== true || owner !== input.ownerAccountId)) {
         throw new Error('Existing Team is not the reserved Dosey robot.');
       }
@@ -95,17 +97,27 @@ export class AppwriteHouseholdTeams implements HouseholdTeams {
 
   async deleteHumanMembership(input: {
     robotId: string;
-    membershipId: string;
+    accountId: string;
+    membershipId: string | null;
   }): Promise<void> {
-    const membership = await this.api.getMembership(input.robotId, input.membershipId);
+    let membership = input.membershipId == null
+      ? null
+      : await this.api.getMembership(input.robotId, input.membershipId);
+    if (membership == null) {
+      const memberships = await this.api.listMemberships(input.robotId);
+      membership = memberships.find((candidate) => candidate.accountId === input.accountId) ?? null;
+    }
     if (membership == null) return;
+    if (membership.accountId !== input.accountId || !membership.confirmed) {
+      throw new Error('The recorded membership does not match the household member.');
+    }
     if (hasRobotDeviceRole(membership.roles)) {
       throw new Error('The household lifecycle cannot delete a robot-device membership.');
     }
     if (!membership.roles.some(isHumanRole)) {
       throw new Error('The recorded membership is not a household human.');
     }
-    await this.api.deleteMembership(input.robotId, input.membershipId);
+    await this.api.deleteMembership(input.robotId, membership.id);
   }
 
   async snapshot(robotId: string, currentAccountId: string): Promise<HouseholdSnapshot> {
@@ -117,7 +129,7 @@ export class AppwriteHouseholdTeams implements HouseholdTeams {
     const memberships = (await this.api.listMemberships(robotId)).filter(
       (membership) =>
         membership.confirmed &&
-        !hasOnlyRobotDeviceRole(membership.roles) &&
+        !hasRobotDeviceRole(membership.roles) &&
         membership.roles.some(isHumanRole),
     );
     const current = memberships.find((membership) => membership.accountId === currentAccountId);
@@ -227,10 +239,6 @@ function validateHumanMembership(
 
 function hasRobotDeviceRole(roles: readonly string[]): boolean {
   return roles.includes(robotDeviceRole);
-}
-
-function hasOnlyRobotDeviceRole(roles: readonly string[]): boolean {
-  return roles.length === 1 && roles[0] === robotDeviceRole;
 }
 
 function isHumanRole(role: string): boolean {

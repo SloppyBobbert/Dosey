@@ -32,13 +32,21 @@ Use Node.js 22 or newer. Do not expose either function's dynamic API key or the 
 
 ## Environment
 
-Appwrite supplies the function endpoint, project ID, and dynamic API key. Add these server-only variables to both functions:
+Appwrite supplies the function endpoint, project ID, and dynamic API key. Add
+`DOSEY_DATABASE_ID` to every Function. Add these server-only variables only to
+the two pairing Functions:
 
 ```text
 DOSEY_DATABASE_ID
 DOSEY_PAIRING_CLAIMS_TABLE_ID
 DOSEY_PAIRING_ATTEMPTS_TABLE_ID
 DOSEY_PAIRING_HMAC_SECRET
+```
+
+Add these variables only to the four household lifecycle Functions:
+
+```text
+DOSEY_DATABASE_ID
 DOSEY_ROBOT_INSTALLATIONS_TABLE_ID
 DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID
 DOSEY_HOUSEHOLD_INVITATIONS_TABLE_ID
@@ -123,7 +131,6 @@ Team operation is being recovered. Add a key index for `robotId`.
 | `createdByAccountId` | varchar | yes |
 | `consumedAt` | datetime | no |
 | `acceptedAccountId` | varchar | no |
-| `revokedAt` | datetime | no |
 | `createdAt` | datetime | yes |
 | `updatedAt` | datetime | yes |
 

@@ -34,15 +34,21 @@ export function createHouseholdRuntime(
     .setEndpoint(endpoint)
     .setProject(projectId)
     .setKey(required(headers['x-appwrite-key'], 'x-appwrite-key'));
-  const userJwt = required(headers['x-appwrite-user-jwt'], 'x-appwrite-user-jwt');
-  const account = new Account(
-    new Client().setEndpoint(endpoint).setProject(projectId).setJWT(userJwt),
-  );
+  const userJwt = headers['x-appwrite-user-jwt']?.trim();
+  const currentAccount = () => {
+    if (userJwt == null || userJwt.length === 0) {
+      throw new Error('Missing Appwrite user JWT.');
+    }
+    return new Account(
+      new Client().setEndpoint(endpoint).setProject(projectId).setJWT(userJwt),
+    );
+  };
   const identity = new AppwriteFunctionIdentityVerifier({
     async getCurrentAccountId() {
-      return (await account.get()).$id;
+      return (await currentAccount().get()).$id;
     },
     async getCurrentHumanAccount() {
+      const account = currentAccount();
       const [user, session] = await Promise.all([
         account.get(),
         account.getSession({ sessionId: 'current' }),
@@ -90,7 +96,7 @@ export function createHouseholdRuntime(
     createRobot: new CreateRobotService({
       registry,
       teams,
-      createId: ID.unique,
+      createId: () => ID.unique(),
       now,
     }),
     createInvitation: new CreateHouseholdInvitationService({

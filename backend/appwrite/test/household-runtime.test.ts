@@ -41,4 +41,12 @@ describe('household runtime', () => {
       /DOSEY_HOUSEHOLD_INVITATION_HMAC_SECRET/,
     );
   });
+
+  test('constructs without a user JWT so identity verification can return 401', async () => {
+    const runtime = createHouseholdRuntime({ 'x-appwrite-key': 'dynamic-key' }, environment);
+
+    assert.equal(await runtime.identity.verifyHuman({
+      'x-appwrite-user-id': 'owner-1',
+    }), null);
+  });
 });

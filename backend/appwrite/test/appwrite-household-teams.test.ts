@@ -53,7 +53,10 @@ describe('Appwrite household Teams projection', () => {
     const api = new FakeTeams();
     const teams = new AppwriteHouseholdTeams(api);
 
-    await teams.ensureRobot({ robotId: 'robot-1', displayName: 'Dosey', ownerAccountId: 'owner-1' });
+    await teams.ensureRobot({
+      robotId: 'robot-1', displayName: 'Dosey', ownerAccountId: 'owner-1',
+      resumeProvisioning: false,
+    });
     const membershipId = await teams.ensureHumanMembership({
       robotId: 'robot-1', accountId: 'owner-1', role: 'owner', membershipId: null,
     });
@@ -75,6 +78,7 @@ describe('Appwrite household Teams projection', () => {
 
     await teams.ensureRobot({
       robotId: 'robot-1', displayName: 'Dosey', ownerAccountId: 'owner-1',
+      resumeProvisioning: true,
     });
 
     assert.deepEqual(api.events, ['prefs']);
@@ -82,6 +86,21 @@ describe('Appwrite household Teams projection', () => {
       doseyRobot: true, householdSchemaVersion: 1,
       ownerAccountId: 'owner-1', mountedDeviceId: null,
     });
+  });
+
+  test('does not adopt an unmarked Team without a registry-authorized resume', async () => {
+    const api = new FakeTeams();
+    api.team = { id: 'robot-1', name: 'Unrelated', preferences: {} };
+    const teams = new AppwriteHouseholdTeams(api);
+
+    await assert.rejects(
+      teams.ensureRobot({
+        robotId: 'robot-1', displayName: 'Dosey', ownerAccountId: 'owner-1',
+        resumeProvisioning: false,
+      }),
+      /not the reserved Dosey robot/,
+    );
+    assert.deepEqual(api.events, []);
   });
 
   test('recovers an existing membership by account ID without duplicating it', async () => {
@@ -98,6 +117,40 @@ describe('Appwrite household Teams projection', () => {
 
     assert.equal(id, 'membership-1');
     assert.equal(api.events.length, 0);
+  });
+
+  test('resumes a recorded membership directly without listing memberships', async () => {
+    const api = markedTeam();
+    api.memberships.push({
+      id: 'membership-1', accountId: 'member-1', roles: ['member'], confirmed: true,
+      userName: 'Member', userEmail: 'member@example.com',
+    });
+    api.listMemberships = async () => {
+      throw new Error('list should not be called');
+    };
+    const teams = new AppwriteHouseholdTeams(api);
+
+    const id = await teams.ensureHumanMembership({
+      robotId: 'robot-1', accountId: 'member-1', role: 'member',
+      membershipId: 'membership-1',
+    });
+
+    assert.equal(id, 'membership-1');
+  });
+
+  test('resolves a missing recorded membership by account ID for safe deletion', async () => {
+    const api = markedTeam();
+    api.memberships.push({
+      id: 'membership-1', accountId: 'member-1', roles: ['member'], confirmed: true,
+      userName: 'Member', userEmail: 'member@example.com',
+    });
+    const teams = new AppwriteHouseholdTeams(api);
+
+    await teams.deleteHumanMembership({
+      robotId: 'robot-1', accountId: 'member-1', membershipId: null,
+    });
+
+    assert.deepEqual(api.events, ['delete:membership-1']);
   });
 
   test('does not activate a newly created unconfirmed membership', async () => {
@@ -127,9 +180,14 @@ describe('Appwrite household Teams projection', () => {
     );
     const teams = new AppwriteHouseholdTeams(api);
 
-    for (const membershipId of ['device-membership', 'mixed-membership']) {
+    for (const [membershipId, accountId] of [
+      ['device-membership', 'device-1'],
+      ['mixed-membership', 'device-2'],
+    ] as const) {
       await assert.rejects(
-        teams.deleteHumanMembership({ robotId: 'robot-1', membershipId }),
+        teams.deleteHumanMembership({
+          robotId: 'robot-1', accountId, membershipId,
+        }),
         /robot-device/,
       );
     }
@@ -151,7 +209,7 @@ describe('Appwrite household Teams projection', () => {
     assert.equal(snapshot.currentRole, 'member');
     assert.equal(snapshot.mountedDeviceId, 'device-1');
     assert.deepEqual(snapshot.members.map((member) => member.label), [
-      'Owner', 'member@example.com', 'Mixed',
+      'Owner', 'member@example.com',
     ]);
   });
 });

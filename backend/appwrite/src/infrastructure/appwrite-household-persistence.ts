@@ -149,6 +149,8 @@ export class AppwriteHouseholdPersistence implements HouseholdPersistence {
     private readonly rows: HouseholdRowsApi,
     private readonly reportRollbackFailure: (error: unknown) => void = () => {},
     private readonly maximumAttempts = 3,
+    private readonly delay: (milliseconds: number) => Promise<void> = defaultDelay,
+    private readonly random: () => number = Math.random,
   ) {}
 
   async transaction<T>(operation: (transaction: HouseholdTransaction) => Promise<T>): Promise<T> {
@@ -165,7 +167,10 @@ export class AppwriteHouseholdPersistence implements HouseholdPersistence {
         } catch (rollbackError) {
           this.reportRollbackFailure(rollbackError);
         }
-        if (isConflict(error) && attempt < this.maximumAttempts) continue;
+        if (isConflict(error) && attempt < this.maximumAttempts) {
+          await this.delay(10 + Math.floor(this.random() * 11));
+          continue;
+        }
         throw error;
       }
     }
@@ -282,7 +287,6 @@ function invitationToRow(record: HouseholdInvitationRecord): HouseholdRow {
     createdByAccountId: record.createdByAccountId,
     consumedAt: record.consumedAt?.toISOString() ?? null,
     acceptedAccountId: record.acceptedAccountId,
-    revokedAt: record.revokedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -298,7 +302,6 @@ function invitationFromRow(row: HouseholdRow): HouseholdInvitationRecord {
     createdByAccountId: requiredString(row, 'createdByAccountId'),
     consumedAt: optionalDate(row, 'consumedAt'),
     acceptedAccountId: optionalString(row, 'acceptedAccountId'),
-    revokedAt: optionalDate(row, 'revokedAt'),
     createdAt: requiredDate(row, 'createdAt'),
     updatedAt: requiredDate(row, 'updatedAt'),
   };
@@ -354,4 +357,8 @@ function fromAppwriteRow(row: Models.Row): HouseholdRow {
 
 function isConflict(error: unknown): boolean {
   return typeof error === 'object' && error != null && 'code' in error && error.code === 409;
+}
+
+function defaultDelay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

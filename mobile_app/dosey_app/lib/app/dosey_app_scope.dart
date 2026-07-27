@@ -34,6 +34,7 @@ import 'package:dosey_app/core/household/local_household_repository.dart';
 import 'package:dosey_app/core/household/local_household_cache_repository.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/household_management_gateway.dart';
+import 'package:dosey_app/core/household/household_membership_notifier.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
@@ -180,6 +181,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     final householdManagement =
         widget.householdManagementGateway ??
         const DisabledHouseholdManagementGateway();
+    final householdMembership = HouseholdMembershipNotifier();
     final robotPairing =
         widget.robotPairingGateway ?? const DisabledRobotPairingGateway();
     final cloudGoogleAuth = cloudIdentity is DisabledCloudIdentityGateway
@@ -362,6 +364,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       cloudIdentity: cloudIdentity,
       householdSync: householdSync,
       householdManagement: householdManagement,
+      householdMembership: householdMembership,
       robotPairing: robotPairing,
       localAuth: localAuth,
       auth: AppAuthService(
@@ -510,6 +513,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       unawaited(_dependencies.robotFaceController.close());
       unawaited(_dependencies.ble.close());
       unawaited(_dependencies.voicePlayer.dispose());
+      _dependencies.householdMembership.dispose();
       if (_ownsNotificationTapController) {
         _dependencies.notificationTaps.dispose();
       }
@@ -551,6 +555,7 @@ class DoseyAppDependencies {
     required this.cloudIdentity,
     required this.householdSync,
     required this.householdManagement,
+    required this.householdMembership,
     required this.robotPairing,
     required this.localAuth,
     required this.auth,
@@ -592,6 +597,7 @@ class DoseyAppDependencies {
   final CloudIdentityGateway cloudIdentity;
   final HouseholdSyncGateway householdSync;
   final HouseholdManagementGateway householdManagement;
+  final HouseholdMembershipNotifier householdMembership;
   final RobotPairingGateway robotPairing;
   final LocalAuthRepository localAuth;
   final AuthService auth;

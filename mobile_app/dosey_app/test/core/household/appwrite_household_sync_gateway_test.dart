@@ -60,14 +60,15 @@ void main() {
     expect(humanIds, {'owner-1'});
   });
 
-  test('keeps mixed-role memberships in the human account set', () {
+  test('excludes mixed robot-device memberships from human accounts', () {
     final memberships = [
       _membership(userId: 'family-1', roles: const ['member', 'robot-device']),
     ];
 
-    expect(acceptedHumanAccountIds(memberships, mountedDeviceId: 'device-1'), {
-      'family-1',
-    });
+    expect(
+      acceptedHumanAccountIds(memberships, mountedDeviceId: 'device-1'),
+      isEmpty,
+    );
   });
 
   test('maps accepted member labels and roles with privacy fallbacks', () {

@@ -62,7 +62,9 @@ class FakeTeams implements HouseholdTeams {
   events: string[] = [];
   membershipId = 'membership-1';
   async ensureRobot(input: Parameters<HouseholdTeams['ensureRobot']>[0]) {
-    this.events.push(`robot:${input.robotId}:${input.ownerAccountId}`);
+    this.events.push(
+      `robot:${input.robotId}:${input.ownerAccountId}:${input.resumeProvisioning}`,
+    );
   }
   async ensureHumanMembership(
     input: Parameters<HouseholdTeams['ensureHumanMembership']>[0],
@@ -73,7 +75,7 @@ class FakeTeams implements HouseholdTeams {
   async deleteHumanMembership(
     input: Parameters<HouseholdTeams['deleteHumanMembership']>[0],
   ) {
-    this.events.push(`delete:${input.membershipId}`);
+    this.events.push(`delete:${input.accountId}:${input.membershipId ?? 'lookup'}`);
   }
   async snapshot(robotId: string, currentAccountId: string) {
     return {
@@ -109,9 +111,45 @@ describe('household application services', () => {
       'activate:owner-1:membership-1',
     ]);
     assert.deepEqual(teams.events, [
-      'robot:robot-1:owner-1',
+      'robot:robot-1:owner-1:false',
       'member:owner-1:owner',
     ]);
+  });
+
+  test('authorizes unmarked Team recovery only for a resumed owner reservation', async () => {
+    const registry = new FakeRegistry();
+    registry.ownerReservation = {
+      status: 'resume',
+      robotId: 'robot-1',
+      membershipId: null,
+    };
+    const teams = new FakeTeams();
+    const service = new CreateRobotService({
+      registry,
+      teams,
+      createId: () => 'unused',
+      now: () => now,
+    });
+
+    await service.create({ accountId: 'owner-1', displayName: 'Dosey' });
+
+    assert.equal(teams.events[0], 'robot:robot-1:owner-1:true');
+  });
+
+  test('rejects overlong Team names before reserving an owner link', async () => {
+    const registry = new FakeRegistry();
+    const service = new CreateRobotService({
+      registry,
+      teams: new FakeTeams(),
+      createId: () => 'robot-1',
+      now: () => now,
+    });
+
+    await assert.rejects(
+      service.create({ accountId: 'owner-1', displayName: 'D'.repeat(129) }),
+      /128 characters or fewer/,
+    );
+    assert.deepEqual(registry.events, []);
   });
 
   test('does not activate a robot when owner membership provisioning fails', async () => {
@@ -221,12 +259,28 @@ describe('household application services', () => {
     });
 
     assert.equal(snapshot?.robotId, 'robot-1');
-    assert.deepEqual(teams.events, ['delete:membership-2']);
+    assert.deepEqual(teams.events, ['delete:member-1:membership-2']);
     assert.deepEqual(registry.events, [
       'revoke:owner-1:member-1',
       'finalize:member-1',
     ]);
     assert.deepEqual(registry.revocationTimes, [now, now]);
+  });
+
+  test('resolves a provisioning member by account before freeing its slot', async () => {
+    const registry = new FakeRegistry();
+    registry.revocation = { status: 'ready', membershipId: null };
+    const teams = new FakeTeams();
+    const service = new RemoveHouseholdMemberService({ registry, teams, now: () => now });
+
+    await service.remove({
+      robotId: 'robot-1',
+      actorAccountId: 'owner-1',
+      targetAccountId: 'member-1',
+    });
+
+    assert.deepEqual(teams.events, ['delete:member-1:lookup']);
+    assert.ok(registry.events.includes('finalize:member-1'));
   });
 
   test('treats finalized removal retries as success without another deletion', async () => {

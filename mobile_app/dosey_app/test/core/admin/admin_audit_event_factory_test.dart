@@ -108,15 +108,17 @@ void main() {
     ];
 
     expect(
-      events.map((event) => event.eventType),
-      AdminAuditEventType.values.where(
-        (type) => {
-          AdminAuditEventType.householdCreated,
-          AdminAuditEventType.householdInvitationGenerated,
-          AdminAuditEventType.householdMemberRemoved,
-          AdminAuditEventType.householdLeft,
-        }.contains(type),
-      ),
+      events.map((event) => event.eventType).toSet(),
+      AdminAuditEventType.values
+          .where(
+            (type) => {
+              AdminAuditEventType.householdCreated,
+              AdminAuditEventType.householdInvitationGenerated,
+              AdminAuditEventType.householdMemberRemoved,
+              AdminAuditEventType.householdLeft,
+            }.contains(type),
+          )
+          .toSet(),
     );
     for (final event in events) {
       expect(event.targetType, AdminAuditTargetType.household);

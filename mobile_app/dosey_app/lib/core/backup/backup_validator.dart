@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../audit/admin_audit_event.dart';
 import 'backup_document.dart';
 
 const portableSettingKeys = <String>{
@@ -434,49 +435,13 @@ class BackupValidator {
         });
       case 'adminAuditEvents':
         oneOf('eventType', {
-          'prescriptionSaved',
-          'prescriptionDeleted',
-          'prescriptionRefillAdded',
-          'scheduleSaved',
-          'scheduleDeleted',
-          'scheduleProfileSaved',
-          'activeScheduleProfileChanged',
-          'carouselSlotAssigned',
-          'carouselSlotLoaded',
-          'carouselSlotNeedsReviewMarked',
-          'pinEnabled',
-          'pinChanged',
-          'pinDisabled',
-          'householdProfileUpdated',
-          'householdCreated',
-          'householdInvitationGenerated',
-          'householdMemberRemoved',
-          'householdLeft',
-          'pairingCodeGenerated',
-          'guidedLoadConfirmed',
-          'guidedLoadPhysicallyUnloaded',
-          'guidedLoadMarkedStale',
-          'guidedLoadShortageCreated',
-          'guidedLoadShortageRecognized',
-          'guidedLoadShortageResolved',
-          'guidedLoadShortagePastDue',
+          for (final value in AdminAuditEventType.values) value.name,
         });
         oneOf('targetType', {
-          'prescription',
-          'reminderSchedule',
-          'scheduleProfile',
-          'carouselSlot',
-          'household',
-          'robot',
-          'pin',
-          'carouselLoadSession',
-          'medicationShortageAlert',
+          for (final value in AdminAuditTargetType.values) value.name,
         });
         oneOf('actorType', {
-          'localAdmin',
-          'signedInUser',
-          'caregiver',
-          'system',
+          for (final value in AdminAuditActorType.values) value.name,
         });
         oneOf('sourceDeviceRole', {
           'android_robot',

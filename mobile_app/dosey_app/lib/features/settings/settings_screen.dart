@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/admin/protected_admin_action.dart';
@@ -774,10 +776,45 @@ class _HouseholdAccountCard extends StatefulWidget {
 class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
   RobotPairingCredential? _pairingCredential;
   HouseholdInvitationCredential? _householdInvitation;
-  RobotInstallation? _managementRobot;
-  bool _hasManagementRobot = false;
   bool _pairingBusy = false;
   bool _householdBusy = false;
+  DoseyAppDependencies? _householdDependencies;
+  StreamSubscription<RobotInstallation?>? _robotSubscription;
+  RobotInstallation? _visibleRobot;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final dependencies = DoseyAppScope.of(context);
+    if (identical(_householdDependencies, dependencies)) return;
+    unawaited(_robotSubscription?.cancel());
+    _householdDependencies?.householdMembership.removeListener(
+      _handlePublishedMembership,
+    );
+    _householdDependencies = dependencies;
+    dependencies.householdMembership.addListener(_handlePublishedMembership);
+    _robotSubscription = dependencies.householdSync.watchRobot().listen((
+      robot,
+    ) {
+      if (mounted) setState(() => _visibleRobot = robot);
+    });
+  }
+
+  @override
+  void dispose() {
+    unawaited(_robotSubscription?.cancel());
+    _householdDependencies?.householdMembership.removeListener(
+      _handlePublishedMembership,
+    );
+    super.dispose();
+  }
+
+  void _handlePublishedMembership() {
+    if (!mounted) return;
+    setState(() {
+      _visibleRobot = _householdDependencies?.householdMembership.robot;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -792,210 +829,194 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
             ? storedRole
             : fallbackRole;
 
-        return StreamBuilder<RobotInstallation?>(
-          stream: dependencies.householdSync.watchRobot(),
-          builder: (context, robotSnapshot) {
-            final robot = _hasManagementRobot
-                ? _managementRobot
-                : robotSnapshot.data;
-            return StreamBuilder<CloudIdentity>(
-              stream: dependencies.cloudIdentity.watchIdentity(),
-              builder: (context, identitySnapshot) {
-                final identity = identitySnapshot.data;
-                return StreamBuilder<HouseholdAccountState>(
-                  stream: dependencies.household.watchState(),
-                  builder: (context, snapshot) {
-                    final state =
-                        snapshot.data ?? const HouseholdAccountState();
-                    return _SettingsSectionCard(
-                      icon: Icons.home_outlined,
-                      title: 'Household & robot profile',
+        final robot = _visibleRobot;
+        return StreamBuilder<CloudIdentity>(
+          stream: dependencies.cloudIdentity.watchIdentity(),
+          builder: (context, identitySnapshot) {
+            final identity = identitySnapshot.data;
+            return StreamBuilder<HouseholdAccountState>(
+              stream: dependencies.household.watchState(),
+              builder: (context, snapshot) {
+                final state = snapshot.data ?? const HouseholdAccountState();
+                return _SettingsSectionCard(
+                  icon: Icons.home_outlined,
+                  title: 'Household & robot profile',
+                  children: [
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: const EdgeInsets.only(bottom: 12),
+                      title: const Text('Profile & device'),
                       children: [
-                        ExpansionTile(
-                          tilePadding: EdgeInsets.zero,
-                          childrenPadding: const EdgeInsets.only(bottom: 12),
-                          title: const Text('Profile & device'),
-                          children: [
-                            _HouseholdMetadataRow(
-                              label: 'Household',
-                              value: state.householdDisplayName,
-                            ),
-                            _HouseholdMetadataRow(
-                              label: 'Robot',
-                              value: state.robotHubDisplayName,
-                            ),
-                            _HouseholdMetadataRow(
-                              label: 'This device',
-                              value: _deviceLabel(role),
-                            ),
-                            _HouseholdMetadataRow(
-                              label: 'Person',
-                              value: state.profileDisplayName ?? 'Not set',
-                            ),
-                            _HouseholdMetadataRow(
-                              label: 'Relationship',
-                              value: state.relationshipLabel ?? 'Not set',
-                            ),
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              onPressed: () =>
-                                  _showHouseholdEditSheet(context, state),
-                              icon: const Icon(Icons.edit_outlined),
-                              label: const Text(
-                                'Edit household & robot profile',
-                              ),
-                            ),
-                          ],
+                        _HouseholdMetadataRow(
+                          label: 'Household',
+                          value: state.householdDisplayName,
                         ),
-                        ExpansionTile(
-                          tilePadding: EdgeInsets.zero,
-                          childrenPadding: const EdgeInsets.only(bottom: 12),
-                          title: const Text('Robot linking'),
-                          children: [
-                            _HouseholdMetadataRow(
-                              label: 'Cloud sync',
-                              value: robot == null ? 'Not linked' : 'Linked',
-                            ),
-                            if (robot != null) ...[
-                              _HouseholdMetadataRow(
-                                label: 'Cloud robot',
-                                value: robot.displayName,
-                              ),
-                              _HouseholdMetadataRow(
-                                label: 'People',
-                                value:
-                                    '${robot.humanAccountCount} of ${RobotInstallation.maxHumanAccounts}',
-                              ),
-                            ],
-                            const SizedBox(height: 12),
-                            Text(
-                              robot == null
-                                  ? 'Local profile data remains available. Link this device to enable cloud robot membership.'
-                                  : 'This device is linked to the robot household. Local medication data remains on this device.',
-                            ),
-                            if (robot != null && !role.canHostRobot) ...[
-                              const SizedBox(height: 16),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  'Household members',
-                                  style: Theme.of(context).textTheme.titleSmall,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              for (final member in robot.members)
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        '${member.label} (${member.role == HouseholdRole.owner ? 'Owner' : 'Member'})',
-                                      ),
-                                    ),
-                                    if (robot.currentRole ==
-                                            HouseholdRole.owner &&
-                                        member.role != HouseholdRole.owner)
-                                      TextButton(
-                                        onPressed: _householdBusy
-                                            ? null
-                                            : () => _confirmRemoveMember(
-                                                robot,
-                                                member,
-                                                identity?.accountId,
-                                              ),
-                                        child: Text('Remove ${member.label}'),
-                                      ),
-                                  ],
-                                ),
-                              if (!dependencies
-                                  .householdManagement
-                                  .isAvailable) ...[
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'Cloud household management is not configured.',
-                                ),
-                              ] else if (robot.currentRole ==
-                                  HouseholdRole.owner) ...[
-                                const SizedBox(height: 8),
-                                OutlinedButton.icon(
-                                  onPressed: _householdBusy
-                                      ? null
-                                      : () => _showInvitationDialog(robot),
-                                  icon: const Icon(Icons.person_add_outlined),
-                                  label: const Text(
-                                    'Generate member invitation',
-                                  ),
-                                ),
-                                if (_householdInvitation
-                                    case final invitation?) ...[
-                                  const SizedBox(height: 12),
-                                  SelectableText(
-                                    'Invitation code: ${invitation.code}',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleMedium,
-                                  ),
-                                  Text(
-                                    'Code expires ${_formatExpiry(context, invitation.expiresAt)}.',
-                                  ),
-                                ],
-                              ] else ...[
-                                const SizedBox(height: 8),
-                                OutlinedButton.icon(
-                                  onPressed: _householdBusy
-                                      ? null
-                                      : () => _confirmLeaveHousehold(
-                                          robot,
-                                          identity?.accountId,
-                                        ),
-                                  icon: const Icon(Icons.logout),
-                                  label: const Text('Leave household'),
-                                ),
-                              ],
-                            ],
-                            if (!dependencies.robotPairing.isAvailable) ...[
-                              const SizedBox(height: 12),
-                              const Text('Robot pairing is not configured.'),
-                            ] else if (role.canHostRobot) ...[
-                              const SizedBox(height: 12),
-                              FilledButton.icon(
-                                onPressed: _pairingBusy
-                                    ? null
-                                    : _showClaimDialog,
-                                icon: const Icon(Icons.link),
-                                label: const Text('Pair this robot phone'),
-                              ),
-                            ] else if (robot != null &&
-                                identity?.accountId ==
-                                    robot.ownerAccountId) ...[
-                              const SizedBox(height: 12),
-                              FilledButton.icon(
-                                onPressed: _pairingBusy
-                                    ? null
-                                    : () => _createPairingCode(robot),
-                                icon: const Icon(Icons.qr_code_2),
-                                label: const Text(
-                                  'Generate robot pairing code',
-                                ),
-                              ),
-                              if (_pairingCredential
-                                  case final credential?) ...[
-                                const SizedBox(height: 12),
-                                SelectableText(
-                                  'Pairing code: ${credential.code}',
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.titleMedium,
-                                ),
-                                Text(
-                                  'Code expires ${_formatExpiry(context, credential.expiresAt)}.',
-                                ),
-                              ],
-                            ],
-                          ],
+                        _HouseholdMetadataRow(
+                          label: 'Robot',
+                          value: state.robotHubDisplayName,
+                        ),
+                        _HouseholdMetadataRow(
+                          label: 'This device',
+                          value: _deviceLabel(role),
+                        ),
+                        _HouseholdMetadataRow(
+                          label: 'Person',
+                          value: state.profileDisplayName ?? 'Not set',
+                        ),
+                        _HouseholdMetadataRow(
+                          label: 'Relationship',
+                          value: state.relationshipLabel ?? 'Not set',
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: () =>
+                              _showHouseholdEditSheet(context, state),
+                          icon: const Icon(Icons.edit_outlined),
+                          label: const Text('Edit household & robot profile'),
                         ),
                       ],
-                    );
-                  },
+                    ),
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      childrenPadding: const EdgeInsets.only(bottom: 12),
+                      title: const Text('Robot linking'),
+                      children: [
+                        _HouseholdMetadataRow(
+                          label: 'Cloud sync',
+                          value: robot == null ? 'Not linked' : 'Linked',
+                        ),
+                        if (robot != null) ...[
+                          _HouseholdMetadataRow(
+                            label: 'Cloud robot',
+                            value: robot.displayName,
+                          ),
+                          _HouseholdMetadataRow(
+                            label: 'People',
+                            value:
+                                '${robot.humanAccountCount} of ${RobotInstallation.maxHumanAccounts}',
+                          ),
+                        ],
+                        const SizedBox(height: 12),
+                        Text(
+                          robot == null
+                              ? 'Local profile data remains available. Link this device to enable cloud robot membership.'
+                              : 'This device is linked to the robot household. Local medication data remains on this device.',
+                        ),
+                        if (robot != null && !role.canHostRobot) ...[
+                          const SizedBox(height: 16),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Household members',
+                              style: Theme.of(context).textTheme.titleSmall,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          for (final member in robot.members)
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${member.label} (${member.role == HouseholdRole.owner ? 'Owner' : 'Member'})',
+                                  ),
+                                ),
+                                if (robot.currentRole == HouseholdRole.owner &&
+                                    member.role != HouseholdRole.owner)
+                                  TextButton(
+                                    onPressed:
+                                        _householdBusy ||
+                                            !dependencies
+                                                .householdManagement
+                                                .isAvailable ||
+                                            identity?.accountId == null
+                                        ? null
+                                        : () => _confirmRemoveMember(
+                                            robot,
+                                            member,
+                                            identity?.accountId,
+                                          ),
+                                    child: Text('Remove ${member.label}'),
+                                  ),
+                              ],
+                            ),
+                          if (!dependencies
+                              .householdManagement
+                              .isAvailable) ...[
+                            const SizedBox(height: 8),
+                            const Text(
+                              'Cloud household management is not configured.',
+                            ),
+                          ] else if (robot.currentRole ==
+                              HouseholdRole.owner) ...[
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed:
+                                  _householdBusy || identity?.accountId == null
+                                  ? null
+                                  : () => _showInvitationDialog(robot),
+                              icon: const Icon(Icons.person_add_outlined),
+                              label: const Text('Generate member invitation'),
+                            ),
+                            if (_householdInvitation
+                                case final invitation?) ...[
+                              const SizedBox(height: 12),
+                              SelectableText(
+                                'Invitation code: ${invitation.code}',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              Text(
+                                'Code expires ${_formatExpiry(context, invitation.expiresAt)}.',
+                              ),
+                            ],
+                          ] else ...[
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed:
+                                  _householdBusy || identity?.accountId == null
+                                  ? null
+                                  : () => _confirmLeaveHousehold(
+                                      robot,
+                                      identity?.accountId,
+                                    ),
+                              icon: const Icon(Icons.logout),
+                              label: const Text('Leave household'),
+                            ),
+                          ],
+                        ],
+                        if (!dependencies.robotPairing.isAvailable) ...[
+                          const SizedBox(height: 12),
+                          const Text('Robot pairing is not configured.'),
+                        ] else if (role.canHostRobot) ...[
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _pairingBusy ? null : _showClaimDialog,
+                            icon: const Icon(Icons.link),
+                            label: const Text('Pair this robot phone'),
+                          ),
+                        ] else if (robot != null &&
+                            identity?.accountId == robot.ownerAccountId) ...[
+                          const SizedBox(height: 12),
+                          FilledButton.icon(
+                            onPressed: _pairingBusy
+                                ? null
+                                : () => _createPairingCode(robot),
+                            icon: const Icon(Icons.qr_code_2),
+                            label: const Text('Generate robot pairing code'),
+                          ),
+                          if (_pairingCredential case final credential?) ...[
+                            const SizedBox(height: 12),
+                            SelectableText(
+                              'Pairing code: ${credential.code}',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              'Code expires ${_formatExpiry(context, credential.expiresAt)}.',
+                            ),
+                          ],
+                        ],
+                      ],
+                    ),
+                  ],
                 );
               },
             );
@@ -1103,25 +1124,28 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
       final dependencies = DoseyAppScope.of(context);
       final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
       if (!mounted) return;
-      final result =
-          await runProtectedAdminAction<HouseholdInvitationCredential>(
-            context,
-            action: (actor) async {
-              final credential = await dependencies.householdManagement
-                  .createInvitation(robot.id, invitedEmail);
-              await dependencies.adminAudit.addEvent(
-                const AdminAuditEventFactory().householdInvitationGenerated(
-                  actor: actor,
-                  sourceDeviceRole: sourceDeviceRole,
-                  targetId: robot.id,
-                  summary: 'Generated an email-bound household invitation.',
-                  invitedEmail: invitedEmail,
-                  expiresAt: credential.expiresAt,
-                ),
-              );
-              return credential;
-            },
-          );
+      final result = await runProtectedAdminAction<HouseholdInvitationCredential>(
+        context,
+        action: (actor) async {
+          final credential = await dependencies.householdManagement
+              .createInvitation(robot.id, invitedEmail);
+          try {
+            await dependencies.adminAudit.addEvent(
+              const AdminAuditEventFactory().householdInvitationGenerated(
+                actor: actor,
+                sourceDeviceRole: sourceDeviceRole,
+                targetId: robot.id,
+                summary: 'Generated an email-bound household invitation.',
+                invitedEmail: invitedEmail,
+                expiresAt: credential.expiresAt,
+              ),
+            );
+          } on Object {
+            // The one-time server credential cannot be recreated for audit repair.
+          }
+          return credential;
+        },
+      );
       if (!mounted || !result.isSuccess) return;
       setState(() => _householdInvitation = result.value);
     } on HouseholdManagementException catch (error) {
@@ -1176,34 +1200,37 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
       if (!mounted) return;
       final result = await runProtectedAdminAction<RobotInstallation>(
         context,
-        action: (actor) async {
-          final updated = await dependencies.householdManagement.removeMember(
-            robot.id,
-            member.accountId,
-          );
-          await dependencies.householdCache.replaceForAccount(
-            accountId,
-            updated,
-            confirmedAt: dependencies.appClock.now().toUtc(),
-          );
-          await dependencies.adminAudit.addEvent(
-            const AdminAuditEventFactory().householdMemberRemoved(
-              actor: actor,
-              sourceDeviceRole: sourceDeviceRole,
-              targetId: robot.id,
-              summary: 'Removed a member from the household.',
-              removedAccountId: member.accountId,
-              removedLabel: member.label,
-            ),
-          );
-          return updated;
-        },
+        action: (actor) => dependencies.householdManagement.removeMember(
+          robot.id,
+          member.accountId,
+        ),
       );
       if (!mounted || !result.isSuccess) return;
-      setState(() {
-        _hasManagementRobot = true;
-        _managementRobot = result.value;
-      });
+      final updated = result.value!;
+      dependencies.householdMembership.update(updated);
+      try {
+        await dependencies.householdCache.replaceForAccount(
+          accountId,
+          updated,
+          confirmedAt: dependencies.appClock.now().toUtc(),
+        );
+      } on Object {
+        // The server result remains authoritative if local cache repair fails.
+      }
+      try {
+        await dependencies.adminAudit.addEvent(
+          const AdminAuditEventFactory().householdMemberRemoved(
+            actor: result.actor!,
+            sourceDeviceRole: sourceDeviceRole,
+            targetId: robot.id,
+            summary: 'Removed a member from the household.',
+            removedAccountId: member.accountId,
+            removedLabel: member.label,
+          ),
+        );
+      } on Object {
+        // The completed server removal cannot be undone for local audit failure.
+      }
     } on HouseholdManagementException catch (error) {
       if (mounted) _showHouseholdManagementError(error.reason);
     } on Object {
@@ -1256,24 +1283,28 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
       if (!mounted) return;
       final result = await runProtectedAdminAction<void>(
         context,
-        action: (actor) async {
-          await dependencies.householdManagement.leaveRobot(robot.id);
-          await dependencies.householdCache.clearForAccount(accountId);
-          await dependencies.adminAudit.addEvent(
-            const AdminAuditEventFactory().householdLeft(
-              actor: actor,
-              sourceDeviceRole: sourceDeviceRole,
-              targetId: robot.id,
-              summary: 'Left the household.',
-            ),
-          );
-        },
+        action: (actor) =>
+            dependencies.householdManagement.leaveRobot(robot.id),
       );
       if (!mounted || !result.isSuccess) return;
-      setState(() {
-        _hasManagementRobot = true;
-        _managementRobot = null;
-      });
+      dependencies.householdMembership.update(null);
+      try {
+        await dependencies.householdCache.clearForAccount(accountId);
+      } on Object {
+        // The server result remains authoritative if local cache cleanup fails.
+      }
+      try {
+        await dependencies.adminAudit.addEvent(
+          const AdminAuditEventFactory().householdLeft(
+            actor: result.actor!,
+            sourceDeviceRole: sourceDeviceRole,
+            targetId: robot.id,
+            summary: 'Left the household.',
+          ),
+        );
+      } on Object {
+        // The completed server leave cannot be undone for local audit failure.
+      }
     } on HouseholdManagementException catch (error) {
       if (mounted) _showHouseholdManagementError(error.reason);
     } on Object {

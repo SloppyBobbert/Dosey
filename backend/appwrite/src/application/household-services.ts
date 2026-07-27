@@ -9,6 +9,8 @@ import {
   normalizeHouseholdInvitationCode,
 } from '../domain/household-invitation.js';
 
+export const maximumAppwriteTeamNameLength = 128;
+
 export type HouseholdFailureCode =
   | 'already_linked'
   | 'household_full'
@@ -66,7 +68,7 @@ export interface HouseholdRegistry {
     targetAccountId: string;
     now: Date;
   }): Promise<
-    | { status: 'ready'; membershipId: string }
+    | { status: 'ready'; membershipId: string | null }
     | { status: 'already_removed' }
     | { status: 'rejected'; reason: HouseholdFailureCode }
   >;
@@ -78,14 +80,23 @@ export interface HouseholdRegistry {
 }
 
 export interface HouseholdTeams {
-  ensureRobot(input: { robotId: string; displayName: string; ownerAccountId: string }): Promise<void>;
+  ensureRobot(input: {
+    robotId: string;
+    displayName: string;
+    ownerAccountId: string;
+    resumeProvisioning: boolean;
+  }): Promise<void>;
   ensureHumanMembership(input: {
     robotId: string;
     accountId: string;
     role: HouseholdRole;
     membershipId: string | null;
   }): Promise<string>;
-  deleteHumanMembership(input: { robotId: string; membershipId: string }): Promise<void>;
+  deleteHumanMembership(input: {
+    robotId: string;
+    accountId: string;
+    membershipId: string | null;
+  }): Promise<void>;
   snapshot(robotId: string, currentAccountId: string): Promise<HouseholdSnapshot>;
 }
 
@@ -100,6 +111,9 @@ export class CreateRobotService {
   async create(input: { accountId: string; displayName: string }): Promise<HouseholdSnapshot> {
     const displayName = input.displayName.trim();
     if (displayName.length === 0) throw new TypeError('Robot display name is required.');
+    if (displayName.length > maximumAppwriteTeamNameLength) {
+      throw new TypeError('Robot display name must be 128 characters or fewer.');
+    }
     const reservation = await this.dependencies.registry.reserveOwner({
       robotId: this.dependencies.createId(),
       accountId: input.accountId,
@@ -111,6 +125,7 @@ export class CreateRobotService {
       robotId: reservation.robotId,
       displayName,
       ownerAccountId: input.accountId,
+      resumeProvisioning: reservation.status === 'resume',
     });
     const membershipId = await this.dependencies.teams.ensureHumanMembership({
       robotId: reservation.robotId,
@@ -212,6 +227,7 @@ export class RemoveHouseholdMemberService {
     }
     await this.dependencies.teams.deleteHumanMembership({
       robotId: input.robotId,
+      accountId: input.targetAccountId,
       membershipId: result.membershipId,
     });
     await this.dependencies.registry.finalizeRevocation({

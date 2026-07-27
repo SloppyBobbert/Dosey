@@ -82,8 +82,7 @@ List<HouseholdMember> acceptedHouseholdMembers(
       (membership) =>
           membership.confirm &&
           membership.userId != mountedDeviceId &&
-          !(membership.roles.length == 1 &&
-              membership.roles.single == 'robot-device'),
+          !membership.roles.contains('robot-device'),
     )
     .map((membership) {
       final role = membership.roles.contains('owner')

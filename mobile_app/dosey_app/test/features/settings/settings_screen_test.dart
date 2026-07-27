@@ -22,6 +22,7 @@ import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
+import 'package:dosey_app/features/onboarding/household_membership_gate.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -162,7 +163,6 @@ void main() {
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
     await _markOnboardingComplete(
       database,
       role: AppDeviceRole.androidPersonal,
@@ -1435,6 +1435,66 @@ void main() {
     );
   });
 
+  testWidgets('later household sync replaces a local management result', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    final sync = _ControllableHouseholdSyncGateway(
+      _robotInstallationWithMember(),
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        cloudIdentityGateway: _FakeCloudIdentityGateway(
+          identity: const CloudIdentity.signedIn(
+            accountId: 'owner-1',
+            email: 'owner@example.com',
+          ),
+        ),
+        householdSyncGateway: sync,
+        householdManagementGateway: _FakeHouseholdManagementGateway(
+          removalResult: _robotInstallation,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove Member Person'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove member'));
+    await tester.pumpAndSettle();
+    expect(find.text('Member Person (Member)'), findsNothing);
+
+    sync.emit(
+      RobotInstallation(
+        id: 'robot-1',
+        displayName: 'Renamed Dosey',
+        ownerAccountId: 'owner-1',
+        members: _robotInstallationWithMember().members,
+        currentRole: HouseholdRole.owner,
+        mountedDeviceId: 'mounted-1',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _findRichTextContaining('Cloud robot: Renamed Dosey'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Member Person (Member)', skipOffstage: false),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('non-owner can leave and clears only their household cache', (
     WidgetTester tester,
   ) async {
@@ -1484,6 +1544,47 @@ void main() {
     expect(await cache.readForAccount('member-1'), isNull);
     final auditRows = await database.select(database.adminAuditEvents).get();
     expect(auditRows.single.eventType, AdminAuditEventType.householdLeft.name);
+  });
+
+  testWidgets('leaving returns the retained Personal app to create and join', (
+    tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+    final robot = _memberRobotInstallation();
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.householdAccount,
+        cloudIdentityGateway: _FakeCloudIdentityGateway(
+          identity: const CloudIdentity.signedIn(
+            accountId: 'member-1',
+            email: 'member@example.com',
+          ),
+        ),
+        householdSyncGateway: _FakeHouseholdSyncGateway(robot),
+        householdManagementGateway: _FakeHouseholdManagementGateway(
+          beforeLeaveReturn: database.close,
+        ),
+        gateAccountId: 'member-1',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Robot linking'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Leave household'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Leave household'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Leave'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create a household'), findsOneWidget);
+    expect(find.text('Join with a code'), findsOneWidget);
   });
 
   testWidgets('Robot Mode can claim an existing robot with a temporary code', (
@@ -1796,6 +1897,7 @@ class _TestSettingsApp extends StatelessWidget {
     this.householdSyncGateway,
     this.householdManagementGateway,
     this.robotPairingGateway,
+    this.gateAccountId,
   });
 
   final DoseyDatabase database;
@@ -1808,6 +1910,7 @@ class _TestSettingsApp extends StatelessWidget {
   final HouseholdSyncGateway? householdSyncGateway;
   final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
+  final String? gateAccountId;
 
   @override
   Widget build(BuildContext context) {
@@ -1825,17 +1928,47 @@ class _TestSettingsApp extends StatelessWidget {
       householdManagementGateway: householdManagementGateway,
       robotPairingGateway: robotPairingGateway,
       voicePlayer: voicePlayer,
-      child: MaterialApp(
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2F6F5E)),
-          useMaterial3: true,
-        ),
-        home: Scaffold(
-          body: SettingsScreen(
-            sectionTarget: sectionTarget,
-            previewVoicePlayer: previewVoicePlayer,
-          ),
-        ),
+      child: Builder(
+        builder: (scopeContext) {
+          final settings = Scaffold(
+            body: SettingsScreen(
+              sectionTarget: sectionTarget,
+              previewVoicePlayer: previewVoicePlayer,
+            ),
+          );
+          final accountId = gateAccountId;
+          final home = accountId == null
+              ? settings
+              : HouseholdMembershipGate(
+                  accountId: accountId,
+                  sync: DoseyAppScope.of(scopeContext).householdSync,
+                  management: DoseyAppScope.of(
+                    scopeContext,
+                  ).householdManagement,
+                  membership: DoseyAppScope.of(
+                    scopeContext,
+                  ).householdMembership,
+                  cache: DoseyAppScope.of(scopeContext).householdCache,
+                  runProtectedMutation: (action) async => action(
+                    const AdminAuditActorIdentity(
+                      actorType: AdminAuditActorType.signedInUser,
+                      actorUserId: 'member-1',
+                      actorLabel: 'Member',
+                      actorProviderLabel: 'Google',
+                    ),
+                  ),
+                  child: settings,
+                );
+          return MaterialApp(
+            theme: ThemeData(
+              colorScheme: ColorScheme.fromSeed(
+                seedColor: const Color(0xFF2F6F5E),
+              ),
+              useMaterial3: true,
+            ),
+            home: home,
+          );
+        },
       ),
     );
   }
@@ -1891,6 +2024,27 @@ class _FakeHouseholdSyncGateway implements HouseholdSyncGateway {
 
   @override
   Future<RobotInstallation?> refreshRobot() async => robot;
+}
+
+class _ControllableHouseholdSyncGateway implements HouseholdSyncGateway {
+  _ControllableHouseholdSyncGateway(this._robot);
+
+  RobotInstallation? _robot;
+  final _changes = StreamController<RobotInstallation?>.broadcast();
+
+  void emit(RobotInstallation? robot) {
+    _robot = robot;
+    _changes.add(robot);
+  }
+
+  @override
+  Stream<RobotInstallation?> watchRobot() async* {
+    yield _robot;
+    yield* _changes.stream;
+  }
+
+  @override
+  Future<RobotInstallation?> refreshRobot() async => _robot;
 }
 
 class _RefreshingHouseholdSyncGateway implements HouseholdSyncGateway {
@@ -1953,9 +2107,10 @@ class _FakeRobotPairingGateway implements RobotPairingGateway {
 }
 
 class _FakeHouseholdManagementGateway implements HouseholdManagementGateway {
-  _FakeHouseholdManagementGateway({this.removalResult});
+  _FakeHouseholdManagementGateway({this.removalResult, this.beforeLeaveReturn});
 
   final RobotInstallation? removalResult;
+  final Future<void> Function()? beforeLeaveReturn;
   String? invitedRobotId;
   String? invitedEmail;
   String? removedRobotId;
@@ -1989,6 +2144,7 @@ class _FakeHouseholdManagementGateway implements HouseholdManagementGateway {
   @override
   Future<void> leaveRobot(String robotId) async {
     leftRobotId = robotId;
+    await beforeLeaveReturn?.call();
   }
 
   @override

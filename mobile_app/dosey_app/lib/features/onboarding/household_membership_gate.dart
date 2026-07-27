@@ -1,8 +1,17 @@
+import 'dart:async';
+
+import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/household/household_management_gateway.dart';
+import 'package:dosey_app/core/household/household_membership_notifier.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/local_household_cache_repository.dart';
 import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:flutter/material.dart';
+
+typedef HouseholdProtectedMutationRunner =
+    Future<RobotInstallation?> Function(
+      Future<RobotInstallation> Function(AdminAuditActorIdentity actor) action,
+    );
 
 class HouseholdMembershipGate extends StatefulWidget {
   const HouseholdMembershipGate({
@@ -10,7 +19,9 @@ class HouseholdMembershipGate extends StatefulWidget {
     required this.accountId,
     required this.sync,
     required this.management,
+    required this.membership,
     required this.cache,
+    required this.runProtectedMutation,
     required this.child,
     this.onHouseholdCreated,
     this.now = DateTime.now,
@@ -19,9 +30,15 @@ class HouseholdMembershipGate extends StatefulWidget {
   final String accountId;
   final HouseholdSyncGateway sync;
   final HouseholdManagementGateway management;
+  final HouseholdMembershipNotifier membership;
   final LocalHouseholdCacheRepository cache;
+  final HouseholdProtectedMutationRunner runProtectedMutation;
   final Widget child;
-  final Future<void> Function(RobotInstallation robot)? onHouseholdCreated;
+  final Future<void> Function(
+    RobotInstallation robot,
+    AdminAuditActorIdentity actor,
+  )?
+  onHouseholdCreated;
   final DateTime Function() now;
 
   @override
@@ -37,16 +54,28 @@ class _HouseholdMembershipGateState extends State<HouseholdMembershipGate> {
   _MembershipGateState _state = _MembershipGateState.loading;
   bool _submitting = false;
   String? _actionError;
+  StreamSubscription<RobotInstallation?>? _syncSubscription;
+  var _membershipChange = 0;
 
   @override
   void initState() {
     super.initState();
+    widget.membership.addListener(_handlePublishedMembership);
+    _subscribeToSync();
     _refresh();
   }
 
   @override
   void didUpdateWidget(HouseholdMembershipGate oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.membership != widget.membership) {
+      oldWidget.membership.removeListener(_handlePublishedMembership);
+      widget.membership.addListener(_handlePublishedMembership);
+    }
+    if (oldWidget.sync != widget.sync) {
+      unawaited(_syncSubscription?.cancel());
+      _subscribeToSync();
+    }
     if (oldWidget.accountId != widget.accountId) {
       _state = _MembershipGateState.loading;
       _refresh();
@@ -55,6 +84,8 @@ class _HouseholdMembershipGateState extends State<HouseholdMembershipGate> {
 
   @override
   void dispose() {
+    widget.membership.removeListener(_handlePublishedMembership);
+    unawaited(_syncSubscription?.cancel());
     _householdNameController.dispose();
     _invitationCodeController.dispose();
     super.dispose();
@@ -62,6 +93,7 @@ class _HouseholdMembershipGateState extends State<HouseholdMembershipGate> {
 
   @override
   Widget build(BuildContext context) {
+    if (!widget.management.isAvailable) return widget.child;
     return switch (_state) {
       _MembershipGateState.loading => const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -200,13 +232,7 @@ class _HouseholdMembershipGateState extends State<HouseholdMembershipGate> {
     }
     try {
       final robot = await widget.sync.refreshRobot();
-      if (robot == null) {
-        await widget.cache.clearForAccount(widget.accountId);
-        if (mounted) setState(() => _state = _MembershipGateState.unlinked);
-        return;
-      }
-      await _cache(robot);
-      if (mounted) setState(() => _state = _MembershipGateState.linked);
+      await _applyConfirmedMembership(robot);
     } on Object {
       final cached = await widget.cache.readForAccount(widget.accountId);
       if (!mounted) return;
@@ -225,7 +251,7 @@ class _HouseholdMembershipGateState extends State<HouseholdMembershipGate> {
       return;
     }
     await _runMutation(
-      () => widget.management.createRobot(displayName),
+      (actor) => widget.management.createRobot(displayName),
       afterSuccess: widget.onHouseholdCreated,
     );
   }
@@ -236,28 +262,41 @@ class _HouseholdMembershipGateState extends State<HouseholdMembershipGate> {
       setState(() => _actionError = 'Enter an invitation code.');
       return;
     }
-    await _runMutation(() => widget.management.acceptInvitation(code));
+    await _runMutation((actor) => widget.management.acceptInvitation(code));
   }
 
   Future<void> _runMutation(
-    Future<RobotInstallation> Function() action, {
-    Future<void> Function(RobotInstallation robot)? afterSuccess,
+    Future<RobotInstallation> Function(AdminAuditActorIdentity actor) action, {
+    Future<void> Function(
+      RobotInstallation robot,
+      AdminAuditActorIdentity actor,
+    )?
+    afterSuccess,
   }) async {
     setState(() {
       _submitting = true;
       _actionError = null;
     });
     try {
-      final robot = await action();
-      await _cache(robot);
-      if (afterSuccess != null) {
-        try {
-          await afterSuccess(robot);
-        } on Object {
-          // The cloud mutation and cache are authoritative; audit failure cannot undo them.
+      final robot = await widget.runProtectedMutation((actor) async {
+        final updated = await action(actor);
+        if (afterSuccess != null) {
+          try {
+            await afterSuccess(updated, actor);
+          } on Object {
+            // The cloud mutation cannot be undone if local audit persistence fails.
+          }
         }
-      }
+        return updated;
+      });
+      if (robot == null) return;
+      widget.membership.update(robot);
       if (mounted) setState(() => _state = _MembershipGateState.linked);
+      try {
+        await _cache(robot);
+      } on Object {
+        // The server result is authoritative; cache repair can happen on refresh.
+      }
     } on HouseholdManagementException catch (error) {
       if (mounted) setState(() => _actionError = _messageFor(error.reason));
     } on Object {
@@ -276,6 +315,36 @@ class _HouseholdMembershipGateState extends State<HouseholdMembershipGate> {
       widget.accountId,
       robot,
       confirmedAt: widget.now().toUtc(),
+    );
+  }
+
+  void _subscribeToSync() {
+    _syncSubscription = widget.sync.watchRobot().listen(
+      (robot) => unawaited(_applyConfirmedMembership(robot)),
+      onError: (_) {},
+    );
+  }
+
+  void _handlePublishedMembership() {
+    unawaited(_applyConfirmedMembership(widget.membership.robot));
+  }
+
+  Future<void> _applyConfirmedMembership(RobotInstallation? robot) async {
+    final change = ++_membershipChange;
+    try {
+      if (robot == null) {
+        await widget.cache.clearForAccount(widget.accountId);
+      } else {
+        await _cache(robot);
+      }
+    } on Object {
+      // Live server and mutation results remain authoritative if local cache fails.
+    }
+    if (!mounted || change != _membershipChange) return;
+    setState(
+      () => _state = robot == null
+          ? _MembershipGateState.unlinked
+          : _MembershipGateState.linked,
     );
   }
 

@@ -36,7 +36,6 @@ export interface HouseholdInvitationRecord {
   readonly createdByAccountId: string;
   readonly consumedAt: Date | null;
   readonly acceptedAccountId: string | null;
-  readonly revokedAt: Date | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -149,6 +148,10 @@ export class TransactionalHouseholdRegistry implements HouseholdRegistry {
       ) {
         throw new HouseholdFailure('owner_required');
       }
+      const robot = await requiredRobot(transaction, input.robotId);
+      if (robot.humanCount >= maximumHouseholdHumans) {
+        throw new HouseholdFailure('household_full');
+      }
       const previous = await transaction.getInvitation(input.id);
       if (previous?.consumedAt != null && previous.acceptedAccountId != null) {
         const acceptedLink = await transaction.getLink(previous.acceptedAccountId);
@@ -163,7 +166,6 @@ export class TransactionalHouseholdRegistry implements HouseholdRegistry {
         createdByAccountId: input.ownerAccountId,
         consumedAt: null,
         acceptedAccountId: null,
-        revokedAt: null,
         createdAt: previous?.createdAt ?? input.now,
         updatedAt: input.now,
       });
@@ -178,7 +180,7 @@ export class TransactionalHouseholdRegistry implements HouseholdRegistry {
   }) {
     return this.persistence.transaction(async (transaction) => {
       const invitation = await transaction.findInvitationByDigest(input.codeDigest);
-      if (invitation == null || invitation.revokedAt != null) {
+      if (invitation == null) {
         return rejected('invalid_invitation');
       }
       if (invitation.invitedEmail !== input.email) return rejected('email_mismatch');
@@ -255,9 +257,6 @@ export class TransactionalHouseholdRegistry implements HouseholdRegistry {
       if (target == null) return { status: 'already_removed' as const };
       if (target.robotId !== input.robotId || target.role === 'owner') {
         return rejectedRevocation('member_not_found');
-      }
-      if (target.membershipId == null) {
-        throw new Error('Household member has no Team membership to revoke.');
       }
       if (target.status !== 'revoking') {
         await transaction.saveLink({ ...target, status: 'revoking', updatedAt: input.now });

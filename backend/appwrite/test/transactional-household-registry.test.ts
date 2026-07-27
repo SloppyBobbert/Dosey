@@ -83,6 +83,21 @@ describe('TransactionalHouseholdRegistry', () => {
     assert.equal(persistence.invitations.get('invite-1')?.consumedAt, null);
   });
 
+  test('does not issue an invitation when the household is already full', async () => {
+    const persistence = seededHousehold(7);
+    const registry = new TransactionalHouseholdRegistry(persistence);
+
+    await assert.rejects(
+      registry.replaceInvitation({
+        id: 'invite-1', robotId: 'robot-1', ownerAccountId: 'owner-1',
+        invitedEmail: 'person@example.com', codeDigest: 'digest',
+        expiresAt: new Date('2026-07-27T12:00:00.000Z'), now,
+      }),
+      (error: unknown) => error instanceof HouseholdFailure && error.code === 'household_full',
+    );
+    assert.equal(persistence.invitations.size, 0);
+  });
+
   test('resumes a consumed invitation only for its accepted account without recounting', async () => {
     const persistence = seededHousehold(2);
     persistence.links.set('member-1', {
@@ -142,6 +157,47 @@ describe('TransactionalHouseholdRegistry', () => {
     assert.equal(persistence.robots.get('robot-1')?.humanCount, 1);
     assert.equal(persistence.links.has('member-1'), false);
   });
+
+  test('allows owner removal and self-leave of provisioning links without memberships', async () => {
+    for (const actorAccountId of ['owner-1', 'member-1']) {
+      const persistence = seededHousehold(2);
+      persistence.links.set('member-1', {
+        accountId: 'member-1', robotId: 'robot-1', role: 'member',
+        membershipId: null, status: 'provisioning', createdAt: now, updatedAt: now,
+      });
+      const registry = new TransactionalHouseholdRegistry(persistence);
+
+      assert.deepEqual(await registry.beginRevocation({
+        robotId: 'robot-1', actorAccountId, targetAccountId: 'member-1', now,
+      }), { status: 'ready', membershipId: null });
+      await registry.finalizeRevocation({ robotId: 'robot-1', targetAccountId: 'member-1', now });
+
+      assert.equal(persistence.robots.get('robot-1')?.humanCount, 1);
+      assert.equal(persistence.links.has('member-1'), false);
+    }
+  });
+
+  test('cleans up an abandoned acceptance and allows a replacement invitation', async () => {
+    const persistence = seededHousehold(1);
+    persistence.invitations.set('invite-1', invitation());
+    const registry = new TransactionalHouseholdRegistry(persistence);
+
+    await registry.reserveAcceptance({
+      codeDigest: 'digest', accountId: 'member-1', email: 'person@example.com', now,
+    });
+    await registry.beginRevocation({
+      robotId: 'robot-1', actorAccountId: 'owner-1', targetAccountId: 'member-1', now,
+    });
+    await registry.finalizeRevocation({ robotId: 'robot-1', targetAccountId: 'member-1', now });
+    await registry.replaceInvitation({
+      id: 'invite-1', robotId: 'robot-1', ownerAccountId: 'owner-1',
+      invitedEmail: 'person@example.com', codeDigest: 'replacement-digest',
+      expiresAt: new Date('2026-07-27T18:00:00.000Z'), now,
+    });
+
+    assert.equal(persistence.robots.get('robot-1')?.humanCount, 1);
+    assert.equal(persistence.invitations.get('invite-1')?.codeDigest, 'replacement-digest');
+  });
 });
 
 function seededHousehold(humanCount: number): MemoryPersistence {
@@ -162,6 +218,6 @@ function invitation(): HouseholdInvitationRecord {
     id: 'invite-1', robotId: 'robot-1', invitedEmail: 'person@example.com',
     codeDigest: 'digest', expiresAt: new Date('2026-07-27T12:00:00.000Z'),
     createdByAccountId: 'owner-1', consumedAt: null, acceptedAccountId: null,
-    revokedAt: null, createdAt: now, updatedAt: now,
+    createdAt: now, updatedAt: now,
   };
 }

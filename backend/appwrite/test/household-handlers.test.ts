@@ -78,6 +78,20 @@ describe('household function boundaries', () => {
     assert.deepEqual(request.response(), { body: snapshot, status: 200 });
   });
 
+  test('rejects an overlong robot name before calling the service', async () => {
+    const request = context({ body: { displayName: 'D'.repeat(129) } });
+    const handler = createRobotHandler({
+      create: async () => { throw new Error('must not run'); },
+    }, ownerIdentity);
+
+    await handler(request.value);
+
+    assert.deepEqual(request.response(), {
+      body: { error: 'invalid_display_name' },
+      status: 400,
+    });
+  });
+
   test('returns invitation plaintext once without persistence details', async () => {
     const calls: unknown[] = [];
     const request = context({

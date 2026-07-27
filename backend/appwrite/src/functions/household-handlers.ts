@@ -1,5 +1,6 @@
 import {
   HouseholdFailure,
+  maximumAppwriteTeamNameLength,
   type HouseholdFailureCode,
 } from '../application/household-services.js';
 import type { HouseholdSnapshot } from '../domain/household.js';
@@ -41,7 +42,12 @@ export function createRobotHandler(
 ) {
   return householdHandler(identity, async (context, human) => {
     const displayName = readRequiredString(context.req.bodyJson, 'displayName');
-    if (displayName == null) return invalidRequest(context, 'invalid_display_name');
+    if (
+      displayName == null ||
+      displayName.length > maximumAppwriteTeamNameLength
+    ) {
+      return invalidRequest(context, 'invalid_display_name');
+    }
     const household = await service.create({
       accountId: human.accountId,
       displayName,

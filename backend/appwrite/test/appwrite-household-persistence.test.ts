@@ -12,6 +12,7 @@ class FakeRows implements HouseholdRowsApi {
   events: string[] = [];
   rows = new Map<string, HouseholdRow>();
   commitFailures = 0;
+  rollbackFailure: object | null = null;
 
   async beginTransaction() {
     this.events.push('begin');
@@ -21,7 +22,10 @@ class FakeRows implements HouseholdRowsApi {
     this.events.push(`commit:${id}`);
     if (this.commitFailures-- > 0) throw { code: 409 };
   }
-  async rollbackTransaction(id: string) { this.events.push(`rollback:${id}`); }
+  async rollbackTransaction(id: string) {
+    this.events.push(`rollback:${id}`);
+    if (this.rollbackFailure != null) throw this.rollbackFailure;
+  }
   async getRow(table: HouseholdTable, id: string, transactionId: string) {
     this.events.push(`get:${table}:${id}:${transactionId}`);
     return this.rows.get(`${table}:${id}`) ?? null;
@@ -65,7 +69,7 @@ describe('Appwrite household persistence', () => {
         id: 'invite-1', robotId: 'robot-1', invitedEmail: 'person@example.com',
         codeDigest: 'digest', expiresAt: new Date('2026-07-27T12:00:00Z'),
         createdByAccountId: 'owner-1', consumedAt: null, acceptedAccountId: null,
-        revokedAt: null, createdAt: new Date('2026-07-26T12:00:00Z'),
+        createdAt: new Date('2026-07-26T12:00:00Z'),
         updatedAt: new Date('2026-07-26T12:00:00Z'),
       });
     });
@@ -78,7 +82,14 @@ describe('Appwrite household persistence', () => {
   test('re-runs the whole transaction after a commit conflict', async () => {
     const rows = new FakeRows();
     rows.commitFailures = 1;
-    const persistence = new AppwriteHouseholdPersistence(rows);
+    const delays: number[] = [];
+    const persistence = new AppwriteHouseholdPersistence(
+      rows,
+      () => {},
+      3,
+      async (milliseconds) => void delays.push(milliseconds),
+      () => 0.5,
+    );
     let attempts = 0;
 
     await persistence.transaction(async () => { attempts += 1; });
@@ -88,6 +99,24 @@ describe('Appwrite household persistence', () => {
       'begin', 'commit:transaction-1', 'rollback:transaction-1',
       'begin', 'commit:transaction-2',
     ]);
+    assert.deepEqual(delays, [15]);
+  });
+
+  test('reports rollback failures without hiding the original error', async () => {
+    const rows = new FakeRows();
+    rows.rollbackFailure = new Error('rollback failed');
+    const reported: unknown[] = [];
+    const persistence = new AppwriteHouseholdPersistence(
+      rows,
+      (error) => void reported.push(error),
+    );
+    const original = new Error('operation failed');
+
+    await assert.rejects(
+      persistence.transaction(async () => { throw original; }),
+      (error: unknown) => error === original,
+    );
+    assert.deepEqual(reported, [rows.rollbackFailure]);
   });
 
   test('rejects duplicate invitation digests', async () => {
