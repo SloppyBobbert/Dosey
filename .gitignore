@@ -32,6 +32,10 @@ mobile_app/dosey_app/ios/Pods/
 mobile_app/dosey_app/android/.gradle/
 mobile_app/dosey_app/android/local.properties
 
+# Appwrite Functions
+backend/appwrite/node_modules/
+backend/appwrite/dist/
+
 # Firmware build output
 .pio/
 .pioenvs/

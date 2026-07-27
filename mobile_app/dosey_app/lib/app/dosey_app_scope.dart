@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 
 import 'package:dosey_app/core/auth/app_auth_service.dart';
 import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/auth/google_auth_service.dart';
 import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:dosey_app/core/audit/admin_audit_repository.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
@@ -11,6 +12,8 @@ import 'package:dosey_app/core/backup/backup_file_gateway.dart';
 import 'package:dosey_app/core/backup/local_backup_service.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
+import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
+import 'package:dosey_app/core/cloud/cloud_google_account_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/connectivity/connectivity_plus_gateway.dart';
 import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
@@ -28,6 +31,7 @@ import 'package:dosey_app/core/demo/demo_external_services.dart';
 import 'package:dosey_app/core/demo/demo_scenario_service.dart';
 import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/household/local_household_repository.dart';
+import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
@@ -70,6 +74,8 @@ class DoseyAppScope extends StatefulWidget {
     this.backupFileGateway,
     this.appClock,
     this.controllerGateway,
+    this.cloudIdentityGateway,
+    this.householdSyncGateway,
     this.enableDemoFaceLab = false,
   });
 
@@ -87,6 +93,8 @@ class DoseyAppScope extends StatefulWidget {
   final BackupFileGateway? backupFileGateway;
   final AppClock? appClock;
   final StagedControllerGateway? controllerGateway;
+  final CloudIdentityGateway? cloudIdentityGateway;
+  final HouseholdSyncGateway? householdSyncGateway;
   final bool enableDemoFaceLab;
 
   static DoseyAppDependencies of(BuildContext context) {
@@ -157,6 +165,16 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     final adminAudit = LocalAdminAuditRepository(_database);
     final localAuth = LocalAuthRepository(_database);
     final household = LocalHouseholdRepository(_database);
+    final cloudIdentity =
+        widget.cloudIdentityGateway ?? const DisabledCloudIdentityGateway();
+    final householdSync =
+        widget.householdSyncGateway ?? const DisabledHouseholdSyncGateway();
+    final cloudGoogleAuth = cloudIdentity is DisabledCloudIdentityGateway
+        ? null
+        : GoogleAuthService(
+            localAuth,
+            googleAccountGateway: CloudGoogleAccountGateway(cloudIdentity),
+          );
     final reminders = LocalReminderRepository(_database);
     final notificationTaps =
         widget.notificationTapController ?? ReminderNotificationTapController();
@@ -327,8 +345,13 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       doseLog: doseLog,
       adminAudit: adminAudit,
       household: household,
+      cloudIdentity: cloudIdentity,
+      householdSync: householdSync,
       localAuth: localAuth,
-      auth: AppAuthService(localAuth: localAuth),
+      auth: AppAuthService(
+        localAuth: localAuth,
+        googleAuthService: cloudGoogleAuth,
+      ),
       controller: controller,
       controllerLifecycle: controllerLifecycle,
       controllerCommands: commandRepository,
@@ -507,6 +530,8 @@ class DoseyAppDependencies {
     required this.doseLog,
     required this.adminAudit,
     required this.household,
+    required this.cloudIdentity,
+    required this.householdSync,
     required this.localAuth,
     required this.auth,
     required this.controller,
@@ -543,6 +568,8 @@ class DoseyAppDependencies {
   final DriftDoseLogRepository doseLog;
   final AdminAuditRepository adminAudit;
   final LocalHouseholdRepository household;
+  final CloudIdentityGateway cloudIdentity;
+  final HouseholdSyncGateway householdSync;
   final LocalAuthRepository localAuth;
   final AuthService auth;
   final ControllerGateway controller;

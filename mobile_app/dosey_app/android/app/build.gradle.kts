@@ -4,6 +4,17 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+fun dotenvValue(key: String): String? {
+    val dotenv = rootProject.file("../.env")
+    if (!dotenv.isFile) return null
+    return dotenv.readLines()
+        .firstOrNull { it.trimStart().startsWith("$key=") }
+        ?.substringAfter('=')
+        ?.trim()
+        ?.trim('"', '\'')
+        ?.takeIf { it.isNotEmpty() }
+}
+
 android {
     namespace = "com.sloppybobbert.dosey_app"
     compileSdk = flutter.compileSdkVersion
@@ -24,6 +35,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // The callback scheme must match Appwrite's project-specific OAuth
+        // scheme, but the project ID remains in the ignored local .env file.
+        manifestPlaceholders["appwriteCallbackScheme"] =
+            "appwrite-callback-${dotenvValue("APPWRITE_PROJECT_ID") ?: "not-configured"}"
     }
 
     buildTypes {

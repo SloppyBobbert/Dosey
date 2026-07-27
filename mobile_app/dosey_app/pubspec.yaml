@@ -44,6 +44,7 @@ dependencies:
   path_provider: ^2.1.6
   file_selector: ^1.1.0
   package_info_plus: ^9.0.1
+  appwrite: ^25.3.0
 
 dev_dependencies:
   flutter_test:
