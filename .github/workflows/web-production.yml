@@ -52,9 +52,11 @@ jobs:
           ref: ${{ inputs.source_sha }}
           fetch-depth: 0
       - name: Verify selected SHA is on origin/main
+        id: validate-source
         working-directory: .
         run: |
           set -euo pipefail
+          SOURCE_SHA="${SOURCE_SHA,,}"
           [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || {
             printf 'source_sha must be a full 40-character commit SHA\n' >&2
             exit 1
@@ -62,6 +64,13 @@ jobs:
           git fetch --no-tags origin main
           git rev-parse --verify "${SOURCE_SHA}^{commit}"
           git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          checked_out_sha="$(git rev-parse HEAD)"
+          [[ "$checked_out_sha" == "$SOURCE_SHA" ]] || {
+            printf 'Checked-out HEAD does not match source_sha\n' >&2
+            exit 1
+          }
+          printf 'SOURCE_SHA=%s\n' "$SOURCE_SHA" >> "$GITHUB_ENV"
+          printf 'source_sha=%s\n' "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
@@ -70,6 +79,17 @@ jobs:
           cache: true
       - name: Install locked dependencies
         run: flutter pub get --enforce-lockfile
+      - name: Validate production web configuration
+        run: |
+          set -euo pipefail
+          test "${APPWRITE_ENDPOINT:-}" = "https://api.dosey.dev/v1" || {
+            printf 'Unexpected Appwrite endpoint\n' >&2
+            exit 1
+          }
+          test -n "${APPWRITE_PROJECT_ID:-}" || {
+            printf 'APPWRITE_PROJECT_ID is required\n' >&2
+            exit 1
+          }
       - name: Build auth-enabled production web release
         run: |
           flutter build web --release --target=lib/main_web.dart \
@@ -91,7 +111,7 @@ jobs:
       - name: Upload production archive
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: dosey-web-production-${{ inputs.source_sha }}
+          name: dosey-web-production-${{ steps.validate-source.outputs.source_sha }}
           path: dosey-web-production.tar.gz
           if-no-files-found: error
           retention-days: 30
@@ -111,6 +131,7 @@ jobs:
           test -n "$APPWRITE_SITES_API_KEY"
           response="$GITHUB_WORKSPACE/production-deployment-response.json"
           status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 1800 \
             --request POST "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments" \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
@@ -130,14 +151,6 @@ jobs:
             puts id
           ' "$response")"
           checked_out_sha="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
-          [[ "$checked_out_sha" =~ ^[0-9a-fA-F]{40}$ ]] || {
-            printf 'Checked-out HEAD is not a full commit SHA\n' >&2
-            exit 1
-          }
-          [[ "$checked_out_sha" == "$SOURCE_SHA" ]] || {
-            printf 'Checked-out HEAD does not match source_sha\n' >&2
-            exit 1
-          }
           archive_sha256="$(shasum -a 256 "$GITHUB_WORKSPACE/dosey-web-production.tar.gz" | cut -d ' ' -f 1)"
           [[ "$archive_sha256" =~ ^[0-9a-fA-F]{64}$ ]] || {
             printf 'Unable to compute archive SHA-256\n' >&2
@@ -203,7 +216,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: dosey-web-production-response-${{ inputs.source_sha }}
+          name: dosey-web-production-response-${{ steps.validate-source.outputs.source_sha }}
           path: ${{ github.workspace }}/production-deployment-response.json
           if-no-files-found: warn
           retention-days: 30
@@ -216,7 +229,6 @@ jobs:
     env:
       SOURCE_SHA: ${{ inputs.source_sha }}
       MAPPING_ARTIFACT_ID: ${{ inputs.mapping_artifact_id }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Check out selected source commit
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -227,6 +239,7 @@ jobs:
         working-directory: .
         run: |
           set -euo pipefail
+          SOURCE_SHA="${SOURCE_SHA,,}"
           [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || {
             printf 'source_sha must be a full 40-character commit SHA\n' >&2
             exit 1
@@ -238,13 +251,17 @@ jobs:
           git fetch --no-tags origin main
           git rev-parse --verify "${SOURCE_SHA}^{commit}"
           git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          printf 'SOURCE_SHA=%s\n' "$SOURCE_SHA" >> "$GITHUB_ENV"
       - name: Fetch and validate provenance artifact metadata
         id: artifact-metadata
         working-directory: .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           metadata="$RUNNER_TEMP/production-artifact-metadata.json"
           status="$(curl --silent --show-error --output "$metadata" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 60 --retry 3 --retry-delay 2 --retry-connrefused \
             --header "Authorization: Bearer $GITHUB_TOKEN" \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
@@ -281,11 +298,14 @@ jobs:
           RUBY
       - name: Fetch and validate provenance workflow run
         working-directory: .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           run_id="$(< "$RUNNER_TEMP/production-artifact-run-id")"
           run_metadata="$RUNNER_TEMP/production-workflow-run.json"
           status="$(curl --silent --show-error --output "$run_metadata" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 60 --retry 3 --retry-delay 2 --retry-connrefused \
             --header "Authorization: Bearer $GITHUB_TOKEN" \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
@@ -323,12 +343,15 @@ jobs:
           }
       - name: Download and validate provenance artifact
         working-directory: .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           artifact_zip="$RUNNER_TEMP/production-provenance-artifact.zip"
           redirect_headers="$(mktemp "$RUNNER_TEMP/production-artifact-headers.XXXXXX")"
           trap 'rm -f "$redirect_headers"' EXIT
           status="$(curl --silent --dump-header "$redirect_headers" --output /dev/null --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 60 \
             --header "Authorization: Bearer $GITHUB_TOKEN" \
             --header 'Accept: application/vnd.github+json' \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
@@ -348,7 +371,7 @@ jobs:
           rm -f "$redirect_headers"
           trap - EXIT
           set +e
-          status="$(curl --silent --proto '=https' --max-redirs 0 --output "$artifact_zip" --write-out '%{http_code}' "$download_url")"
+          status="$(curl --silent --connect-timeout 10 --max-time 1800 --proto '=https' --max-redirs 0 --output "$artifact_zip" --write-out '%{http_code}' "$download_url")"
           curl_exit=$?
           set -e
           unset download_url
@@ -377,7 +400,7 @@ jobs:
         run: |
           set -euo pipefail
           export MANIFEST_PATH="$RUNNER_TEMP/production-provenance-extracted/production-provenance.json"
-          export EXPECTED_SOURCE_SHA="$SOURCE_SHA"
+          export EXPECTED_SOURCE_SHA="${SOURCE_SHA,,}"
           export EXPECTED_REPOSITORY="$GITHUB_REPOSITORY"
           export EXPECTED_WORKFLOW='.github/workflows/web-production.yml'
           export EXPECTED_RUN_ID="$(< "$RUNNER_TEMP/production-artifact-run-id")"
@@ -417,6 +440,7 @@ jobs:
           deployment_id="$(< "$RUNNER_TEMP/provenance-deployment-id")"
           response="$RUNNER_TEMP/production-selected-deployment.json"
           status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 120 \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
             "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$deployment_id")"
@@ -439,6 +463,7 @@ jobs:
           deployment_id="$(< "$RUNNER_TEMP/provenance-deployment-id")"
           response="$RUNNER_TEMP/production-activation-response.json"
           status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 120 \
             --request PATCH "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployment" \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
@@ -467,6 +492,7 @@ jobs:
           deployment_id="$(< "$RUNNER_TEMP/provenance-deployment-id")"
           response="$RUNNER_TEMP/production-site-response.json"
           status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 120 \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
             "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID")"

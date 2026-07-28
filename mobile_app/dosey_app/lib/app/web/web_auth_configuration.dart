@@ -58,10 +58,7 @@ class WebAuthConfiguration {
 
   Uri _callback(String result) => Uri.parse(appOrigin!).replace(
     path: '/auth.html',
-    queryParameters: <String, String>{
-      'result': result,
-      'destination': appOrigin!,
-    },
+    queryParameters: <String, String>{'result': result},
   );
 
   static bool parseAuthEnabled(String value) {

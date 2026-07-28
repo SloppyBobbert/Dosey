@@ -4,6 +4,7 @@ import 'package:dosey_app/app/web/dosey_web_app.dart';
 import 'package:dosey_app/app/web/dosey_web_dependencies.dart';
 import 'package:dosey_app/app/web/web_auth_configuration.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
+import 'package:dosey_app/main_web.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -40,6 +41,21 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Robot Face'), findsNothing);
+  });
+
+  testWidgets('startup configuration errors use an accessible fallback', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const DoseyWebStartupError(diagnostic: 'invalid web configuration'),
+    );
+
+    expect(find.text('Dosey couldn’t start'), findsOneWidget);
+    expect(
+      find.text('Check the web configuration and reload this page.'),
+      findsOneWidget,
+    );
+    expect(find.text('invalid web configuration'), findsOneWidget);
   });
 
   testWidgets('signed-out personal lane supports email validation', (

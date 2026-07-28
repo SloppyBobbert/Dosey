@@ -22,10 +22,8 @@ void main() {
       config.oauthFailure.toString(),
       contains('/auth.html?result=failure'),
     );
-    expect(
-      config.oauthSuccess.queryParameters['destination'],
-      config.appOrigin,
-    );
+    expect(config.oauthSuccess.queryParameters, {'result': 'success'});
+    expect(config.oauthFailure.queryParameters, {'result': 'failure'});
   });
 
   test('disabled preview does not require public auth configuration', () {

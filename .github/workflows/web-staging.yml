@@ -19,6 +19,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: web-staging-sites
+  cancel-in-progress: false
+
 env:
   APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
   APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
@@ -29,6 +33,7 @@ jobs:
     if: inputs.mode == 'upload'
     name: Upload staging deployment without activation
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     environment: staging
     defaults:
       run:
@@ -36,6 +41,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
@@ -84,6 +91,7 @@ jobs:
           test -n "$APPWRITE_ENDPOINT"; test -n "$APPWRITE_PROJECT_ID"; test -n "$APPWRITE_SITE_ID"; test -n "$APPWRITE_SITES_API_KEY"
           response="$GITHUB_WORKSPACE/staging-deployment-response.json"
           status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 1800 \
             --request POST "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments" \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
@@ -91,22 +99,45 @@ jobs:
             --form 'installCommand=' --form 'buildCommand=' --form 'outputDirectory=' \
             --form 'activate=false')"
           REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
-          if [ "${status#2}" = "$status" ]; then
+          if [ "$status" != 202 ]; then
             printf 'Appwrite staging upload failed with HTTP %s\n' "$status" >&2
             exit 1
           fi
           deployment_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("$id", ""))' "$response")"
           test -n "$deployment_id" || { printf 'Deployment ID missing from Appwrite response\n' >&2; exit 1; }
           printf 'Created staging deployment: %s\n' "$deployment_id"
+          state=""
           for attempt in $(seq 1 30); do
             poll="$GITHUB_WORKSPACE/staging-deployment-status.json"
+            poll_exit=0
             poll_status="$(curl --silent --show-error --output "$poll" --write-out '%{http_code}' \
+              --connect-timeout 10 --max-time 120 \
               --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
               --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
-              "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$deployment_id")"
-            REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$poll"
-            [ "${poll_status#2}" = "$poll_status" ] && { printf 'Appwrite status poll failed with HTTP %s\n' "$poll_status" >&2; exit 1; }
-            state="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", ""))' "$poll")"
+              "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$deployment_id")" || poll_exit=$?
+            if [ -f "$poll" ]; then
+              REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$poll"
+            fi
+            if [ "$poll_exit" -ne 0 ]; then
+              printf 'Transient staging status poll failure (%s/30); retrying\n' "$attempt" >&2
+              sleep 10
+              continue
+            fi
+            if [ "${poll_status#2}" = "$poll_status" ]; then
+              printf 'Transient staging status poll HTTP %s (%s/30); retrying\n' "$poll_status" "$attempt" >&2
+              sleep 10
+              continue
+            fi
+            state="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); print(data.get("status", "") if isinstance(data, dict) else "")' "$poll")" || {
+              printf 'Transient staging status poll JSON failure (%s/30); retrying\n' "$attempt" >&2
+              sleep 10
+              continue
+            }
+            if [ -z "$state" ]; then
+              printf 'Transient staging status poll missing status (%s/30); retrying\n' "$attempt" >&2
+              sleep 10
+              continue
+            fi
             printf 'Deployment status (%s/30): %s\n' "$attempt" "$state"
             case "$state" in
               ready) break ;;
@@ -131,6 +162,7 @@ jobs:
     if: inputs.mode == 'activate'
     name: Explicitly activate staging deployment
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: staging
     steps:
       - name: Validate explicit deployment ID
@@ -142,6 +174,48 @@ jobs:
             printf 'deployment_id has an invalid format\n' >&2
             exit 1
           }
+      - name: Verify selected staging deployment is ready
+        env:
+          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
+            printf 'Unexpected Appwrite endpoint\n' >&2
+            exit 1
+          }
+          [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
+            printf 'deployment_id has an invalid format\n' >&2
+            exit 1
+          }
+          response="$RUNNER_TEMP/staging-selected-deployment.json"
+          curl_exit=0
+          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 120 \
+            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
+            "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$DEPLOYMENT_ID")" || curl_exit=$?
+          if [ -f "$response" ]; then
+            REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
+          fi
+          [ "$curl_exit" -eq 0 ] || {
+            printf 'Staging deployment readiness lookup failed before receiving an HTTP response\n' >&2
+            exit 1
+          }
+          [ "$status" = 200 ] || {
+            printf 'Staging deployment readiness lookup failed with HTTP %s\n' "$status" >&2
+            exit 1
+          }
+          EXPECTED_DEPLOYMENT_ID="$DEPLOYMENT_ID" ruby -rjson -e '
+            begin
+              data = JSON.parse(File.read(ARGV.fetch(0)))
+            rescue JSON::ParserError, Errno::ENOENT
+              abort "Staging deployment readiness response is malformed"
+            end
+            abort "Staging deployment readiness response is not an object" unless data.is_a?(Hash)
+            abort "Staging deployment ID mismatch" unless data["$id"] == ENV.fetch("EXPECTED_DEPLOYMENT_ID")
+            abort "Staging deployment is not ready" unless data["status"] == "ready"
+          ' "$response"
       - name: Activate selected staging deployment
         env:
           APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
@@ -158,6 +232,7 @@ jobs:
           }
           response="$GITHUB_WORKSPACE/staging-activation-response.json"
           status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 120 \
             --request PATCH "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployment" \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
