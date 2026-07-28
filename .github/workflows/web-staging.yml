@@ -64,13 +64,83 @@ jobs:
       - name: Verify and archive web contents
         run: |
           set -euo pipefail
-          test -s build/web/index.html
-          test -s build/web/auth.html
-          test -s build/web/flutter_bootstrap.js
-          test -s build/web/manifest.json
-          tar -czf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" -C build/web .
-          tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './index.html'
-          tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './auth.html'
+          build_dir="build/web"
+          expected_symbols=(
+            "canvaskit/canvaskit.js.symbols"
+            "canvaskit/chromium/canvaskit.js.symbols"
+            "canvaskit/experimental_webparagraph/canvaskit.js.symbols"
+            "canvaskit/skwasm.js.symbols"
+            "canvaskit/skwasm_heavy.js.symbols"
+            "canvaskit/wimp.js.symbols"
+          )
+          for symbol in "${expected_symbols[@]}"; do
+            test -f "$build_dir/$symbol" || {
+              printf 'Expected web symbol file is missing: %s\n' "$symbol" >&2
+              exit 1
+            }
+          done
+          expected_symbols_file="$RUNNER_TEMP/staging-expected-symbols"
+          actual_symbols_file="$RUNNER_TEMP/staging-actual-symbols"
+          for symbol in "${expected_symbols[@]}"; do
+            printf './%s\n' "$symbol"
+          done | LC_ALL=C sort > "$expected_symbols_file"
+          (cd "$build_dir" && find . -name '*.js.symbols' -print | LC_ALL=C sort) > "$actual_symbols_file"
+          cmp -s "$expected_symbols_file" "$actual_symbols_file" || {
+            printf 'Unexpected web symbol file set\n' >&2
+            exit 1
+          }
+          if LC_ALL=C grep -R -I -n -F --exclude='*.js.symbols' -- '.js.symbols' "$build_dir"; then
+            printf 'Retained web files reference .js.symbols\n' >&2
+            exit 1
+          else
+            grep_exit=$?
+            [ "$grep_exit" -eq 1 ] || exit "$grep_exit"
+          fi
+          required_files=(
+            "index.html"
+            "auth.html"
+            "manifest.json"
+            "main.dart.js"
+            "flutter_bootstrap.js"
+            "assets/NOTICES"
+            "canvaskit/canvaskit.js"
+            "canvaskit/canvaskit.wasm"
+            "canvaskit/chromium/canvaskit.js"
+            "canvaskit/chromium/canvaskit.wasm"
+            "canvaskit/experimental_webparagraph/canvaskit.js"
+            "canvaskit/experimental_webparagraph/canvaskit.wasm"
+            "canvaskit/skwasm.js"
+            "canvaskit/skwasm.wasm"
+            "canvaskit/skwasm_heavy.js"
+            "canvaskit/skwasm_heavy.wasm"
+            "canvaskit/wimp.js"
+            "canvaskit/wimp.wasm"
+          )
+          for required_file in "${required_files[@]}"; do
+            test -s "$build_dir/$required_file" || {
+              printf 'Required web file is missing or empty: %s\n' "$required_file" >&2
+              exit 1
+            }
+          done
+          expected_files="$RUNNER_TEMP/staging-expected-files"
+          (cd "$build_dir" && find . -type f ! -name '*.js.symbols' -print | LC_ALL=C sort) > "$expected_files"
+          tar --use-compress-program='gzip -9' --exclude='*.js.symbols' -cf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" -C "$build_dir" .
+          archive_files="$RUNNER_TEMP/staging-archive-files"
+          tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -v '/$' | LC_ALL=C sort > "$archive_files"
+          cmp -s "$expected_files" "$archive_files" || {
+            printf 'Staging archive file set differs from build/web after symbol exclusion\n' >&2
+            exit 1
+          }
+          if tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -F -- '.js.symbols'; then
+            printf 'Staging archive contains a web symbol file\n' >&2
+            exit 1
+          fi
+          archive_bytes="$(wc -c < "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz")"
+          printf 'Staging archive bytes: %s\n' "$archive_bytes"
+          test "$archive_bytes" -lt 20000000 || {
+            printf 'Staging archive exceeds 20,000,000 bytes\n' >&2
+            exit 1
+          }
       - name: Report archive byte size
         run: |
           printf 'Staging archive bytes: %s\n' "$(wc -c < "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz")"
