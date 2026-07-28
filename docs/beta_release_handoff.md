@@ -6,7 +6,7 @@ The Beta 1 release work is paused while `main` is changing rapidly. The work is 
 
 - Branch: `beta/0.1.0-beta-1`
 - Worktree: `/Users/brandontran/Dosey/.slim/worktrees/beta-0.1.0-beta-1`
-- Local and remote branch head: `2a43ba0a291a0deceb2dadc6ab720bb2827d9f54`
+- Preserved mobile release state ends at: `2a43ba0a291a0deceb2dadc6ab720bb2827d9f54`
 - Original base: `89951848fe0cac8f5646a1f00520bd0072e959d6`
 - Last observed remote `main`: `6781b79654f9783b0b18fb68d76bde75dcf32ae9`
 - Worktree status: clean, tracking `origin/beta/0.1.0-beta-1`, with no merge in progress
@@ -15,6 +15,7 @@ Relevant commits:
 
 - `63b225a` — `chore(mobile): prepare Dosey beta 1`
 - `2a43ba0` — `chore(mobile): use Dosey app icon`
+- `fabaa53` — `docs(mobile): document paused beta release`
 
 Existing stashes belong to unrelated work and were not changed. Do not apply or delete them as part of this release work.
 
@@ -96,18 +97,20 @@ The worktree contains an ignored `.env` with the four public Appwrite identifier
 
 Do not commit the `.env`, print its values, or copy it into release assets. A future clean worktree will need its own ignored copy.
 
-## Incomplete public prerelease
+## Removed public prerelease
 
-The public prerelease is incomplete and predates the icon commit:
+The incomplete public prerelease and its local and remote tags were deleted on July 28, 2026 after explicit approval. GitHub now returns 404 for both the release and remote tag, and the local tag no longer exists. The deleted release had zero downloads.
+
+Deleted release details retained for historical context:
 
 - URL: <https://github.com/SloppyBobbert/Dosey/releases/tag/v0.1.0-beta.1>
 - Release database ID: `360760238`
 - Tag: `v0.1.0-beta.1`
 - Annotated tag object: `278eb9e29f134c72ba9eaf3d2d32c78f9337794b`
 - Tag target: `63b225aad7fe922fcaa4e9164be2e8d1f851ee8e`
-- Downloads observed: zero for every asset
+- Downloads before deletion: zero for every asset
 
-Current server assets:
+Deleted assets:
 
 | Asset | Asset ID | State | Size | Digest |
 | --- | ---: | --- | ---: | --- |
@@ -121,7 +124,7 @@ Upload history:
 2. Creating the release first allowed the checksum and Personal APK to upload, but the Robot APK failed with the same TLS error.
 3. A final bounded attempt used the GitHub release-assets REST endpoint with `curl --http1.1`; it failed with `Send failure: Broken pipe` and left the incomplete `starter` asset.
 
-Further blind retries were stopped. The incomplete prerelease and stale tag should be deleted only after fresh explicit approval. Do not treat this release or tag as a valid starting point for a later beta.
+Further blind retries were stopped. Do not recreate or reuse this stale release or tag as a starting point for a later beta.
 
 ## Why work paused
 
@@ -131,15 +134,14 @@ A merge from the then-current `main` was discussed and briefly approved, but can
 
 ## Restarting a beta later
 
-1. Inspect the incomplete prerelease and tag. With explicit approval, remove them rather than reusing stale `v0.1.0-beta.1` state.
-2. Create a fresh clean worktree and release branch from the current `main` at that time.
-3. Choose a fresh beta version and release name. Reapply the appropriate version and launcher names instead of blindly copying Beta 1 metadata.
-4. If the classic mobile icon is still wanted, cherry-pick `2a43ba0` or regenerate its exact changes against current assets after checking for conflicts.
-5. Copy the required public Appwrite configuration into an ignored, mode-600 `.env` without exposing its values.
-6. Run the current project setup, `flutter analyze`, and the full Flutter test suite from the new worktree.
-7. Build both Android flavors and an iOS debug no-codesign build using the current project instructions.
-8. Verify package and bundle identifiers, labels, version name/code, ABI coverage, debug or release signing identity, icon assets, iOS unsigned status when applicable, and SHA-256 checksums.
-9. Use a reliable distribution path. If GitHub release uploads remain unreliable, prefer an approved CI uploader or another explicitly selected method rather than repeated local retries.
-10. Create and verify a new tag and prerelease only after the rebuilt artifacts represent current `main`.
+1. Create a fresh clean worktree and release branch from the current `main` at that time.
+2. Choose a fresh beta version, release name, and tag. The deleted `v0.1.0-beta.1` state should not be reused. Reapply the appropriate version and launcher names instead of blindly copying Beta 1 metadata.
+3. If the classic mobile icon is still wanted, cherry-pick `2a43ba0` or regenerate its exact changes against current assets after checking for conflicts.
+4. Copy the required public Appwrite configuration into an ignored, mode-600 `.env` without exposing its values.
+5. Run the current project setup, `flutter analyze`, and the full Flutter test suite from the new worktree.
+6. Build both Android flavors and an iOS debug no-codesign build using the current project instructions.
+7. Verify package and bundle identifiers, labels, version name/code, ABI coverage, debug or release signing identity, icon assets, iOS unsigned status when applicable, and SHA-256 checksums.
+8. Use a reliable distribution path. If GitHub release uploads remain unreliable, prefer an approved CI uploader or another explicitly selected method rather than repeated local retries.
+9. Create and verify a new tag and prerelease only after the rebuilt artifacts represent current `main`.
 
 Keep this worktree, its ignored `.env`, and its ignored build artifacts until their removal is separately approved.
