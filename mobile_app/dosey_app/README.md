@@ -4,8 +4,8 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 
 ## Status badges
 
-![Flutter](https://img.shields.io/badge/Flutter-3.44.1-02569B?logo=flutter&logoColor=white)
-![Dart](https://img.shields.io/badge/Dart-3.12.1-0175C2?logo=dart&logoColor=white)
+![Flutter](https://img.shields.io/badge/Flutter-3.44.6-02569B?logo=flutter&logoColor=white)
+![Dart](https://img.shields.io/badge/Dart-3.12.2-0175C2?logo=dart&logoColor=white)
 ![Local data](https://img.shields.io/badge/local%20data-Drift%20%2F%20SQLite-336791)
 ![Backend](https://img.shields.io/badge/backend-Appwrite-F02E65?logo=appwrite&logoColor=white)
 
