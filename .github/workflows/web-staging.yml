@@ -35,6 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment: staging
+    env:
+      APPWRITE_DEPLOYMENT_ENDPOINT: ${{ vars.APPWRITE_DEPLOYMENT_ENDPOINT }}
     defaults:
       run:
         working-directory: mobile_app/dosey_app
@@ -89,22 +91,70 @@ jobs:
             exit 1
           }
           test -n "$APPWRITE_ENDPOINT"; test -n "$APPWRITE_PROJECT_ID"; test -n "$APPWRITE_SITE_ID"; test -n "$APPWRITE_SITES_API_KEY"
+          test "$APPWRITE_DEPLOYMENT_ENDPOINT" = "https://sfo.cloud.appwrite.io/v1" || {
+            printf 'Unexpected Appwrite deployment endpoint\n' >&2
+            exit 1
+          }
+          test -n "$APPWRITE_DEPLOYMENT_ENDPOINT"
+          site_response="$GITHUB_WORKSPACE/staging-site-response.json"
+          site_curl_exit=0
+          site_status="$(curl --silent --show-error --output "$site_response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 120 \
+            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
+            "$APPWRITE_DEPLOYMENT_ENDPOINT/sites/$APPWRITE_SITE_ID")" || site_curl_exit=$?
+          if [ -f "$site_response" ]; then
+            REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$site_response"
+          fi
+          [ "$site_curl_exit" -eq 0 ] || {
+            printf 'Appwrite staging Site preflight failed before receiving an HTTP response\n' >&2
+            exit 1
+          }
+          [ "$site_status" = 200 ] || {
+            printf 'Appwrite staging Site preflight failed with HTTP %s\n' "$site_status" >&2
+            exit 1
+          }
+          EXPECTED_SITE_ID="$APPWRITE_SITE_ID" ruby -rjson -e '
+            begin
+              data = JSON.parse(File.read(ARGV.fetch(0)))
+            rescue JSON::ParserError, Errno::ENOENT
+              abort "Appwrite staging Site preflight response is malformed"
+            end
+            abort "Appwrite staging Site preflight response is not an object" unless data.is_a?(Hash)
+            abort "Appwrite staging Site preflight ID mismatch" unless data["$id"] == ENV.fetch("EXPECTED_SITE_ID")
+          ' "$site_response"
           response="$GITHUB_WORKSPACE/staging-deployment-response.json"
+          upload_exit=0
           status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
             --connect-timeout 10 --max-time 1800 \
-            --request POST "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments" \
+            --request POST "$APPWRITE_DEPLOYMENT_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments" \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
             --form "code=@$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" \
-            --form 'installCommand=' --form 'buildCommand=' --form 'outputDirectory=' \
-            --form 'activate=false')"
-          REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
-          if [ "$status" != 202 ]; then
-            printf 'Appwrite staging upload failed with HTTP %s\n' "$status" >&2
+            --form 'installCommand=' --form 'buildCommand=' --form 'outputDirectory=./' \
+            --form 'activate=false')" || upload_exit=$?
+          if [ -f "$response" ]; then
+            REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
+          fi
+          if [ "$upload_exit" -ne 0 ]; then
+            printf 'Appwrite staging upload transport failed; deployment state is ambiguous; inspect Appwrite Sites before rerun\n' >&2
             exit 1
           fi
-          deployment_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("$id", ""))' "$response")"
-          test -n "$deployment_id" || { printf 'Deployment ID missing from Appwrite response\n' >&2; exit 1; }
+          if [ "$status" != 202 ]; then
+            printf 'Appwrite staging upload returned HTTP %s; deployment state is ambiguous; inspect Appwrite Sites before rerun\n' "$status" >&2
+            exit 1
+          fi
+          deployment_id="$(ruby -rjson -e '
+            begin
+              data = JSON.parse(File.read(ARGV.fetch(0)))
+            rescue JSON::ParserError, Errno::ENOENT
+              abort "Appwrite staging upload response is malformed; deployment state is ambiguous; inspect Appwrite Sites before rerun"
+            end
+            abort "Appwrite staging upload response is not an object; deployment state is ambiguous; inspect Appwrite Sites before rerun" unless data.is_a?(Hash)
+            id = data["$id"]
+            abort "Appwrite staging upload response has an invalid deployment ID; deployment state is ambiguous; inspect Appwrite Sites before rerun" unless id.is_a?(String) && id.match?(/\A[A-Za-z0-9][A-Za-z0-9._-]{0,35}\z/)
+            puts id
+          ' "$response")"
           printf 'Created staging deployment: %s\n' "$deployment_id"
           state=""
           for attempt in $(seq 1 30); do
@@ -114,7 +164,7 @@ jobs:
               --connect-timeout 10 --max-time 120 \
               --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
               --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
-              "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$deployment_id")" || poll_exit=$?
+              "$APPWRITE_DEPLOYMENT_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$deployment_id")" || poll_exit=$?
             if [ -f "$poll" ]; then
               REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$poll"
             fi
@@ -155,6 +205,7 @@ jobs:
           path: |
             ${{ github.workspace }}/staging-deployment-response.json
             ${{ github.workspace }}/staging-deployment-status.json
+            ${{ github.workspace }}/staging-site-response.json
           if-no-files-found: warn
           retention-days: 14
 
@@ -164,6 +215,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: staging
+    env:
+      APPWRITE_DEPLOYMENT_ENDPOINT: ${{ vars.APPWRITE_DEPLOYMENT_ENDPOINT }}
     steps:
       - name: Validate explicit deployment ID
         env:
@@ -184,6 +237,11 @@ jobs:
             printf 'Unexpected Appwrite endpoint\n' >&2
             exit 1
           }
+          test "$APPWRITE_DEPLOYMENT_ENDPOINT" = "https://sfo.cloud.appwrite.io/v1" || {
+            printf 'Unexpected Appwrite deployment endpoint\n' >&2
+            exit 1
+          }
+          test -n "$APPWRITE_DEPLOYMENT_ENDPOINT"
           [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
             printf 'deployment_id has an invalid format\n' >&2
             exit 1
@@ -194,7 +252,7 @@ jobs:
             --connect-timeout 10 --max-time 120 \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
-            "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$DEPLOYMENT_ID")" || curl_exit=$?
+            "$APPWRITE_DEPLOYMENT_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$DEPLOYMENT_ID")" || curl_exit=$?
           if [ -f "$response" ]; then
             REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
           fi
@@ -226,6 +284,10 @@ jobs:
             printf 'Unexpected Appwrite endpoint\n' >&2
             exit 1
           }
+          test "$APPWRITE_DEPLOYMENT_ENDPOINT" = "https://sfo.cloud.appwrite.io/v1" || {
+            printf 'Unexpected Appwrite deployment endpoint\n' >&2
+            exit 1
+          }
           [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
             printf 'deployment_id has an invalid format\n' >&2
             exit 1
@@ -233,7 +295,7 @@ jobs:
           response="$GITHUB_WORKSPACE/staging-activation-response.json"
           status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
             --connect-timeout 10 --max-time 120 \
-            --request PATCH "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployment" \
+            --request PATCH "$APPWRITE_DEPLOYMENT_ENDPOINT/sites/$APPWRITE_SITE_ID/deployment" \
             --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
             --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
             --header 'Content-Type: application/json' \
