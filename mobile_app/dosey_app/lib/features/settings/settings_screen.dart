@@ -1545,6 +1545,8 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
         'Android personal phone. This device does not control the XIAO controller.',
       AppDeviceRole.iosPersonal =>
         'iOS personal phone. This device does not control the XIAO controller.',
+      AppDeviceRole.webPersonal =>
+        'Browser-based Personal Mode. This device does not control the XIAO controller.',
     };
   }
 

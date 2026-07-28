@@ -1,0 +1,250 @@
+name: Web Staging Sites
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Upload a prebuilt staging deployment, or explicitly activate an existing one
+        required: true
+        type: choice
+        options:
+          - upload
+          - activate
+        default: upload
+      deployment_id:
+        description: Required only for activate mode; never inferred from an upload
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-staging-sites
+  cancel-in-progress: false
+
+env:
+  APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+  APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+  APPWRITE_SITE_ID: ${{ vars.APPWRITE_STAGING_SITE_ID }}
+
+jobs:
+  upload:
+    if: inputs.mode == 'upload'
+    name: Upload staging deployment without activation
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: staging
+    defaults:
+      run:
+        working-directory: mobile_app/dosey_app
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.44.1'
+          channel: stable
+          cache: true
+      - name: Install locked dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Build auth-enabled staging web release
+        run: |
+          flutter build web --release --target=lib/main_web.dart \
+            --dart-define=DOSEY_BUILD_PROFILE=personal \
+            --dart-define=WEB_AUTH_ENABLED=true \
+            --dart-define=WEB_APP_ORIGIN=https://staging.dosey.dev \
+            --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
+            --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID"
+      - name: Verify and archive web contents
+        run: |
+          set -euo pipefail
+          test -s build/web/index.html
+          test -s build/web/auth.html
+          test -s build/web/flutter_bootstrap.js
+          test -s build/web/manifest.json
+          tar -czf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" -C build/web .
+          tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './index.html'
+          tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './auth.html'
+      - name: Report archive byte size
+        run: |
+          printf 'Staging archive bytes: %s\n' "$(wc -c < "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz")"
+      - name: Upload staging archive
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dosey-web-staging
+          path: dosey-web-staging.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+      - name: Create Appwrite staging deployment
+        env:
+          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
+        run: |
+          set -euo pipefail
+          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
+            printf 'Unexpected Appwrite endpoint\n' >&2
+            exit 1
+          }
+          test -n "$APPWRITE_ENDPOINT"; test -n "$APPWRITE_PROJECT_ID"; test -n "$APPWRITE_SITE_ID"; test -n "$APPWRITE_SITES_API_KEY"
+          response="$GITHUB_WORKSPACE/staging-deployment-response.json"
+          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 1800 \
+            --request POST "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments" \
+            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
+            --form "code=@$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" \
+            --form 'installCommand=' --form 'buildCommand=' --form 'outputDirectory=' \
+            --form 'activate=false')"
+          REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
+          if [ "$status" != 202 ]; then
+            printf 'Appwrite staging upload failed with HTTP %s\n' "$status" >&2
+            exit 1
+          fi
+          deployment_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("$id", ""))' "$response")"
+          test -n "$deployment_id" || { printf 'Deployment ID missing from Appwrite response\n' >&2; exit 1; }
+          printf 'Created staging deployment: %s\n' "$deployment_id"
+          state=""
+          for attempt in $(seq 1 30); do
+            poll="$GITHUB_WORKSPACE/staging-deployment-status.json"
+            poll_exit=0
+            poll_status="$(curl --silent --show-error --output "$poll" --write-out '%{http_code}' \
+              --connect-timeout 10 --max-time 120 \
+              --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+              --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
+              "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$deployment_id")" || poll_exit=$?
+            if [ -f "$poll" ]; then
+              REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$poll"
+            fi
+            if [ "$poll_exit" -ne 0 ]; then
+              printf 'Transient staging status poll failure (%s/30); retrying\n' "$attempt" >&2
+              sleep 10
+              continue
+            fi
+            if [ "${poll_status#2}" = "$poll_status" ]; then
+              printf 'Transient staging status poll HTTP %s (%s/30); retrying\n' "$poll_status" "$attempt" >&2
+              sleep 10
+              continue
+            fi
+            state="$(python3 -c 'import json,sys; data=json.load(open(sys.argv[1])); print(data.get("status", "") if isinstance(data, dict) else "")' "$poll")" || {
+              printf 'Transient staging status poll JSON failure (%s/30); retrying\n' "$attempt" >&2
+              sleep 10
+              continue
+            }
+            if [ -z "$state" ]; then
+              printf 'Transient staging status poll missing status (%s/30); retrying\n' "$attempt" >&2
+              sleep 10
+              continue
+            fi
+            printf 'Deployment status (%s/30): %s\n' "$attempt" "$state"
+            case "$state" in
+              ready) break ;;
+              failed|canceled|cancelled) printf 'Staging deployment ended in %s\n' "$state" >&2; exit 1 ;;
+            esac
+            sleep 10
+          done
+          [ "$state" = ready ] || { printf 'Staging deployment did not become ready within the polling window\n' >&2; exit 1; }
+          printf 'Upload complete. Do not activate until a human verifies prebuilt serving, auth.html, and upload limits.\n'
+      - name: Preserve Appwrite response
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dosey-web-staging-response
+          path: |
+            ${{ github.workspace }}/staging-deployment-response.json
+            ${{ github.workspace }}/staging-deployment-status.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  activate:
+    if: inputs.mode == 'activate'
+    name: Explicitly activate staging deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    steps:
+      - name: Validate explicit deployment ID
+        env:
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
+            printf 'deployment_id has an invalid format\n' >&2
+            exit 1
+          }
+      - name: Verify selected staging deployment is ready
+        env:
+          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
+            printf 'Unexpected Appwrite endpoint\n' >&2
+            exit 1
+          }
+          [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
+            printf 'deployment_id has an invalid format\n' >&2
+            exit 1
+          }
+          response="$RUNNER_TEMP/staging-selected-deployment.json"
+          curl_exit=0
+          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 120 \
+            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
+            "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$DEPLOYMENT_ID")" || curl_exit=$?
+          if [ -f "$response" ]; then
+            REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
+          fi
+          [ "$curl_exit" -eq 0 ] || {
+            printf 'Staging deployment readiness lookup failed before receiving an HTTP response\n' >&2
+            exit 1
+          }
+          [ "$status" = 200 ] || {
+            printf 'Staging deployment readiness lookup failed with HTTP %s\n' "$status" >&2
+            exit 1
+          }
+          EXPECTED_DEPLOYMENT_ID="$DEPLOYMENT_ID" ruby -rjson -e '
+            begin
+              data = JSON.parse(File.read(ARGV.fetch(0)))
+            rescue JSON::ParserError, Errno::ENOENT
+              abort "Staging deployment readiness response is malformed"
+            end
+            abort "Staging deployment readiness response is not an object" unless data.is_a?(Hash)
+            abort "Staging deployment ID mismatch" unless data["$id"] == ENV.fetch("EXPECTED_DEPLOYMENT_ID")
+            abort "Staging deployment is not ready" unless data["status"] == "ready"
+          ' "$response"
+      - name: Activate selected staging deployment
+        env:
+          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+        run: |
+          set -euo pipefail
+          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
+            printf 'Unexpected Appwrite endpoint\n' >&2
+            exit 1
+          }
+          [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
+            printf 'deployment_id has an invalid format\n' >&2
+            exit 1
+          }
+          response="$GITHUB_WORKSPACE/staging-activation-response.json"
+          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
+            --connect-timeout 10 --max-time 120 \
+            --request PATCH "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployment" \
+            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
+            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
+            --header 'Content-Type: application/json' \
+            --data-raw "{\"deploymentId\":\"$DEPLOYMENT_ID\"}")"
+          REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
+          [ "${status#2}" != "$status" ] || { printf 'Activation failed with HTTP %s\n' "$status" >&2; exit 1; }
+      - name: Preserve activation response
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dosey-web-staging-activation-response
+          path: ${{ github.workspace }}/staging-activation-response.json
+          if-no-files-found: warn
+          retention-days: 14

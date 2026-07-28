@@ -10,7 +10,19 @@ abstract interface class AppwriteAccountApi {
   // in this file and makes the Dosey gateway testable without network calls.
   Future<CloudIdentity?> getCurrentIdentity();
 
-  Future<void> signInWithGoogle({required List<String> scopes});
+  Future<void> signInWithGoogle({
+    required List<String> scopes,
+    String? successUrl,
+    String? failureUrl,
+  });
+
+  Future<String> requestEmailOtp(String email) =>
+      Future.error(UnimplementedError());
+
+  Future<void> completeEmailOtp({
+    required String userId,
+    required String secret,
+  }) => Future.error(UnimplementedError());
 
   Future<void> signOutCurrentSession();
 }
@@ -33,8 +45,34 @@ class AppwriteAccountApiAdapter implements AppwriteAccountApi {
   }
 
   @override
-  Future<void> signInWithGoogle({required List<String> scopes}) => _account
-      .createOAuth2Session(provider: OAuthProvider.google, scopes: scopes);
+  Future<void> signInWithGoogle({
+    required List<String> scopes,
+    String? successUrl,
+    String? failureUrl,
+  }) => _account.createOAuth2Session(
+    provider: OAuthProvider.google,
+    scopes: scopes,
+    success: successUrl,
+    failure: failureUrl,
+  );
+
+  @override
+  Future<String> requestEmailOtp(String email) async {
+    final token = await _account.createEmailToken(
+      userId: ID.unique(),
+      email: email,
+      phrase: false,
+    );
+    return token.userId;
+  }
+
+  @override
+  Future<void> completeEmailOtp({
+    required String userId,
+    required String secret,
+  }) async {
+    await _account.createSession(userId: userId, secret: secret);
+  }
 
   @override
   Future<void> signOutCurrentSession() =>
@@ -88,11 +126,38 @@ class AppwriteCloudIdentityGateway implements CloudIdentityGateway {
   @override
   Future<CloudIdentity> signInWithGoogle({
     List<String> scopes = const [],
+    String? successUrl,
+    String? failureUrl,
   }) async {
-    await _account.signInWithGoogle(scopes: scopes);
+    await _account.signInWithGoogle(
+      scopes: scopes,
+      successUrl: successUrl,
+      failureUrl: failureUrl,
+    );
+    return _publishCurrentIdentity(
+      'Appwrite Google sign-in did not create a session.',
+    );
+  }
+
+  @override
+  Future<String> requestEmailOtp(String email) =>
+      _account.requestEmailOtp(email.trim().toLowerCase());
+
+  @override
+  Future<CloudIdentity> completeEmailOtp({
+    required String userId,
+    required String secret,
+  }) async {
+    await _account.completeEmailOtp(userId: userId, secret: secret);
+    return _publishCurrentIdentity(
+      'Appwrite email OTP sign-in did not create a session.',
+    );
+  }
+
+  Future<CloudIdentity> _publishCurrentIdentity(String errorMessage) async {
     final identity = await _account.getCurrentIdentity();
     if (identity == null) {
-      throw StateError('Appwrite Google sign-in did not create a session.');
+      throw StateError(errorMessage);
     }
     _publish(identity);
     return identity;

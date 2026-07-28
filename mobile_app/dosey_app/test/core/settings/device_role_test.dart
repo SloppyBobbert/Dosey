@@ -19,6 +19,22 @@ void main() {
     );
   });
 
+  test('web is personal phone only and cannot use a restored robot role', () {
+    expect(AppDeviceRole.allowedFor(AppDevicePlatform.web), [
+      AppDeviceRole.webPersonal,
+    ]);
+    expect(
+      AppDeviceRole.defaultFor(AppDevicePlatform.web),
+      AppDeviceRole.webPersonal,
+    );
+    expect(
+      AppDeviceRole.fromStorageValue(
+        'android_robot',
+      )!.isAllowedOn(AppDevicePlatform.web),
+      isFalse,
+    );
+  });
+
   test('default role follows the device platform', () {
     expect(
       AppDeviceRole.defaultFor(AppDevicePlatform.android),
@@ -34,5 +50,6 @@ void main() {
     expect(AppDeviceRole.androidRobot.canHostRobot, isTrue);
     expect(AppDeviceRole.androidPersonal.canHostRobot, isFalse);
     expect(AppDeviceRole.iosPersonal.canHostRobot, isFalse);
+    expect(AppDeviceRole.webPersonal.canHostRobot, isFalse);
   });
 }

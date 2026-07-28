@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Dosey sign-in</title></head>
+<body>
+<script>
+  (function () {
+    const message = { 'flutter-web-auth-2': window.location.href };
+    if (window.opener) window.opener.postMessage(message, window.location.origin);
+    else if (window.parent && window.parent !== window) window.parent.postMessage(message, window.location.origin);
+    else window.localStorage.setItem('flutter-web-auth-2', window.location.href);
+    window.close();
+  }());
+</script>
+</body>
+</html>

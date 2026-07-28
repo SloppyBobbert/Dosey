@@ -32,6 +32,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_app_scope_dependencies.dart';
+import '../../support/fake_cloud_identity_gateway.dart';
 
 void main() {
   testWidgets('personal settings use eight accordions in the required order', (
@@ -1196,7 +1197,7 @@ void main() {
       _TestSettingsApp(
         database: database,
         sectionTarget: SettingsSection.householdAccount,
-        cloudIdentityGateway: _FakeCloudIdentityGateway(
+        cloudIdentityGateway: FakeCloudIdentityGateway(
           identity: const CloudIdentity.signedIn(
             accountId: 'owner-1',
             email: 'owner@example.com',
@@ -1247,7 +1248,7 @@ void main() {
       _TestSettingsApp(
         database: database,
         sectionTarget: SettingsSection.householdAccount,
-        cloudIdentityGateway: _FakeCloudIdentityGateway(
+        cloudIdentityGateway: FakeCloudIdentityGateway(
           identity: const CloudIdentity.signedIn(
             accountId: 'owner-1',
             email: 'owner@example.com',
@@ -1287,7 +1288,7 @@ void main() {
       _TestSettingsApp(
         database: database,
         sectionTarget: SettingsSection.householdAccount,
-        cloudIdentityGateway: _FakeCloudIdentityGateway(
+        cloudIdentityGateway: FakeCloudIdentityGateway(
           identity: const CloudIdentity.signedIn(
             accountId: 'owner-1',
             email: 'owner@example.com',
@@ -1348,7 +1349,7 @@ void main() {
       _TestSettingsApp(
         database: database,
         sectionTarget: SettingsSection.householdAccount,
-        cloudIdentityGateway: _FakeCloudIdentityGateway(
+        cloudIdentityGateway: FakeCloudIdentityGateway(
           identity: const CloudIdentity.signedIn(
             accountId: 'owner-1',
             email: 'owner@example.com',
@@ -1396,7 +1397,7 @@ void main() {
       _TestSettingsApp(
         database: database,
         sectionTarget: SettingsSection.householdAccount,
-        cloudIdentityGateway: _FakeCloudIdentityGateway(
+        cloudIdentityGateway: FakeCloudIdentityGateway(
           identity: const CloudIdentity.signedIn(
             accountId: 'owner-1',
             email: 'owner@example.com',
@@ -1461,7 +1462,7 @@ void main() {
       _TestSettingsApp(
         database: database,
         sectionTarget: SettingsSection.householdAccount,
-        cloudIdentityGateway: _FakeCloudIdentityGateway(
+        cloudIdentityGateway: FakeCloudIdentityGateway(
           identity: const CloudIdentity.signedIn(
             accountId: 'member-1',
             email: 'member@example.com',
@@ -1504,7 +1505,7 @@ void main() {
       _TestSettingsApp(
         database: database,
         sectionTarget: SettingsSection.householdAccount,
-        cloudIdentityGateway: _FakeCloudIdentityGateway(
+        cloudIdentityGateway: FakeCloudIdentityGateway(
           identity: const CloudIdentity.signedIn(
             accountId: 'member-1',
             email: 'member@example.com',
@@ -2138,29 +2139,6 @@ class _FakeHouseholdManagementGateway implements HouseholdManagementGateway {
     removedAccountId = accountId;
     return removalResult ?? _robotInstallation;
   }
-}
-
-class _FakeCloudIdentityGateway implements CloudIdentityGateway {
-  _FakeCloudIdentityGateway({this.identity = const CloudIdentity.signedOut()});
-
-  final CloudIdentity identity;
-  var signOutCount = 0;
-
-  @override
-  Future<CloudIdentity> signInWithGoogle({
-    List<String> scopes = const [],
-  }) async => const CloudIdentity.signedIn(
-    accountId: 'owner-1',
-    email: 'owner@example.com',
-  );
-
-  @override
-  Future<void> signOut() async {
-    signOutCount += 1;
-  }
-
-  @override
-  Stream<CloudIdentity> watchIdentity() => Stream.value(identity);
 }
 
 class _FakeBackupFileGateway implements BackupFileGateway {

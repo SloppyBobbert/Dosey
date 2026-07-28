@@ -1,4 +1,4 @@
-enum AppDevicePlatform { android, ios }
+enum AppDevicePlatform { android, ios, web }
 
 enum AppDeviceRole {
   androidRobot(
@@ -14,6 +14,11 @@ enum AppDeviceRole {
   iosPersonal(
     storageValue: 'ios_personal',
     label: 'iOS personal phone',
+    canHostRobot: false,
+  ),
+  webPersonal(
+    storageValue: 'web_personal',
+    label: 'Web personal',
     canHostRobot: false,
   );
 
@@ -31,6 +36,7 @@ enum AppDeviceRole {
     return switch (platform) {
       AppDevicePlatform.android => [androidRobot, androidPersonal],
       AppDevicePlatform.ios => [iosPersonal],
+      AppDevicePlatform.web => [webPersonal],
     };
   }
 
@@ -38,6 +44,7 @@ enum AppDeviceRole {
     return switch (platform) {
       AppDevicePlatform.android => androidPersonal,
       AppDevicePlatform.ios => iosPersonal,
+      AppDevicePlatform.web => webPersonal,
     };
   }
 
