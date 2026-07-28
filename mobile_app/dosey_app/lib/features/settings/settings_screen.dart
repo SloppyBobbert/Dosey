@@ -23,6 +23,7 @@ import 'package:dosey_app/core/voice/fixed_phrase_catalog.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/log/dose_log_screen.dart';
+import 'package:dosey_app/features/controller/controller_screen.dart';
 import 'package:dosey_app/features/settings/settings_accordion.dart';
 import 'package:dosey_app/features/settings/robot_phone_setup_screen.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
@@ -30,14 +31,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 part 'settings_backup_card.dart';
+part 'maintenance_screen.dart';
 
 enum SettingsSection {
   account,
   deviceMode,
   actionPin,
   householdAccount,
-  adminHistory,
-  backupDatabase,
   robotFace,
   notifications,
   safety,
@@ -47,15 +47,12 @@ enum SettingsSection {
 }
 
 enum _SettingsGroup {
-  profile,
-  household,
-  history,
-  actionPin,
-  notifications,
+  accountHousehold,
+  deviceConnection,
+  reminders,
   appearance,
   robotFace,
-  help,
-  safety,
+  helpSafety,
 }
 
 class SettingsScreen extends StatefulWidget {
@@ -82,13 +79,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late Future<GuidedTrialCompletion?> _guidedTrialCompletion;
   LocalAppSettingsRepository? _guidedTrialSettings;
   bool? _guidedTrialWasDemo;
-  bool _showsRobotFaceGroup = false;
   bool _isSigningIn = false;
   String? _authMessage;
-  final Set<_SettingsGroup> _expandedGroups = {
-    _SettingsGroup.profile,
-    _SettingsGroup.notifications,
-  };
+  final Set<_SettingsGroup> _expandedGroups = {};
 
   @override
   void initState() {
@@ -98,7 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         widget.previewVoicePlayer ??
         DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway());
     final target = widget.sectionTarget;
-    if (target != null) _expandedGroups.add(_groupFor(target));
+    if (target != null) _expandedGroups.add(_SettingsGroup.helpSafety);
     _scrollToTargetAfterBuild();
   }
 
@@ -132,7 +125,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (oldWidget.sectionTarget != widget.sectionTarget) {
       final target = widget.sectionTarget;
       if (target != null) {
-        setState(() => _expandedGroups.add(_groupFor(target)));
+        setState(() => _expandedGroups.add(_SettingsGroup.helpSafety));
       }
       _scrollToTargetAfterBuild();
     }
@@ -165,29 +158,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   double _estimatedSectionOffset(SettingsSection section) {
     const listHeaderExtent = 52.0;
     const collapsedAccordionExtent = 84.0;
-    final visibleGroups = _SettingsGroup.values
-        .where(
-          (group) => group != _SettingsGroup.robotFace || _showsRobotFaceGroup,
-        )
-        .toList();
-    final groupIndex = visibleGroups.indexOf(_groupFor(section));
+    final visibleGroups = _SettingsGroup.values;
+    final groupIndex = visibleGroups.indexOf(
+      _groupFor(section, _SettingsGroup.accountHousehold),
+    );
     return listHeaderExtent + groupIndex * collapsedAccordionExtent;
   }
 
-  _SettingsGroup _groupFor(SettingsSection section) {
+  _SettingsGroup _groupFor(SettingsSection section, _SettingsGroup firstGroup) {
     return switch (section) {
       SettingsSection.account ||
-      SettingsSection.deviceMode => _SettingsGroup.profile,
-      SettingsSection.householdAccount => _SettingsGroup.household,
-      SettingsSection.adminHistory ||
-      SettingsSection.backupDatabase => _SettingsGroup.history,
-      SettingsSection.actionPin => _SettingsGroup.actionPin,
-      SettingsSection.notifications => _SettingsGroup.notifications,
-      SettingsSection.robotFace => _SettingsGroup.robotFace,
+      SettingsSection.householdAccount ||
+      SettingsSection.deviceMode ||
+      SettingsSection.actionPin => firstGroup,
       SettingsSection.helpAbout ||
+      SettingsSection.safety => _SettingsGroup.helpSafety,
+      SettingsSection.notifications => _SettingsGroup.reminders,
+      SettingsSection.robotFace => _SettingsGroup.robotFace,
       SettingsSection.guidedTrial ||
-      SettingsSection.setup => _SettingsGroup.help,
-      SettingsSection.safety => _SettingsGroup.safety,
+      SettingsSection.setup => _SettingsGroup.helpSafety,
     };
   }
 
@@ -237,8 +226,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final role = storedRole != null && allowedRoles.contains(storedRole)
             ? storedRole
             : AppDeviceRole.defaultFor(platform);
-        _showsRobotFaceGroup = role.canHostRobot;
-
+        final firstGroup = role.canHostRobot
+            ? _SettingsGroup.deviceConnection
+            : _SettingsGroup.accountHousehold;
+        final target = widget.sectionTarget;
+        if (target != null) _expandedGroups.add(_groupFor(target, firstGroup));
         return StreamBuilder<AuthSession>(
           stream: dependencies.auth.watchSession(),
           builder: (context, authSnapshot) {
@@ -251,14 +243,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text('Settings', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
                 _accordion(
-                  group: _SettingsGroup.profile,
-                  title: 'Profile, account & device',
+                  group: firstGroup,
+                  title: role.canHostRobot
+                      ? 'Device & connection'
+                      : 'Account & household',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _ProfileSummaryCard(session: session, platform: platform),
-                      if (!role.canHostRobot) ...[
-                        const SizedBox(height: 12),
+                      const SizedBox(height: 12),
+                      if (!role.canHostRobot)
                         _targeted(
                           SettingsSection.account,
                           _SettingsSectionCard(
@@ -298,55 +292,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ],
                           ),
                         ),
-                      ],
+                      if (!role.canHostRobot) const SizedBox(height: 12),
+                      _targeted(
+                        SettingsSection.householdAccount,
+                        _HouseholdAccountCard(platform: platform),
+                      ),
                       const SizedBox(height: 12),
                       _targeted(
                         SettingsSection.deviceMode,
                         _DeviceModeCard(platform: platform),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _accordion(
-                  group: _SettingsGroup.household,
-                  title: 'Household & robot profile',
-                  child: _targeted(
-                    SettingsSection.householdAccount,
-                    _HouseholdAccountCard(platform: platform),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                _accordion(
-                  group: _SettingsGroup.history,
-                  title: 'History & data',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
+                      const SizedBox(height: 12),
+                      _targeted(SettingsSection.actionPin, _ActionPinCard()),
+                      const SizedBox(height: 12),
                       _DoseHistoryCard(),
-                      const SizedBox(height: 12),
-                      _targeted(
-                        SettingsSection.adminHistory,
-                        _AdminHistoryCard(),
-                      ),
-                      const SizedBox(height: 12),
-                      _targeted(
-                        SettingsSection.backupDatabase,
-                        _BackupDatabaseCard(),
-                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 12),
+                if (role.canHostRobot) ...[
+                  _accordion(
+                    group: _SettingsGroup.robotFace,
+                    title: 'Robot Face',
+                    child: _targeted(
+                      SettingsSection.robotFace,
+                      _RobotFaceSettingsCard(
+                        previewVoicePlayer: _previewVoicePlayer,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 _accordion(
-                  group: _SettingsGroup.actionPin,
-                  title: 'Action PIN',
-                  child: _targeted(SettingsSection.actionPin, _ActionPinCard()),
-                ),
-                const SizedBox(height: 12),
-                _accordion(
-                  group: _SettingsGroup.notifications,
-                  title: 'Reminder notifications',
+                  group: _SettingsGroup.reminders,
+                  title: 'Reminders',
                   child: _targeted(
                     SettingsSection.notifications,
                     _ReminderNotificationCard(),
@@ -358,83 +337,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   title: 'Appearance',
                   child: const _AppearanceCard(),
                 ),
-                if (role.canHostRobot) ...[
-                  const SizedBox(height: 12),
-                  _accordion(
-                    group: _SettingsGroup.robotFace,
-                    title: 'Robot Face options',
-                    child: _targeted(
-                      SettingsSection.robotFace,
-                      _RobotFaceSettingsCard(
-                        previewVoicePlayer: _previewVoicePlayer,
-                      ),
-                    ),
-                  ),
-                ],
                 const SizedBox(height: 12),
                 _accordion(
-                  group: _SettingsGroup.help,
-                  title: 'Help, guided trial & setup',
+                  group: _SettingsGroup.helpSafety,
+                  title: 'Help & safety',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _targeted(SettingsSection.helpAbout, _HelpAboutCard()),
                       const SizedBox(height: 12),
-                      _targeted(
-                        SettingsSection.guidedTrial,
-                        _GuidedTrialSettingsCard(
-                          completion: _guidedTrialCompletion,
-                          onStart: DemoModeHost.maybeOf(
-                            context,
-                          )?.startGuidedTrial,
-                          isActive: dependencies.isDemo,
-                        ),
-                      ),
+                      _targeted(SettingsSection.safety, _SafetyCard()),
                       const SizedBox(height: 12),
-                      _targeted(
-                        SettingsSection.setup,
-                        _SettingsSectionCard(
-                          icon: Icons.restart_alt,
-                          title: 'Setup',
-                          children: [
-                            const Text(
-                              'Show the first-run safety notice and setup steps again.',
-                            ),
-                            const SizedBox(height: 12),
-                            OutlinedButton.icon(
-                              onPressed: _resetSetup,
-                              icon: const Icon(Icons.replay_outlined),
-                              label: const Text('Start over setup'),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (dependencies
-                          .effectiveRole
-                          .capabilities
-                          .showsRobotPhoneSetup) ...[
-                        const SizedBox(height: 12),
-                        _RobotPhoneSetupCard(
-                          onOpen: () => Navigator.of(context).push<void>(
-                            MaterialPageRoute(
-                              builder: (_) => RobotPhoneSetupScreen(
-                                gateway: dependencies.robotPhoneSetup,
-                                externalActionResumeGuard:
-                                    dependencies.externalActionResumeGuard,
-                              ),
-                            ),
+                      if (!role.canHostRobot)
+                        _targeted(
+                          SettingsSection.guidedTrial,
+                          _GuidedTrialSettingsCard(
+                            completion: _guidedTrialCompletion,
+                            onStart: DemoModeHost.maybeOf(
+                              context,
+                            )?.startGuidedTrial,
+                            isActive: dependencies.isDemo,
                           ),
                         ),
-                      ],
+                      if (!role.canHostRobot) const SizedBox(height: 12),
+                      if (!role.canHostRobot)
+                        _targeted(
+                          SettingsSection.setup,
+                          _SettingsSectionCard(
+                            icon: Icons.restart_alt,
+                            title: 'Setup',
+                            children: [
+                              const Text(
+                                'Show the first-run safety notice and setup steps again.',
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: _resetSetup,
+                                icon: const Icon(Icons.replay_outlined),
+                                label: const Text('Start over setup'),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 12),
-                _accordion(
-                  group: _SettingsGroup.safety,
-                  title: 'Safety & limitations',
-                  child: _targeted(SettingsSection.safety, _SafetyCard()),
-                ),
+                if (role.canHostRobot) ...[
+                  const SizedBox(height: 16),
+                  _MaintenanceEntryCard(onOpen: _openMaintenance),
+                ],
               ],
             );
           },
@@ -494,6 +445,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ).showSnackBar(SnackBar(content: Text('Setup reset failed: $error')));
     }
   }
+
+  Future<void> _openMaintenance() async {
+    final dependencies = DoseyAppScope.of(context);
+    if (!dependencies.effectiveRole.capabilities.canHostRobot) return;
+    final pinEnabled = await dependencies.settings.isActionPinEnabled();
+    if (!mounted) return;
+    if (!pinEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Set an Action PIN before opening Maintenance.'),
+        ),
+      );
+      return;
+    }
+    final result = await runProtectedAdminAction<void>(
+      context,
+      action: (_) async {},
+    );
+    if (!mounted || !result.isSuccess) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const _MaintenanceScreen()),
+    );
+  }
+}
+
+class _MaintenanceEntryCard extends StatelessWidget {
+  const _MaintenanceEntryCard({required this.onOpen});
+
+  final Future<void> Function() onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Icon(Icons.build_outlined, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Maintenance'),
+                  SizedBox(height: 2),
+                  Text('Setup and repair tools for this robot.'),
+                ],
+              ),
+            ),
+            TextButton(
+              key: const Key('open-maintenance-tools'),
+              onPressed: onOpen,
+              child: const Text('Open tools'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _GuidedTrialSettingsCard extends StatelessWidget {
@@ -511,10 +526,10 @@ class _GuidedTrialSettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _SettingsSectionCard(
       icon: Icons.fact_check_outlined,
-      title: 'Guided Trial Run',
+      title: 'Practice mode',
       children: [
         const Text(
-          'Practice reminders, simulated dispensing, dose confirmation, missed-dose handling, and reconnect recovery. Real medication data is not changed.',
+          'Practice reminders and dose actions without changing your real medication data.',
         ),
         const SizedBox(height: 8),
         FutureBuilder<GuidedTrialCompletion?>(
@@ -525,12 +540,12 @@ class _GuidedTrialSettingsCard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Checking trial status...'),
+                  const Text('Checking practice status...'),
                   const SizedBox(height: 12),
                   FilledButton.tonalIcon(
                     onPressed: null,
                     icon: const Icon(Icons.play_arrow),
-                    label: const Text('Start guided trial'),
+                    label: const Text('Start practice mode'),
                   ),
                 ],
               );
@@ -548,10 +563,10 @@ class _GuidedTrialSettingsCard extends StatelessWidget {
                   icon: const Icon(Icons.play_arrow),
                   label: Text(
                     isActive
-                        ? 'Trial in progress'
+                        ? 'Practice in progress'
                         : value == null
-                        ? 'Start guided trial'
-                        : 'Run guided trial again',
+                        ? 'Start practice mode'
+                        : 'Practice again',
                   ),
                 ),
               ],
@@ -665,48 +680,25 @@ class _DeviceModeCard extends StatelessWidget {
     final isRobot = capabilities.canHostRobot;
     return _SettingsSectionCard(
       icon: Icons.phone_android_outlined,
-      title: 'Device mode',
+      title: 'Phone type',
       children: [
         Text(
-          isRobot ? 'Robot distribution' : 'Personal distribution',
+          isRobot ? 'Robot phone' : 'Personal phone',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 10),
         Text(
           isRobot
-              ? 'This app is fixed as the mounted Android robot phone and can control Dosey hardware.'
-              : 'This app is fixed for personal reminders, history, and management features.',
+              ? 'This phone is set up as the mounted robot phone and can control Dosey hardware.'
+              : 'This phone is set up as a personal phone for reminders, history, and management.',
         ),
         if (platform == AppDevicePlatform.ios) ...[
           const SizedBox(height: 8),
-          const Text('iOS always uses the Personal distribution.'),
+          const Text('iOS always uses the Personal phone.'),
         ],
         const SizedBox(height: 8),
-        const Text('Install the other Dosey app to change this phone’s role.'),
-      ],
-    );
-  }
-}
-
-class _RobotPhoneSetupCard extends StatelessWidget {
-  const _RobotPhoneSetupCard({required this.onOpen});
-
-  final VoidCallback onOpen;
-
-  @override
-  Widget build(BuildContext context) {
-    return _SettingsSectionCard(
-      icon: Icons.phonelink_setup_outlined,
-      title: 'Robot phone setup',
-      children: [
         const Text(
-          'Review Bluetooth, Wi-Fi, notifications, battery optimization, and secure lock status.',
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: onOpen,
-          icon: const Icon(Icons.open_in_new),
-          label: const Text('Open robot phone setup'),
+          'To use a different phone type, install the matching Dosey app.',
         ),
       ],
     );

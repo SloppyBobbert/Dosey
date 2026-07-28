@@ -91,7 +91,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final confirmButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Confirm dose taken manually'),
+      find.widgetWithText(FilledButton, 'Mark dose as taken').first,
     );
     final pendingConfirmation = (confirmButton.onPressed as dynamic)();
     await tester.pumpAndSettle();

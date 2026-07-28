@@ -9,12 +9,14 @@ import 'package:dosey_app/core/notifications/reminder_notification_tap_controlle
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/carousel/carousel_hub_screen.dart';
-import 'package:dosey_app/features/dashboard/dashboard_screen.dart';
+import 'package:dosey_app/features/controller/controller_screen.dart';
+import 'package:dosey_app/features/medications/medications_hub_screen.dart';
+import 'package:dosey_app/features/prescriptions/prescriptions_screen.dart';
+import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
-import 'package:dosey_app/features/schedule/schedule_hub_screen.dart';
 import 'package:dosey_app/features/shell/robot_face_shell_controller.dart';
 import 'package:dosey_app/features/today/today_screen.dart';
 import 'package:flutter/material.dart';
@@ -40,7 +42,6 @@ class _DoseyShellState extends State<DoseyShell>
   _ShellTabId? _selectedTabId;
   SettingsSection? _settingsSectionTarget;
   int _settingsNavigationRequest = 0;
-  CarouselHubSegment _carouselSegment = CarouselHubSegment.carousel;
   int _carouselNavigationRequest = 0;
   DoseyAppDependencies? _dependencies;
   ReminderNotificationTapController? _notificationTaps;
@@ -80,9 +81,6 @@ class _DoseyShellState extends State<DoseyShell>
   @override
   void initState() {
     super.initState();
-    if (widget.startOnController) {
-      _carouselSegment = CarouselHubSegment.controller;
-    }
     _lifecycleState = WidgetsBinding.instance.lifecycleState;
     WidgetsBinding.instance.addObserver(this);
   }
@@ -215,7 +213,7 @@ class _DoseyShellState extends State<DoseyShell>
         _currentOrientation = orientation;
         final previousOrientation = _previousOrientation;
         _previousOrientation = orientation;
-        final tabs = _buildTabs(role);
+        final tabs = _buildTabs(role, isDemo: dependencies.isDemo);
         final selectedIndex = _selectedIndexForTabs(tabs, role, orientation);
         final navigationTabs = tabs
             .where((tab) => tab.destination != null)
@@ -250,22 +248,7 @@ class _DoseyShellState extends State<DoseyShell>
             child: Scaffold(
               appBar: _wasPresenting || faceVisible
                   ? null
-                  : AppBar(
-                      title: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Dosey',
-                            style: Theme.of(context).textTheme.labelLarge
-                                ?.copyWith(
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                          ),
-                          Text(activeTab.title),
-                        ],
-                      ),
-                    ),
+                  : AppBar(title: Text(activeTab.title)),
               body: IndexedStack(
                 index: selectedIndex,
                 children: [
@@ -277,9 +260,7 @@ class _DoseyShellState extends State<DoseyShell>
                   ? null
                   : NavigationBar(
                       labelBehavior:
-                          MediaQuery.textScalerOf(context).scale(1) > 1.3
-                          ? NavigationDestinationLabelBehavior.alwaysHide
-                          : NavigationDestinationLabelBehavior.alwaysShow,
+                          NavigationDestinationLabelBehavior.alwaysShow,
                       selectedIndex: selectedNavigationIndex < 0
                           ? 0
                           : selectedNavigationIndex,
@@ -296,42 +277,47 @@ class _DoseyShellState extends State<DoseyShell>
     );
   }
 
-  List<_ShellTab> _buildTabs(AppDeviceRole role) {
+  List<_ShellTab> _buildTabs(AppDeviceRole role, {required bool isDemo}) {
     return [
       _ShellTab(
-        id: _ShellTabId.dashboard,
-        title: 'Dashboard',
+        id: _ShellTabId.today,
+        title: 'Today',
         destination: NavigationDestination(
-          icon: Tooltip(
-            message: 'Dashboard',
-            child: Icon(Icons.dashboard_outlined),
-          ),
-          selectedIcon: Tooltip(
-            message: 'Dashboard',
-            child: Icon(Icons.dashboard),
-          ),
-          label: 'Dashboard',
+          icon: Tooltip(message: 'Today', child: Icon(Icons.today_outlined)),
+          selectedIcon: Tooltip(message: 'Today', child: Icon(Icons.today)),
+          label: 'Today',
         ),
-        screenBuilder: (selectedIndex, tabIndex) => DashboardScreen(
-          showRobotFaceShortcut: role.canHostRobot,
-          onOpenSchedule: () => _selectVisibleTab(_ShellTabId.schedule),
-          onOpenCarousel: () => _openCarousel(CarouselHubSegment.carousel),
-          onOpenSettings: () => _openSettings(),
-          onOpenRobotFace: role.canHostRobot
-              ? _openRobotFaceFromDashboard
-              : null,
-          onOpenToday: _openTodayDetails,
+        screenBuilder: (selectedIndex, tabIndex) => TodayScreen(
+          onOpenMedications: () => _selectVisibleTab(_ShellTabId.medications),
+          onOpenCarousel: _openCarousel,
+          onOpenSettings: _openSettings,
         ),
       ),
       _ShellTab(
-        id: _ShellTabId.schedule,
-        title: 'Schedule',
+        id: _ShellTabId.medications,
+        title: 'Medications',
         destination: NavigationDestination(
-          icon: Tooltip(message: 'Schedule', child: Icon(Icons.alarm_outlined)),
-          selectedIcon: Tooltip(message: 'Schedule', child: Icon(Icons.alarm)),
-          label: 'Schedule',
+          icon: Tooltip(
+            message: 'Medications',
+            child: Icon(Icons.medication_outlined),
+          ),
+          selectedIcon: Tooltip(
+            message: 'Medications',
+            child: Icon(Icons.medication),
+          ),
+          label: 'Medications',
         ),
-        screenBuilder: (selectedIndex, tabIndex) => const ScheduleHubScreen(),
+        screenBuilder: (selectedIndex, tabIndex) => MedicationsHubScreen(
+          onOpenSchedules: () => _pushMedicationRoute(
+            title: 'Schedules',
+            child: const RemindersScreen(),
+          ),
+          onOpenPrescriptions: () => _pushMedicationRoute(
+            title: 'Prescriptions',
+            child: const PrescriptionsScreen(),
+          ),
+          onManageCarousel: _openCarousel,
+        ),
       ),
       // iOS and Personal Mode never expose the mounted robot face tab.
       if (role.canHostRobot)
@@ -347,22 +333,18 @@ class _DoseyShellState extends State<DoseyShell>
       _ShellTab(
         id: _ShellTabId.carousel,
         title: 'Carousel',
-        destination: NavigationDestination(
-          icon: Tooltip(
-            message: 'Carousel',
-            child: Icon(Icons.view_carousel_outlined),
-          ),
-          selectedIcon: Tooltip(
-            message: 'Carousel',
-            child: Icon(Icons.view_carousel),
-          ),
-          label: 'Carousel',
-        ),
+        destination: null,
         screenBuilder: (selectedIndex, tabIndex) => CarouselHubScreen(
           key: ValueKey('carousel-$_carouselNavigationRequest'),
-          initialSegment: _carouselSegment,
         ),
       ),
+      if (isDemo && role.canHostRobot)
+        _ShellTab(
+          id: _ShellTabId.guidedTrial,
+          title: 'Guided trial',
+          destination: null,
+          screenBuilder: (selectedIndex, tabIndex) => const ControllerScreen(),
+        ),
       _ShellTab(
         id: _ShellTabId.settings,
         title: 'Settings',
@@ -411,10 +393,20 @@ class _DoseyShellState extends State<DoseyShell>
     _syncScreenAwake();
   }
 
-  void _openCarousel(CarouselHubSegment segment, {bool authoritative = true}) {
+  void _pushMedicationRoute({required String title, required Widget child}) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: Text(title)),
+          body: child,
+        ),
+      ),
+    );
+  }
+
+  void _openCarousel({bool authoritative = true}) {
     if (authoritative) _markAuthoritativeNavigationThroughNextFrame();
     setState(() {
-      _carouselSegment = segment;
       _carouselNavigationRequest += 1;
       _selectedTabId = _ShellTabId.carousel;
     });
@@ -451,32 +443,6 @@ class _DoseyShellState extends State<DoseyShell>
       if (!mounted || generation != _authoritativeNavigationGeneration) return;
       _authoritativeNavigationPending = false;
     });
-  }
-
-  void _openTodayDetails() {
-    _markAuthoritativeNavigationThroughNextFrame();
-    unawaited(
-      Navigator.of(context).push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: const Text('Today')),
-            body: const TodayScreen(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _openRobotFaceFromDashboard() {
-    if (_currentOrientation == RobotFaceShellOrientation.portrait) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Rotate to landscape to open Robot Face.'),
-        ),
-      );
-      return;
-    }
-    _selectTab(_ShellTabId.robotFace);
   }
 
   void _handleLongPressExit() {
@@ -563,8 +529,8 @@ class _DoseyShellState extends State<DoseyShell>
     _wasPresenting = state.isPresenting;
     if (state.isPresenting) {
       _selectTab(_ShellTabId.robotFace);
-    } else {
-      _openCarousel(CarouselHubSegment.controller);
+    } else if (_dependencies?.isDemo == true) {
+      _selectTab(_ShellTabId.guidedTrial);
     }
   }
 
@@ -702,7 +668,7 @@ class _DoseyShellState extends State<DoseyShell>
     final generation = ++_authoritativeNavigationGeneration;
     _authoritativeNavigationPending = true;
     if (tap.kind == ReminderNotificationTapKind.shortage && mounted) {
-      _openCarousel(CarouselHubSegment.carousel, authoritative: false);
+      _openCarousel(authoritative: false);
     }
     unawaited(_routeNotificationTap(tap, generation));
   }
@@ -722,11 +688,9 @@ class _DoseyShellState extends State<DoseyShell>
     }
     final role = _resolvedRole(storedRole, currentAppDevicePlatform());
     if (tap.kind == ReminderNotificationTapKind.shortage) {
-      _openCarousel(CarouselHubSegment.carousel, authoritative: false);
+      _openCarousel(authoritative: false);
     } else {
-      _selectTab(
-        role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.dashboard,
-      );
+      _selectTab(role.canHostRobot ? _ShellTabId.robotFace : _ShellTabId.today);
     }
     if (generation == _authoritativeNavigationGeneration) {
       _authoritativeNavigationPending = false;
@@ -793,14 +757,14 @@ class _DoseyShellState extends State<DoseyShell>
     RobotFaceShellOrientation? orientation,
   }) {
     if (widget.forceTodayTab) {
-      return _ShellTabId.dashboard;
+      return _ShellTabId.today;
     }
-    if (widget.startOnController) {
-      return _ShellTabId.carousel;
+    if (widget.startOnController && _dependencies?.isDemo == true) {
+      return role.canHostRobot ? _ShellTabId.guidedTrial : _ShellTabId.carousel;
     }
-    if (!role.canHostRobot) return _ShellTabId.dashboard;
+    if (!role.canHostRobot) return _ShellTabId.today;
     return orientation == RobotFaceShellOrientation.portrait
-        ? _ShellTabId.dashboard
+        ? _ShellTabId.today
         : _ShellTabId.robotFace;
   }
 
@@ -841,9 +805,10 @@ class _DoseyShellState extends State<DoseyShell>
 
   RobotFaceShellDestination _controllerDestinationFor(_ShellTabId tab) {
     return switch (tab) {
-      _ShellTabId.dashboard => RobotFaceShellDestination.dashboard,
-      _ShellTabId.schedule => RobotFaceShellDestination.schedule,
+      _ShellTabId.today => RobotFaceShellDestination.dashboard,
+      _ShellTabId.medications => RobotFaceShellDestination.schedule,
       _ShellTabId.carousel => RobotFaceShellDestination.carousel,
+      _ShellTabId.guidedTrial => RobotFaceShellDestination.carousel,
       _ShellTabId.settings => RobotFaceShellDestination.settings,
       _ShellTabId.robotFace => RobotFaceShellDestination.robotFace,
     };
@@ -854,8 +819,8 @@ class _DoseyShellState extends State<DoseyShell>
   ) {
     return switch (destination) {
       RobotFaceShellDestination.dashboard ||
-      RobotFaceShellDestination.todayDetails => _ShellTabId.dashboard,
-      RobotFaceShellDestination.schedule => _ShellTabId.schedule,
+      RobotFaceShellDestination.todayDetails => _ShellTabId.today,
+      RobotFaceShellDestination.schedule => _ShellTabId.medications,
       RobotFaceShellDestination.carousel => _ShellTabId.carousel,
       RobotFaceShellDestination.settings => _ShellTabId.settings,
       RobotFaceShellDestination.robotFace => _ShellTabId.robotFace,
@@ -899,7 +864,14 @@ class _DoseyShellState extends State<DoseyShell>
   }
 }
 
-enum _ShellTabId { dashboard, schedule, robotFace, carousel, settings }
+enum _ShellTabId {
+  today,
+  medications,
+  robotFace,
+  carousel,
+  guidedTrial,
+  settings,
+}
 
 typedef _ShellScreenBuilder = Widget Function(int selectedIndex, int tabIndex);
 

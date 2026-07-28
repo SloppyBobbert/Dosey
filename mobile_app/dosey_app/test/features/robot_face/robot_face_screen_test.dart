@@ -2160,6 +2160,50 @@ void main() {
   });
 
   testWidgets(
+    'shows a visible, accessible exit control when a shell callback is provided',
+    (WidgetTester tester) async {
+      var exits = 0;
+
+      await tester.pumpWidget(_RobotFaceTestApp(onLongPress: () => exits += 1));
+      await tester.pump();
+
+      expect(find.byKey(RobotFaceScreen.exitButtonKey), findsOneWidget);
+      expect(find.text('Exit Robot Mode'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.byKey(RobotFaceScreen.exitButtonKey)).label,
+        'Exit Robot Mode',
+      );
+      expect(
+        tester.getSize(find.byKey(RobotFaceScreen.exitButtonKey)).height,
+        48,
+      );
+
+      await tester.tap(find.byKey(RobotFaceScreen.exitButtonKey));
+      await tester.pump();
+
+      expect(exits, 1);
+    },
+  );
+
+  testWidgets('keeps the exit control usable at large text scale', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+        child: _RobotFaceTestApp(onLongPress: () {}),
+      ),
+    );
+    await tester.pump();
+
+    final exitButton = find.byKey(RobotFaceScreen.exitButtonKey);
+    expect(exitButton, findsOneWidget);
+    expect(tester.getSize(exitButton).height, greaterThanOrEqualTo(48));
+    expect(tester.getRect(exitButton).left, greaterThanOrEqualTo(0));
+    expect(tester.getRect(exitButton).right, lessThanOrEqualTo(800));
+  });
+
+  testWidgets(
     'tapping the Robot Face display records interaction through the app-owned controller',
     (WidgetTester tester) async {
       final harness = _RobotFaceInteractionControllerHarness();

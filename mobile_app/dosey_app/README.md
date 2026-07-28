@@ -11,7 +11,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 
 ## Current scope
 
-- Four-destination Dashboard, Schedule, Carousel, and Settings shell. Prescriptions live under Schedule, Controller under Carousel, and histories under Settings. The Android Robot distribution also has a full-screen Robot Face.
+- Three visible destinations: Today, Medications, and Settings. Schedule, Prescriptions, and carousel management are under Medications; technical tools are protected in Robot Maintenance; the Robot distribution retains full-screen Robot Face.
 - Safety-first copy and local safety acknowledgement storage.
 - Local prescription storage with remaining-dose counts, refill thresholds, refill-add history, and medication-type display.
 - Local reminder schedule storage with add/edit/delete controls, enabled/disabled state, duplicate-time checks, and schedule profiles.

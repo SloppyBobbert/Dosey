@@ -51,22 +51,32 @@ class DoseActionService {
         return;
       }
       if (effectiveGuidedDispenseContext != null &&
-          _isTerminalDoseEvent(event) &&
+          event.marksDoseTaken &&
           !effectiveGuidedDispenseContext.canResolveAfterMovement) {
         throw StateError(
-          'Confirm movement or visible/review state before logging a terminal dose outcome.',
+          'Confirm controller movement before logging a taken dose outcome.',
         );
       }
       if (effectiveGuidedDispenseContext != null &&
           _isTerminalDoseEvent(event) &&
           !event.marksDoseTaken) {
-        await guidedCarouselLoads.confirmDispensedSlotNeedsReview(
-          profileId: effectiveGuidedDispenseContext.profileId,
-          activeSessionId: effectiveGuidedDispenseContext.sessionId,
-          slotNumber: effectiveGuidedDispenseContext.slotNumber,
-          occurredAt: event.occurredAt,
-          reason: event.kind.name,
-        );
+        if (effectiveGuidedDispenseContext.canResolveAfterMovement) {
+          await guidedCarouselLoads.confirmDispensedSlotNeedsReview(
+            profileId: effectiveGuidedDispenseContext.profileId,
+            activeSessionId: effectiveGuidedDispenseContext.sessionId,
+            slotNumber: effectiveGuidedDispenseContext.slotNumber,
+            occurredAt: event.occurredAt,
+            reason: event.kind.name,
+          );
+        } else {
+          await guidedCarouselLoads.quarantineSlotForReview(
+            profileId: effectiveGuidedDispenseContext.profileId,
+            activeSessionId: effectiveGuidedDispenseContext.sessionId,
+            slotNumber: effectiveGuidedDispenseContext.slotNumber,
+            occurredAt: event.occurredAt,
+            reason: event.kind.name,
+          );
+        }
       }
       if (retiresLoadedSlot && effectiveGuidedDispenseContext == null) {
         await carouselSlots.markNeedsReview(effectiveLoadedSlot.id);

@@ -44,6 +44,7 @@ class RobotFaceScreen extends StatefulWidget {
     'robot-face-urgent-prompt-scale',
   );
   static const statusBadgeKey = ValueKey<String>('robot-face-status-badge');
+  static const exitButtonKey = ValueKey<String>('robot-face-exit-button');
   static const networkAdvisoryBadgeKey = ValueKey<String>(
     'robot-face-network-advisory-badge',
   );
@@ -311,6 +312,8 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                         controller: faceLab,
                         state: labState,
                       ),
+                    if (widget.onLongPress != null)
+                      _RobotFaceExitButton(onPressed: widget.onLongPress!),
                   ],
                 );
                 if (labState.reducedMotion) {
@@ -337,6 +340,44 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
             },
           );
         },
+      ),
+    );
+  }
+}
+
+class _RobotFaceExitButton extends StatelessWidget {
+  const _RobotFaceExitButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Semantics(
+            button: true,
+            label: 'Exit Robot Mode',
+            child: SizedBox(
+              height: 48,
+              child: OutlinedButton.icon(
+                key: RobotFaceScreen.exitButtonKey,
+                onPressed: onPressed,
+                icon: const Icon(Icons.arrow_back_rounded),
+                label: const Text('Exit Robot Mode'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFD5F4FF),
+                  backgroundColor: const Color(0xED102A43),
+                  side: const BorderSide(color: Color(0x9900A8E8)),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
