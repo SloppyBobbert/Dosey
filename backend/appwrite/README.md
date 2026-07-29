@@ -6,8 +6,23 @@ command dispensing, or mark doses taken.
 
 Appwrite Teams remain the authority for robot ownership and human household
 membership. TablesDB is the authority for pairing and mounted-device access.
-Mounted anonymous Robot accounts are never Team members. Flutter invokes
-Functions for every server operation and never reads the server-only tables.
+On the target secure path, mounted anonymous Robot accounts never become Team
+members. Flutter invokes Functions for every server operation and never reads
+the server-only tables.
+
+The source and target contract is seven server-authorized Functions and six
+server-only TablesDB tables. The live staging backend rollout remains pending
+and incomplete until the approved cloud rollout is performed. Personal account
+and household use requires human authentication; the mounted Robot
+distribution remains fully usable as a guest.
+
+Human authentication, device pairing, and hardware authorization are independent
+capabilities. Sign-in/sign-out does not change pairing, hardware authorization,
+settings, or local medication data, and pairing does not alter human
+authentication. Appwrite/auth outages must not block the local Robot shell.
+Mounted credentials never save, swap, or restore a human session. Medication
+schedules, dose state/history, inventory, and related medication data remain in
+local Drift/SQLite; no medication sync or upload is introduced.
 
 ## Functions
 
@@ -18,6 +33,14 @@ Functions for every server operation and never reads the server-only tables.
 - `src/entrypoints/accept-household-invitation.ts`: atomically reserves a human slot before creating the Team membership.
 - `src/entrypoints/remove-household-member.ts`: removes a member as the owner, or lets a non-owner member leave.
 - `src/entrypoints/get-mounted-robot.ts`: restores the robot identity for the authenticated anonymous mounted account.
+
+The target Android Robot configuration will include the active versioned secure
+claim Function ID and the public `get-mounted-robot` Function ID. A pending
+mobile follow-up will add `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID` and point the
+existing `APPWRITE_CLAIM_ROBOT_FUNCTION_ID` at that secure Function. Current
+clients do not read the new ID and remain on the legacy Function until the
+follow-up is released, configured, and validated. Database/table IDs, dynamic
+API keys, and HMAC secrets remain server-only; Web remains auth-only.
 
 Build with `npm ci && npm run build`. Configure each Appwrite Function with the corresponding compiled entrypoint:
 
@@ -84,21 +107,22 @@ The exact server scopes are:
   `teams.read`, `teams.write`.
 
 Function execution access requires an authenticated Appwrite user. The mounted
-phone uses its own anonymous account. The Android client restores by calling
-`get-mounted-robot`; the web boundary is auth-only and does not expose
+phone uses its own anonymous account. The target secure Android client restores
+by calling `get-mounted-robot`; current-main clients still use legacy
+Team-backed restoration. The web boundary is auth-only and does not expose
 mounted-robot restore state. A deployment of the old Team-writing
 `claim-robot` implementation is not a safe rollback target after this contract
 is deployed.
 
 ## Rollout note
 
-The backend may merge and deploy inactive Functions independently. During the
-staging compatibility period, deploy secure claim under a separate versioned
-Function ID and keep the existing Team-writing Function available only to
-installed clients that still depend on Team-backed restoration. Configure a
-supported Android build with both the secure claim ID and the public
-`get-mounted-robot` Function ID before using the secure path. Do not dual-write
-mounted accounts into Teams.
+The backend source implements the target contract, but the secure mounted-access
+path is not active in live staging. During the staging compatibility period, a
+pending mobile follow-up must point supported Android Robot builds at a secure
+claim under a separate versioned Function ID and configure the public
+`get-mounted-robot` Function ID. Keep the existing Team-writing Function
+available only to installed clients that still depend on Team-backed
+restoration. Do not dual-write mounted accounts into Teams.
 
 Before retiring the legacy Function, inventory every mounted staging device and
 upgrade or reset any client that still uses Team-backed restoration. Verify
