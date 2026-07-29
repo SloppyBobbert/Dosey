@@ -92,11 +92,21 @@ is deployed.
 
 ## Rollout note
 
-The backend may merge and deploy inactive Functions independently. Secure claim
-activation requires the corresponding Android mounted-access client and the
-public `get-mounted-robot` Function ID. Do not activate the secure claim path
-without both client and Function support; do not roll back to the old
-Team-writing claim.
+The backend may merge and deploy inactive Functions independently. During the
+staging compatibility period, deploy secure claim under a separate versioned
+Function ID and keep the existing Team-writing Function available only to
+installed clients that still depend on Team-backed restoration. Configure a
+supported Android build with both the secure claim ID and the public
+`get-mounted-robot` Function ID before using the secure path. Do not dual-write
+mounted accounts into Teams.
+
+Before retiring the legacy Function, inventory every mounted staging device and
+upgrade or reset any client that still uses Team-backed restoration. Verify
+fresh and upgraded installs across guest/signed-in, paired/unpaired, and
+online/offline states, including restart restoration and failure behavior. If
+the device inventory is incomplete or any unsupported client remains, stop the
+rollout. Once the legacy Function is retired, do not reactivate its Team-writing
+deployment as a rollback.
 
 ## Tables
 

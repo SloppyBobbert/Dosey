@@ -97,6 +97,16 @@ describe('get mounted robot function', () => {
     assert.deepEqual(lookup.calls, ['access:device-1']);
   });
 
+  test('rejects a provisioning installation without returning a robot identity', async () => {
+    const lookup = new FakeLookup();
+    lookup.robot = { ...installation, status: 'provisioning' };
+
+    await assert.rejects(
+      new GetMountedRobotService(lookup).get('device-1'),
+      /missing or inactive/,
+    );
+  });
+
   test('rejects duplicate access rows and missing installations as integrity failures', async () => {
     const duplicate = new FakeLookup();
     duplicate.accesses = [access, { ...access, robotId: 'robot-2' }];

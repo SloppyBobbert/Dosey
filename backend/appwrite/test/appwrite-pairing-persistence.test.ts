@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 import {
+  AppwritePairingRowsApi,
   AppwritePairingPersistence,
   PairingTransactionConflictError,
   type PairingRowsApi,
   type PairingRow,
 } from '../src/infrastructure/appwrite-pairing-persistence.js';
+import type { TablesDB } from 'node-appwrite';
 
 class FakeRowsApi implements PairingRowsApi {
   events: string[] = [];
@@ -79,6 +81,33 @@ class FakeRowsApi implements PairingRowsApi {
 }
 
 describe('Appwrite pairing persistence', () => {
+  test('uses the SDK limit of two for duplicate mounted-access lookup', async () => {
+    let queryStrings: readonly string[] | undefined;
+    const tables = {
+      listRows: async (input: { queries: readonly string[] }) => {
+        queryStrings = input.queries;
+        return { rows: [{
+          $id: 'robot-1', robotId: 'robot-1', mountedDeviceAccountId: 'device-1',
+          pairingClaimId: 'claim-1', createdAt: '2026-07-26T12:00:00.000Z',
+          updatedAt: '2026-07-26T12:00:00.000Z',
+        }] };
+      },
+    } as unknown as TablesDB;
+    const rows = new AppwritePairingRowsApi(tables, {
+      databaseId: 'database-1',
+      pairingClaimsTableId: 'claims',
+      pairingAttemptsTableId: 'attempts',
+      mountedRobotAccessTableId: 'mounted-access',
+    });
+
+    await rows.findMountedAccessByDevice('device-1', 'transaction-1');
+
+    assert.deepEqual(queryStrings, [
+      '{"method":"equal","attribute":"mountedDeviceAccountId","values":["device-1"]}',
+      '{"method":"limit","values":[2]}',
+    ]);
+  });
+
   test('commits mapped claim operations in one transaction', async () => {
     const api = new FakeRowsApi();
     const persistence = new AppwritePairingPersistence(api);

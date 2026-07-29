@@ -1,0 +1,51 @@
+name: Appwrite Backend CI
+
+on:
+  pull_request:
+    paths:
+      - backend/appwrite/**
+      - .github/workflows/appwrite-backend-ci.yml
+  push:
+    paths:
+      - backend/appwrite/**
+      - .github/workflows/appwrite-backend-ci.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: appwrite-backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  appwrite-backend:
+    name: Appwrite backend tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend/appwrite
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/appwrite/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
