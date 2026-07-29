@@ -78,6 +78,24 @@ void main() {
     },
   );
 
+  test('jam scenario is deterministic from a fresh reset state', () async {
+    final first = await StandaloneSimulatorScenarioHarness.create();
+    addTearDown(first.close);
+    await first.select(DemoScenarioId.jam);
+    await first.next();
+    final firstSnapshot = await first.snapshot();
+    expect(await first.slotStatus(), 'needs_review');
+
+    final second = await StandaloneSimulatorScenarioHarness.create();
+    addTearDown(second.close);
+    await second.select(DemoScenarioId.jam);
+    await second.next();
+    final secondSnapshot = await second.snapshot();
+
+    expect(secondSnapshot.sameAs(firstSnapshot), isTrue);
+    expect(await second.slotStatus(), 'needs_review');
+  });
+
   testWidgets('DoseyAppScope shutdown completes after shell unmount', (
     tester,
   ) async {
