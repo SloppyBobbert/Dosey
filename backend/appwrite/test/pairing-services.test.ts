@@ -21,7 +21,6 @@ describe('pairing application services', () => {
     const robots: RobotAccessDirectory = {
       isOwner: async ({ accountId }) => accountId === 'owner-1',
       canMountDevice: async () => true,
-      mountDevice: async () => {},
     };
     const service = new CreatePairingCodeApplicationService({
       store,
@@ -58,7 +57,6 @@ describe('pairing application services', () => {
       robots: {
         isOwner: async () => true,
         canMountDevice: async () => true,
-        mountDevice: async () => {},
       },
       secret: 'server-only-secret-at-least-32-bytes',
       createId: () => `claim-${saveCount + 1}`,
@@ -75,8 +73,7 @@ describe('pairing application services', () => {
     assert.equal(issued.code, 'BBBBBBBBBB');
   });
 
-  test('mounts the authenticated device only after an accepted claim', async () => {
-    const mounted: unknown[] = [];
+  test('delegates claim eligibility to the atomic claim store', async () => {
     const store: PairingClaimStore = {
       claimAtomically: async (input) => {
         assert.equal(await input.canClaim('robot-1'), true);
@@ -86,9 +83,6 @@ describe('pairing application services', () => {
     const robots: RobotAccessDirectory = {
       isOwner: async () => false,
       canMountDevice: async () => true,
-      mountDevice: async (input) => {
-        mounted.push(input);
-      },
     };
     const service = new ClaimRobotApplicationService({
       store,
@@ -103,13 +97,10 @@ describe('pairing application services', () => {
     });
 
     assert.deepEqual(result, { status: 'accepted', robotId: 'robot-1' });
-    assert.deepEqual(mounted, [
-      { robotId: 'robot-1', mountedDeviceAccountId: 'device-1' },
-    ]);
   });
 
-  test('does not mount a device when the claim is rejected', async () => {
-    let mounted = false;
+  test('does not invoke eligibility when the claim is rejected', async () => {
+    let checked = false;
     const store: PairingClaimStore = {
       claimAtomically: async () => ({ status: 'rejected', reason: 'expired' }),
     };
@@ -117,10 +108,7 @@ describe('pairing application services', () => {
       store,
       robots: {
         isOwner: async () => false,
-        canMountDevice: async () => true,
-        mountDevice: async () => {
-          mounted = true;
-        },
+        canMountDevice: async () => { checked = true; return true; },
       },
       secret: 'server-only-secret-at-least-32-bytes',
       now: () => new Date('2026-07-26T12:00:00.000Z'),
@@ -132,11 +120,10 @@ describe('pairing application services', () => {
     });
 
     assert.deepEqual(result, { status: 'rejected', reason: 'expired' });
-    assert.equal(mounted, false);
+    assert.equal(checked, false);
   });
 
-  test('rejects an owner before consuming or mounting the claim', async () => {
-    let mounted = false;
+  test('rejects an owner before consuming the claim', async () => {
     const store: PairingClaimStore = {
       claimAtomically: async (input) => {
         const allowed = await input.canClaim('robot-1');
@@ -150,9 +137,6 @@ describe('pairing application services', () => {
       robots: {
         isOwner: async () => false,
         canMountDevice: async ({ accountId }) => accountId !== 'owner-1',
-        mountDevice: async () => {
-          mounted = true;
-        },
       },
       secret: 'server-only-secret-at-least-32-bytes',
       now: () => new Date('2026-07-26T12:00:00.000Z'),
@@ -164,6 +148,5 @@ describe('pairing application services', () => {
     });
 
     assert.deepEqual(result, { status: 'rejected', reason: 'invalid' });
-    assert.equal(mounted, false);
   });
 });

@@ -28,11 +28,6 @@ export interface RobotAccessDirectory {
   isOwner(input: { robotId: string; accountId: string }): Promise<boolean>;
 
   canMountDevice(input: { robotId: string; accountId: string }): Promise<boolean>;
-
-  mountDevice(input: {
-    robotId: string;
-    mountedDeviceAccountId: string;
-  }): Promise<void>;
 }
 
 export class RobotOwnerRequiredError extends Error {
@@ -127,12 +122,6 @@ export class ClaimRobotApplicationService {
     });
     if (result.status === 'rejected') return result;
 
-    // A retry by the same device is intentional: a function may have consumed
-    // the token before a transient Teams membership request failed.
-    await this.dependencies.robots.mountDevice({
-      robotId: result.robotId,
-      mountedDeviceAccountId: input.mountedDeviceAccountId,
-    });
     return result;
   }
 }

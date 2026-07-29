@@ -15,10 +15,25 @@ import {
 import { TransactionalPairingStore } from '../infrastructure/transactional-pairing-store.js';
 import { AppwriteFunctionIdentityVerifier } from '../functions/function-identity.js';
 
+interface PairingUserAccount {
+  get(): Promise<{ readonly $id: string }>;
+  getSession(input: { readonly sessionId: string }): Promise<{
+    readonly userId: string;
+    readonly provider: string;
+  }>;
+}
+
 export function createPairingRuntime(
   headers: Readonly<Record<string, string | undefined>>,
   environment = process.env,
   reportError: (message: string) => void = () => {},
+  createUserAccount: (
+    endpoint: string,
+    projectId: string,
+    userJwt: string,
+  ) => PairingUserAccount = (endpoint, projectId, userJwt) =>
+    new Account(new Client().setEndpoint(endpoint).setProject(projectId).setJWT(userJwt)),
+  requireMountedRobotAccess = true,
 ) {
   const endpoint = required(
     environment.APPWRITE_FUNCTION_API_ENDPOINT ?? environment.APPWRITE_ENDPOINT,
@@ -39,10 +54,21 @@ export function createPairingRuntime(
   const identity = new AppwriteFunctionIdentityVerifier({
     async getCurrentAccountId() {
       if (!userJwt) throw new Error('Authenticated user JWT is required.');
-      const user = await new Account(
-        new Client().setEndpoint(endpoint).setProject(projectId).setJWT(userJwt),
-      ).get();
+      const user = await createUserAccount(endpoint, projectId, userJwt).get();
       return user.$id;
+    },
+    async getCurrentAnonymousAccount() {
+      if (!userJwt) throw new Error('Authenticated user JWT is required.');
+      const account = createUserAccount(endpoint, projectId, userJwt);
+      const [user, session] = await Promise.all([
+        account.get(),
+        account.getSession({ sessionId: 'current' }),
+      ]);
+      return {
+        accountId: user.$id,
+        sessionUserId: session.userId,
+        provider: session.provider,
+      };
     },
   });
 
@@ -56,6 +82,14 @@ export function createPairingRuntime(
       environment.DOSEY_PAIRING_ATTEMPTS_TABLE_ID,
       'DOSEY_PAIRING_ATTEMPTS_TABLE_ID',
     ),
+    ...(requireMountedRobotAccess
+      ? {
+          mountedRobotAccessTableId: required(
+            environment.DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID,
+            'DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID',
+          ),
+        }
+      : {}),
   });
   const store = new TransactionalPairingStore(
     new AppwritePairingPersistence(tables, (error) => {

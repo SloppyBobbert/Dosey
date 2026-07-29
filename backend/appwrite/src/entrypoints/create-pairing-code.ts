@@ -8,6 +8,8 @@ export default async function createPairingCode(
     context.req.headers,
     process.env,
     context.error,
+    undefined,
+    false,
   );
   return createPairingCodeHandler(runtime.createPairingCode, runtime.identity)(
     context,

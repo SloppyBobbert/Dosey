@@ -6,6 +6,7 @@ import {
 } from 'node-appwrite';
 
 import type { PairingClaimRecord } from '../domain/pairing-claim.js';
+import type { MountedRobotAccessRecord } from '../domain/mounted-robot-access.js';
 import type {
   PairingAttemptRecord,
   PairingPersistence,
@@ -40,12 +41,23 @@ export interface PairingRowsApi {
     transactionId: string,
   ): Promise<PairingRow | null>;
   upsertAttempt(row: PairingRow, transactionId: string): Promise<void>;
+  findMountedAccessByDevice(
+    deviceAccountId: string,
+    transactionId: string,
+  ): Promise<readonly PairingRow[]>;
+  getMountedAccessByRobot(
+    robotId: string,
+    transactionId: string,
+  ): Promise<PairingRow | null>;
+  createMountedAccess(row: PairingRow, transactionId: string): Promise<void>;
+  updateMountedAccess(rowId: string, data: PairingRow, transactionId: string): Promise<void>;
 }
 
 export interface AppwritePairingTableConfiguration {
   readonly databaseId: string;
   readonly pairingClaimsTableId: string;
   readonly pairingAttemptsTableId: string;
+  readonly mountedRobotAccessTableId?: string;
 }
 
 export class PairingTransactionConflictError extends Error {
@@ -141,7 +153,7 @@ export class AppwritePairingRowsApi implements PairingRowsApi {
       });
       return rowFromAppwrite(row);
     } catch (error) {
-      if (error instanceof AppwriteException && error.code === 404) return null;
+      if (isNotFound(error)) return null;
       throw error;
     }
   }
@@ -152,6 +164,61 @@ export class AppwritePairingRowsApi implements PairingRowsApi {
       tableId: this.configuration.pairingAttemptsTableId,
       rowId: row.$id,
       data: withoutId(row),
+      transactionId,
+    });
+  }
+
+  async findMountedAccessByDevice(
+    deviceAccountId: string,
+    transactionId: string,
+  ): Promise<readonly PairingRow[]> {
+    const result = await this.tables.listRows({
+      databaseId: this.configuration.databaseId,
+      tableId: mountedAccessTableId(this.configuration),
+      queries: [Query.equal('mountedDeviceAccountId', [deviceAccountId]), Query.limit(2)],
+      transactionId,
+    });
+    return result.rows.map(rowFromAppwrite);
+  }
+
+  async getMountedAccessByRobot(
+    robotId: string,
+    transactionId: string,
+  ): Promise<PairingRow | null> {
+    try {
+      const row = await this.tables.getRow({
+        databaseId: this.configuration.databaseId,
+        tableId: mountedAccessTableId(this.configuration),
+        rowId: robotId,
+        transactionId,
+      });
+      return rowFromAppwrite(row);
+    } catch (error) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  async createMountedAccess(row: PairingRow, transactionId: string): Promise<void> {
+    await this.tables.createRow({
+      databaseId: this.configuration.databaseId,
+      tableId: mountedAccessTableId(this.configuration),
+      rowId: row.$id,
+      data: withoutId(row),
+      transactionId,
+    });
+  }
+
+  async updateMountedAccess(
+    rowId: string,
+    data: PairingRow,
+    transactionId: string,
+  ): Promise<void> {
+    await this.tables.updateRow({
+      databaseId: this.configuration.databaseId,
+      tableId: mountedAccessTableId(this.configuration),
+      rowId,
+      data: withoutId(data),
       transactionId,
     });
   }
@@ -180,6 +247,47 @@ export class AppwritePairingPersistence implements PairingPersistence {
       }
       if (isConflict(error)) throw new PairingTransactionConflictError();
       throw error;
+    }
+  }
+
+  async resolveClaimConflict(input: {
+    codeDigest: string;
+    robotId: string;
+    mountedDeviceAccountId: string;
+  }): Promise<'accepted' | 'consumed' | 'device_already_mounted' | 'unknown'> {
+    const transactionId = await this.rows.beginTransaction();
+    const transaction = new AppwritePairingTransaction(this.rows, transactionId);
+    try {
+      const deviceAccess = await transaction.findMountedAccessByDevice(
+        input.mountedDeviceAccountId,
+      );
+      if (deviceAccess.length > 1) {
+        throw new Error('Multiple mounted robot access rows share one device.');
+      }
+      if (deviceAccess[0] != null && deviceAccess[0].robotId !== input.robotId) {
+        return 'device_already_mounted';
+      }
+
+      const claim = await transaction.findActiveClaimByDigest(input.codeDigest);
+      if (claim?.consumedAt == null) return 'unknown';
+      if (claim.mountedDeviceAccountId == null) return 'unknown';
+      if (claim.mountedDeviceAccountId !== input.mountedDeviceAccountId) {
+        return 'consumed';
+      }
+      const robotAccess = await transaction.getMountedAccessByRobot(input.robotId);
+      if (
+        robotAccess?.mountedDeviceAccountId === input.mountedDeviceAccountId &&
+        robotAccess.pairingClaimId === claim.id
+      ) {
+        return 'accepted';
+      }
+      return 'unknown';
+    } finally {
+      try {
+        await this.rows.rollbackTransaction(transactionId);
+      } catch (error) {
+        this.reportRollbackFailure(error);
+      }
     }
   }
 }
@@ -238,6 +346,30 @@ class AppwritePairingTransaction implements PairingTransaction {
   saveAttempt(record: PairingAttemptRecord): Promise<void> {
     return this.rows.upsertAttempt(attemptToRow(record), this.transactionId);
   }
+
+  async findMountedAccessByDevice(
+    deviceAccountId: string,
+  ): Promise<readonly MountedRobotAccessRecord[]> {
+    return (await this.rows.findMountedAccessByDevice(deviceAccountId, this.transactionId))
+      .map((row) => mountedAccessFromRow(row, undefined, deviceAccountId));
+  }
+
+  async getMountedAccessByRobot(robotId: string): Promise<MountedRobotAccessRecord | null> {
+    const row = await this.rows.getMountedAccessByRobot(robotId, this.transactionId);
+    return row == null ? null : mountedAccessFromRow(row, robotId);
+  }
+
+  createMountedAccess(record: MountedRobotAccessRecord): Promise<void> {
+    return this.rows.createMountedAccess(mountedAccessToRow(record), this.transactionId);
+  }
+
+  updateMountedAccess(record: MountedRobotAccessRecord): Promise<void> {
+    return this.rows.updateMountedAccess(
+      record.robotId,
+      mountedAccessToRow(record),
+      this.transactionId,
+    );
+  }
 }
 
 function claimToRow(record: PairingClaimRecord): PairingRow {
@@ -284,6 +416,57 @@ function attemptFromRow(row: PairingRow): PairingAttemptRecord {
     failedAttempts: requiredNumber(row, 'failedAttempts'),
     blockedUntil: optionalDate(row, 'blockedUntil'),
   };
+}
+
+function mountedAccessToRow(record: MountedRobotAccessRecord): PairingRow {
+  return {
+    $id: record.robotId,
+    robotId: record.robotId,
+    mountedDeviceAccountId: record.mountedDeviceAccountId,
+    pairingClaimId: record.pairingClaimId,
+    createdAt: record.createdAt.toISOString(),
+    updatedAt: record.updatedAt.toISOString(),
+  };
+}
+
+function mountedAccessFromRow(
+  row: PairingRow,
+  expectedRobotId?: string,
+  expectedDeviceAccountId?: string,
+): MountedRobotAccessRecord {
+  const record = {
+    robotId: requiredString(row, 'robotId'),
+    mountedDeviceAccountId: requiredString(row, 'mountedDeviceAccountId'),
+    pairingClaimId: requiredString(row, 'pairingClaimId'),
+    createdAt: requiredDate(row, 'createdAt'),
+    updatedAt: requiredDate(row, 'updatedAt'),
+  };
+  if (row.$id !== record.robotId || (expectedRobotId != null && row.$id !== expectedRobotId)) {
+    throw new Error('Mounted robot access row ID does not match robotId.');
+  }
+  if (
+    expectedDeviceAccountId != null &&
+    record.mountedDeviceAccountId !== expectedDeviceAccountId
+  ) {
+    throw new Error('Mounted robot access row device does not match the requested account.');
+  }
+  return record;
+}
+
+function mountedAccessTableId(
+  configuration: AppwritePairingTableConfiguration,
+): string {
+  if (configuration.mountedRobotAccessTableId == null) {
+    throw new Error('Mounted robot access table is required for claim operations.');
+  }
+  return configuration.mountedRobotAccessTableId;
+}
+
+function isNotFound(error: unknown): boolean {
+  return (
+    (error instanceof AppwriteException && error.code === 404) ||
+    (typeof error === 'object' && error != null && 'code' in error && error.code === 404)
+  );
 }
 
 function requiredString(row: PairingRow, key: string): string {

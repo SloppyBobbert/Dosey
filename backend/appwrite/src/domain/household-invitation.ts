@@ -34,5 +34,8 @@ export function digestHouseholdInvitationCode(code: string, secret: string): str
 }
 
 export function householdInvitationId(robotId: string, normalizedEmail: string): string {
-  return createHash('sha256').update(`${robotId}\n${normalizedEmail}`, 'utf8').digest('hex');
+  return createHash('sha256')
+    .update(`dosey:household-invitation:v1\0${robotId.length}:${robotId}\0${normalizedEmail.length}:${normalizedEmail}`, 'utf8')
+    .digest('hex')
+    .slice(0, 36);
 }

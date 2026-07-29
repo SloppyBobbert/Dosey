@@ -10,7 +10,10 @@ import {
   type HouseholdRegistry,
   type HouseholdTeams,
 } from '../src/application/household-services.js';
-import { digestHouseholdInvitationCode } from '../src/domain/household-invitation.js';
+import {
+  digestHouseholdInvitationCode,
+  householdInvitationId,
+} from '../src/domain/household-invitation.js';
 
 const now = new Date('2026-07-26T12:00:00.000Z');
 const secret = 'household-secret-at-least-32-bytes';
@@ -90,6 +93,14 @@ class FakeTeams implements HouseholdTeams {
 }
 
 describe('household application services', () => {
+  test('uses a deterministic Appwrite-safe bounded invitation row ID', () => {
+    const id = householdInvitationId('robot-1', 'person@example.com');
+    assert.equal(id.length, 36);
+    assert.match(id, /^[a-z0-9]+$/);
+    assert.equal(id, householdInvitationId('robot-1', 'person@example.com'));
+    assert.notEqual(id, householdInvitationId('robot-2', 'person@example.com'));
+    assert.notEqual(id, householdInvitationId('robot-1', 'other@example.com'));
+  });
   test('creates a robot only after explicit owner Team membership succeeds', async () => {
     const registry = new FakeRegistry();
     const teams = new FakeTeams();

@@ -1,26 +1,19 @@
-import { Query, Teams, type Models } from 'node-appwrite';
+import { Teams, type Models } from 'node-appwrite';
 
 import type { RobotAccessDirectory } from '../application/pairing-services.js';
 
 const robotMarkerKey = 'doseyRobot';
 const ownerAccountIdKey = 'ownerAccountId';
-const mountedDeviceIdKey = 'mountedDeviceId';
-const robotDeviceRole = 'robot-device';
 
 export interface RobotTeam {
   readonly id: string;
   readonly isDoseyRobot: boolean;
   readonly ownerAccountId: string | null;
-  readonly mountedDeviceAccountId: string | null;
-  readonly humanAccountIds: readonly string[];
+  readonly teamMemberAccountIds: readonly string[];
 }
 
 export interface RobotTeamsApi {
   getRobot(robotId: string): Promise<RobotTeam | null>;
-  replaceMountedDevice(
-    robotId: string,
-    mountedDeviceAccountId: string,
-  ): Promise<void>;
 }
 
 export class AppwriteRobotAccessDirectory implements RobotAccessDirectory {
@@ -44,23 +37,10 @@ export class AppwriteRobotAccessDirectory implements RobotAccessDirectory {
     return (
       robot?.isDoseyRobot === true &&
       robot.ownerAccountId !== input.accountId &&
-      !robot.humanAccountIds.includes(input.accountId)
+      !robot.teamMemberAccountIds.includes(input.accountId)
     );
   }
 
-  async mountDevice(input: {
-    robotId: string;
-    mountedDeviceAccountId: string;
-  }): Promise<void> {
-    const robot = await this.teams.getRobot(input.robotId);
-    if (robot?.isDoseyRobot !== true) {
-      throw new Error('Dosey robot not found.');
-    }
-    await this.teams.replaceMountedDevice(
-      input.robotId,
-      input.mountedDeviceAccountId,
-    );
-  }
 }
 
 export class AppwriteRobotTeamsApi implements RobotTeamsApi {
@@ -75,17 +55,9 @@ export class AppwriteRobotTeamsApi implements RobotTeamsApi {
         id: team.$id,
         isDoseyRobot: preferences[robotMarkerKey] === true,
         ownerAccountId: stringPreference(preferences, ownerAccountIdKey),
-        mountedDeviceAccountId: stringPreference(
-          preferences,
-          mountedDeviceIdKey,
+        teamMemberAccountIds: memberships.memberships.map(
+          (membership) => membership.userId,
         ),
-        humanAccountIds: memberships.memberships
-          .filter(
-            (membership) =>
-              membership.confirm &&
-              !hasOnlyRobotDeviceRole(membership.roles),
-          )
-          .map((membership) => membership.userId),
       };
     } catch (error) {
       if (isNotFound(error)) return null;
@@ -93,95 +65,6 @@ export class AppwriteRobotTeamsApi implements RobotTeamsApi {
     }
   }
 
-  async replaceMountedDevice(
-    robotId: string,
-    mountedDeviceAccountId: string,
-  ): Promise<void> {
-    const team = await this.teams.get({ teamId: robotId });
-    const preferences = preferencesOf(team);
-    if (preferences[robotMarkerKey] !== true) {
-      throw new Error('Dosey robot not found.');
-    }
-
-    const oldDeviceId = stringPreference(preferences, mountedDeviceIdKey);
-    if (oldDeviceId === mountedDeviceAccountId) return;
-
-    const memberships = await this.teams.listMemberships({
-      teamId: robotId,
-      queries: [
-        Query.equal('userId', [
-          ...new Set(
-            [oldDeviceId, mountedDeviceAccountId].filter(
-              (value): value is string => value != null,
-            ),
-          ),
-        ]),
-      ],
-    });
-    let newMembership = memberships.memberships.find(
-      (membership) => membership.userId === mountedDeviceAccountId,
-    );
-    if (
-      newMembership != null &&
-      !hasOnlyRobotDeviceRole(newMembership.roles)
-    ) {
-      throw new Error('A human team member cannot become the mounted device.');
-    }
-    const createdMembership = newMembership == null;
-    if (newMembership == null) {
-      newMembership = await this.teams.createMembership({
-        teamId: robotId,
-        roles: [robotDeviceRole],
-        userId: mountedDeviceAccountId,
-      });
-    }
-
-    const oldMembership = memberships.memberships.find(
-      (membership) => membership.userId === oldDeviceId,
-    );
-    try {
-      // Revoke the old credential before making the replacement authoritative.
-      // If the preference update then fails, the consumed code can safely retry.
-      if (
-        oldMembership != null &&
-        isRevocableRobotDeviceMembership(oldMembership, oldDeviceId)
-      ) {
-        await this.teams.deleteMembership({
-          teamId: robotId,
-          membershipId: oldMembership.$id,
-        });
-      }
-      await this.teams.updatePrefs({
-        teamId: robotId,
-        prefs: { ...preferences, [mountedDeviceIdKey]: mountedDeviceAccountId },
-      });
-    } catch (error) {
-      if (createdMembership) {
-        await ignoreFailure(
-          this.teams.deleteMembership({
-            teamId: robotId,
-            membershipId: newMembership.$id,
-          }),
-        );
-      }
-      throw error;
-    }
-  }
-}
-
-export function isRevocableRobotDeviceMembership(
-  membership: Pick<Models.Membership, 'userId' | 'roles'>,
-  mountedDeviceAccountId: string | null,
-): boolean {
-  return (
-    mountedDeviceAccountId != null &&
-    membership.userId === mountedDeviceAccountId &&
-    hasOnlyRobotDeviceRole(membership.roles)
-  );
-}
-
-function hasOnlyRobotDeviceRole(roles: readonly string[]): boolean {
-  return roles.length === 1 && roles[0] === robotDeviceRole;
 }
 
 function preferencesOf(team: Models.Team): Record<string, unknown> {
@@ -203,12 +86,4 @@ function isNotFound(error: unknown): boolean {
     'code' in error &&
     error.code === 404
   );
-}
-
-async function ignoreFailure(operation: Promise<unknown>): Promise<void> {
-  try {
-    await operation;
-  } catch (_) {
-    // Preserve the preference update failure that triggered cleanup.
-  }
 }

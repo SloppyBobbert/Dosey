@@ -6,6 +6,8 @@ export default async function claimRobot(context: Parameters<ReturnType<typeof c
     context.req.headers,
     process.env,
     context.error,
+    undefined,
+    true,
   );
   return createClaimRobotHandler(runtime.claimRobot, runtime.identity)(context);
 }

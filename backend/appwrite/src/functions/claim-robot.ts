@@ -3,7 +3,7 @@ import {
   normalizePairingCode,
 } from '../domain/pairing-code.js';
 import type { PairingClaimRejectionReason } from '../domain/pairing-claim.js';
-import type { FunctionIdentityVerifier } from './function-identity.js';
+import type { AnonymousFunctionIdentityVerifier } from './function-identity.js';
 
 export interface ClaimRobotService {
   claimRobot(input: {
@@ -33,13 +33,17 @@ export interface FunctionContext {
 
 export function createClaimRobotHandler(
   service: ClaimRobotService,
-  identity: FunctionIdentityVerifier,
+  identity: AnonymousFunctionIdentityVerifier,
 ) {
   return async (context: FunctionContext) => {
     if (context.req.method !== 'POST') {
       return context.res.json({ error: 'method_not_allowed' }, 405);
     }
-    const mountedDeviceAccountId = await identity.verify(context.req.headers);
+    const identityResult = await identity.verifyAnonymous(context.req.headers);
+    if (identityResult != null && typeof identityResult !== 'string') {
+      return context.res.json({ error: 'anonymous_account_required' }, 403);
+    }
+    const mountedDeviceAccountId = identityResult;
     if (mountedDeviceAccountId == null) {
       return context.res.json({ error: 'authentication_required' }, 401);
     }
@@ -70,6 +74,7 @@ const rejectionStatus: Record<PairingClaimRejectionReason, number> = {
   expired: 410,
   consumed: 409,
   attempts_exhausted: 429,
+  device_already_mounted: 409,
 };
 
 function readCode(body: unknown): string {
