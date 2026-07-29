@@ -106,8 +106,8 @@ jobs:
           test -s build/web/auth.html
           test -s build/web/flutter_bootstrap.js
           test -s build/web/manifest.json
-          if find build/web -name .env -print -quit | grep -q .; then
-            printf 'Unexpected .env file in web artifact\n' >&2
+          if find build/web \( -name '.env' -o -name '.env.*' \) -print -quit | grep -q .; then
+            printf 'Unexpected environment file in web artifact\n' >&2
             exit 1
           fi
 
@@ -127,6 +127,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      # The deploy job only needs Pages publishing and its OIDC token.
       pages: write
       id-token: write
     environment:
