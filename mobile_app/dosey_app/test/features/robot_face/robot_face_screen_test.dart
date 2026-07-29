@@ -2495,6 +2495,56 @@ void main() {
     expect(visibleAndTakenLogger.calls, hasLength(2));
   });
 
+  testWidgets('confirm taken handles callback errors and stays retryable', (
+    tester,
+  ) async {
+    var callCount = 0;
+    Future<bool> throwingLogger(
+      BuildContext context, {
+      required String doseId,
+      required DateTime occurredAt,
+      required String successMessage,
+    }) async {
+      callCount += 1;
+      throw StateError('visible and taken failed');
+    }
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        visibleAndTakenLogger: throwingLogger,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.waitingForConfirmation,
+          nextEventLabel: 'Taken? · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          actionDoseId: 'dose-123',
+          availableActions: {RobotFaceActionKind.confirmTaken},
+        ),
+      ),
+    );
+    await tester.pump();
+    final confirmButton = find.byKey(RobotFaceScreen.confirmTakenButtonKey);
+
+    await tester.tap(confirmButton);
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text('Dose action failed: Bad state: visible and taken failed'),
+      findsOneWidget,
+    );
+    expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+
+    await tester.tap(confirmButton);
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(callCount, 2);
+    expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+  });
+
   for (final testCase
       in <
         ({

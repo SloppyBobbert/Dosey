@@ -423,6 +423,13 @@ void main() {
     );
     final load = await fixture.guidedLoads.readActiveLoad(_profileId);
     expect(load!.slots.first.status, CarouselLoadSlotStatus.needsReview);
+    final snapshot = await _guidedSnapshot(fixture.database);
+    expect(snapshot.status, 'needs_review');
+    expect(snapshot.resolvedAt?.toUtc(), _now);
+    expect(snapshot.reviewReason, DoseLogEventKind.doseSkipped.name);
+    final prescription = await _prescription(fixture.database);
+    expect(prescription.loadedDoses, 0);
+    expect(prescription.reviewDoses, 1);
   });
 
   test('guided post-movement missed marks dispensed slot for review', () async {
@@ -435,6 +442,13 @@ void main() {
     );
     final load = await fixture.guidedLoads.readActiveLoad(_profileId);
     expect(load!.slots.first.status, CarouselLoadSlotStatus.needsReview);
+    final snapshot = await _guidedSnapshot(fixture.database);
+    expect(snapshot.status, 'needs_review');
+    expect(snapshot.resolvedAt?.toUtc(), _now);
+    expect(snapshot.reviewReason, DoseLogEventKind.doseMissed.name);
+    final prescription = await _prescription(fixture.database);
+    expect(prescription.loadedDoses, 0);
+    expect(prescription.reviewDoses, 1);
   });
 }
 
@@ -538,6 +552,13 @@ Future<dynamic> _prescription(DoseyDatabase database) {
   return (database.select(
     database.prescriptions,
   )..where((row) => row.id.equals('fake-med'))).getSingle();
+}
+
+Future<CarouselLoadSlotSnapshotRow> _guidedSnapshot(DoseyDatabase database) {
+  return (database.select(database.carouselLoadSlotSnapshots)..where(
+        (row) => row.sessionId.equals(_sessionId) & row.slotNumber.equals(1),
+      ))
+      .getSingle();
 }
 
 class _GuidedDoseFixture {

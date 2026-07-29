@@ -157,11 +157,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _openMaintenanceAfterBuild() {
     final request = widget.openMaintenanceRequest;
-    if (request <= _appliedMaintenanceRequest) return;
+    if (request == 0 || request == _appliedMaintenanceRequest) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted ||
           widget.openMaintenanceRequest != request ||
-          request <= _appliedMaintenanceRequest) {
+          request == 0 ||
+          request == _appliedMaintenanceRequest) {
         return;
       }
       _appliedMaintenanceRequest = request;

@@ -1815,6 +1815,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     if (!context.mounted) return;
 
     setState(() => _isSubmitting = true);
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     try {
       final logged =
           await (widget.visibleAndTakenLogger ??
@@ -1830,6 +1831,13 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           actionDoseId,
         ).addAll(widget.state.availableActions);
       });
+    } on Object catch (error) {
+      if (!context.mounted) {
+        return;
+      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Dose action failed: $error')),
+      );
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }

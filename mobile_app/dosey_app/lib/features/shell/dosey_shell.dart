@@ -406,14 +406,15 @@ class _DoseyShellState extends State<DoseyShell>
       _maintenanceNavigationRequest += 1;
       _selectedTabId = _ShellTabId.settings;
     });
+    _stopFaceAwakeWindow();
+    _restartInactivityTimer();
+    _syncScreenAwake();
   }
 
   void _acknowledgeMaintenanceRequest(int request) {
     if (request != _maintenanceNavigationRequest) return;
     setState(() {
-      if (request == _maintenanceNavigationRequest) {
-        _maintenanceNavigationRequest = 0;
-      }
+      _maintenanceNavigationRequest = 0;
     });
   }
 

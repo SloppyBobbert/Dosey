@@ -26,13 +26,13 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
-import 'package:dosey_app/features/settings/settings_accordion.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_app_scope_dependencies.dart';
 import 'support/bottom_navigation_test_helper.dart';
+import 'support/settings_accordion_test_helper.dart';
 
 void main() {
   testWidgets('first install shows medical-device onboarding before shell', (
@@ -251,7 +251,11 @@ void main() {
 
     await _openBottomDestination(tester, 'Settings');
     await _pumpAppFrame(tester);
-    await _openSettingsAccordion(tester, 'Help & safety');
+    await openSettingsAccordion(
+      tester,
+      'Help & safety',
+      pumpAfterTap: () => _pumpAppFrame(tester),
+    );
     await _scrollSettingsUntilVisible(tester, find.text('Start over setup'));
     await tester.tap(find.text('Start over setup').hitTestable());
     await _pumpAppFrame(tester);
@@ -278,7 +282,11 @@ void main() {
     await _openBottomDestination(tester, 'Settings');
     await _pumpAppFrame(tester);
 
-    await _openSettingsAccordion(tester, 'Account & household');
+    await openSettingsAccordion(
+      tester,
+      'Account & household',
+      pumpAfterTap: () => _pumpAppFrame(tester),
+    );
     expect(find.text('Profile'), findsOneWidget);
     expect(find.text('Dosey Tester'), findsOneWidget);
     expect(find.text('Account'), findsOneWidget);
@@ -287,7 +295,11 @@ void main() {
 
     expect(find.text('Phone type'), findsOneWidget);
     expect(find.text('Personal phone'), findsOneWidget);
-    await _openSettingsAccordion(tester, 'Help & safety');
+    await openSettingsAccordion(
+      tester,
+      'Help & safety',
+      pumpAfterTap: () => _pumpAppFrame(tester),
+    );
     await _scrollSettingsUntilVisible(tester, find.text('Prototype safety'));
 
     expect(find.text('Prototype safety'), findsOneWidget);
@@ -316,7 +328,11 @@ void main() {
     await _pumpAppFrame(tester);
     await _openBottomDestination(tester, 'Settings');
     await _pumpAppFrame(tester);
-    await _openSettingsAccordion(tester, 'Account & household');
+    await openSettingsAccordion(
+      tester,
+      'Account & household',
+      pumpAfterTap: () => _pumpAppFrame(tester),
+    );
 
     expect(find.text('Dosey Tester'), findsOneWidget);
     expect(find.text('google@example.com'), findsOneWidget);
@@ -572,12 +588,24 @@ void main() {
     await _pumpAppFrame(tester);
     await _openSettingsMenu(tester);
 
-    await _openSettingsAccordion(tester, 'Account & household');
+    await openSettingsAccordion(
+      tester,
+      'Account & household',
+      pumpAfterTap: () => _pumpAppFrame(tester),
+    );
     expect(find.text('Account'), findsOneWidget);
     expect(find.text('Cloud sync is not active yet.'), findsOneWidget);
-    await _openSettingsAccordion(tester, 'Reminders');
+    await openSettingsAccordion(
+      tester,
+      'Reminders',
+      pumpAfterTap: () => _pumpAppFrame(tester),
+    );
     expect(find.text('Reminder notifications'), findsWidgets);
-    await _openSettingsAccordion(tester, 'Help & safety');
+    await openSettingsAccordion(
+      tester,
+      'Help & safety',
+      pumpAfterTap: () => _pumpAppFrame(tester),
+    );
     expect(find.text('Help & safety'), findsOneWidget);
   });
 
@@ -597,7 +625,11 @@ void main() {
     );
     await _pumpAppFrame(tester);
     await _openSettingsMenu(tester);
-    await _openSettingsAccordion(tester, 'Account & household');
+    await openSettingsAccordion(
+      tester,
+      'Account & household',
+      pumpAfterTap: () => _pumpAppFrame(tester),
+    );
 
     expect(find.text('Account'), findsWidgets);
     expect(find.text('Sign out'), findsOneWidget);
@@ -3898,7 +3930,11 @@ void main() {
       await _pumpAppFrame(tester);
       await _openBottomDestination(tester, 'Settings');
       await _pumpAppFrame(tester);
-      await _openSettingsAccordion(tester, 'Account & household');
+      await openSettingsAccordion(
+        tester,
+        'Account & household',
+        pumpAfterTap: () => _pumpAppFrame(tester),
+      );
 
       expect(find.text('iOS always uses the Personal phone.'), findsOneWidget);
       expect(find.text('Android robot phone'), findsNothing);
@@ -3922,7 +3958,11 @@ void main() {
       await _pumpAppFrame(tester);
       await _openBottomDestination(tester, 'Settings');
       await _pumpAppFrame(tester);
-      await _openSettingsAccordion(tester, 'Account & household');
+      await openSettingsAccordion(
+        tester,
+        'Account & household',
+        pumpAfterTap: () => _pumpAppFrame(tester),
+      );
       await tester.tap(find.text('Sign out'));
       await _pumpAppFrame(tester);
 
@@ -4104,7 +4144,11 @@ Future<void> _openSettingsMenu(WidgetTester tester) async {
 
 Future<void> _openReminderSettings(WidgetTester tester) async {
   await _openBottomDestination(tester, 'Settings');
-  await _openSettingsAccordion(tester, 'Reminders');
+  await openSettingsAccordion(
+    tester,
+    'Reminders',
+    pumpAfterTap: () => _pumpAppFrame(tester),
+  );
   await _scrollSettingsUntilVisible(
     tester,
     find.text('Send test notification'),
@@ -4115,23 +4159,6 @@ Future<void> _openRefillFlow(WidgetTester tester) async {
   final button = find.widgetWithText(FilledButton, 'Start refill/loading');
   tester.widget<FilledButton>(button).onPressed!();
   await _pumpAppFrame(tester);
-}
-
-Future<void> _openSettingsAccordion(WidgetTester tester, String title) async {
-  final accordion = _settingsAccordion(title);
-  await _scrollSettingsUntilVisible(tester, accordion);
-  await tester.ensureVisible(accordion);
-  await tester.pump();
-  await tester.tap(
-    find.descendant(of: accordion, matching: find.byType(InkWell)).first,
-  );
-  await _pumpAppFrame(tester);
-}
-
-Finder _settingsAccordion(String title) {
-  return find.byWidgetPredicate(
-    (widget) => widget is SettingsAccordion && widget.title == title,
-  );
 }
 
 Future<void> _openBottomDestination(WidgetTester tester, String label) async {
@@ -4219,7 +4246,11 @@ Future<void> _waitForVisible(WidgetTester tester, Finder finder) async {
 
 Future<void> _openDoseHistory(WidgetTester tester) async {
   await _openBottomDestination(tester, 'Settings');
-  await _openSettingsAccordion(tester, 'Device & connection');
+  await openSettingsAccordion(
+    tester,
+    'Device & connection',
+    pumpAfterTap: () => _pumpAppFrame(tester),
+  );
   await _scrollSettingsUntilVisible(tester, find.text('Open dose history'));
   await tester.tap(find.text('Open dose history').hitTestable());
   await _pumpAppFrame(tester);

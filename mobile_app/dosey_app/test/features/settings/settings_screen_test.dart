@@ -34,6 +34,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_app_scope_dependencies.dart';
 import '../../support/fake_cloud_identity_gateway.dart';
+import '../../support/settings_accordion_test_helper.dart';
 
 void main() {
   testWidgets('personal settings show compact collapsed daily groups', (
@@ -123,12 +124,13 @@ void main() {
     expect(reminders.expanded, isTrue);
     expect(helpSafety.expanded, isFalse);
 
-    await _tapSettingsAccordion(tester, _settingsAccordion('Reminders'));
-    await tester.pumpAndSettle();
+    await openSettingsAccordion(
+      tester,
+      'Reminders',
+      pumpAfterTap: tester.pumpAndSettle,
+    );
     expect(
-      tester
-          .widget<SettingsAccordion>(_settingsAccordion('Reminders'))
-          .expanded,
+      tester.widget<SettingsAccordion>(settingsAccordion('Reminders')).expanded,
       isFalse,
     );
 
@@ -141,14 +143,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      tester
-          .widget<SettingsAccordion>(_settingsAccordion('Reminders'))
-          .expanded,
+      tester.widget<SettingsAccordion>(settingsAccordion('Reminders')).expanded,
       isFalse,
     );
     expect(
       tester
-          .widget<SettingsAccordion>(_settingsAccordion('Help & safety'))
+          .widget<SettingsAccordion>(settingsAccordion('Help & safety'))
           .expanded,
       isFalse,
     );
@@ -207,6 +207,40 @@ void main() {
     expect(find.text('For setup and repairs'), findsNothing);
     expect(find.text('Hardware bench'), findsNothing);
     expect(await database.select(database.adminAuditEvents).get(), isEmpty);
+  });
+
+  testWidgets('Maintenance request accepts a lower token after reset', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    final acknowledgements = <int>[];
+
+    Future<void> pumpRequest(int request) => tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.robot,
+        openMaintenanceRequest: request,
+        onMaintenanceRequestAcknowledged: acknowledgements.add,
+      ),
+    );
+
+    await pumpRequest(7);
+    await tester.pumpAndSettle();
+    expect(acknowledgements, [7]);
+
+    await pumpRequest(0);
+    await tester.pumpAndSettle();
+    expect(acknowledgements, [7]);
+
+    await pumpRequest(1);
+    await tester.pumpAndSettle();
+    expect(acknowledgements, [7, 1]);
+
+    await pumpRequest(1);
+    await tester.pumpAndSettle();
+    expect(acknowledgements, [7, 1]);
   });
 
   testWidgets('Maintenance entry audits once after a successful PIN check', (
@@ -388,10 +422,7 @@ void main() {
     await _openMaintenanceRecords(tester);
 
     final exportBackup = find.widgetWithText(FilledButton, 'Export backup');
-    await tester.drag(
-      find.byType(Scrollable).hitTestable().first,
-      const Offset(0, -200),
-    );
+    await tester.ensureVisible(exportBackup);
     await tester.pumpAndSettle();
     await tester.tap(exportBackup.hitTestable());
     await tester.pumpAndSettle();
@@ -458,10 +489,7 @@ void main() {
     await tester.pumpAndSettle();
     await _openMaintenanceRecords(tester);
     final restoreBackup = find.widgetWithText(FilledButton, 'Restore backup');
-    await tester.drag(
-      find.byType(Scrollable).hitTestable().first,
-      const Offset(0, -200),
-    );
+    await tester.ensureVisible(restoreBackup);
     await tester.pumpAndSettle();
     await tester.tap(restoreBackup.hitTestable());
     await tester.pump();
@@ -506,7 +534,11 @@ void main() {
 
     await tester.pumpWidget(_TestSettingsApp(database: database));
     await tester.pumpAndSettle();
-    await _openSettingsAccordion(tester, 'Account & household');
+    await openSettingsAccordion(
+      tester,
+      'Account & household',
+      pumpAfterTap: tester.pumpAndSettle,
+    );
 
     expect(find.text('Sign in with Google'), findsOneWidget);
     expect(find.text('Account'), findsOneWidget);
@@ -526,7 +558,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await _openSettingsAccordion(tester, 'Account & household');
+    await openSettingsAccordion(
+      tester,
+      'Account & household',
+      pumpAfterTap: tester.pumpAndSettle,
+    );
 
     expect(find.text('Personal phone'), findsOneWidget);
     expect(find.byType(DropdownButton<AppDeviceRole>), findsNothing);
@@ -553,7 +589,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await _openSettingsAccordion(tester, 'Device & connection');
+    await openSettingsAccordion(
+      tester,
+      'Device & connection',
+      pumpAfterTap: tester.pumpAndSettle,
+    );
     expect(find.text('Robot phone'), findsOneWidget);
     expect(find.text('Sign in with Google'), findsNothing);
     final settingsScrollable = find
@@ -1988,29 +2028,6 @@ List<SettingsAccordion> _accordions(WidgetTester tester) {
   return children.whereType<SettingsAccordion>().toList();
 }
 
-Future<void> _openSettingsAccordion(WidgetTester tester, String title) async {
-  final finder = _settingsAccordion(title);
-  await tester.scrollUntilVisible(
-    finder,
-    240,
-    scrollable: find.byType(Scrollable).first,
-  );
-  await _tapSettingsAccordion(tester, finder);
-  await tester.pumpAndSettle();
-}
-
-Finder _settingsAccordion(String title) {
-  return find.byWidgetPredicate(
-    (widget) => widget is SettingsAccordion && widget.title == title,
-  );
-}
-
-Future<void> _tapSettingsAccordion(WidgetTester tester, Finder accordion) {
-  return tester.tap(
-    find.descendant(of: accordion, matching: find.byType(InkWell)).first,
-  );
-}
-
 Future<void> _openMaintenanceRecords(WidgetTester tester) async {
   await tester.tap(find.text('Open tools'));
   await tester.pumpAndSettle();
@@ -2056,7 +2073,11 @@ Finder _robotFaceAccordion() {
 }
 
 Future<void> _scrollToActionPin(WidgetTester tester) async {
-  await _openSettingsAccordion(tester, 'Account & household');
+  await openSettingsAccordion(
+    tester,
+    'Account & household',
+    pumpAfterTap: tester.pumpAndSettle,
+  );
   final isPinEnabled = find.text('PIN is on').evaluate().isNotEmpty;
   final isPinDisabled = find.text('PIN is off').evaluate().isNotEmpty;
   if (!isPinEnabled && !isPinDisabled) {
@@ -2103,6 +2124,8 @@ class _TestSettingsApp extends StatelessWidget {
     this.voicePlayer,
     this.previewVoicePlayer,
     this.sectionTarget,
+    this.openMaintenanceRequest = 0,
+    this.onMaintenanceRequestAcknowledged,
     this.backupFileGateway,
     this.appClock,
     this.cloudIdentityGateway,
@@ -2118,6 +2141,8 @@ class _TestSettingsApp extends StatelessWidget {
   final DoseyVoicePlayer? voicePlayer;
   final DoseyVoicePlayer? previewVoicePlayer;
   final SettingsSection? sectionTarget;
+  final int openMaintenanceRequest;
+  final ValueChanged<int>? onMaintenanceRequestAcknowledged;
   final BackupFileGateway? backupFileGateway;
   final AppClock? appClock;
   final CloudIdentityGateway? cloudIdentityGateway;
@@ -2151,6 +2176,9 @@ class _TestSettingsApp extends StatelessWidget {
           final settings = Scaffold(
             body: SettingsScreen(
               sectionTarget: sectionTarget,
+              openMaintenanceRequest: openMaintenanceRequest,
+              onMaintenanceRequestAcknowledged:
+                  onMaintenanceRequestAcknowledged,
               previewVoicePlayer: previewVoicePlayer,
             ),
           );

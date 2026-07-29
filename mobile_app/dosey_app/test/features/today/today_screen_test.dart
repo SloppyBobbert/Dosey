@@ -142,15 +142,41 @@ void main() {
     expect(find.text('Needs attention'), findsNothing);
     expect(find.text('Review carousel'), findsNothing);
   });
+
+  testWidgets('Today shows active enabled review slots', (tester) async {
+    final database = DoseyDatabase.inMemory();
+    final now = DateTime.utc(2040, 1, 2, 9);
+    addTearDown(database.close);
+    await _seedActiveProfile(database, now);
+    await _seedSchedule(database, 'review-schedule', 8);
+    await _insertSlot(
+      database,
+      id: 'review-slot',
+      scheduleId: 'review-schedule',
+      profileId: ScheduleProfile.defaultProfileId,
+      status: 'needs_review',
+      now: now,
+    );
+
+    await tester.pumpWidget(_todayApp(database, onOpenCarousel: () {}));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Needs attention'), findsOneWidget);
+    expect(find.text('Review carousel'), findsOneWidget);
+    expect(find.text('1 loaded slot need review.'), findsOneWidget);
+  });
 }
 
-Widget _todayApp(DoseyDatabase database) => DoseyAppScope(
-  database: database,
-  bleGateway: FakeBleGateway(),
-  connectivityGateway: FakeConnectivityGateway(),
-  missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
-  child: MaterialApp(home: const Scaffold(body: TodayScreen())),
-);
+Widget _todayApp(DoseyDatabase database, {VoidCallback? onOpenCarousel}) =>
+    DoseyAppScope(
+      database: database,
+      bleGateway: FakeBleGateway(),
+      connectivityGateway: FakeConnectivityGateway(),
+      missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
+      child: MaterialApp(
+        home: Scaffold(body: TodayScreen(onOpenCarousel: onOpenCarousel)),
+      ),
+    );
 
 Future<void> _seedActiveProfile(DoseyDatabase database, DateTime now) {
   return LocalScheduleProfileRepository(database).upsertProfile(
