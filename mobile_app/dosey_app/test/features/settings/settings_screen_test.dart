@@ -490,6 +490,12 @@ void main() {
     await tester.tap(exportBackup.hitTestable());
     await tester.pumpAndSettle();
     expect(find.text('Export unencrypted backup?'), findsOneWidget);
+    expect(
+      find.text(
+        'Anyone who can open the JSON file can read its sensitive medication, schedule, history, and profile data. Choose a trusted destination.',
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Continue'));
     await tester.pump();

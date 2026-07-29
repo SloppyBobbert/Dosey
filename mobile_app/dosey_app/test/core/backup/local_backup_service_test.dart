@@ -79,6 +79,42 @@ void main() {
     expect(result.status, BackupOperationStatus.successWithNotificationWarning);
   });
 
+  test('notification sync observes the restored enabled schedule', () async {
+    final sourceDatabase = DoseyDatabase.inMemory();
+    await sourceDatabase.customStatement(
+      "INSERT INTO reminder_schedules (id, label, profile_id, hour, minute, is_enabled, created_at, updated_at) VALUES ('restored-schedule', 'Restored', 'schedule-1', 9, 45, 1, 1, 1)",
+    );
+    final source = await LocalBackupStore(sourceDatabase).readSnapshot();
+    await sourceDatabase.close();
+    final destinationDatabase = DoseyDatabase.inMemory();
+    addTearDown(destinationDatabase.close);
+    await destinationDatabase.customStatement(
+      "INSERT INTO reminder_schedules (id, label, profile_id, hour, minute, is_enabled, created_at, updated_at) VALUES ('stale-schedule', 'Stale', 'schedule-1', 7, 30, 0, 1, 1)",
+    );
+    List<ReminderScheduleRow>? schedulesSeenBySync;
+    final service = LocalBackupService(
+      database: destinationDatabase,
+      store: LocalBackupStore(destinationDatabase),
+      gateway: _FakeGateway(),
+      syncNotifications: () async {
+        schedulesSeenBySync = await destinationDatabase
+            .select(destinationDatabase.reminderSchedules)
+            .get();
+      },
+    );
+
+    final result = await service.restore(
+      BackupPreview(source, const BackupCodec().encode(source)),
+    );
+
+    expect(result.status, BackupOperationStatus.success);
+    expect(schedulesSeenBySync, hasLength(1));
+    expect(schedulesSeenBySync!.single.id, 'restored-schedule');
+    expect(schedulesSeenBySync!.single.hour, 9);
+    expect(schedulesSeenBySync!.single.minute, 45);
+    expect(schedulesSeenBySync!.single.isEnabled, isTrue);
+  });
+
   test('restore accepts valid non-canonical JSON', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
