@@ -69,8 +69,9 @@ imply physical actions or replace a physical production-database check.
 - Actual Android OS notification delivery, sound, tap routing, process restart,
   OEM lifecycle/display behavior, and pixel-level Maintenance repaint behavior.
 - Android file-provider export/import and crash/power-loss durability.
-- BLE/XIAO transport, servo, carousel, fake-media dispensing, and
-  cancellation/timeout/power-loss movement behavior.
+- Physical-device BLE/XIAO validation of the identified APK and integrated
+  external-hardware lifecycle; servo/carousel movement, fake-media dispensing,
+  and cancellation/timeout/power-loss movement behavior.
 - Appwrite/pairing/live staging.
 - Voice asset ownership/license provenance.
 - Release signing, versioning, tag, and GitHub Release.
@@ -83,9 +84,9 @@ imply physical actions or replace a physical production-database check.
    screen-awake release, and Maintenance repaint on the device.
 3. Exercise backup export/import through Android file providers and record
    restart and failure behavior.
-4. Keep the simulator active until separate supervised BLE/XIAO and carousel
-   evidence exists. Do not attach real medication or infer a taken dose from
-   movement.
+4. Keep this qualification simulator-backed. Existing bare-XIAO bench evidence
+   does not qualify this APK or the integrated carousel path. Do not attach real
+   medication or infer a taken dose from movement.
 
 Related format and controller boundaries are documented in
 [the backup format](../../docs/local_backup_format.md) and
