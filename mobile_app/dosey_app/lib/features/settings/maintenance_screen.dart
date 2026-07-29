@@ -60,11 +60,11 @@ class _MaintenanceScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 8),
-          const Expanded(
+          Expanded(
             child: DefaultTabController(
               length: 2,
               child: Column(
-                children: [
+                children: const [
                   TabBar(
                     tabs: [
                       Tab(text: 'Controller'),
@@ -73,7 +73,10 @@ class _MaintenanceScreen extends StatelessWidget {
                   ),
                   Expanded(
                     child: TabBarView(
-                      children: [ControllerScreen(), _MaintenanceRecords()],
+                      children: [
+                        _MaintenanceTabSurface(child: ControllerScreen()),
+                        _MaintenanceTabSurface(child: _MaintenanceRecords()),
+                      ],
                     ),
                   ),
                 ],
@@ -81,6 +84,22 @@ class _MaintenanceScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MaintenanceTabSurface extends StatelessWidget {
+  const _MaintenanceTabSurface({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return RepaintBoundary(
+      child: ColoredBox(
+        color: Theme.of(context).colorScheme.surface,
+        child: child,
       ),
     );
   }
