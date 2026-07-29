@@ -150,6 +150,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
   Timer? _missedDoseReconciliationTimer;
   late final MissedDoseReconciliationService _missedDoseReconciliation;
   late final DoseyAppDependencies _dependencies;
+  Future<void>? _shutdownFuture;
   bool _dependenciesInitialized = false;
   StreamSubscription<AppDeviceRole>? _controllerRoleSubscription;
   ControllerHealthSupervisor? _controllerHealthSupervisor;
@@ -520,31 +521,65 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(_controllerRoleSubscription?.cancel());
     _missedDoseReconciliationTimer?.cancel();
-    if (_ownsAppClock) {
-      if (_appClock case final SystemAppClock clock) {
-        unawaited(clock.close());
-      } else if (_appClock case final ControllableAppClock clock) {
-        unawaited(clock.close());
-      }
-    }
     if (_dependenciesInitialized) {
-      unawaited(_dependencies.controller.close());
-      unawaited(_dependencies.demoScenarios?.close());
-      unawaited(_dependencies.demoFaceLab?.close());
-      unawaited(_dependencies.robotFaceController.close());
-      unawaited(_dependencies.ble.close());
-      unawaited(_dependencies.voicePlayer.dispose());
-      _dependencies.householdMembership.dispose();
-      if (_ownsNotificationTapController) {
-        _dependencies.notificationTaps.dispose();
+      if (_ownsAppClock) {
+        if (_appClock case final SystemAppClock clock) {
+          unawaited(clock.close());
+        } else if (_appClock case final ControllableAppClock clock) {
+          unawaited(clock.close());
+        }
       }
-    }
-    if (_ownsDatabase) {
-      unawaited(_database.close());
+      unawaited(_shutdownFuture ??= _shutdownDependencies());
     }
     super.dispose();
+  }
+
+  Future<void> _shutdownDependencies() async {
+    Object? firstError;
+    StackTrace? firstStackTrace;
+
+    Future<void> attempt(Future<void> Function() action) async {
+      try {
+        await action();
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+
+    void attemptSync(void Function() action) {
+      try {
+        action();
+      } on Object catch (error, stackTrace) {
+        firstError ??= error;
+        firstStackTrace ??= stackTrace;
+      }
+    }
+
+    await attempt(() async {
+      await _controllerRoleSubscription?.cancel();
+      _controllerRoleSubscription = null;
+    });
+    await attempt(() async => _dependencies.demoScenarios?.close());
+    await attempt(() async => _dependencies.demoFaceLab?.close());
+    await attempt(_dependencies.robotFaceController.close);
+    await attempt(_dependencies.voicePlayer.dispose);
+    attemptSync(_dependencies.householdMembership.dispose);
+
+    // Consumers must release their subscriptions before producer gateways close.
+    await attempt(_dependencies.controller.close);
+    await attempt(_dependencies.ble.close);
+    if (_ownsNotificationTapController) {
+      attemptSync(_dependencies.notificationTaps.dispose);
+    }
+    if (_ownsDatabase) {
+      await attempt(_database.close);
+    }
+
+    if (firstError != null) {
+      Error.throwWithStackTrace(firstError!, firstStackTrace!);
+    }
   }
 
   @override
