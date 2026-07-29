@@ -2163,6 +2163,7 @@ void main() {
     'shows a visible, accessible exit control when a shell callback is provided',
     (WidgetTester tester) async {
       var exits = 0;
+      final semantics = tester.ensureSemantics();
 
       await tester.pumpWidget(_RobotFaceTestApp(onLongPress: () => exits += 1));
       await tester.pump();
@@ -2182,25 +2183,30 @@ void main() {
       await tester.pump();
 
       expect(exits, 1);
+      semantics.dispose();
     },
   );
 
   testWidgets('keeps the exit control usable at large text scale', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(textScaler: TextScaler.linear(2)),
-        child: _RobotFaceTestApp(onLongPress: () {}),
-      ),
+    tester.binding.platformDispatcher.textScaleFactorTestValue = 2;
+    addTearDown(
+      tester.binding.platformDispatcher.clearTextScaleFactorTestValue,
     );
+    await tester.pumpWidget(_RobotFaceTestApp(onLongPress: () {}));
     await tester.pump();
 
     final exitButton = find.byKey(RobotFaceScreen.exitButtonKey);
     expect(exitButton, findsOneWidget);
     expect(tester.getSize(exitButton).height, greaterThanOrEqualTo(48));
     expect(tester.getRect(exitButton).left, greaterThanOrEqualTo(0));
-    expect(tester.getRect(exitButton).right, lessThanOrEqualTo(800));
+    expect(
+      tester.getRect(exitButton).right,
+      lessThanOrEqualTo(
+        tester.view.physicalSize.width / tester.view.devicePixelRatio,
+      ),
+    );
   });
 
   testWidgets(
@@ -2367,6 +2373,126 @@ void main() {
 
     expect(tester.widget<FilledButton>(buttonFinder).onPressed, isNull);
     expect(find.text('Taken logged.'), findsOneWidget);
+  });
+
+  testWidgets('confirm taken uses the dedicated visible-and-taken callback', (
+    tester,
+  ) async {
+    final clock = _RawAppClock(DateTime.utc(2040, 1, 2, 8, 45));
+    final genericLogger = _FakeRobotFaceDoseActionLogger();
+    final visibleAndTakenLogger = _FakeVisibleAndTakenLogger();
+
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        appClock: clock,
+        doseActionLogger: genericLogger.call,
+        visibleAndTakenLogger: visibleAndTakenLogger.call,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.waitingForConfirmation,
+          nextEventLabel: 'Taken? · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          actionDoseId: 'dose-123',
+          availableActions: {RobotFaceActionKind.confirmTaken},
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('I can see it and took it'), findsOneWidget);
+    clock.value = DateTime.utc(2040, 1, 2, 8, 55);
+    await tester.tap(find.byKey(RobotFaceScreen.confirmTakenButtonKey));
+    await tester.pump();
+
+    expect(genericLogger.events, isEmpty);
+    expect(visibleAndTakenLogger.calls, hasLength(1));
+    expect(visibleAndTakenLogger.calls.single.doseId, 'dose-123');
+    expect(visibleAndTakenLogger.calls.single.occurredAt, clock.now().toUtc());
+  });
+
+  testWidgets(
+    'confirm taken does not call its callback until the PIN is accepted',
+    (tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await LocalAppSettingsRepository(
+        database,
+        defaultRole: AppDeviceRole.androidPersonal,
+      ).setActionPin('1234');
+      final visibleAndTakenLogger = _FakeVisibleAndTakenLogger();
+
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          database: database,
+          visibleAndTakenLogger: visibleAndTakenLogger.call,
+          initialState: const RobotFaceState(
+            mode: RobotFaceMode.doseReady,
+            nextEventLabel: 'Now · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            actionDoseId: 'dose-123',
+            availableActions: {RobotFaceActionKind.confirmTaken},
+          ),
+        ),
+      );
+      await tester.pump();
+      final confirmButton = find.byKey(RobotFaceScreen.confirmTakenButtonKey);
+
+      await tester.tap(confirmButton);
+      await tester.pump();
+      expect(find.text('Enter Action PIN'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+      expect(visibleAndTakenLogger.calls, isEmpty);
+
+      await tester.tap(confirmButton);
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('action-pin-field')), '0000');
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      expect(visibleAndTakenLogger.calls, isEmpty);
+
+      await tester.tap(confirmButton);
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+      await tester.tap(find.text('Continue'));
+      await tester.pump();
+      expect(visibleAndTakenLogger.calls, hasLength(1));
+    },
+  );
+
+  testWidgets('confirm taken stays retryable when its callback returns false', (
+    tester,
+  ) async {
+    final visibleAndTakenLogger = _FakeVisibleAndTakenLogger(result: false);
+    await tester.pumpWidget(
+      _RobotFaceTestApp(
+        visibleAndTakenLogger: visibleAndTakenLogger.call,
+        initialState: const RobotFaceState(
+          mode: RobotFaceMode.waitingForConfirmation,
+          nextEventLabel: 'Taken? · Morning meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          actionDoseId: 'dose-123',
+          availableActions: {RobotFaceActionKind.confirmTaken},
+        ),
+      ),
+    );
+    await tester.pump();
+    final confirmButton = find.byKey(RobotFaceScreen.confirmTakenButtonKey);
+
+    await tester.tap(confirmButton);
+    await tester.pump();
+    expect(tester.widget<FilledButton>(confirmButton).onPressed, isNotNull);
+    await tester.tap(confirmButton);
+    await tester.pump();
+    expect(visibleAndTakenLogger.calls, hasLength(2));
   });
 
   for (final testCase
@@ -3177,6 +3303,7 @@ class _RobotFaceTestApp extends StatefulWidget {
     this.initialState,
     this.isActive = true,
     this.doseActionLogger,
+    this.visibleAndTakenLogger,
     this.appClock,
     this.voicePlayer,
     this.enableDemoFaceLab = false,
@@ -3190,6 +3317,7 @@ class _RobotFaceTestApp extends StatefulWidget {
   final RobotFaceState? initialState;
   final bool isActive;
   final RobotFaceDoseActionLogger? doseActionLogger;
+  final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
   final AppClock? appClock;
   final DoseyVoicePlayer? voicePlayer;
   final bool enableDemoFaceLab;
@@ -3220,6 +3348,23 @@ class _RobotFaceTestAppState extends State<_RobotFaceTestApp> {
         initialState: widget.initialState,
         isActive: widget.isActive,
         doseActionLogger: widget.doseActionLogger,
+        visibleAndTakenLogger:
+            widget.visibleAndTakenLogger ??
+            (widget.doseActionLogger == null
+                ? null
+                : (
+                    context, {
+                    required doseId,
+                    required occurredAt,
+                    required successMessage,
+                  }) => widget.doseActionLogger!(
+                    context,
+                    DoseLogEvent.doseTakenConfirmed(
+                      doseId: doseId,
+                      occurredAt: occurredAt,
+                    ),
+                    successMessage,
+                  )),
         onLongPress: widget.onLongPress,
       );
     }
@@ -3385,6 +3530,28 @@ class _FakeRobotFaceDoseActionLogger {
     }
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     messenger.showSnackBar(SnackBar(content: Text(successMessage)));
+  }
+}
+
+class _FakeVisibleAndTakenLogger {
+  _FakeVisibleAndTakenLogger({this.result = true});
+
+  final bool result;
+  final List<({String doseId, DateTime occurredAt, String successMessage})>
+  calls = [];
+
+  Future<bool> call(
+    BuildContext context, {
+    required String doseId,
+    required DateTime occurredAt,
+    required String successMessage,
+  }) async {
+    calls.add((
+      doseId: doseId,
+      occurredAt: occurredAt,
+      successMessage: successMessage,
+    ));
+    return result;
   }
 }
 

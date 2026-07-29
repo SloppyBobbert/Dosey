@@ -19,16 +19,10 @@ import 'package:dosey_app/features/today/unresolved_missed_dose_helper.dart';
 import 'package:flutter/material.dart';
 
 class TodayScreen extends StatelessWidget {
-  const TodayScreen({
-    super.key,
-    this.onOpenMedications,
-    this.onOpenCarousel,
-    this.onOpenSettings,
-  });
+  const TodayScreen({super.key, this.onOpenCarousel, this.onOpenMaintenance});
 
-  final VoidCallback? onOpenMedications;
   final VoidCallback? onOpenCarousel;
-  final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenMaintenance;
 
   @override
   Widget build(BuildContext context) {
@@ -70,9 +64,8 @@ class TodayScreen extends StatelessWidget {
                         _TodayAttentionSummary(
                           schedules: schedules,
                           activeProfileId: profileSnapshot.data?.id,
-                          onOpenMedications: onOpenMedications,
                           onOpenCarousel: onOpenCarousel,
-                          onOpenSettings: onOpenSettings,
+                          onOpenMaintenance: onOpenMaintenance,
                         ),
                         const SizedBox(height: 12),
                         StreamBuilder<List<DoseLogEvent>>(
@@ -115,16 +108,14 @@ class _TodayAttentionSummary extends StatelessWidget {
   const _TodayAttentionSummary({
     required this.schedules,
     required this.activeProfileId,
-    this.onOpenMedications,
     this.onOpenCarousel,
-    this.onOpenSettings,
+    this.onOpenMaintenance,
   });
 
   final List<ReminderSchedule> schedules;
   final String? activeProfileId;
-  final VoidCallback? onOpenMedications;
   final VoidCallback? onOpenCarousel;
-  final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenMaintenance;
 
   @override
   Widget build(BuildContext context) {
@@ -204,9 +195,8 @@ class _TodayAttentionSummary extends StatelessWidget {
                               failedCommands: failedCommands,
                               reviewSlots: reviewSlots,
                               hasHealthIssue: hasHealthIssue,
-                              onOpenMedications: onOpenMedications,
                               onOpenCarousel: onOpenCarousel,
-                              onOpenSettings: onOpenSettings,
+                              onOpenMaintenance: onOpenMaintenance,
                             ),
                           );
                         },
@@ -223,23 +213,20 @@ class _AttentionPanel extends StatelessWidget {
     required this.failedCommands,
     required this.reviewSlots,
     required this.hasHealthIssue,
-    this.onOpenMedications,
     this.onOpenCarousel,
-    this.onOpenSettings,
+    this.onOpenMaintenance,
   });
 
   final bool missedDose;
   final int failedCommands;
   final int reviewSlots;
   final bool hasHealthIssue;
-  final VoidCallback? onOpenMedications;
   final VoidCallback? onOpenCarousel;
-  final VoidCallback? onOpenSettings;
+  final VoidCallback? onOpenMaintenance;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final medicationAttention = missedDose;
     final deviceAttention = failedCommands > 0 || hasHealthIssue;
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -274,20 +261,15 @@ class _AttentionPanel extends StatelessWidget {
             Wrap(
               spacing: 8,
               children: [
-                if (medicationAttention && onOpenMedications != null)
-                  TextButton(
-                    onPressed: onOpenMedications,
-                    child: const Text('Review medications'),
-                  ),
                 if (reviewSlots > 0 && onOpenCarousel != null)
                   TextButton(
                     onPressed: onOpenCarousel,
                     child: const Text('Review carousel'),
                   ),
-                if (deviceAttention && onOpenSettings != null)
+                if (deviceAttention && onOpenMaintenance != null)
                   TextButton(
-                    onPressed: onOpenSettings,
-                    child: const Text('Review settings'),
+                    onPressed: onOpenMaintenance,
+                    child: const Text('Review device'),
                   ),
               ],
             ),

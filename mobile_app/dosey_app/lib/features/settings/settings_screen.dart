@@ -59,10 +59,14 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.sectionTarget,
+    this.openMaintenanceRequest = 0,
+    this.onMaintenanceRequestAcknowledged,
     this.previewVoicePlayer,
   });
 
   final SettingsSection? sectionTarget;
+  final int openMaintenanceRequest;
+  final ValueChanged<int>? onMaintenanceRequestAcknowledged;
   final DoseyVoicePlayer? previewVoicePlayer;
 
   @override
@@ -82,6 +86,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isSigningIn = false;
   String? _authMessage;
   final Set<_SettingsGroup> _expandedGroups = {};
+  SettingsSection? _appliedSectionTarget;
+  int _appliedMaintenanceRequest = 0;
 
   @override
   void initState() {
@@ -91,6 +97,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         widget.previewVoicePlayer ??
         DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway());
     _scrollToTargetAfterBuild();
+    _openMaintenanceAfterBuild();
   }
 
   @override
@@ -106,6 +113,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _guidedTrialWasDemo = dependencies.isDemo;
       _guidedTrialCompletion = settings.getGuidedTrialCompletion();
     }
+    _applySectionTargetFromLifecycle(dependencies);
   }
 
   @override
@@ -121,8 +129,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void didUpdateWidget(SettingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sectionTarget != widget.sectionTarget) {
+      _appliedSectionTarget = null;
+      _applySectionTargetFromLifecycle(DoseyAppScope.of(context));
       _scrollToTargetAfterBuild();
     }
+    if (oldWidget.openMaintenanceRequest != widget.openMaintenanceRequest) {
+      _openMaintenanceAfterBuild();
+    }
+  }
+
+  void _applySectionTargetFromLifecycle(DoseyAppDependencies dependencies) {
+    final target = widget.sectionTarget;
+    if (target == null || _appliedSectionTarget == target) return;
+    final role = dependencies.effectiveRole.capabilities.fixedRole;
+    final firstGroup = role.canHostRobot
+        ? _SettingsGroup.deviceConnection
+        : _SettingsGroup.accountHousehold;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _appliedSectionTarget == target) return;
+      setState(() {
+        _expandedGroups.add(_groupFor(target, firstGroup));
+        _appliedSectionTarget = target;
+      });
+      _scrollToTargetAfterBuild();
+    });
+  }
+
+  void _openMaintenanceAfterBuild() {
+    final request = widget.openMaintenanceRequest;
+    if (request <= _appliedMaintenanceRequest) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted ||
+          widget.openMaintenanceRequest != request ||
+          request <= _appliedMaintenanceRequest) {
+        return;
+      }
+      _appliedMaintenanceRequest = request;
+      widget.onMaintenanceRequestAcknowledged?.call(request);
+      unawaited(_openMaintenance());
+    });
   }
 
   void _scrollToTargetAfterBuild() {
@@ -141,23 +186,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // Some sections may not have built yet; use stable estimates so deep
         // links still land near the requested card.
         final position = _scrollController.position;
+        final role = DoseyAppScope.of(
+          context,
+        ).effectiveRole.capabilities.fixedRole;
+        final firstGroup = role.canHostRobot
+            ? _SettingsGroup.deviceConnection
+            : _SettingsGroup.accountHousehold;
         final offset = _estimatedSectionOffset(
           target,
+          _visibleGroupsFor(role),
+          firstGroup,
         ).clamp(position.minScrollExtent, position.maxScrollExtent);
         _scrollController.jumpTo(offset);
       }
     });
   }
 
-  double _estimatedSectionOffset(SettingsSection section) {
+  double _estimatedSectionOffset(
+    SettingsSection section,
+    List<_SettingsGroup> visibleGroups,
+    _SettingsGroup firstGroup,
+  ) {
     const listHeaderExtent = 52.0;
     const collapsedAccordionExtent = 84.0;
-    final visibleGroups = _SettingsGroup.values;
-    final groupIndex = visibleGroups.indexOf(
-      _groupFor(section, _SettingsGroup.accountHousehold),
-    );
-    return listHeaderExtent + groupIndex * collapsedAccordionExtent;
+    final groupIndex = visibleGroups.indexOf(_groupFor(section, firstGroup));
+    return listHeaderExtent +
+        (groupIndex < 0 ? 0 : groupIndex) * collapsedAccordionExtent;
   }
+
+  List<_SettingsGroup> _visibleGroupsFor(AppDeviceRole role) => [
+    role.canHostRobot
+        ? _SettingsGroup.deviceConnection
+        : _SettingsGroup.accountHousehold,
+    if (role.canHostRobot) _SettingsGroup.robotFace,
+    _SettingsGroup.reminders,
+    _SettingsGroup.appearance,
+    _SettingsGroup.helpSafety,
+  ];
 
   _SettingsGroup _groupFor(SettingsSection section, _SettingsGroup firstGroup) {
     return switch (section) {
@@ -223,8 +288,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final firstGroup = role.canHostRobot
             ? _SettingsGroup.deviceConnection
             : _SettingsGroup.accountHousehold;
-        final target = widget.sectionTarget;
-        if (target != null) _expandedGroups.add(_groupFor(target, firstGroup));
         return StreamBuilder<AuthSession>(
           stream: dependencies.auth.watchSession(),
           builder: (context, authSnapshot) {
@@ -342,7 +405,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       const SizedBox(height: 12),
                       _targeted(SettingsSection.safety, _SafetyCard()),
                       const SizedBox(height: 12),
-                      if (!role.canHostRobot)
+                      if (!role.canHostRobot) ...[
                         _targeted(
                           SettingsSection.guidedTrial,
                           _GuidedTrialSettingsCard(
@@ -353,8 +416,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             isActive: dependencies.isDemo,
                           ),
                         ),
-                      if (!role.canHostRobot) const SizedBox(height: 12),
-                      if (!role.canHostRobot)
+                        const SizedBox(height: 12),
                         _targeted(
                           SettingsSection.setup,
                           _SettingsSectionCard(
@@ -373,6 +435,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ],
                           ),
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -443,7 +506,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _openMaintenance() async {
     final dependencies = DoseyAppScope.of(context);
     if (!dependencies.effectiveRole.capabilities.canHostRobot) return;
-    final pinEnabled = await dependencies.settings.isActionPinEnabled();
+    final bool pinEnabled;
+    try {
+      pinEnabled = await dependencies.settings.isActionPinEnabled();
+    } on Object catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Maintenance availability failed: $error')),
+        );
+      }
+      return;
+    }
     if (!mounted) return;
     if (!pinEnabled) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -453,9 +526,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
       return;
     }
+    final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
+    if (!mounted) return;
     final result = await runProtectedAdminAction<void>(
       context,
-      action: (_) async {},
+      action: (actor) => dependencies.adminAudit.addEvent(
+        const AdminAuditEventFactory().maintenanceEntered(
+          actor: actor,
+          sourceDeviceRole: sourceDeviceRole,
+          summary: 'Opened Robot Maintenance tools.',
+        ),
+      ),
     );
     if (!mounted || !result.isSuccess) return;
     await Navigator.of(context).push<void>(

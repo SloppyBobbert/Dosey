@@ -23,6 +23,14 @@ typedef RobotFaceDoseActionLogger =
       String successMessage,
     );
 
+typedef RobotFaceVisibleAndTakenLogger =
+    Future<bool> Function(
+      BuildContext context, {
+      required String doseId,
+      required DateTime occurredAt,
+      required String successMessage,
+    });
+
 class RobotFaceScreen extends StatefulWidget {
   const RobotFaceScreen({
     super.key,
@@ -32,6 +40,7 @@ class RobotFaceScreen extends StatefulWidget {
     this.initialState,
     this.isActive = true,
     this.doseActionLogger,
+    this.visibleAndTakenLogger,
     this.onLongPress,
   });
 
@@ -98,6 +107,7 @@ class RobotFaceScreen extends StatefulWidget {
   final RobotFaceState? initialState;
   final bool isActive;
   final RobotFaceDoseActionLogger? doseActionLogger;
+  final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
   final VoidCallback? onLongPress;
 
   @override
@@ -294,6 +304,8 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                               onInteraction: _handleInteraction,
                               onLongPress: widget.onLongPress,
                               doseActionLogger: widget.doseActionLogger,
+                              visibleAndTakenLogger:
+                                  widget.visibleAndTakenLogger,
                             );
 
                             if (isPortraitFrame) {
@@ -357,23 +369,19 @@ class _RobotFaceExitButton extends StatelessWidget {
         alignment: Alignment.topLeft,
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Semantics(
-            button: true,
-            label: 'Open Today',
-            child: SizedBox(
-              height: 48,
-              child: OutlinedButton.icon(
-                key: RobotFaceScreen.exitButtonKey,
-                onPressed: onPressed,
-                icon: const Icon(Icons.arrow_back_rounded),
-                label: const Text('Open Today'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFFD5F4FF),
-                  backgroundColor: const Color(0xED102A43),
-                  side: const BorderSide(color: Color(0x9900A8E8)),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: OutlinedButton.icon(
+              key: RobotFaceScreen.exitButtonKey,
+              onPressed: onPressed,
+              icon: const Icon(Icons.arrow_back_rounded),
+              label: const Text('Open Today'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFD5F4FF),
+                backgroundColor: const Color(0xED102A43),
+                side: const BorderSide(color: Color(0x9900A8E8)),
+                textStyle: const TextStyle(fontWeight: FontWeight.w700),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
               ),
             ),
           ),
@@ -938,6 +946,7 @@ class _RobotFaceFrame extends StatelessWidget {
     required this.onInteraction,
     this.onLongPress,
     this.doseActionLogger,
+    this.visibleAndTakenLogger,
   });
 
   final RobotFaceState state;
@@ -950,6 +959,7 @@ class _RobotFaceFrame extends StatelessWidget {
   final VoidCallback onInteraction;
   final VoidCallback? onLongPress;
   final RobotFaceDoseActionLogger? doseActionLogger;
+  final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
 
   @override
   Widget build(BuildContext context) {
@@ -1058,6 +1068,7 @@ class _RobotFaceFrame extends StatelessWidget {
                 key: RobotFaceScreen.bottomCardKey,
                 state: state,
                 doseActionLogger: doseActionLogger,
+                visibleAndTakenLogger: visibleAndTakenLogger,
               ),
             ],
           ),
@@ -1103,10 +1114,12 @@ class _RobotFaceStatusCard extends StatelessWidget {
     super.key,
     required this.state,
     this.doseActionLogger,
+    this.visibleAndTakenLogger,
   });
 
   final RobotFaceState state;
   final RobotFaceDoseActionLogger? doseActionLogger;
+  final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
 
   @override
   Widget build(BuildContext context) {
@@ -1298,6 +1311,7 @@ class _RobotFaceStatusCard extends StatelessWidget {
               _RobotFaceActionPanel(
                 state: state,
                 doseActionLogger: doseActionLogger,
+                visibleAndTakenLogger: visibleAndTakenLogger,
               ),
             ],
           ],
@@ -1503,10 +1517,15 @@ class _RobotFaceShortageCard extends StatelessWidget {
 }
 
 class _RobotFaceActionPanel extends StatefulWidget {
-  const _RobotFaceActionPanel({required this.state, this.doseActionLogger});
+  const _RobotFaceActionPanel({
+    required this.state,
+    this.doseActionLogger,
+    this.visibleAndTakenLogger,
+  });
 
   final RobotFaceState state;
   final RobotFaceDoseActionLogger? doseActionLogger;
+  final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
 
   @override
   State<_RobotFaceActionPanel> createState() => _RobotFaceActionPanelState();
@@ -1584,21 +1603,11 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
       buttons.add(
         _buildActionButton(
           key: RobotFaceScreen.confirmTakenButtonKey,
-          label: 'Confirm taken',
+          label: 'I can see it and took it',
           isEnabled: _isActionEnabled(RobotFaceActionKind.confirmTaken),
           onPressed: () {
             final occurredAt = DoseyAppScope.of(context).appClock.now().toUtc();
-            unawaited(
-              _logAction(
-                context,
-                actionKind: RobotFaceActionKind.confirmTaken,
-                event: DoseLogEvent.doseTakenConfirmed(
-                  doseId: widget.state.actionDoseId!,
-                  occurredAt: occurredAt,
-                ),
-                successMessage: 'Taken logged.',
-              ),
-            );
+            unawaited(_logVisibleAndTaken(context, occurredAt: occurredAt));
           },
         ),
       );
@@ -1793,6 +1802,36 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
       if (mounted) {
         setState(() => _isSubmitting = false);
       }
+    }
+  }
+
+  Future<void> _logVisibleAndTaken(
+    BuildContext context, {
+    required DateTime occurredAt,
+  }) async {
+    if (_isSubmitting) return;
+    final actionDoseId = widget.state.actionDoseId;
+    if (actionDoseId == null || !await authorizeActionPin(context)) return;
+    if (!context.mounted) return;
+
+    setState(() => _isSubmitting = true);
+    try {
+      final logged =
+          await (widget.visibleAndTakenLogger ??
+              DoseActionLogger.logRobotFaceVisibleAndTaken)(
+            context,
+            doseId: actionDoseId,
+            occurredAt: occurredAt,
+            successMessage: 'Taken logged.',
+          );
+      if (!logged || !context.mounted) return;
+      setState(() {
+        _completedActionsForDose(
+          actionDoseId,
+        ).addAll(widget.state.availableActions);
+      });
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 }

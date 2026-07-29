@@ -42,6 +42,7 @@ class _DoseyShellState extends State<DoseyShell>
   _ShellTabId? _selectedTabId;
   SettingsSection? _settingsSectionTarget;
   int _settingsNavigationRequest = 0;
+  int _maintenanceNavigationRequest = 0;
   int _carouselNavigationRequest = 0;
   DoseyAppDependencies? _dependencies;
   ReminderNotificationTapController? _notificationTaps;
@@ -230,7 +231,7 @@ class _DoseyShellState extends State<DoseyShell>
           _syncSystemUi(faceVisible);
         });
         final selectedNavigationIndex = navigationTabs.indexWhere(
-          (tab) => tab.id == activeTab.id,
+          (tab) => tab.id == _visibleParentFor(activeTab.id),
         );
 
         return Listener(
@@ -288,9 +289,8 @@ class _DoseyShellState extends State<DoseyShell>
           label: 'Today',
         ),
         screenBuilder: (selectedIndex, tabIndex) => TodayScreen(
-          onOpenMedications: () => _selectVisibleTab(_ShellTabId.medications),
           onOpenCarousel: _openCarousel,
-          onOpenSettings: _openSettings,
+          onOpenMaintenance: _openDeviceAttention,
         ),
       ),
       _ShellTab(
@@ -364,6 +364,8 @@ class _DoseyShellState extends State<DoseyShell>
             'settings-$_settingsNavigationRequest-$_settingsSectionTarget',
           ),
           sectionTarget: _settingsSectionTarget,
+          openMaintenanceRequest: _maintenanceNavigationRequest,
+          onMaintenanceRequestAcknowledged: _acknowledgeMaintenanceRequest,
         ),
       ),
     ];
@@ -391,6 +393,28 @@ class _DoseyShellState extends State<DoseyShell>
     _stopFaceAwakeWindow();
     _restartInactivityTimer();
     _syncScreenAwake();
+  }
+
+  void _openDeviceAttention() {
+    if (_currentRole?.canHostRobot != true) {
+      _openSettings();
+      return;
+    }
+    _markAuthoritativeNavigationThroughNextFrame();
+    setState(() {
+      _settingsNavigationRequest += 1;
+      _maintenanceNavigationRequest += 1;
+      _selectedTabId = _ShellTabId.settings;
+    });
+  }
+
+  void _acknowledgeMaintenanceRequest(int request) {
+    if (request != _maintenanceNavigationRequest) return;
+    setState(() {
+      if (request == _maintenanceNavigationRequest) {
+        _maintenanceNavigationRequest = 0;
+      }
+    });
   }
 
   void _pushMedicationRoute({required String title, required Widget child}) {
@@ -529,7 +553,8 @@ class _DoseyShellState extends State<DoseyShell>
     _wasPresenting = state.isPresenting;
     if (state.isPresenting) {
       _selectTab(_ShellTabId.robotFace);
-    } else if (_dependencies?.isDemo == true) {
+    } else if (_dependencies?.isDemo == true &&
+        _currentRole?.canHostRobot == true) {
       _selectTab(_ShellTabId.guidedTrial);
     }
   }
@@ -826,6 +851,12 @@ class _DoseyShellState extends State<DoseyShell>
       RobotFaceShellDestination.robotFace => _ShellTabId.robotFace,
     };
   }
+
+  _ShellTabId _visibleParentFor(_ShellTabId tab) => switch (tab) {
+    _ShellTabId.carousel => _ShellTabId.medications,
+    _ShellTabId.guidedTrial => _ShellTabId.settings,
+    _ => tab,
+  };
 
   void _syncSystemUi(bool faceVisible) {
     if (!mounted) return;

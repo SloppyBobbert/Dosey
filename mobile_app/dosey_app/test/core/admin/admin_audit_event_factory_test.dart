@@ -146,4 +146,18 @@ void main() {
     expect(event.detailsJson, isNot(contains('code')));
     expect(event.detailsJson, isNot(contains('digest')));
   });
+
+  test('maintenance entry audit uses the maintenance target', () {
+    final event = factory.maintenanceEntered(
+      actor: actor,
+      sourceDeviceRole: 'androidRobot',
+      summary: 'Opened Robot Maintenance tools.',
+      occurredAt: DateTime.utc(2026, 7, 28, 12),
+    );
+
+    expect(event.eventType, AdminAuditEventType.maintenanceEntered);
+    expect(event.targetType, AdminAuditTargetType.maintenance);
+    expect(event.sourceDeviceRole, 'androidRobot');
+    expect(event.summary, 'Opened Robot Maintenance tools.');
+  });
 }

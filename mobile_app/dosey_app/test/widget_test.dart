@@ -26,6 +26,7 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
+import 'package:dosey_app/features/settings/settings_accordion.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -129,7 +130,7 @@ void main() {
     await _pumpAppFrame(tester);
 
     expect(find.text('Today'), findsWidgets);
-    expect(find.text('Today'), findsWidgets);
+    expect(find.text('Dashboard'), findsNothing);
     expect(find.text('Sign in to continue'), findsNothing);
     expect(find.text('Robot Mode'), findsNothing);
     expect(find.text('Personal Mode'), findsNothing);
@@ -4117,12 +4118,20 @@ Future<void> _openRefillFlow(WidgetTester tester) async {
 }
 
 Future<void> _openSettingsAccordion(WidgetTester tester, String title) async {
-  final titleFinder = find.text(title);
-  await _scrollSettingsUntilVisible(tester, titleFinder);
-  await tester.ensureVisible(titleFinder.first);
+  final accordion = _settingsAccordion(title);
+  await _scrollSettingsUntilVisible(tester, accordion);
+  await tester.ensureVisible(accordion);
   await tester.pump();
-  await tester.tap(titleFinder.first);
+  await tester.tap(
+    find.descendant(of: accordion, matching: find.byType(InkWell)).first,
+  );
   await _pumpAppFrame(tester);
+}
+
+Finder _settingsAccordion(String title) {
+  return find.byWidgetPredicate(
+    (widget) => widget is SettingsAccordion && widget.title == title,
+  );
 }
 
 Future<void> _openBottomDestination(WidgetTester tester, String label) async {
@@ -4211,9 +4220,6 @@ Future<void> _waitForVisible(WidgetTester tester, Finder finder) async {
 Future<void> _openDoseHistory(WidgetTester tester) async {
   await _openBottomDestination(tester, 'Settings');
   await _openSettingsAccordion(tester, 'Device & connection');
-  if (find.text('Open dose history').evaluate().isEmpty) {
-    await _scrollSettingsUntilVisible(tester, find.text('Open dose history'));
-  }
   await _scrollSettingsUntilVisible(tester, find.text('Open dose history'));
   await tester.tap(find.text('Open dose history').hitTestable());
   await _pumpAppFrame(tester);

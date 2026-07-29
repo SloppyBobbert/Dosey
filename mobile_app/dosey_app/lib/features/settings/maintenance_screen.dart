@@ -20,13 +20,22 @@ class _MaintenanceScreen extends StatelessWidget {
               ).colorScheme.errorContainer.withValues(alpha: 0.34),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: const Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('For setup and repairs'),
-                SizedBox(height: 4),
+                Text(
+                  'For setup and repairs',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
                 Text(
                   'Daily reminders and dose confirmations stay in Today. Use these tools only when setting up or repairing the robot.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onErrorContainer,
+                  ),
                 ),
               ],
             ),

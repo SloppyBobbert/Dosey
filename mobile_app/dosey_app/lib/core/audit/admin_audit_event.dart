@@ -25,6 +25,7 @@ enum AdminAuditEventType {
   guidedLoadShortageRecognized,
   guidedLoadShortageResolved,
   guidedLoadShortagePastDue,
+  maintenanceEntered,
 }
 
 enum AdminAuditTargetType {
@@ -37,6 +38,7 @@ enum AdminAuditTargetType {
   pin,
   carouselLoadSession,
   medicationShortageAlert,
+  maintenance,
 }
 
 enum AdminAuditActorType { localAdmin, signedInUser, caregiver, system }

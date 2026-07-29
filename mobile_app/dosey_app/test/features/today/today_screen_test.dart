@@ -60,9 +60,7 @@ void main() {
         bleGateway: FakeBleGateway(),
         connectivityGateway: FakeConnectivityGateway(),
         missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
-        child: MaterialApp(
-          home: Scaffold(body: TodayScreen(onOpenMedications: () {})),
-        ),
+        child: MaterialApp(home: const Scaffold(body: TodayScreen())),
       ),
     );
     await tester.pumpAndSettle();
@@ -71,7 +69,7 @@ void main() {
     expect(find.textContaining('upcoming dose'), findsWidgets);
     expect(find.text('Needs attention'), findsOneWidget);
     expect(find.text('A missed dose needs review.'), findsOneWidget);
-    expect(find.text('Review medications'), findsOneWidget);
+    expect(find.text('Review medications'), findsNothing);
     expect(find.text('Upcoming doses'), findsOneWidget);
     expect(find.text('Mark dose as taken'), findsOneWidget);
     expect(find.text('Carousel'), findsNothing);

@@ -58,4 +58,36 @@ class DoseActionLogger {
       return false;
     }
   }
+
+  static Future<bool> logRobotFaceVisibleAndTaken(
+    BuildContext context, {
+    required String doseId,
+    required DateTime occurredAt,
+    required String successMessage,
+  }) async {
+    try {
+      final result = await DoseyAppScope.of(context).doseActions
+          .recordRobotFaceVisibleAndTaken(
+            doseId: doseId,
+            occurredAt: occurredAt,
+          );
+      if (!context.mounted) return true;
+      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      if (result == DoseActionResult.ignored) {
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Dose already logged for today.')),
+        );
+        return true;
+      }
+      messenger.showSnackBar(SnackBar(content: Text(successMessage)));
+      return true;
+    } on Object catch (error) {
+      if (!context.mounted) return false;
+      final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      messenger.showSnackBar(
+        SnackBar(content: Text('Dose action failed: $error')),
+      );
+      return false;
+    }
+  }
 }

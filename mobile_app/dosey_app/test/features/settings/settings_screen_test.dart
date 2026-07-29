@@ -25,6 +25,7 @@ import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/onboarding/household_membership_gate.dart';
+import 'package:dosey_app/features/controller/controller_screen.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/settings/settings_accordion.dart';
 import 'package:flutter/foundation.dart';
@@ -121,6 +122,138 @@ void main() {
     );
     expect(reminders.expanded, isTrue);
     expect(helpSafety.expanded, isFalse);
+
+    await _tapSettingsAccordion(tester, _settingsAccordion('Reminders'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<SettingsAccordion>(_settingsAccordion('Reminders'))
+          .expanded,
+      isFalse,
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.notifications,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<SettingsAccordion>(_settingsAccordion('Reminders'))
+          .expanded,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<SettingsAccordion>(_settingsAccordion('Help & safety'))
+          .expanded,
+      isFalse,
+    );
+  });
+
+  testWidgets('maintenance lookup failure stays in Settings without auditing', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
+    await tester.pumpAndSettle();
+    expect(await database.select(database.adminAuditEvents).get(), isEmpty);
+
+    await database.close();
+    await tester.tap(find.byKey(const Key('open-maintenance-tools')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Maintenance availability failed:'),
+      findsOneWidget,
+    );
+    expect(find.text('Enter Action PIN'), findsNothing);
+    expect(find.byType(ControllerScreen, skipOffstage: false), findsNothing);
+    expect(find.text('For setup and repairs'), findsNothing);
+    expect(find.text('Hardware bench'), findsNothing);
+  });
+
+  testWidgets('cancelling Maintenance PIN leaves tools closed and unaudited', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('open-maintenance-tools')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ControllerScreen, skipOffstage: false), findsNothing);
+    expect(find.text('For setup and repairs'), findsNothing);
+    expect(find.text('Hardware bench'), findsNothing);
+    expect(await database.select(database.adminAuditEvents).get(), isEmpty);
+  });
+
+  testWidgets('Maintenance entry audits once after a successful PIN check', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
+    final app = _TestSettingsApp(
+      database: database,
+      buildProfile: AppBuildProfile.robot,
+    );
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('open-maintenance-tools')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('For setup and repairs'), findsOneWidget);
+    final auditRows = await database.select(database.adminAuditEvents).get();
+    expect(auditRows, hasLength(1));
+    expect(
+      auditRows.single.eventType,
+      AdminAuditEventType.maintenanceEntered.name,
+    );
+    expect(auditRows.single.targetType, AdminAuditTargetType.maintenance.name);
+    expect(
+      auditRows.single.sourceDeviceRole,
+      AppDeviceRole.androidRobot.storageValue,
+    );
+    expect(auditRows.single.summary, 'Opened Robot Maintenance tools.');
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+    expect(
+      await database.select(database.adminAuditEvents).get(),
+      hasLength(1),
+    );
   });
 
   testWidgets(
@@ -146,6 +279,7 @@ void main() {
       await tester.tap(find.text('Open tools'));
       await tester.pumpAndSettle();
       expect(find.text('Enter Action PIN'), findsOneWidget);
+      expect(find.byType(ControllerScreen, skipOffstage: false), findsNothing);
       expect(find.text('Hardware bench'), findsNothing);
 
       await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
@@ -253,7 +387,13 @@ void main() {
     await tester.pumpAndSettle();
     await _openMaintenanceRecords(tester);
 
-    await tester.tap(find.text('Export backup'));
+    final exportBackup = find.widgetWithText(FilledButton, 'Export backup');
+    await tester.drag(
+      find.byType(Scrollable).hitTestable().first,
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(exportBackup.hitTestable());
     await tester.pumpAndSettle();
     expect(find.text('Export unencrypted backup?'), findsOneWidget);
 
@@ -317,9 +457,13 @@ void main() {
     ).setActionPin('1234');
     await tester.pumpAndSettle();
     await _openMaintenanceRecords(tester);
-    final restoreBackup = find.text('Restore backup');
-    await tester.ensureVisible(restoreBackup);
-    await tester.tap(restoreBackup);
+    final restoreBackup = find.widgetWithText(FilledButton, 'Restore backup');
+    await tester.drag(
+      find.byType(Scrollable).hitTestable().first,
+      const Offset(0, -200),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(restoreBackup.hitTestable());
     await tester.pump();
     await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
     await tester.tap(find.text('Continue'));
@@ -548,7 +692,6 @@ void main() {
     ).settings.setDeviceRole(AppDeviceRole.androidPersonal);
     await tester.pumpAndSettle();
 
-    expect(find.text('Robot Face'), findsNothing);
     expect(find.text('Robot Face'), findsNothing);
     expect(find.text('Flip face 180°'), findsNothing);
     expect(find.text('Dim after inactivity'), findsNothing);
@@ -1846,14 +1989,26 @@ List<SettingsAccordion> _accordions(WidgetTester tester) {
 }
 
 Future<void> _openSettingsAccordion(WidgetTester tester, String title) async {
-  final finder = find.text(title);
+  final finder = _settingsAccordion(title);
   await tester.scrollUntilVisible(
     finder,
     240,
     scrollable: find.byType(Scrollable).first,
   );
-  await tester.tap(finder.first);
+  await _tapSettingsAccordion(tester, finder);
   await tester.pumpAndSettle();
+}
+
+Finder _settingsAccordion(String title) {
+  return find.byWidgetPredicate(
+    (widget) => widget is SettingsAccordion && widget.title == title,
+  );
+}
+
+Future<void> _tapSettingsAccordion(WidgetTester tester, Finder accordion) {
+  return tester.tap(
+    find.descendant(of: accordion, matching: find.byType(InkWell)).first,
+  );
 }
 
 Future<void> _openMaintenanceRecords(WidgetTester tester) async {
