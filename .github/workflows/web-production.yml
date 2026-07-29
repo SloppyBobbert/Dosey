@@ -106,7 +106,10 @@ jobs:
           test -s build/web/auth.html
           test -s build/web/flutter_bootstrap.js
           test -s build/web/manifest.json
-          test ! -e build/web/.env
+          if find build/web -name .env -print -quit | grep -q .; then
+            printf 'Unexpected .env file in web artifact\n' >&2
+            exit 1
+          fi
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
