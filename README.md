@@ -19,7 +19,7 @@
 
 Dosey is designed around being inexpensive, widely available, and with easily replaceable components. The current prototype uses:
 
-- A premade, food safe-ish pill carousel
+- A premade pill carousel; its food-contact suitability has not been independently verified
 - Almost any inexpensive USB-C Android phone as its face and interface
 - A Seeed Studio XIAO ESP32-C6 microcontroller
 - Grove-compatible sensors and accessories
@@ -49,7 +49,7 @@ The project is intended to explore whether an inexpensive, expressive, and repai
 | Mechanism | Grove Servo pusher with a ratchet or physical stop; prior movement from a different 3.3 V Grove board is preliminary evidence only, and the final Grove Base `D8/A8` path remains unverified |
 | Shell | Fully LEGO body around the carousel, phone, electronics, cup opening, and service panels |
 | App data | Drift/SQLite remains local-first; Appwrite provides human identity, while Functions provide household ownership and mounted-phone pairing foundations |
-| App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus a face-first mounted experience in Android Robot Mode |
+| App shell | Today, Medications, and Settings; prescriptions, schedules, and carousel management live within those surfaces, Controller is protected under Robot Maintenance, and Robot Face is the mounted Android surface |
 | Safety status | Fake-pill testing only; not for real medication |
 
 ## Safety
@@ -121,7 +121,7 @@ The project should now focus on the servo/carousel rig while app MVP work contin
 
 1. **Hardware selected** — ESP32-C6, Grove Base SKU 103020312, and the eight-socket layout are selected. Verify the Grove Servo power behavior, PIR, Light Sensor, Active Buzzer, DHT20, and Dual Buttons one at a time before combined testing.
 2. **Servo and carousel rig** — Next major build. Advance the Daviky carousel one slot repeatably, prevent rollback, and align the slot with the chute/cup.
-3. **Bluetooth control** — Physically verify the implemented D1 phone-to-XIAO command/status protocol, acknowledgements, heartbeat, disconnect handling, and reconnect behavior.
+3. **Bluetooth control** — Extend the existing physical safe-default BLE command/status evidence to reconnect, controller power-loss, missed-heartbeat, fresh-heartbeat gating, and movement behavior.
 4. **Basic app MVP** — Continue Robot Mode with the face screen, schedule, loading guide, dispense, refill, history, hardware test, local safety flows, and Guided Trial scenarios.
 5. **LEGO body integration** — Turn the working rig into a cute, stable, serviceable LEGO robot body.
 6. **Reliability features** — Physically verify the app's heartbeat/offline recovery and continue refill warnings, missed-dose handling, PIN, error recovery, and index correction.
@@ -149,6 +149,9 @@ Useful docs:
 | [`docs/protocol.md`](docs/protocol.md) | Bluetooth command, acknowledgement, heartbeat, status, and dose-event messages |
 | [`docs/controller_bench_runbook.md`](docs/controller_bench_runbook.md) | Supervised BLE and controller bench-test gates |
 | [`docs/local_backup_format.md`](docs/local_backup_format.md) | Versioned local backup contents, validation, and restore behavior |
+| [`mobile_app/dosey_app/README.md`](mobile_app/dosey_app/README.md) | Canonical app scope, exact local commands, and CI commands |
+| [`mobile_app/dosey_app/ROBOT_SOFTWARE_DEMO_QUALIFICATION.md`](mobile_app/dosey_app/ROBOT_SOFTWARE_DEMO_QUALIFICATION.md) | Android Robot simulator-demo automated qualification evidence and pending physical evidence |
+| [`firmware/HARDWARE_VALIDATION.md`](firmware/HARDWARE_VALIDATION.md) | Physical controller and hardware validation status |
 
 ## Firmware
 
@@ -162,11 +165,11 @@ Build the safe-default controller image from `firmware/` with `/tmp/dosey-platfo
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the practical platform for Robot Mode because the phone lives inside Dosey; iOS remains supported for Personal Mode.
 
-The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. Mounted Robot Mode returns to Robot Face on resume and after a configurable 1, 2, 5, 10, or 15 minutes of inactivity, contains Back navigation inside the app, keeps the screen awake only while the face is active and the app is resumed, and routes local dose and shortage notification taps to the appropriate in-app surface. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Guided Trial scenarios, Appwrite-backed Google identity and legacy pairing, native iOS Apple sign-in, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, pairing, and dose logging. Secure mounted-access restoration remains a pending mobile follow-up.
+The app lives in `mobile_app/dosey_app/`. The current shell has Today, Medications, and Settings; prescriptions, schedules, and carousel management live within those surfaces, while Controller is protected under Robot Maintenance. Robot Face is the mounted Android surface. Mounted Robot Mode returns to Robot Face on resume and after a configurable 1, 2, 5, 10, or 15 minutes of inactivity, contains Back navigation inside the app, keeps the screen awake only while the face is active and the app is resumed, and routes local dose and shortage notification taps to the appropriate in-app surface. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Guided Trial scenarios, Appwrite-backed Google identity and legacy pairing, native iOS Apple sign-in, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, pairing, and dose logging. Secure mounted-access restoration remains a pending mobile follow-up.
 
 BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
 
-- `flutter_blue_plus` for the compile-tested D1 BLE transport and staged controller gateway; physical BLE behavior remains unverified.
+- `flutter_blue_plus` for the compile-tested D1 BLE transport and staged controller gateway; Android-to-bare-XIAO connection, safe-default HEARTBEAT, device/config/safety status, LED test, and disconnect indication were observed. That bench evidence does not qualify the identified APK or integrated carousel/hardware path. Integrated external-hardware lifecycle, reconnect, power-loss, movement cancellation/timeout, and movement/dispensing behavior remain unverified.
 - `connectivity_plus` for advisory connectivity and Wi-Fi status only; this is not Wi-Fi provisioning.
 - `appwrite` for Google cloud identity, robot ownership, and server-authorized mounted-phone pairing behind Dosey-owned interfaces.
 - `google_sign_in` and a native iOS Apple sign-in bridge remain available for local/provider-specific auth paths.
@@ -186,21 +189,15 @@ Device roles are intentionally platform-limited:
 - Android personal phone: a personal Android phone can receive notifications and use the app.
 - iOS personal phone: iOS can receive notifications and use the app, but cannot be the robot's embedded phone.
 
-Current local checks:
+Use the [canonical app README](mobile_app/dosey_app/README.md#local-commands)
+for exact local flavor/profile commands and its
+[CI commands](mobile_app/dosey_app/README.md#ci-commands). Unflavored APK
+commands are not canonical.
 
-```sh
-cd mobile_app/dosey_app
-dart format .
-dart run build_runner build
-git diff --exit-code -- lib/core/storage/dosey_database.g.dart
-flutter analyze
-flutter test
-flutter build apk --debug
-flutter build ios --debug --no-codesign
-git diff --check
-```
-
-Pull requests also run Mobile CI through GitHub Actions. The workflow checks committed whitespace, generated Drift code, formatting, analyzer output, tests, and an Android debug APK build on Ubuntu. iOS builds stay local for now because they require macOS runners.
+Mobile CI checks committed whitespace, generated Drift code, formatting,
+analysis, and tests; it builds both Personal and Robot debug APK flavors on
+Ubuntu and a separate no-codesign iOS debug build on macOS. The Android APKs are
+short-lived debug artifacts, not releases.
 
 ## Mechanical prototype
 
@@ -216,13 +213,13 @@ The Grove Servo previously moved the actual carousel from a 3.3 V socket on a di
 
 ## Project status
 
-Early prototype. The repo has a safety-first Flutter app shell, mounted-phone Robot Mode guardrails, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, Guided Trial scenarios, local settings/dose-log storage, Appwrite-backed Google identity and mounted-phone pairing foundations, a compile-tested D1 BLE transport and fail-closed controller lifecycle, a controller simulator, local Android/iOS tooling, and a safe-default controller firmware baseline. It still has no physically validated integrated firmware or phone-to-hardware BLE lifecycle, medication schedule/dose cloud sync, remote push notifications, or proven repeatable Daviky carousel movement.
+Early prototype. The repo has a safety-first Flutter app shell, mounted-phone Robot Mode guardrails, fixed prerecorded Robot Mode voice prompts, local prescription and schedule controls, local refill inventory tracking, Today dose-state logging that keeps controller movement separate from taken confirmation, skipped state, and inventory changes, Daviky carousel loading and dispense workflow scaffolding, Guided Trial scenarios, local settings/dose-log storage, Appwrite-backed Google identity and mounted-phone pairing foundations, a compile-tested D1 BLE transport and fail-closed controller lifecycle, a controller simulator, local Android/iOS tooling, and a safe-default controller firmware baseline. Physical bench evidence covers safe-default USB/BLE status and diagnostic commands, but the repo still has no fully qualified integrated phone-to-hardware lifecycle, medication schedule/dose cloud sync, remote push notifications, or proven repeatable Daviky carousel movement.
 
 Near-term work:
 
 - Verify the ESP32-C6 and Grove Base wiring, pin assignments, and loaded Grove Servo power behavior.
 - Build the Stage 2 servo/carousel rig and run repeated one-slot tests.
-- Physically verify D1 BLE discovery, commands, status, heartbeat, disconnect, and reconnect behavior against the bare XIAO before enabling external hardware.
+- Extend physical D1 BLE evidence to controller power loss, missed heartbeats, reconnect, and fresh-heartbeat gating before enabling movement.
 - Run mounted-phone manual QA on the Moto G Play, including inactivity return, notification routing, Back containment, screen-awake release, and role changes.
 - Add screenshots or simulator scenario notes for the current app surfaces before a broader app polish PR.
 - Integrate the working rig into a fully LEGO shell only after movement is repeatable.

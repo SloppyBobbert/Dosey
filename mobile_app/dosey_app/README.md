@@ -22,7 +22,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Robot Face scaffolding with local face-state timing settings for wake-before-dose and stay-awake-after-dose behavior.
 - Mounted Robot Mode behavior that returns to Robot Face on resume, Back, or configurable inactivity; routes local notification taps by role and alert type; and keeps the Android display awake only while Robot Face is active and the app is resumed, never while backgrounded.
 - Fixed WAV voice catalog for the mounted Robot Mode phone, with app-owned asset playback wiring, previews, category toggles, quiet hours, configurable repetition cooldowns, and reminder repeat policy controls for normal reminder speech.
-- Controller simulator plus a compile-tested D1 BLE transport and staged controller gateway; physical BLE behavior is still unverified.
+- Controller simulator plus a compile-tested D1 BLE transport and staged controller gateway; Android-to-bare-XIAO connection, safe-default HEARTBEAT, device/config/safety status, LED test, and disconnect indication were observed. That bench evidence does not qualify the identified APK or integrated carousel/hardware path. Integrated external-hardware lifecycle, reconnect, power-loss, movement cancellation/timeout, and movement/dispensing behavior remain unverified.
 - Guided Trial scenarios for simulator-backed happy-path dispensing, missed-dose recognition, and offline/reconnect behavior.
 - Appwrite-backed human identity and robot linking plus native iOS Apple sign-in, all behind app-owned interfaces. Human authentication, device pairing, and hardware authorization are independent capabilities: sign-in/sign-out does not change pairing, hardware authorization, settings, or local medication data, and pairing does not alter human authentication.
 - App-owned interfaces for controller/BLE, connectivity, auth, robot pairing, reminders, permissions, notifications, and dose logging.
@@ -111,6 +111,9 @@ The package migration still requires a physical Android exercise. Until that is 
 
 ## What works locally
 
+See the [Robot software demo qualification record](ROBOT_SOFTWARE_DEMO_QUALIFICATION.md)
+for the automated evidence and pending physical-device evidence.
+
 - Create, edit, and delete local prescriptions and reminders.
 - Track remaining doses, refill thresholds, refill warnings, and refill-add history locally.
 - Assign reminders to Daviky carousel slots and exercise controller flows with either the simulator or the compile-tested BLE bench path.
@@ -127,7 +130,7 @@ The app must not mark a dose taken because the servo moved. Dispense logging req
 
 ## Near-term app work
 
-- Physically verify BLE advertising, discovery, status, heartbeat, disconnect, and reconnect with the bare XIAO before attaching external hardware.
+- Extend the existing bare-XIAO BLE evidence through integrated external hardware, reconnect, controller power loss, missed-heartbeat and fresh-heartbeat gating, movement cancellation/timeout, and movement behavior.
 - Run mounted-phone manual QA on the Android test device for resume, inactivity, Back, notification, screen-awake, and role-change behavior.
 - Keep Today dose actions and refill inventory behavior aligned with local-first safety rules.
 - Physically verify the fail-closed heartbeat/offline and reconnect lifecycle for XIAO power loss, crash, disconnect, and missed responses.
@@ -155,7 +158,9 @@ git diff --check
 
 ## CI commands
 
-Mobile CI runs the non-iOS subset on GitHub Actions:
+Mobile CI has two jobs. Its Ubuntu job first checks committed whitespace, then
+runs the generated Drift code check, format, analyze, tests, Personal debug APK
+build, and Robot debug APK build:
 
 ```sh
 flutter pub get
@@ -168,11 +173,13 @@ flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-
 flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
 ```
 
-CI writes the four required public values from same-named GitHub repository variables to a temporary `.env`, checks committed whitespace, uploads both debug APKs as short-lived artifacts, and removes the temporary file even after failure. iOS no-codesign builds still run locally.
+The Ubuntu job uploads both debug APKs as short-lived artifacts. Its macOS job
+runs the no-codesign Personal-profile iOS debug build. Each job prepares the
+temporary public configuration it needs and removes it after the run.
 
 ## Local toolchain notes
 
 - Android SDK: `/opt/homebrew/share/android-commandlinetools`.
 - JDK: Homebrew OpenJDK 17.
 - Android packages installed: platform-tools, Android SDK Platforms 35 and 36, Build-Tools 36.0.0, NDK 28.2.13676358, CMake 3.22.1.
-- Xcode 26.5 is selected at `/Applications/Xcode.app/Contents/Developer`; no-codesign iOS debug builds run locally.
+- Xcode 26.5 is selected at `/Applications/Xcode.app/Contents/Developer`; no-codesign iOS debug builds can also run locally.

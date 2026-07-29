@@ -30,7 +30,11 @@ The BLE peripheral advertises as `Dosey-XIAO-C6` with service UUID
 reassembles newline-delimited bounded messages. A disconnect stops active
 movement without reporting completion, clears partial transport input, and
 restarts advertising. These paths compile and are host-tested where transport
-independent; physical BLE behavior remains unverified.
+independent. Physical Android-to-bare-XIAO connection, safe-default status and
+diagnostic commands, LED test, and disconnect indication have been observed.
+That bench evidence does not qualify the identified APK or integrated
+carousel/hardware path. Reconnect, power-loss, movement cancellation/timeout,
+and movement behavior remain unverified.
 
 The framing, parsing, dispatch, status, timeout, cancellation, and exact output
 transcripts are host-tested in `firmware/test/test_native`. Arduino-specific
