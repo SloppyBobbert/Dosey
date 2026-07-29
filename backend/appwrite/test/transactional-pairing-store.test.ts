@@ -9,14 +9,28 @@ import {
   type PairingTransaction,
 } from '../src/infrastructure/transactional-pairing-store.js';
 import { PairingTransactionConflictError } from '../src/infrastructure/appwrite-pairing-persistence.js';
+import type { MountedRobotAccessRecord } from '../src/domain/mounted-robot-access.js';
 
 class MemoryPairingPersistence implements PairingPersistence, PairingTransaction {
   claims = new Map<string, PairingClaimRecord>();
   activeClaimIds = new Set<string>();
   attempts = new Map<string, PairingAttemptRecord>();
+  mountedAccess = new Map<string, MountedRobotAccessRecord>();
 
   async transaction<T>(operation: (transaction: PairingTransaction) => Promise<T>) {
-    return operation(this);
+    const claims = new Map(this.claims);
+    const activeClaimIds = new Set(this.activeClaimIds);
+    const attempts = new Map(this.attempts);
+    const mountedAccess = new Map(this.mountedAccess);
+    try {
+      return await operation(this);
+    } catch (error) {
+      this.claims = claims;
+      this.activeClaimIds = activeClaimIds;
+      this.attempts = attempts;
+      this.mountedAccess = mountedAccess;
+      throw error;
+    }
   }
 
   async deactivateRobotClaims(robotId: string) {
@@ -49,6 +63,24 @@ class MemoryPairingPersistence implements PairingPersistence, PairingTransaction
   async saveAttempt(record: PairingAttemptRecord) {
     this.attempts.set(record.deviceAccountId, record);
   }
+
+  async findMountedAccessByDevice(deviceAccountId: string) {
+    return [...this.mountedAccess.values()].filter(
+      (record) => record.mountedDeviceAccountId === deviceAccountId,
+    );
+  }
+
+  async getMountedAccessByRobot(robotId: string) {
+    return this.mountedAccess.get(robotId) ?? null;
+  }
+
+  async createMountedAccess(record: MountedRobotAccessRecord) {
+    this.mountedAccess.set(record.robotId, record);
+  }
+
+  async updateMountedAccess(record: MountedRobotAccessRecord) {
+    this.mountedAccess.set(record.robotId, record);
+  }
 }
 
 function claim(id: string, robotId: string, digest: string): PairingClaimRecord {
@@ -64,9 +96,19 @@ function claim(id: string, robotId: string, digest: string): PairingClaimRecord 
 describe('transactional pairing store', () => {
   test('maps a concurrent claim transaction conflict to consumed', async () => {
     const store = new TransactionalPairingStore({
-      transaction: async () => {
+      transaction: async (operation) => {
+        await operation({
+          getAttempt: async () => null,
+          findActiveClaimByDigest: async () => claim('claim-1', 'robot-1', 'digest'),
+          saveClaim: async () => {},
+          findMountedAccessByDevice: async () => [],
+          getMountedAccessByRobot: async () => null,
+          createMountedAccess: async () => {},
+          saveAttempt: async () => {},
+        });
         throw new PairingTransactionConflictError();
       },
+      resolveClaimConflict: async () => 'consumed',
     });
 
     const result = await store.claimAtomically({
@@ -77,6 +119,55 @@ describe('transactional pairing store', () => {
     });
 
     assert.deepEqual(result, { status: 'rejected', reason: 'consumed' });
+  });
+
+  test('does not classify an unresolved conflict as a safe rejection', async () => {
+    let resolutionCalls = 0;
+    const store = new TransactionalPairingStore({
+      transaction: async () => { throw new PairingTransactionConflictError(); },
+      resolveClaimConflict: async () => {
+        resolutionCalls += 1;
+        return 'unknown';
+      },
+    });
+
+    await assert.rejects(
+      store.claimAtomically({
+        codeDigest: 'digest', mountedDeviceAccountId: 'device-1',
+        now: new Date('2026-07-26T12:00:00.000Z'), canClaim: async () => true,
+      }),
+      PairingTransactionConflictError,
+    );
+    assert.equal(resolutionCalls, 0);
+  });
+
+  test('classifies a unique mounted-device race from authoritative conflict checks', async () => {
+    const store = new TransactionalPairingStore({
+      transaction: async (operation) => {
+        await operation({
+          getAttempt: async () => null,
+          findActiveClaimByDigest: async () => claim('claim-1', 'robot-2', 'digest'),
+          saveClaim: async () => {},
+          findMountedAccessByDevice: async () => [{
+            robotId: 'robot-1',
+            mountedDeviceAccountId: 'device-1',
+            pairingClaimId: 'old',
+            createdAt: new Date('2026-07-26T11:00:00.000Z'),
+            updatedAt: new Date('2026-07-26T11:00:00.000Z'),
+          }],
+          getMountedAccessByRobot: async () => null,
+          createMountedAccess: async () => {},
+          saveAttempt: async () => {},
+        });
+        throw new PairingTransactionConflictError();
+      },
+      resolveClaimConflict: async () => 'device_already_mounted',
+    });
+
+    assert.deepEqual(await store.claimAtomically({
+      codeDigest: 'digest', mountedDeviceAccountId: 'device-1',
+      now: new Date('2026-07-26T12:00:00.000Z'), canClaim: async () => true,
+    }), { status: 'rejected', reason: 'device_already_mounted' });
   });
   test('replacing a credential invalidates the previous robot credential', async () => {
     const persistence = new MemoryPairingPersistence();
@@ -154,5 +245,95 @@ describe('transactional pairing store', () => {
 
     assert.deepEqual(result, { status: 'rejected', reason: 'invalid' });
     assert.equal(persistence.claims.get('claim-1')?.consumedAt, null);
+  });
+
+  test('rejects ineligible candidates before any pairing transaction write', async () => {
+    const persistence = new MemoryPairingPersistence();
+    const store = new TransactionalPairingStore(persistence);
+    await store.replaceActive(claim('claim-1', 'robot-1', 'digest'));
+
+    const result = await store.claimAtomically({
+      codeDigest: 'digest', mountedDeviceAccountId: 'device-1',
+      now: new Date('2026-07-26T12:00:00.000Z'), canClaim: async () => false,
+    });
+
+    assert.deepEqual(result, { status: 'rejected', reason: 'invalid' });
+    assert.equal(persistence.claims.get('claim-1')?.consumedAt, null);
+    assert.equal(persistence.mountedAccess.size, 0);
+  });
+
+  test('creates mounted access in the same claim transaction', async () => {
+    const persistence = new MemoryPairingPersistence();
+    const store = new TransactionalPairingStore(persistence);
+    await store.replaceActive(claim('claim-1', 'robot-1', 'digest'));
+
+    assert.deepEqual(await store.claimAtomically({
+      codeDigest: 'digest',
+      mountedDeviceAccountId: 'device-1',
+      now: new Date('2026-07-26T12:00:00.000Z'),
+      canClaim: async () => true,
+    }), { status: 'accepted', robotId: 'robot-1' });
+    assert.equal(persistence.mountedAccess.get('robot-1')?.pairingClaimId, 'claim-1');
+  });
+
+  test('replaces the mounted account atomically on a later claim', async () => {
+    const persistence = new MemoryPairingPersistence();
+    const store = new TransactionalPairingStore(persistence);
+    await store.replaceActive(claim('claim-1', 'robot-1', 'first'));
+    await store.claimAtomically({
+      codeDigest: 'first', mountedDeviceAccountId: 'old-device',
+      now: new Date('2026-07-26T12:00:00.000Z'), canClaim: async () => true,
+    });
+    await store.replaceActive(claim('claim-2', 'robot-1', 'second'));
+
+    assert.deepEqual(await store.claimAtomically({
+      codeDigest: 'second', mountedDeviceAccountId: 'new-device',
+      now: new Date('2026-07-26T12:01:00.000Z'), canClaim: async () => true,
+    }), { status: 'accepted', robotId: 'robot-1' });
+    assert.deepEqual(persistence.mountedAccess.get('robot-1'), {
+      robotId: 'robot-1',
+      mountedDeviceAccountId: 'new-device',
+      pairingClaimId: 'claim-2',
+      createdAt: new Date('2026-07-26T12:00:00.000Z'),
+      updatedAt: new Date('2026-07-26T12:01:00.000Z'),
+    });
+  });
+
+  test('rejects a device already mounted to another robot without consuming the claim', async () => {
+    const persistence = new MemoryPairingPersistence();
+    const store = new TransactionalPairingStore(persistence);
+    await store.replaceActive(claim('claim-1', 'robot-2', 'digest'));
+    persistence.mountedAccess.set('robot-1', {
+      robotId: 'robot-1', mountedDeviceAccountId: 'device-1', pairingClaimId: 'old',
+      createdAt: new Date('2026-07-26T11:00:00.000Z'),
+      updatedAt: new Date('2026-07-26T11:00:00.000Z'),
+    });
+
+    assert.deepEqual(await store.claimAtomically({
+      codeDigest: 'digest', mountedDeviceAccountId: 'device-1',
+      now: new Date('2026-07-26T12:00:00.000Z'), canClaim: async () => true,
+    }), { status: 'rejected', reason: 'device_already_mounted' });
+    assert.equal(persistence.claims.get('claim-1')?.consumedAt, null);
+  });
+
+  test('rolls back claim and access when the mounted access write fails', async () => {
+    class FailingPersistence extends MemoryPairingPersistence {
+      override async createMountedAccess(): Promise<void> {
+        throw new Error('mounted access write failed');
+      }
+    }
+    const persistence = new FailingPersistence();
+    const store = new TransactionalPairingStore(persistence);
+    await store.replaceActive(claim('claim-1', 'robot-1', 'digest'));
+
+    await assert.rejects(
+      store.claimAtomically({
+        codeDigest: 'digest', mountedDeviceAccountId: 'device-1',
+        now: new Date('2026-07-26T12:00:00.000Z'), canClaim: async () => true,
+      }),
+      /mounted access write failed/,
+    );
+    assert.equal(persistence.claims.get('claim-1')?.consumedAt, null);
+    assert.equal(persistence.mountedAccess.size, 0);
   });
 });

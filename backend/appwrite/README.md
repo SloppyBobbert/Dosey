@@ -1,12 +1,28 @@
 # Dosey Appwrite functions
 
-This package contains the server-authorized robot pairing and human household
-lifecycle foundations. It does not schedule doses, command dispensing, or mark
-doses taken.
+This package contains the server-authorized robot pairing, mounted-device
+restore, and human household lifecycle foundations. It does not schedule doses,
+command dispensing, or mark doses taken.
 
-The development setup uses Appwrite Teams for robot membership and TablesDB as
-the authority for pairing and human household lifecycle state. Flutter invokes
-Functions for every household mutation and never reads the server-only tables.
+Appwrite Teams remain the authority for robot ownership and human household
+membership. TablesDB is the authority for pairing and mounted-device access.
+On the target secure path, mounted anonymous Robot accounts never become Team
+members. Flutter invokes Functions for every server operation and never reads
+the server-only tables.
+
+The source and target contract is seven server-authorized Functions and six
+server-only TablesDB tables. The live staging backend rollout remains pending
+and incomplete until the approved cloud rollout is performed. Personal account
+and household use requires human authentication; the mounted Robot
+distribution remains fully usable as a guest.
+
+Human authentication, device pairing, and hardware authorization are independent
+capabilities. Sign-in/sign-out does not change pairing, hardware authorization,
+settings, or local medication data, and pairing does not alter human
+authentication. Appwrite/auth outages must not block the local Robot shell.
+Mounted credentials never save, swap, or restore a human session. Medication
+schedules, dose state/history, inventory, and related medication data remain in
+local Drift/SQLite; no medication sync or upload is introduced.
 
 ## Functions
 
@@ -16,6 +32,15 @@ Functions for every household mutation and never reads the server-only tables.
 - `src/entrypoints/create-household-invitation.ts`: replaces an owner's 24-hour email-bound invitation and returns its code once.
 - `src/entrypoints/accept-household-invitation.ts`: atomically reserves a human slot before creating the Team membership.
 - `src/entrypoints/remove-household-member.ts`: removes a member as the owner, or lets a non-owner member leave.
+- `src/entrypoints/get-mounted-robot.ts`: restores the robot identity for the authenticated anonymous mounted account.
+
+The target Android Robot configuration will include the active versioned secure
+claim Function ID and the public `get-mounted-robot` Function ID. A pending
+mobile follow-up will add `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID` and point the
+existing `APPWRITE_CLAIM_ROBOT_FUNCTION_ID` at that secure Function. Current
+clients do not read the new ID and remain on the legacy Function until the
+follow-up is released, configured, and validated. Database/table IDs, dynamic
+API keys, and HMAC secrets remain server-only; Web remains auth-only.
 
 Build with `npm ci && npm run build`. Configure each Appwrite Function with the corresponding compiled entrypoint:
 
@@ -26,21 +51,37 @@ dist/entrypoints/create-robot.js
 dist/entrypoints/create-household-invitation.js
 dist/entrypoints/accept-household-invitation.js
 dist/entrypoints/remove-household-member.js
+dist/entrypoints/get-mounted-robot.js
 ```
 
-Use Node.js 22 or newer. Do not expose either function's dynamic API key or the HMAC secret to Flutter.
+Use Node.js 22 or newer. Do not expose any Function dynamic API key or HMAC secret to Flutter.
 
 ## Environment
 
-Appwrite supplies the function endpoint, project ID, and dynamic API key. Add
-`DOSEY_DATABASE_ID` to every Function. Add these server-only variables only to
-the two pairing Functions:
+Appwrite supplies the Function endpoint, project ID, and dynamic API key. Add
+`DOSEY_DATABASE_ID` to every Function. Both pairing Functions require the
+pairing claims/attempts variables; `claim-robot` additionally requires the
+mounted access table:
 
 ```text
 DOSEY_DATABASE_ID
 DOSEY_PAIRING_CLAIMS_TABLE_ID
 DOSEY_PAIRING_ATTEMPTS_TABLE_ID
 DOSEY_PAIRING_HMAC_SECRET
+```
+
+`claim-robot` additionally requires:
+
+```text
+DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID
+```
+
+The `get-mounted-robot` Function requires only:
+
+```text
+DOSEY_DATABASE_ID
+DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID
+DOSEY_ROBOT_INSTALLATIONS_TABLE_ID
 ```
 
 Add these variables only to the four household lifecycle Functions:
@@ -57,14 +98,44 @@ Generate separate pairing and household invitation HMAC secrets with at least
 32 random characters each. Store them only in Appwrite Function environment
 variables. Never reuse, log, or expose either secret to Flutter.
 
-The dynamic API key needs only `rows.read`, `rows.write`, `teams.read`, and
-`teams.write`. Function execution access should require an authenticated
-Appwrite user. The mounted phone must use its own anonymous account; the app
-replaces an active human session before invoking the claim Function.
+The exact server scopes are:
+
+- `create-pairing-code`: `rows.read`, `rows.write`, `teams.read`.
+- `claim-robot`: `rows.read`, `rows.write`, `teams.read`.
+- `get-mounted-robot`: `rows.read`.
+- Each of the four household Functions: `rows.read`, `rows.write`,
+  `teams.read`, `teams.write`.
+
+Function execution access requires an authenticated Appwrite user. The mounted
+phone uses its own anonymous account. The target secure Android client restores
+by calling `get-mounted-robot`; current-main clients still use legacy
+Team-backed restoration. The web boundary is auth-only and does not expose
+mounted-robot restore state. A deployment of the old Team-writing
+`claim-robot` implementation is not a safe rollback target after this contract
+is deployed.
+
+## Rollout note
+
+The backend source implements the target contract, but the secure mounted-access
+path is not active in live staging. During the staging compatibility period, a
+pending mobile follow-up must point supported Android Robot builds at a secure
+claim under a separate versioned Function ID and configure the public
+`get-mounted-robot` Function ID. Keep the existing Team-writing Function
+available only to installed clients that still depend on Team-backed
+restoration. Do not dual-write mounted accounts into Teams.
+
+Before retiring the legacy Function, inventory every mounted staging device and
+upgrade or reset any client that still uses Team-backed restoration. Verify
+fresh and upgraded installs across guest/signed-in, paired/unpaired, and
+online/offline states, including restart restoration and failure behavior. If
+the device inventory is incomplete or any unsupported client remains, stop the
+rollout. Once the legacy Function is retired, do not reactivate its Team-writing
+deployment as a rollback.
 
 ## Tables
 
-Create a server-only database with no client row permissions.
+Create a server-only database with no client row permissions. This contract has
+six TablesDB tables, including `mounted_robot_access` above.
 
 `pairing_claims` columns:
 
@@ -90,7 +161,22 @@ as zero. The per-device `pairing_attempts` rows below are authoritative.
 | `failedAttempts` | integer | yes |
 | `blockedUntil` | datetime | no |
 
-The attempt row ID is the mounted-device account ID. Appwrite transactions make code replacement, consumption, and attempt updates atomic. A new owner-issued code invalidates the previous code. Five failed claims block that device account for fifteen minutes. A consumed code can retry only from the same mounted-device account and only until its original ten-minute expiry, allowing short recovery from a Teams update failure without creating a permanent remount credential.
+The attempt row ID is the mounted-device account ID. Appwrite transactions make code replacement, consumption, and attempt updates atomic. A new owner-issued code invalidates the previous code. Five failed claims block that device account for fifteen minutes. A consumed code can retry only from the same mounted-device account and only until its original ten-minute expiry, allowing recovery when the Function response or transaction outcome is ambiguous without creating a permanent remount credential.
+
+`mounted_robot_access` columns:
+
+| Column | Type | Required |
+| --- | --- | --- |
+| `robotId` | varchar | yes |
+| `mountedDeviceAccountId` | varchar | yes |
+| `pairingClaimId` | varchar | yes |
+| `createdAt` | datetime | yes |
+| `updatedAt` | datetime | yes |
+
+The row ID is exactly `robotId`. Add a unique index for
+`mountedDeviceAccountId`. This table has no client read or write permissions.
+Claim consumption, attempt reset, and mounted-access create/replace occur in
+one TablesDB transaction. Duplicate or mismatched rows are integrity failures.
 
 `robot_installations` columns:
 

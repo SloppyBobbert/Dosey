@@ -48,7 +48,7 @@ The project is intended to explore whether an inexpensive, expressive, and repai
 | Expansion hardware | Seeed Studio Grove Base for XIAO with battery management, SKU 103020312 |
 | Mechanism | Grove Servo pusher with a ratchet or physical stop; prior movement from a different 3.3 V Grove board is preliminary evidence only, and the final Grove Base `D8/A8` path remains unverified |
 | Shell | Fully LEGO body around the carousel, phone, electronics, cup opening, and service panels |
-| App data | Drift/SQLite remains local-first; Appwrite provides Google identity, robot ownership, and mounted-phone pairing foundations |
+| App data | Drift/SQLite remains local-first; Appwrite provides human identity, while Functions provide household ownership and mounted-phone pairing foundations |
 | App shell | Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings, plus a face-first mounted experience in Android Robot Mode |
 | Safety status | Fake-pill testing only; not for real medication |
 
@@ -81,7 +81,11 @@ Dosey is built around four main systems:
    - Personal Mode runs on Android and iOS phones for patient or caregiver use.
    - Robot Mode returns to Robot Face on resume, after configurable inactivity, or when Back is pressed from another app tab. The screen stays awake only while Robot Face is active and the app is resumed.
    - The phone handles schedules, medication data, refill logic, dose history, PIN rules, caregiver logic, UI, reminders, Bluetooth commands, fixed prerecorded Robot Mode voice prompts, and future voice-command or local AI features.
-   - Appwrite currently handles Google cloud identity, robot ownership records, and short-lived mounted-phone pairing. Medication schedules and dose state remain local in Drift.
+   - Personal users must authenticate for Personal account and household use. The mounted Robot distribution remains fully usable as a guest.
+   - Human authentication, device pairing, and hardware authorization are independent capabilities. Sign-in and sign-out do not change pairing, hardware authorization, settings, or local medication data; pairing does not change human authentication.
+   - Appwrite/auth outages must not block the local Robot shell. The app does not save, swap, or restore a human session to multiplex mounted Robot credentials.
+   - The backend source implements a target server-only `mounted_robot_access` and `get-mounted-robot` contract; it is not active in live staging. Current-main Android clients still use legacy Team-backed restoration and do not read `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID`.
+   - A pending mobile follow-up will add `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID`, point `APPWRITE_CLAIM_ROBOT_FUNCTION_ID` at a separate/versioned secure Function for supported Android Robot builds, and restore through `get-mounted-robot`. Until it is released, configured, and validated, legacy clients stay on the legacy Function. The target contract is seven server-authorized Functions and six server-only TablesDB tables. Medication schedules, dose state/history, inventory, and related medication data remain in local Drift/SQLite; no medication sync or upload is introduced.
 
 3. **XIAO and Grove controller**
    - The controller handles direct hardware only: servo movement, PIR, LEDs, buzzer/vibration, buttons, sensor readings, status, and Bluetooth messages.
@@ -158,7 +162,7 @@ Build the safe-default controller image from `firmware/` with `/tmp/dosey-platfo
 
 The app is a Flutter project under `mobile_app/dosey_app/`. Android is the practical platform for Robot Mode because the phone lives inside Dosey; iOS remains supported for Personal Mode.
 
-The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. Mounted Robot Mode returns to Robot Face on resume and after a configurable 1, 2, 5, 10, or 15 minutes of inactivity, contains Back navigation inside the app, keeps the screen awake only while the face is active and the app is resumed, and routes local dose and shortage notification taps to the appropriate in-app surface. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Guided Trial scenarios, Appwrite-backed Google identity and robot pairing, native iOS Apple sign-in, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, pairing, and dose logging.
+The app lives in `mobile_app/dosey_app/`. The current shell includes Today, Prescriptions, Schedule, Carousel, Controller, Log, and Settings for personal devices, plus Robot Face in Android Robot Mode. Mounted Robot Mode returns to Robot Face on resume and after a configurable 1, 2, 5, 10, or 15 minutes of inactivity, contains Back navigation inside the app, keeps the screen awake only while the face is active and the app is resumed, and routes local dose and shortage notification taps to the appropriate in-app surface. It includes local safety acknowledgement storage, prescription and schedule profile management, refill tracking, Daviky carousel loading, a controller simulator, Guided Trial scenarios, Appwrite-backed Google identity and legacy pairing, native iOS Apple sign-in, local Drift/SQLite storage, and app-owned interfaces for controller communication, reminders, permissions, auth, notifications, pairing, and dose logging. Secure mounted-access restoration remains a pending mobile follow-up.
 
 BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
 

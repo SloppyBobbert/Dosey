@@ -15,7 +15,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Safety-first copy and local safety acknowledgement storage.
 - Local prescription storage with remaining-dose counts, refill thresholds, refill-add history, and medication-type display.
 - Local reminder schedule storage with add/edit/delete controls, enabled/disabled state, duplicate-time checks, and schedule profiles.
-- Local household/profile metadata plus Appwrite-backed robot ownership and mounted-phone pairing. Human invitations and shared medication data are not active yet.
+- Local household/profile metadata plus Appwrite-backed robot ownership and current legacy mounted-phone pairing. Personal account and household use requires human authentication; the Robot distribution remains usable as a guest. Secure mounted-access restoration is a pending mobile follow-up; the live staging backend rollout remains pending/incomplete.
 - Four-digit Action PIN gating for protected admin edits, plus a separate local admin audit history for prescription, schedule, carousel, household/profile, and PIN lifecycle changes.
 - Carousel loading workflow with Daviky slot assignment, loaded/dispensed/review states, and controller-gated dispense actions.
 - Today dose-state logging that keeps dispense, visible, taken, skipped, missed, and caregiver/help actions separate.
@@ -24,7 +24,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Fixed WAV voice catalog for the mounted Robot Mode phone, with app-owned asset playback wiring, previews, category toggles, quiet hours, configurable repetition cooldowns, and reminder repeat policy controls for normal reminder speech.
 - Controller simulator plus a compile-tested D1 BLE transport and staged controller gateway; physical BLE behavior is still unverified.
 - Guided Trial scenarios for simulator-backed happy-path dispensing, missed-dose recognition, and offline/reconnect behavior.
-- Appwrite-backed Google identity and robot linking plus native iOS Apple sign-in, all behind app-owned interfaces.
+- Appwrite-backed human identity and robot linking plus native iOS Apple sign-in, all behind app-owned interfaces. Human authentication, device pairing, and hardware authorization are independent capabilities: sign-in/sign-out does not change pairing, hardware authorization, settings, or local medication data, and pairing does not alter human authentication.
 - App-owned interfaces for controller/BLE, connectivity, auth, robot pairing, reminders, permissions, notifications, and dose logging.
 - Drift/SQLite local database for device role settings, prescriptions, reminders, schedule profiles, carousel slots, cached auth state, refill records, dose log events, household/profile metadata, and admin audit events.
 
@@ -32,7 +32,7 @@ Selected background packages:
 
 - `flutter_blue_plus` for filtered Dosey discovery, GATT service discovery, notifications, and bounded D1 writes.
 - `connectivity_plus` for advisory connectivity/Wi-Fi status only, not provisioning.
-- `appwrite` for Google identity, robot ownership, and server-authorized mounted-phone pairing.
+- `appwrite` for human identity, robot ownership, and current legacy mounted-phone pairing. The target secure path uses server-only `mounted_robot_access` and `get-mounted-robot`; anonymous Robot accounts must never join or enumerate Teams on that path, which remain for human household ownership and membership.
 - `google_sign_in` plus a native iOS Apple sign-in bridge for local/provider-specific auth paths.
 - `flutter_local_notifications` for local reminder notifications and sounds.
 - `permission_handler` for runtime permission requests/checks. Android 12 and
@@ -41,13 +41,18 @@ Selected background packages:
 
 Notification channel IDs and sound IDs are intended to stay stable. Custom reminder sound assets may still need platform provisioning on Android/iOS.
 
-Appwrite currently stores account, robot ownership, membership, and pairing
-state. Prescriptions, schedules, dose history, and inventory remain local in
-Drift. Remote push notifications and medication-data cloud sync are not active.
+Appwrite Functions define the target account, human household, pairing, and
+mounted restoration contract. The backend source implements that contract, but
+it is not active in live staging. Prescriptions, schedules, dose state/history,
+inventory, and related medication data remain local in Drift/SQLite. No
+medication-data sync or upload is introduced. Appwrite/auth outages must not
+block the local Robot shell, and mounted credentials do not save, swap, or
+restore a human session.
 
 ## Appwrite setup
 
-Local configured builds read four public values from the ignored `.env` file:
+Configured Android builds require four public values from the ignored `.env`
+file:
 
 ```text
 APPWRITE_ENDPOINT
@@ -56,6 +61,22 @@ APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID
 APPWRITE_CLAIM_ROBOT_FUNCTION_ID
 ```
 
+Personal household management additionally uses these public Function IDs when
+that feature is configured:
+
+```text
+APPWRITE_CREATE_ROBOT_FUNCTION_ID
+APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID
+APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID
+APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID
+```
+
+The mounted-access mobile follow-up will add
+`APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID`. In supported Android Robot builds,
+`APPWRITE_CLAIM_ROBOT_FUNCTION_ID` will point to the separate/versioned secure
+claim Function; there is no `APPWRITE_CLAIM_ROBOT_SECURE_FUNCTION_ID`. Current
+clients do not read `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID` and remain on the
+legacy Function until that follow-up is released, configured, and validated.
 The app invokes the pairing Functions; it does not read pairing tables
 directly, so database and table IDs stay in the Function environment rather
 than Flutter configuration. Never add the server pairing HMAC secret or a
@@ -76,7 +97,7 @@ The build profile is authoritative. Imported or stale local role settings cannot
 
 ## Local configuration
 
-`.env` is ignored and must be bootstrapped separately in every checkout or worktree. Never commit it or print its values. It must contain the four public Appwrite keys listed above and must not contain `DOSEY_BUILD_PROFILE`; each build command supplies the profile explicitly.
+`.env` is ignored and must be bootstrapped separately in every checkout or worktree. Never commit it or print its values. It must contain the four required public Appwrite keys listed above, plus the optional public Function IDs for features enabled in that build, and must not contain `DOSEY_BUILD_PROFILE`; each build command supplies the profile explicitly.
 
 Personal Android Google/Appwrite sign-in requires the existing package and callback scheme to remain registered in Appwrite. Robot does not support OAuth. App-owned non-OAuth robot pairing remains available when its public Function configuration is present.
 
@@ -99,7 +120,7 @@ The package migration still requires a physical Android exercise. Until that is 
 - Store device role, safety acknowledgement, cached auth state, Action PIN state, refill data, carousel state, household/profile metadata, admin audit events, and dose log events locally.
 - Return mounted Robot Mode to Robot Face after 1, 2, 5, 10, or 15 minutes of inactivity, with 2 minutes as the default; pause the timer in the background and defer it while a dialog or sheet is open.
 - Route local dose reminders to Robot Face in Robot Mode and Today in Personal Mode, route shortage alerts to Carousel, and run missed-dose reconciliation when the app resumes.
-- Sign in with Google through Appwrite, restore robot membership, generate an owner-authorized ten-minute pairing code, and claim a robot from the mounted Android phone with a dedicated anonymous device identity.
+- Sign in with Google through Appwrite for Personal use, generate an owner-authorized ten-minute pairing code, and claim a robot from the mounted Android phone with a dedicated anonymous device identity. Current clients use legacy Team-backed restoration; the pending secure follow-up will restore through `get-mounted-robot` without adding the mounted account to Teams.
 - Run Android debug APK and iOS no-codesign debug builds on this machine.
 
 The app must not mark a dose taken because the servo moved. Dispense logging requires a controller success event, and the app separately tracks dose visible and dose taken confirmation.

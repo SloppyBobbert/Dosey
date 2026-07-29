@@ -39,6 +39,8 @@ describe('claim robot function boundary', () => {
   const identity = {
     verify: async (headers: Readonly<Record<string, string | undefined>>) =>
       headers['x-appwrite-user-id'] ?? null,
+    verifyAnonymous: async (headers: Readonly<Record<string, string | undefined>>) =>
+      headers['x-appwrite-user-id'] ?? null,
   };
 
   test('rejects non-POST requests without calling the service', async () => {
@@ -84,7 +86,7 @@ describe('claim robot function boundary', () => {
           return { status: 'accepted', robotId: 'robot-1' };
         },
       },
-      { verify: async () => null },
+      { verify: async () => null, verifyAnonymous: async () => null },
     );
 
     const response = (await handler(
@@ -93,6 +95,37 @@ describe('claim robot function boundary', () => {
 
     assert.equal(response.status, 401);
     assert.equal(called, false);
+  });
+
+  test('returns forbidden when the authenticated account is not anonymous', async () => {
+    const handler = createClaimRobotHandler(
+      { claimRobot: async () => ({ status: 'accepted', robotId: 'robot-1' }) },
+      { verify: async () => null, verifyAnonymous: async () => ({ reason: 'provider' }) },
+    );
+
+    const response = (await handler(
+      context({ userId: 'device-1', userJwt: 'jwt', body: { code: 'ABCD2EFGH3' } }),
+    )) as { body: unknown; status: number };
+
+    assert.equal(response.status, 403);
+    assert.deepEqual(response.body, { error: 'anonymous_account_required' });
+  });
+
+  test('maps anonymous account and session authentication failures to 401', async () => {
+    for (const failure of ['account', 'session']) {
+      const handler = createClaimRobotHandler(
+        { claimRobot: async () => ({ status: 'accepted', robotId: 'robot-1' }) },
+        {
+          verifyAnonymous: async () => null,
+        },
+      );
+      const response = (await handler(
+        context({ userId: `device-${failure}`, userJwt: 'bad', body: { code: 'ABCD2EFGH3' } }),
+      )) as { body: unknown; status: number };
+
+      assert.equal(response.status, 401);
+      assert.deepEqual(response.body, { error: 'authentication_required' });
+    }
   });
 
   test('rejects malformed codes before calling the service', async () => {
@@ -143,7 +176,7 @@ describe('claim robot function boundary', () => {
 
   test('maps safe rejection reasons without exposing claim details', async () => {
     const cases: Array<{
-      reason: 'invalid' | 'expired' | 'consumed' | 'attempts_exhausted';
+      reason: 'invalid' | 'expired' | 'consumed' | 'attempts_exhausted' | 'device_already_mounted';
       expectedStatus: number;
     }> = [
       { reason: 'invalid', expectedStatus: 400 },
@@ -153,6 +186,7 @@ describe('claim robot function boundary', () => {
         reason: 'attempts_exhausted',
         expectedStatus: 429,
       },
+      { reason: 'device_already_mounted', expectedStatus: 409 },
     ];
 
     for (const testCase of cases) {

@@ -13,7 +13,8 @@ export type PairingClaimRejectionReason =
   | 'invalid'
   | 'expired'
   | 'consumed'
-  | 'attempts_exhausted';
+  | 'attempts_exhausted'
+  | 'device_already_mounted';
 
 export type PairingClaimResult =
   | {
