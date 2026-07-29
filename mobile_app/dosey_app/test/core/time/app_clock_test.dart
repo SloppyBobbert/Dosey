@@ -3,6 +3,31 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   test(
+    'system clock stop prevents ticks and leaves the stream closable',
+    () async {
+      final clock = SystemAppClock(
+        tickInterval: const Duration(milliseconds: 1),
+      );
+      final emitted = <DateTime>[];
+      final subscription = clock.ticks.listen(emitted.add);
+
+      clock.stop();
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(emitted, isEmpty);
+      await clock.close();
+      await subscription.cancel();
+    },
+  );
+
+  test('system clock close is idempotent', () async {
+    final clock = SystemAppClock(tickInterval: const Duration(days: 1));
+
+    await clock.close();
+    await clock.close();
+  });
+
+  test(
     'controllable clock advances deterministically and emits each value',
     () async {
       final initial = DateTime.utc(2026, 7, 24, 8);
@@ -22,6 +47,14 @@ void main() {
 
       await subscription.cancel();
       await clock.close();
+      await clock.close();
     },
   );
+
+  test('controllable clock close is idempotent', () async {
+    final clock = ControllableAppClock(DateTime.utc(2026, 7, 24, 8));
+
+    await clock.close();
+    await clock.close();
+  });
 }
