@@ -27,30 +27,30 @@ void main() {
     await tester.pumpWidget(_doseLogApp(database));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Dose ID: taken'), findsOneWidget);
-    expect(find.textContaining('Dose ID: movement'), findsOneWidget);
+    expect(find.text('taken'), findsOneWidget);
+    expect(find.text('movement'), findsOneWidget);
 
     await tester.tap(find.text('Confirmed taken'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Dose ID: taken'), findsOneWidget);
-    expect(find.textContaining('Dose ID: missed'), findsNothing);
+    expect(find.text('taken'), findsOneWidget);
+    expect(find.text('missed'), findsNothing);
 
     await tester.tap(find.text('Needs attention'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Dose ID: missed'), findsOneWidget);
-    expect(find.textContaining('Dose ID: recognized'), findsOneWidget);
-    expect(find.textContaining('Dose ID: skipped'), findsOneWidget);
-    expect(find.textContaining('Dose ID: help'), findsOneWidget);
-    expect(find.textContaining('Dose ID: error'), findsOneWidget);
-    expect(find.textContaining('Dose ID: taken'), findsNothing);
-    expect(find.textContaining('Dose ID: movement'), findsNothing);
+    expect(find.text('missed'), findsOneWidget);
+    expect(find.text('recognized'), findsOneWidget);
+    expect(find.text('skipped'), findsOneWidget);
+    expect(find.text('help'), findsOneWidget);
+    expect(find.text('error'), findsOneWidget);
+    expect(find.text('taken'), findsNothing);
+    expect(find.text('movement'), findsNothing);
 
     await tester.tap(find.text('Other activity'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Dose ID: movement'), findsOneWidget);
-    expect(find.textContaining('Dose ID: visible'), findsOneWidget);
-    expect(find.textContaining('Dose ID: snoozed'), findsOneWidget);
-    expect(find.textContaining('Dose ID: missed'), findsNothing);
+    expect(find.text('movement'), findsOneWidget);
+    expect(find.text('visible'), findsOneWidget);
+    expect(find.text('snoozed'), findsOneWidget);
+    expect(find.text('missed'), findsNothing);
   });
 
   testWidgets('hero counts continue to use all events after filtering', (
@@ -77,7 +77,7 @@ void main() {
     expect(find.text('3 local events'), findsOneWidget);
     expect(find.text('1 confirmed taken'), findsOneWidget);
     expect(find.text('2 movement or review'), findsOneWidget);
-    expect(find.textContaining('Dose ID: missed'), findsNothing);
+    expect(find.text('missed'), findsNothing);
   });
 
   testWidgets('renders local event timestamps in 12-hour format', (
@@ -143,21 +143,16 @@ Future<void> _expectLocalEventSubtitle(
   );
   await tester.pumpAndSettle();
 
-  final subtitleFinder = find.byWidgetPredicate(
-    (widget) =>
-        widget is Text && widget.data?.contains('Dose ID: $doseId') == true,
-    description: 'dose log subtitle for $doseId',
-  );
-  expect(subtitleFinder, findsOneWidget);
-  final subtitle = tester.widget<Text>(subtitleFinder);
-  final context = tester.element(subtitleFinder);
+  final doseIdFinder = find.text(doseId);
+  expect(doseIdFinder, findsOneWidget);
+  final context = tester.element(doseIdFinder);
   final local = occurredAt.toLocal();
   final localizations = MaterialLocalizations.of(context);
   final expectedTimestamp =
       '${localizations.formatFullDate(local)} at '
       '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local), alwaysUse24HourFormat: alwaysUse24HourFormat)}';
 
-  expect(subtitle.data, '$expectedTimestamp\nDose ID: $doseId');
+  expect(find.text(expectedTimestamp), findsOneWidget);
 }
 
 Future<void> _setDoseLogViewport(WidgetTester tester) async {
@@ -212,7 +207,7 @@ Widget _doseLogApp(
         ).copyWith(alwaysUse24HourFormat: alwaysUse24HourFormat),
         child: child!,
       ),
-      home: const Scaffold(body: DoseLogScreen()),
+      home: const DoseLogScreen(),
     ),
   );
 }

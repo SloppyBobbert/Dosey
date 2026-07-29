@@ -50,9 +50,12 @@ class _DoseLogScreenState extends State<DoseLogScreen> {
                   child: ListTile(
                     leading: CircleAvatar(child: Icon(_iconFor(event.kind))),
                     title: Text(_labelFor(event.kind)),
-                    subtitle: Text(
-                      '${_formatOccurredAt(context, event.occurredAt)}\n'
-                      'Dose ID: ${event.doseId}',
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_formatOccurredAt(context, event.occurredAt)),
+                        Text(event.doseId),
+                      ],
                     ),
                     isThreeLine: true,
                     trailing: Icon(
@@ -154,17 +157,20 @@ class _DoseLogFilters extends StatelessWidget {
   Widget build(BuildContext context) {
     return Semantics(
       label: 'Filter dose history',
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final filter in _DoseLogFilter.values)
-            ChoiceChip(
-              label: Text(filter.label),
-              selected: selected == filter,
-              onSelected: (_) => onSelected(filter),
-            ),
-        ],
+      child: Material(
+        type: MaterialType.transparency,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final filter in _DoseLogFilter.values)
+              ChoiceChip(
+                label: Text(filter.label),
+                selected: selected == filter,
+                onSelected: (_) => onSelected(filter),
+              ),
+          ],
+        ),
       ),
     );
   }
