@@ -48,6 +48,17 @@ fields, in this canonical order:
 
 `authSessions` is intentionally absent.
 
+## Versioning And Database Schema
+
+The Drift database schema version and portable backup `sourceSchemaVersion` are
+independent contracts. Backup format version 1 began at database schema 14.
+Database migrations 15 and 16 add device-local tables that are excluded from
+portable backups, so version 1 backups with source schema 14 remain valid.
+
+Change the backup version or supported `sourceSchemaVersion` only when the
+portable backup contract changes. A database-only migration does not require a
+new portable backup version.
+
 ## Fields
 
 Each row must contain exactly the listed fields. A `?` suffix means the value

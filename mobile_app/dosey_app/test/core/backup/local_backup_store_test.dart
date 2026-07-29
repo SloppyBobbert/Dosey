@@ -200,6 +200,37 @@ void main() {
     );
   });
 
+  test('on-disk current-format restore persists after reopening', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'dosey-backup-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/dosey.sqlite');
+    var database = DoseyDatabase(NativeDatabase(file));
+    addTearDown(() => database.close());
+    final source = _populatedDocument();
+    final currentFormat = const BackupCodec().decode(
+      const BackupCodec().encode(source),
+    );
+
+    await database.transaction(
+      () => LocalBackupStore(database).replaceSnapshot(currentFormat),
+    );
+    await database.close();
+    database = DoseyDatabase(NativeDatabase(file));
+    final reopenedStore = LocalBackupStore(database);
+    final restored = await reopenedStore.readSnapshot();
+
+    expect(
+      const BackupCodec().encode(restored),
+      const BackupCodec().encode(source),
+    );
+    expect(
+      (await reopenedStore.checkHealth()).status,
+      DatabaseHealthStatus.healthy,
+    );
+  });
+
   test('replacement submits deletes and inserts as one Drift batch', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
