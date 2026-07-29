@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/carousel/eligible_carousel_slots.dart';
@@ -17,6 +18,7 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 part 'carousel_refill_countdown.dart';
 
@@ -660,19 +662,26 @@ class _CarouselHeroChip extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: colorScheme.onTertiaryContainer),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: colorScheme.onTertiaryContainer,
-                fontWeight: FontWeight.w700,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxWidth: MediaQuery.sizeOf(context).width - 64,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: colorScheme.onTertiaryContainer),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onTertiaryContainer,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1236,10 +1245,8 @@ class _TopOffFlowSheetState extends State<_TopOffFlowSheet> {
                       _selectedSlots.contains(slot.slotNumber),
                     ),
                 },
+                interactiveSlotNumbers: _fillableSlots.toSet(),
                 onSlotTap: (slotNumber) {
-                  if (!_fillableSlots.contains(slotNumber)) {
-                    return;
-                  }
                   setState(() {
                     if (!_selectedSlots.add(slotNumber)) {
                       _selectedSlots.remove(slotNumber);
@@ -1346,6 +1353,21 @@ class _FullReloadFlowSheetState extends State<_FullReloadFlowSheet> {
                 _recoveredSlots.contains(slot),
               ),
     };
+    final nextLoadStates = <int, _CarouselPlanVisualState>{
+      for (final slot in widget.plan.slots)
+        slot.slotNumber: _slotVisualStateForNextLoad(slot.status),
+    };
+    final plannedCompartmentCount = widget.plan.slots
+        .where((slot) => slot.status == GuidedCarouselLoadPlanSlotStatus.loaded)
+        .length;
+    final shortageCount = widget.plan.slots
+        .where(
+          (slot) => slot.status == GuidedCarouselLoadPlanSlotStatus.shortage,
+        )
+        .length;
+    final deferredEmptyCount = widget.plan.slots
+        .where((slot) => slot.status == GuidedCarouselLoadPlanSlotStatus.empty)
+        .length;
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -1411,14 +1433,13 @@ class _FullReloadFlowSheetState extends State<_FullReloadFlowSheet> {
                 const SizedBox(height: 12),
                 _CarouselPlanView(
                   slotStates: occupiedStates,
+                  interactiveSlotNumbers: {
+                    for (final slot in widget.activeLoad!.slots)
+                      if (slot.status == CarouselLoadSlotStatus.loaded ||
+                          slot.status == CarouselLoadSlotStatus.retained)
+                        slot.slotNumber,
+                  },
                   onSlotTap: (slotNumber) {
-                    final snapshot = widget.activeLoad!.slots.firstWhere(
-                      (entry) => entry.slotNumber == slotNumber,
-                    );
-                    if (snapshot.status != CarouselLoadSlotStatus.loaded &&
-                        snapshot.status != CarouselLoadSlotStatus.retained) {
-                      return;
-                    }
                     setState(() {
                       if (!_recoveredSlots.add(slotNumber)) {
                         _recoveredSlots.remove(slotNumber);
@@ -1473,10 +1494,49 @@ class _FullReloadFlowSheetState extends State<_FullReloadFlowSheet> {
                 ),
                 const SizedBox(height: 8),
                 const Text(
-                  'The carousel should look empty before you confirm the new load. Dosey still needs manual confirmation before a dose is marked taken.',
+                  'Review the current physical carousel and the next load plan separately. Dosey still needs manual confirmation before a dose is marked taken.',
                 ),
                 const SizedBox(height: 12),
-                _CarouselPlanView(slotStates: occupiedStates),
+                Text(
+                  'Current physical carousel',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Empty after the saved unload. Keep the carousel at START/home.',
+                ),
+                const SizedBox(height: 8),
+                _CarouselPlanView(
+                  slotStates: occupiedStates,
+                  keyNamespace: 'full-reload-current',
+                  semanticLabel:
+                      'Current physical carousel, empty and display only',
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Next load plan',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Display only. Check the planned compartments before confirming the reload at START/home.',
+                ),
+                const SizedBox(height: 8),
+                _CarouselPlanView(
+                  slotStates: nextLoadStates,
+                  keyNamespace: 'full-reload-next',
+                  semanticLabel: 'Next load plan, display only',
+                ),
+                const SizedBox(height: 12),
+                _NextLoadSummaryCard(
+                  plannedCompartmentCount: plannedCompartmentCount,
+                  shortageCount: shortageCount,
+                  deferredEmptyCount: deferredEmptyCount,
+                ),
                 const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
@@ -1574,39 +1634,153 @@ enum _CarouselPlanVisualState {
   deferredEmpty,
   shortageBlocked,
   recovered,
+  planned,
+  plannedShortage,
+  plannedEmpty,
 }
 
 class _CarouselPlanView extends StatelessWidget {
-  const _CarouselPlanView({required this.slotStates, this.onSlotTap});
+  const _CarouselPlanView({
+    required this.slotStates,
+    this.interactiveSlotNumbers = const <int>{},
+    this.onSlotTap,
+    this.keyNamespace,
+    this.semanticLabel,
+  });
+
+  static const ringKey = ValueKey<String>('carousel-plan-ring');
+  static const startKey = ValueKey<String>('carousel-start-marker');
+
+  static ValueKey<String> slotKey(int slotNumber) =>
+      ValueKey<String>('carousel-slot-$slotNumber');
 
   final Map<int, _CarouselPlanVisualState> slotStates;
+  final Set<int> interactiveSlotNumbers;
   final ValueChanged<int>? onSlotTap;
+  final String? keyNamespace;
+  final String? semanticLabel;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (
-              var slot = 1;
-              slot <= GuidedCarouselLoadPlanner.capacity;
-              slot += 1
-            )
-              _CarouselPlanSlotChip(
-                slotNumber: slot,
-                state: slotStates[slot] ?? _CarouselPlanVisualState.empty,
-                onTap: onSlotTap == null ? null : () => onSlotTap!(slot),
+    return Semantics(
+      container: true,
+      explicitChildNodes: semanticLabel != null,
+      label: semanticLabel,
+      child: DecoratedBox(
+        key: _ringKey(),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final side = math.min(constraints.maxWidth, 360.0);
+            final itemSize = side < 320 ? 48.0 : 54.0;
+            final radius = side / 2 - itemSize / 2 - 2;
+            return Align(
+              alignment: Alignment.center,
+              child: SizedBox(
+                width: side,
+                height: side,
+                child: Stack(
+                  children: [
+                    _ringPositioned(
+                      index: 0,
+                      side: side,
+                      itemSize: itemSize,
+                      radius: radius,
+                      child: _CarouselStartMarker(markerKey: _startKey()),
+                    ),
+                    for (
+                      var slot = 1;
+                      slot <= GuidedCarouselLoadPlanner.capacity;
+                      slot += 1
+                    )
+                      _ringPositioned(
+                        index: slot,
+                        side: side,
+                        itemSize: itemSize,
+                        radius: radius,
+                        child: _CarouselPlanSlotChip(
+                          slotNumber: slot,
+                          state:
+                              slotStates[slot] ??
+                              _CarouselPlanVisualState.empty,
+                          slotKey: _slotKey(slot),
+                          onTap:
+                              onSlotTap == null ||
+                                  !interactiveSlotNumbers.contains(slot)
+                              ? null
+                              : () => onSlotTap!(slot),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-          ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Key _ringKey() =>
+      keyNamespace == null ? ringKey : ValueKey('$keyNamespace-ring');
+
+  Key _startKey() =>
+      keyNamespace == null ? startKey : ValueKey('$keyNamespace-start-marker');
+
+  Key _slotKey(int slotNumber) => keyNamespace == null
+      ? slotKey(slotNumber)
+      : ValueKey('$keyNamespace-slot-$slotNumber');
+
+  static Widget _ringPositioned({
+    required int index,
+    required double side,
+    required double itemSize,
+    required double radius,
+    required Widget child,
+  }) {
+    final angle = math.pi / 2 + index * (2 * math.pi / 15);
+    return Positioned(
+      left: side / 2 + radius * math.cos(angle) - itemSize / 2,
+      top: side / 2 + radius * math.sin(angle) - itemSize / 2,
+      width: itemSize,
+      height: itemSize,
+      child: child,
+    );
+  }
+}
+
+class _CarouselStartMarker extends StatelessWidget {
+  const _CarouselStartMarker({required this.markerKey});
+
+  final Key markerKey;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      sortKey: const OrdinalSortKey(0),
+      label: 'START/home marker',
+      child: ExcludeSemantics(
+        child: DecoratedBox(
+          key: markerKey,
+          decoration: const BoxDecoration(
+            shape: BoxShape.circle,
+            color: Color(0xFFFF8A32),
+          ),
+          child: const Center(
+            child: Text(
+              'START',
+              style: TextStyle(
+                color: Color(0xFF3B1600),
+                fontSize: 11,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -1677,15 +1851,16 @@ class _FlowStatusChip extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 16, color: foreground),
             const SizedBox(width: 6),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: foreground,
-                fontWeight: FontWeight.w700,
+            Flexible(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: foreground,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ],
@@ -1724,15 +1899,60 @@ class _ReloadLockedCard extends StatelessWidget {
   }
 }
 
+class _NextLoadSummaryCard extends StatelessWidget {
+  const _NextLoadSummaryCard({
+    required this.plannedCompartmentCount,
+    required this.shortageCount,
+    required this.deferredEmptyCount,
+  });
+
+  final int plannedCompartmentCount;
+  final int shortageCount;
+  final int deferredEmptyCount;
+
+  @override
+  Widget build(BuildContext context) {
+    final details = <String>[
+      '$plannedCompartmentCount planned ${plannedCompartmentCount == 1 ? 'compartment' : 'compartments'}',
+      if (shortageCount > 0)
+        '$shortageCount shortage ${shortageCount == 1 ? 'slot' : 'slots'}',
+      if (deferredEmptyCount > 0)
+        '$deferredEmptyCount ${deferredEmptyCount == 1 ? 'compartment' : 'compartments'} not planned in this reload',
+    ];
+    return Card(
+      margin: EdgeInsets.zero,
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Ready to confirm',
+              style: Theme.of(
+                context,
+              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 4),
+            Text('${details.join(' · ')}. Confirm the reload at START/home.'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _CarouselPlanSlotChip extends StatelessWidget {
   const _CarouselPlanSlotChip({
     required this.slotNumber,
     required this.state,
+    required this.slotKey,
     this.onTap,
   });
 
   final int slotNumber;
   final _CarouselPlanVisualState state;
+  final Key slotKey;
   final VoidCallback? onTap;
 
   @override
@@ -1773,26 +1993,96 @@ class _CarouselPlanSlotChip extends StatelessWidget {
         const Color(0xFF5C6679),
         const Color(0x33FFFFFF),
       ),
+      _CarouselPlanVisualState.planned => (
+        const Color(0xFF56EBC6),
+        const Color(0xFF03221B),
+        const Color(0xFF56EBC6),
+      ),
+      _CarouselPlanVisualState.plannedShortage => (
+        const Color(0x1AFF728C),
+        const Color(0xFF8E2841),
+        const Color(0x66FF728C),
+      ),
+      _CarouselPlanVisualState.plannedEmpty => (
+        const Color(0x14FFD666),
+        const Color(0xFF8A6514),
+        const Color(0x66FFD666),
+      ),
     };
-    return InkWell(
+    final isInteractive = onTap != null;
+    return Semantics(
+      container: true,
+      sortKey: OrdinalSortKey(slotNumber.toDouble()),
+      label: 'Slot $slotNumber, ${state.semanticLabel}',
+      button: isInteractive ? true : null,
+      enabled: isInteractive ? true : null,
       onTap: onTap,
-      customBorder: const CircleBorder(),
-      child: Ink(
-        width: 54,
-        height: 54,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: background,
-          border: Border.all(color: border),
-        ),
-        child: Center(
-          child: Text(
-            '$slotNumber',
-            style: TextStyle(fontWeight: FontWeight.w800, color: foreground),
+      toggled: isInteractive ? state.isMarked : null,
+      child: _CircularHitRegion(
+        child: ExcludeSemantics(
+          child: InkWell(
+            key: slotKey,
+            onTap: onTap,
+            customBorder: const CircleBorder(),
+            child: Ink(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: background,
+                border: Border.all(color: border),
+              ),
+              child: Center(
+                child: Text(
+                  '$slotNumber',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: foreground,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
     );
+  }
+}
+
+extension on _CarouselPlanVisualState {
+  bool get isMarked =>
+      this == _CarouselPlanVisualState.selectedEmpty ||
+      this == _CarouselPlanVisualState.recovered;
+
+  String get semanticLabel => switch (this) {
+    _CarouselPlanVisualState.retained => 'loaded',
+    _CarouselPlanVisualState.empty => 'empty',
+    _CarouselPlanVisualState.selectableEmpty => 'empty and available to load',
+    _CarouselPlanVisualState.selectedEmpty => 'selected to load',
+    _CarouselPlanVisualState.deferredEmpty => 'empty for a later pass',
+    _CarouselPlanVisualState.shortageBlocked => 'blocked by a shortage',
+    _CarouselPlanVisualState.recovered => 'recovered during unload',
+    _CarouselPlanVisualState.planned => 'planned to load',
+    _CarouselPlanVisualState.plannedShortage => 'planned shortage',
+    _CarouselPlanVisualState.plannedEmpty => 'not planned in this reload',
+  };
+}
+
+class _CircularHitRegion extends SingleChildRenderObjectWidget {
+  const _CircularHitRegion({required super.child});
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _CircularHitRegionRenderBox();
+}
+
+class _CircularHitRegionRenderBox extends RenderProxyBox {
+  @override
+  bool hitTest(BoxHitTestResult result, {required Offset position}) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide / 2;
+    if ((position - center).distanceSquared > radius * radius) {
+      return false;
+    }
+    return super.hitTest(result, position: position);
   }
 }
 
@@ -1825,6 +2115,19 @@ _CarouselPlanVisualState _fullReloadSlotVisualState(
         : _CarouselPlanVisualState.retained;
   }
   return _CarouselPlanVisualState.empty;
+}
+
+_CarouselPlanVisualState _slotVisualStateForNextLoad(
+  GuidedCarouselLoadPlanSlotStatus status,
+) {
+  return switch (status) {
+    GuidedCarouselLoadPlanSlotStatus.retained ||
+    GuidedCarouselLoadPlanSlotStatus.loaded => _CarouselPlanVisualState.planned,
+    GuidedCarouselLoadPlanSlotStatus.shortage =>
+      _CarouselPlanVisualState.plannedShortage,
+    GuidedCarouselLoadPlanSlotStatus.empty =>
+      _CarouselPlanVisualState.plannedEmpty,
+  };
 }
 
 String _shortageMedicationLabel(MedicationShortageAlertRow alert) {
