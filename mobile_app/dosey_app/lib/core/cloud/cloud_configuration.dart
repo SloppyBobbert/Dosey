@@ -8,6 +8,7 @@ class CloudConfiguration {
     String? createHouseholdInvitationFunctionId,
     String? acceptHouseholdInvitationFunctionId,
     String? removeHouseholdMemberFunctionId,
+    String? getMountedRobotFunctionId,
   }) {
     final normalizedEndpoint = _normalize(endpoint);
     final normalizedProjectId = _normalize(projectId);
@@ -31,6 +32,7 @@ class CloudConfiguration {
       removeHouseholdMemberFunctionId: _normalize(
         removeHouseholdMemberFunctionId,
       ),
+      getMountedRobotFunctionId: _normalize(getMountedRobotFunctionId),
     );
   }
 
@@ -43,6 +45,7 @@ class CloudConfiguration {
     this.createHouseholdInvitationFunctionId,
     this.acceptHouseholdInvitationFunctionId,
     this.removeHouseholdMemberFunctionId,
+    this.getMountedRobotFunctionId,
   });
 
   static final fromEnvironment = CloudConfiguration.fromValues(
@@ -66,6 +69,9 @@ class CloudConfiguration {
     removeHouseholdMemberFunctionId: const String.fromEnvironment(
       'APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID',
     ),
+    getMountedRobotFunctionId: const String.fromEnvironment(
+      'APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID',
+    ),
   );
 
   final String? endpoint;
@@ -76,18 +82,25 @@ class CloudConfiguration {
   final String? createHouseholdInvitationFunctionId;
   final String? acceptHouseholdInvitationFunctionId;
   final String? removeHouseholdMemberFunctionId;
+  final String? getMountedRobotFunctionId;
 
   bool get isEnabled => endpoint != null && projectId != null;
-  bool get isPairingEnabled =>
+  bool get isPersonalPairingEnabled =>
       isEnabled &&
       createPairingCodeFunctionId != null &&
       claimRobotFunctionId != null;
+  bool get isRobotClaimEnabled =>
+      isEnabled &&
+      claimRobotFunctionId != null &&
+      getMountedRobotFunctionId != null;
   bool get isHouseholdManagementEnabled =>
       isEnabled &&
       createRobotFunctionId != null &&
       createHouseholdInvitationFunctionId != null &&
       acceptHouseholdInvitationFunctionId != null &&
       removeHouseholdMemberFunctionId != null;
+  bool get isMountedRobotAccessEnabled =>
+      isEnabled && getMountedRobotFunctionId != null;
 
   static String? _normalize(String? value) {
     final normalized = value?.trim();

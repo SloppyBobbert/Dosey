@@ -98,7 +98,7 @@ void main() {
     const cases = <int, RobotPairingFailureReason>{
       400: RobotPairingFailureReason.invalidCode,
       401: RobotPairingFailureReason.missingSession,
-      409: RobotPairingFailureReason.consumedCode,
+      409: RobotPairingFailureReason.functionFailure,
       410: RobotPairingFailureReason.expiredCode,
       429: RobotPairingFailureReason.blockedDevice,
       500: RobotPairingFailureReason.functionFailure,
@@ -123,6 +123,59 @@ void main() {
             (error) => error.reason,
             'reason',
             entry.value,
+          ),
+        ),
+      );
+    }
+  });
+
+  test('maps only exact authoritative conflict reasons', () async {
+    final cases = <String, RobotPairingFailureReason>{
+      'consumed': RobotPairingFailureReason.consumedCode,
+      'device_already_mounted': RobotPairingFailureReason.deviceAlreadyMounted,
+      'unknown': RobotPairingFailureReason.functionFailure,
+    };
+    for (final entry in cases.entries) {
+      final gateway = AppwriteRobotPairingGateway(
+        _FakePairingApi(
+          response: PairingFunctionResponse(
+            statusCode: 409,
+            body: '{"error":"${entry.key}"}',
+          ),
+        ),
+        'create-code',
+        'claim-robot',
+      );
+
+      await expectLater(
+        gateway.claimRobot(code: 'ABCD2EFGH3'),
+        throwsA(
+          isA<RobotPairingException>().having(
+            (error) => error.reason,
+            'reason',
+            entry.value,
+          ),
+        ),
+      );
+    }
+  });
+
+  test('maps malformed conflict bodies to generic function failure', () async {
+    for (final body in ['', '{}', '{"error":123}', '{"error":"consumed"}x']) {
+      final gateway = AppwriteRobotPairingGateway(
+        _FakePairingApi(
+          response: PairingFunctionResponse(statusCode: 409, body: body),
+        ),
+        'create-code',
+        'claim-robot',
+      );
+      await expectLater(
+        gateway.claimRobot(code: 'ABCD2EFGH3'),
+        throwsA(
+          isA<RobotPairingException>().having(
+            (error) => error.reason,
+            'reason',
+            RobotPairingFailureReason.functionFailure,
           ),
         ),
       );

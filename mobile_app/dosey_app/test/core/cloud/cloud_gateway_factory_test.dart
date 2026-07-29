@@ -8,6 +8,7 @@ import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/appwrite_robot_pairing_gateway.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
+import 'package:dosey_app/core/household/mounted_robot_access_gateway.dart';
 import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -83,6 +84,7 @@ void main() {
 
     expect(gateways.identity, isA<AppwriteCloudIdentityGateway>());
     expect(gateways.household, isA<AppwriteHouseholdSyncGateway>());
+    expect(gateways.mountedRobotAccess.isAvailable, isFalse);
     expect(gateways.pairing, isA<AppwriteRobotPairingGateway>());
     expect(
       gateways.householdManagement,
@@ -90,6 +92,75 @@ void main() {
     );
     expect(factoryCalls, 1);
   });
+
+  test('keeps Teams construction lazy for mounted Robot composition', () {
+    final configuration = CloudConfiguration.fromValues(
+      endpoint: 'https://example.appwrite.io/v1',
+      projectId: 'dosey-development',
+      getMountedRobotFunctionId: 'get-mounted-robot',
+    );
+    var teamFactoryCalls = 0;
+
+    final gateways = createCloudGateways(
+      configuration,
+      profile: CloudGatewayProfile.robot,
+      accountApiFactory: (_) => _UnusedAccountApi(),
+      teamsApiFactory: (_) {
+        teamFactoryCalls += 1;
+        return _UnusedTeamsApi();
+      },
+    );
+
+    expect(gateways.mountedRobotAccess.isAvailable, isTrue);
+    expect(teamFactoryCalls, 0);
+  });
+
+  test('Robot profile disables human gateways without evaluating Teams', () {
+    final configuration = CloudConfiguration.fromValues(
+      endpoint: 'https://example.appwrite.io/v1',
+      projectId: 'dosey-development',
+      claimRobotFunctionId: 'claim-robot',
+      getMountedRobotFunctionId: 'get-mounted-robot',
+    );
+
+    final gateways = createCloudGateways(
+      configuration,
+      profile: CloudGatewayProfile.robot,
+      accountApiFactory: (_) => _UnusedAccountApi(),
+      teamsApiFactory: (_) => throw StateError('Teams must not be evaluated.'),
+      pairingApiFactory: (_) => _UnusedPairingApi(),
+    );
+
+    expect(gateways.household, isA<DisabledHouseholdSyncGateway>());
+    expect(
+      gateways.householdManagement,
+      isA<DisabledHouseholdManagementGateway>(),
+    );
+    expect(gateways.pairing.isAvailable, isTrue);
+    expect(
+      gateways.mountedRobotAccess,
+      isA<AppwriteMountedRobotAccessGateway>(),
+    );
+  });
+
+  test(
+    'Robot claim is disabled before mutation when restore is unconfigured',
+    () {
+      final gateways = createCloudGateways(
+        CloudConfiguration.fromValues(
+          endpoint: 'https://example.appwrite.io/v1',
+          projectId: 'dosey-development',
+          claimRobotFunctionId: 'claim-robot',
+        ),
+        profile: CloudGatewayProfile.robot,
+        accountApiFactory: (_) => _UnusedAccountApi(),
+        pairingApiFactory: (_) => _UnusedPairingApi(),
+      );
+
+      expect(gateways.pairing.isAvailable, isFalse);
+      expect(gateways.mountedRobotAccess.isAvailable, isFalse);
+    },
+  );
 }
 
 class _UnusedHouseholdFunctionsApi implements AppwriteHouseholdFunctionsApi {

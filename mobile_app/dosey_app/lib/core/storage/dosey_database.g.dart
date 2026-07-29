@@ -10293,6 +10293,344 @@ class CachedHouseholdMembersCompanion
   }
 }
 
+class $CachedMountedRobotAccessTable extends CachedMountedRobotAccess
+    with
+        TableInfo<$CachedMountedRobotAccessTable, CachedMountedRobotAccessRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CachedMountedRobotAccessTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<String> accountId = GeneratedColumn<String>(
+    'account_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _robotIdMeta = const VerificationMeta(
+    'robotId',
+  );
+  @override
+  late final GeneratedColumn<String> robotId = GeneratedColumn<String>(
+    'robot_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _displayNameMeta = const VerificationMeta(
+    'displayName',
+  );
+  @override
+  late final GeneratedColumn<String> displayName = GeneratedColumn<String>(
+    'display_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _confirmedAtMeta = const VerificationMeta(
+    'confirmedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> confirmedAt = GeneratedColumn<DateTime>(
+    'confirmed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    accountId,
+    robotId,
+    displayName,
+    confirmedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'cached_mounted_robot_access';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CachedMountedRobotAccessRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('robot_id')) {
+      context.handle(
+        _robotIdMeta,
+        robotId.isAcceptableOrUnknown(data['robot_id']!, _robotIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_robotIdMeta);
+    }
+    if (data.containsKey('display_name')) {
+      context.handle(
+        _displayNameMeta,
+        displayName.isAcceptableOrUnknown(
+          data['display_name']!,
+          _displayNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_displayNameMeta);
+    }
+    if (data.containsKey('confirmed_at')) {
+      context.handle(
+        _confirmedAtMeta,
+        confirmedAt.isAcceptableOrUnknown(
+          data['confirmed_at']!,
+          _confirmedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_confirmedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {accountId};
+  @override
+  CachedMountedRobotAccessRow map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CachedMountedRobotAccessRow(
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}account_id'],
+      )!,
+      robotId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}robot_id'],
+      )!,
+      displayName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}display_name'],
+      )!,
+      confirmedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}confirmed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CachedMountedRobotAccessTable createAlias(String alias) {
+    return $CachedMountedRobotAccessTable(attachedDatabase, alias);
+  }
+}
+
+class CachedMountedRobotAccessRow extends DataClass
+    implements Insertable<CachedMountedRobotAccessRow> {
+  final String accountId;
+  final String robotId;
+  final String displayName;
+  final DateTime confirmedAt;
+  const CachedMountedRobotAccessRow({
+    required this.accountId,
+    required this.robotId,
+    required this.displayName,
+    required this.confirmedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['account_id'] = Variable<String>(accountId);
+    map['robot_id'] = Variable<String>(robotId);
+    map['display_name'] = Variable<String>(displayName);
+    map['confirmed_at'] = Variable<DateTime>(confirmedAt);
+    return map;
+  }
+
+  CachedMountedRobotAccessCompanion toCompanion(bool nullToAbsent) {
+    return CachedMountedRobotAccessCompanion(
+      accountId: Value(accountId),
+      robotId: Value(robotId),
+      displayName: Value(displayName),
+      confirmedAt: Value(confirmedAt),
+    );
+  }
+
+  factory CachedMountedRobotAccessRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CachedMountedRobotAccessRow(
+      accountId: serializer.fromJson<String>(json['accountId']),
+      robotId: serializer.fromJson<String>(json['robotId']),
+      displayName: serializer.fromJson<String>(json['displayName']),
+      confirmedAt: serializer.fromJson<DateTime>(json['confirmedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'accountId': serializer.toJson<String>(accountId),
+      'robotId': serializer.toJson<String>(robotId),
+      'displayName': serializer.toJson<String>(displayName),
+      'confirmedAt': serializer.toJson<DateTime>(confirmedAt),
+    };
+  }
+
+  CachedMountedRobotAccessRow copyWith({
+    String? accountId,
+    String? robotId,
+    String? displayName,
+    DateTime? confirmedAt,
+  }) => CachedMountedRobotAccessRow(
+    accountId: accountId ?? this.accountId,
+    robotId: robotId ?? this.robotId,
+    displayName: displayName ?? this.displayName,
+    confirmedAt: confirmedAt ?? this.confirmedAt,
+  );
+  CachedMountedRobotAccessRow copyWithCompanion(
+    CachedMountedRobotAccessCompanion data,
+  ) {
+    return CachedMountedRobotAccessRow(
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      robotId: data.robotId.present ? data.robotId.value : this.robotId,
+      displayName: data.displayName.present
+          ? data.displayName.value
+          : this.displayName,
+      confirmedAt: data.confirmedAt.present
+          ? data.confirmedAt.value
+          : this.confirmedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedMountedRobotAccessRow(')
+          ..write('accountId: $accountId, ')
+          ..write('robotId: $robotId, ')
+          ..write('displayName: $displayName, ')
+          ..write('confirmedAt: $confirmedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(accountId, robotId, displayName, confirmedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CachedMountedRobotAccessRow &&
+          other.accountId == this.accountId &&
+          other.robotId == this.robotId &&
+          other.displayName == this.displayName &&
+          other.confirmedAt == this.confirmedAt);
+}
+
+class CachedMountedRobotAccessCompanion
+    extends UpdateCompanion<CachedMountedRobotAccessRow> {
+  final Value<String> accountId;
+  final Value<String> robotId;
+  final Value<String> displayName;
+  final Value<DateTime> confirmedAt;
+  final Value<int> rowid;
+  const CachedMountedRobotAccessCompanion({
+    this.accountId = const Value.absent(),
+    this.robotId = const Value.absent(),
+    this.displayName = const Value.absent(),
+    this.confirmedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CachedMountedRobotAccessCompanion.insert({
+    required String accountId,
+    required String robotId,
+    required String displayName,
+    required DateTime confirmedAt,
+    this.rowid = const Value.absent(),
+  }) : accountId = Value(accountId),
+       robotId = Value(robotId),
+       displayName = Value(displayName),
+       confirmedAt = Value(confirmedAt);
+  static Insertable<CachedMountedRobotAccessRow> custom({
+    Expression<String>? accountId,
+    Expression<String>? robotId,
+    Expression<String>? displayName,
+    Expression<DateTime>? confirmedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (accountId != null) 'account_id': accountId,
+      if (robotId != null) 'robot_id': robotId,
+      if (displayName != null) 'display_name': displayName,
+      if (confirmedAt != null) 'confirmed_at': confirmedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CachedMountedRobotAccessCompanion copyWith({
+    Value<String>? accountId,
+    Value<String>? robotId,
+    Value<String>? displayName,
+    Value<DateTime>? confirmedAt,
+    Value<int>? rowid,
+  }) {
+    return CachedMountedRobotAccessCompanion(
+      accountId: accountId ?? this.accountId,
+      robotId: robotId ?? this.robotId,
+      displayName: displayName ?? this.displayName,
+      confirmedAt: confirmedAt ?? this.confirmedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (accountId.present) {
+      map['account_id'] = Variable<String>(accountId.value);
+    }
+    if (robotId.present) {
+      map['robot_id'] = Variable<String>(robotId.value);
+    }
+    if (displayName.present) {
+      map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (confirmedAt.present) {
+      map['confirmed_at'] = Variable<DateTime>(confirmedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CachedMountedRobotAccessCompanion(')
+          ..write('accountId: $accountId, ')
+          ..write('robotId: $robotId, ')
+          ..write('displayName: $displayName, ')
+          ..write('confirmedAt: $confirmedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$DoseyDatabase extends GeneratedDatabase {
   _$DoseyDatabase(QueryExecutor e) : super(e);
   $DoseyDatabaseManager get managers => $DoseyDatabaseManager(this);
@@ -10328,6 +10666,8 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
       $CachedRobotInstallationsTable(this);
   late final $CachedHouseholdMembersTable cachedHouseholdMembers =
       $CachedHouseholdMembersTable(this);
+  late final $CachedMountedRobotAccessTable cachedMountedRobotAccess =
+      $CachedMountedRobotAccessTable(this);
   late final Index controllerHealthEventsOccurredAtIdx = Index(
     'controller_health_events_occurred_at_idx',
     'CREATE INDEX controller_health_events_occurred_at_idx ON controller_health_events (occurred_at DESC)',
@@ -10355,6 +10695,7 @@ abstract class _$DoseyDatabase extends GeneratedDatabase {
     adminAuditEvents,
     cachedRobotInstallations,
     cachedHouseholdMembers,
+    cachedMountedRobotAccess,
     controllerHealthEventsOccurredAtIdx,
   ];
 }
@@ -15615,6 +15956,210 @@ typedef $$CachedHouseholdMembersTableProcessedTableManager =
       CachedHouseholdMemberRow,
       PrefetchHooks Function()
     >;
+typedef $$CachedMountedRobotAccessTableCreateCompanionBuilder =
+    CachedMountedRobotAccessCompanion Function({
+      required String accountId,
+      required String robotId,
+      required String displayName,
+      required DateTime confirmedAt,
+      Value<int> rowid,
+    });
+typedef $$CachedMountedRobotAccessTableUpdateCompanionBuilder =
+    CachedMountedRobotAccessCompanion Function({
+      Value<String> accountId,
+      Value<String> robotId,
+      Value<String> displayName,
+      Value<DateTime> confirmedAt,
+      Value<int> rowid,
+    });
+
+class $$CachedMountedRobotAccessTableFilterComposer
+    extends Composer<_$DoseyDatabase, $CachedMountedRobotAccessTable> {
+  $$CachedMountedRobotAccessTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get robotId => $composableBuilder(
+    column: $table.robotId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get confirmedAt => $composableBuilder(
+    column: $table.confirmedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$CachedMountedRobotAccessTableOrderingComposer
+    extends Composer<_$DoseyDatabase, $CachedMountedRobotAccessTable> {
+  $$CachedMountedRobotAccessTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get robotId => $composableBuilder(
+    column: $table.robotId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get confirmedAt => $composableBuilder(
+    column: $table.confirmedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$CachedMountedRobotAccessTableAnnotationComposer
+    extends Composer<_$DoseyDatabase, $CachedMountedRobotAccessTable> {
+  $$CachedMountedRobotAccessTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<String> get robotId =>
+      $composableBuilder(column: $table.robotId, builder: (column) => column);
+
+  GeneratedColumn<String> get displayName => $composableBuilder(
+    column: $table.displayName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get confirmedAt => $composableBuilder(
+    column: $table.confirmedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$CachedMountedRobotAccessTableTableManager
+    extends
+        RootTableManager<
+          _$DoseyDatabase,
+          $CachedMountedRobotAccessTable,
+          CachedMountedRobotAccessRow,
+          $$CachedMountedRobotAccessTableFilterComposer,
+          $$CachedMountedRobotAccessTableOrderingComposer,
+          $$CachedMountedRobotAccessTableAnnotationComposer,
+          $$CachedMountedRobotAccessTableCreateCompanionBuilder,
+          $$CachedMountedRobotAccessTableUpdateCompanionBuilder,
+          (
+            CachedMountedRobotAccessRow,
+            BaseReferences<
+              _$DoseyDatabase,
+              $CachedMountedRobotAccessTable,
+              CachedMountedRobotAccessRow
+            >,
+          ),
+          CachedMountedRobotAccessRow,
+          PrefetchHooks Function()
+        > {
+  $$CachedMountedRobotAccessTableTableManager(
+    _$DoseyDatabase db,
+    $CachedMountedRobotAccessTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CachedMountedRobotAccessTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$CachedMountedRobotAccessTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$CachedMountedRobotAccessTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> accountId = const Value.absent(),
+                Value<String> robotId = const Value.absent(),
+                Value<String> displayName = const Value.absent(),
+                Value<DateTime> confirmedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CachedMountedRobotAccessCompanion(
+                accountId: accountId,
+                robotId: robotId,
+                displayName: displayName,
+                confirmedAt: confirmedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String accountId,
+                required String robotId,
+                required String displayName,
+                required DateTime confirmedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CachedMountedRobotAccessCompanion.insert(
+                accountId: accountId,
+                robotId: robotId,
+                displayName: displayName,
+                confirmedAt: confirmedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$CachedMountedRobotAccessTableProcessedTableManager =
+    ProcessedTableManager<
+      _$DoseyDatabase,
+      $CachedMountedRobotAccessTable,
+      CachedMountedRobotAccessRow,
+      $$CachedMountedRobotAccessTableFilterComposer,
+      $$CachedMountedRobotAccessTableOrderingComposer,
+      $$CachedMountedRobotAccessTableAnnotationComposer,
+      $$CachedMountedRobotAccessTableCreateCompanionBuilder,
+      $$CachedMountedRobotAccessTableUpdateCompanionBuilder,
+      (
+        CachedMountedRobotAccessRow,
+        BaseReferences<
+          _$DoseyDatabase,
+          $CachedMountedRobotAccessTable,
+          CachedMountedRobotAccessRow
+        >,
+      ),
+      CachedMountedRobotAccessRow,
+      PrefetchHooks Function()
+    >;
 
 class $DoseyDatabaseManager {
   final _$DoseyDatabase _db;
@@ -15675,5 +16220,10 @@ class $DoseyDatabaseManager {
       $$CachedHouseholdMembersTableTableManager(
         _db,
         _db.cachedHouseholdMembers,
+      );
+  $$CachedMountedRobotAccessTableTableManager get cachedMountedRobotAccess =>
+      $$CachedMountedRobotAccessTableTableManager(
+        _db,
+        _db.cachedMountedRobotAccess,
       );
 }

@@ -14,6 +14,8 @@ import 'package:dosey_app/core/display/screen_awake_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
+import 'package:dosey_app/core/household/mounted_robot_access_gateway.dart';
+import 'package:dosey_app/core/household/mounted_robot_access_service.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -26,6 +28,7 @@ import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../support/fake_cloud_identity_gateway.dart';
 
 void main() {
   testWidgets('maybeOf returns null when the app scope is absent', (
@@ -96,6 +99,94 @@ void main() {
     expect(dependencies.householdSync, isA<DisabledHouseholdSyncGateway>());
     expect(dependencies.robotPairing, isA<DisabledRobotPairingGateway>());
 
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'Robot startup restores mounted access from its anonymous identity',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final mounted = _ScopeMountedRobotAccessGateway();
+      late DoseyAppDependencies dependencies;
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: DoseyAppScope(
+            database: database,
+            buildProfile: AppBuildProfile.robot,
+            bleGateway: _FakeBleGateway(),
+            connectivityGateway: _FakeConnectivityGateway(),
+            reminderScheduler: _FakeReminderScheduler(),
+            permissionGateway: _FakePermissionGateway(),
+            missedDoseReconciliationService:
+                _FakeMissedDoseReconciliationService(),
+            cloudIdentityGateway: FakeCloudIdentityGateway(
+              identity: const CloudIdentity.signedIn(
+                accountId: 'anonymous-1',
+                email: '',
+              ),
+            ),
+            mountedRobotAccessGateway: mounted,
+            child: Builder(
+              builder: (context) {
+                dependencies = DoseyAppScope.of(context);
+                return const SizedBox();
+              },
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(mounted.restoreCount, 1);
+      expect(
+        dependencies.mountedRobotAccessService.currentState.status,
+        MountedRobotAccessStatus.verifiedMounted,
+      );
+      expect(
+        dependencies.mountedRobotAccessService.currentState.robot?.robotId,
+        'robot-1',
+      );
+
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets('Personal startup does not restore mounted access', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final mounted = _ScopeMountedRobotAccessGateway();
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          buildProfile: AppBuildProfile.personal,
+          bleGateway: _FakeBleGateway(),
+          connectivityGateway: _FakeConnectivityGateway(),
+          reminderScheduler: _FakeReminderScheduler(),
+          permissionGateway: _FakePermissionGateway(),
+          missedDoseReconciliationService:
+              _FakeMissedDoseReconciliationService(),
+          cloudIdentityGateway: FakeCloudIdentityGateway(
+            identity: const CloudIdentity.signedIn(
+              accountId: 'personal-1',
+              email: 'person@example.com',
+            ),
+          ),
+          mountedRobotAccessGateway: mounted,
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(mounted.restoreCount, 0);
     await tester.pumpWidget(const SizedBox());
   });
 
@@ -357,6 +448,22 @@ void main() {
       await database.close();
     },
   );
+}
+
+class _ScopeMountedRobotAccessGateway implements MountedRobotAccessGateway {
+  var restoreCount = 0;
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<MountedRobotInstallation?> restore() async {
+    restoreCount += 1;
+    return const MountedRobotInstallation(
+      robotId: 'robot-1',
+      displayName: 'Dosey',
+    );
+  }
 }
 
 class _StoppingVoicePlaybackGateway implements VoicePlaybackGateway {

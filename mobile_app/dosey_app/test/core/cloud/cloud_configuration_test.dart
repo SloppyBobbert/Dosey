@@ -23,7 +23,7 @@ void main() {
     );
 
     expect(configuration.isEnabled, isTrue);
-    expect(configuration.isPairingEnabled, isTrue);
+    expect(configuration.isPersonalPairingEnabled, isTrue);
     expect(configuration.endpoint, 'https://nyc.cloud.appwrite.io/v1');
     expect(configuration.projectId, 'dosey-development');
     expect(configuration.createPairingCodeFunctionId, 'create-code');
@@ -41,7 +41,7 @@ void main() {
       );
 
       expect(configuration.isEnabled, isTrue);
-      expect(configuration.isPairingEnabled, isFalse);
+      expect(configuration.isPersonalPairingEnabled, isFalse);
     },
   );
 
@@ -54,6 +54,42 @@ void main() {
 
     expect(configuration.isEnabled, isTrue);
     expect(configuration.isHouseholdManagementEnabled, isFalse);
+  });
+
+  test('mounted robot access requires its dedicated Function ID', () {
+    final incomplete = CloudConfiguration.fromValues(
+      endpoint: 'https://nyc.cloud.appwrite.io/v1',
+      projectId: 'dosey-development',
+    );
+    expect(incomplete.isMountedRobotAccessEnabled, isFalse);
+
+    final complete = CloudConfiguration.fromValues(
+      endpoint: 'https://nyc.cloud.appwrite.io/v1',
+      projectId: 'dosey-development',
+      getMountedRobotFunctionId: 'get-mounted-robot',
+    );
+    expect(complete.isMountedRobotAccessEnabled, isTrue);
+    expect(complete.getMountedRobotFunctionId, 'get-mounted-robot');
+  });
+
+  test('splits Personal pairing and Robot claim predicates', () {
+    final personal = CloudConfiguration.fromValues(
+      endpoint: 'https://cloud.example/v1',
+      projectId: 'project',
+      createPairingCodeFunctionId: 'create-code',
+      claimRobotFunctionId: 'claim-robot',
+    );
+    expect(personal.isPersonalPairingEnabled, isTrue);
+    expect(personal.isRobotClaimEnabled, isFalse);
+
+    final robot = CloudConfiguration.fromValues(
+      endpoint: 'https://cloud.example/v1',
+      projectId: 'project',
+      claimRobotFunctionId: 'claim-robot',
+      getMountedRobotFunctionId: 'get-mounted-robot',
+    );
+    expect(robot.isPersonalPairingEnabled, isFalse);
+    expect(robot.isRobotClaimEnabled, isTrue);
   });
 
   test('cloud configuration rejects a partial Appwrite setup', () {

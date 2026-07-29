@@ -9,6 +9,7 @@ import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
+import 'package:dosey_app/core/household/mounted_robot_access_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
@@ -35,6 +36,7 @@ class DoseyApp extends StatelessWidget {
     this.householdSyncGateway,
     this.householdManagementGateway,
     this.robotPairingGateway,
+    this.mountedRobotAccessGateway,
     this.buildProfile,
     this.robotPhoneSetupGateway,
   });
@@ -53,6 +55,7 @@ class DoseyApp extends StatelessWidget {
   final HouseholdSyncGateway? householdSyncGateway;
   final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
+  final MountedRobotAccessGateway? mountedRobotAccessGateway;
   final AppBuildProfile? buildProfile;
   final RobotPhoneSetupGateway? robotPhoneSetupGateway;
 
@@ -79,6 +82,9 @@ class DoseyApp extends StatelessWidget {
             ? null
             : householdManagementGateway,
         robotPairingGateway: session.isDemo ? null : robotPairingGateway,
+        mountedRobotAccessGateway: session.isDemo
+            ? null
+            : mountedRobotAccessGateway,
         buildProfile: buildProfile,
         robotPhoneSetupGateway: robotPhoneSetupGateway,
         appClock: session.clock,

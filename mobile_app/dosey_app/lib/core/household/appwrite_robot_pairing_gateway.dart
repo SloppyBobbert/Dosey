@@ -75,7 +75,7 @@ class AppwriteRobotPairingGateway implements RobotPairingGateway {
   );
 
   final AppwriteRobotPairingApi _api;
-  final String _createPairingCodeFunctionId;
+  final String? _createPairingCodeFunctionId;
   final String _claimRobotFunctionId;
 
   @override
@@ -85,8 +85,14 @@ class AppwriteRobotPairingGateway implements RobotPairingGateway {
   Future<RobotPairingCredential> createPairingCode({
     required String robotId,
   }) async {
+    final functionId = _createPairingCodeFunctionId;
+    if (functionId == null) {
+      throw const RobotPairingException(
+        RobotPairingFailureReason.functionFailure,
+      );
+    }
     final response = await _execute(
-      _createPairingCodeFunctionId,
+      functionId,
       jsonEncode({'robotId': robotId}),
     );
     final body = _successfulBody(response);
@@ -141,7 +147,7 @@ class AppwriteRobotPairingGateway implements RobotPairingGateway {
 
   Map<String, dynamic> _successfulBody(PairingFunctionResponse response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw RobotPairingException(_reasonForStatus(response.statusCode));
+      throw RobotPairingException(_reasonForResponse(response));
     }
     try {
       return jsonDecode(response.body) as Map<String, dynamic>;
@@ -150,6 +156,35 @@ class AppwriteRobotPairingGateway implements RobotPairingGateway {
         RobotPairingFailureReason.functionFailure,
       );
     }
+  }
+
+  RobotPairingFailureReason _reasonForResponse(
+    PairingFunctionResponse response,
+  ) {
+    if (response.statusCode != 409) {
+      return _reasonForStatus(response.statusCode);
+    }
+    final error = _safeError(response.body);
+    return switch (error) {
+      'consumed' => RobotPairingFailureReason.consumedCode,
+      'device_already_mounted' =>
+        RobotPairingFailureReason.deviceAlreadyMounted,
+      _ => RobotPairingFailureReason.functionFailure,
+    };
+  }
+
+  String? _safeError(String responseBody) {
+    try {
+      final decoded = jsonDecode(responseBody);
+      if (decoded is Map<String, dynamic> &&
+          decoded.length == 1 &&
+          decoded['error'] is String) {
+        return decoded['error'] as String;
+      }
+    } on Object {
+      // Malformed server errors must stay generic.
+    }
+    return null;
   }
 
   RobotPairingFailureReason _reasonForStatus(int statusCode) =>

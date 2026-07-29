@@ -39,6 +39,9 @@ import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/household_membership_notifier.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
+import 'package:dosey_app/core/household/mounted_robot_access_gateway.dart';
+import 'package:dosey_app/core/household/local_mounted_robot_access_repository.dart';
+import 'package:dosey_app/core/household/mounted_robot_access_service.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
@@ -90,6 +93,7 @@ class DoseyAppScope extends StatefulWidget {
     this.householdSyncGateway,
     this.householdManagementGateway,
     this.robotPairingGateway,
+    this.mountedRobotAccessGateway,
     this.buildProfile,
     this.robotPhoneSetupGateway,
     this.enableDemoFaceLab = false,
@@ -114,6 +118,7 @@ class DoseyAppScope extends StatefulWidget {
   final HouseholdSyncGateway? householdSyncGateway;
   final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
+  final MountedRobotAccessGateway? mountedRobotAccessGateway;
   final AppBuildProfile? buildProfile;
   final RobotPhoneSetupGateway? robotPhoneSetupGateway;
   final bool enableDemoFaceLab;
@@ -187,6 +192,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     final localAuth = LocalAuthRepository(_database);
     final household = LocalHouseholdRepository(_database);
     final householdCache = LocalHouseholdCacheRepository(_database);
+    final mountedRobotCache = LocalMountedRobotAccessRepository(_database);
     final cloudIdentity =
         widget.cloudIdentityGateway ?? const DisabledCloudIdentityGateway();
     final householdSync =
@@ -197,6 +203,13 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     final householdMembership = HouseholdMembershipNotifier();
     final robotPairing =
         widget.robotPairingGateway ?? const DisabledRobotPairingGateway();
+    final mountedRobotAccess =
+        widget.mountedRobotAccessGateway ??
+        const DisabledMountedRobotAccessGateway();
+    final mountedRobotAccessService = MountedRobotAccessService(
+      mountedRobotAccess,
+      mountedRobotCache,
+    );
     final cloudGoogleAuth = cloudIdentity is DisabledCloudIdentityGateway
         ? null
         : GoogleAuthService(
@@ -392,6 +405,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       householdManagement: householdManagement,
       householdMembership: householdMembership,
       robotPairing: robotPairing,
+      mountedRobotAccess: mountedRobotAccess,
+      mountedRobotAccessService: mountedRobotAccessService,
       localAuth: localAuth,
       auth: AppAuthService(
         localAuth: localAuth,
@@ -464,6 +479,27 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
   }
 
   Future<void> _runStartupMaintenance() async {
+    final role = await _dependencies.effectiveRole.getDeviceRole();
+    if (role.canHostRobot) {
+      try {
+        final identity = await _dependencies.cloudIdentity
+            .watchIdentity()
+            .first;
+        if (identity.accountId != null) {
+          await _dependencies.mountedRobotAccessService.restoreForAccount(
+            identity.accountId!,
+          );
+        }
+      } on Object catch (error, stackTrace) {
+        developer.log(
+          'Mounted robot restore failed; continuing with local state.',
+          name: 'dosey.app_scope',
+          level: 1000,
+          error: error,
+          stackTrace: stackTrace,
+        );
+      }
+    }
     try {
       // Startup sync repairs local notification state without blocking app boot.
       await _dependencies.reminderSchedules.syncScheduledNotifications();
@@ -536,6 +572,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       unawaited(_dependencies.robotFaceController.close());
       unawaited(_dependencies.ble.close());
       unawaited(_dependencies.voicePlayer.dispose());
+      unawaited(_dependencies.mountedRobotAccessService.close());
       _dependencies.householdMembership.dispose();
       if (_ownsNotificationTapController) {
         _dependencies.notificationTaps.dispose();
@@ -582,6 +619,8 @@ class DoseyAppDependencies {
     required this.householdManagement,
     required this.householdMembership,
     required this.robotPairing,
+    required this.mountedRobotAccess,
+    required this.mountedRobotAccessService,
     required this.localAuth,
     required this.auth,
     required this.controller,
@@ -630,6 +669,8 @@ class DoseyAppDependencies {
   final HouseholdManagementGateway householdManagement;
   final HouseholdMembershipNotifier householdMembership;
   final RobotPairingGateway robotPairing;
+  final MountedRobotAccessGateway mountedRobotAccess;
+  final MountedRobotAccessService mountedRobotAccessService;
   final LocalAuthRepository localAuth;
   final AuthService auth;
   final ControllerGateway controller;

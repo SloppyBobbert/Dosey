@@ -387,6 +387,17 @@ class CachedHouseholdMembers extends Table {
   ];
 }
 
+@DataClassName('CachedMountedRobotAccessRow')
+class CachedMountedRobotAccess extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get robotId => text()();
+  TextColumn get displayName => text()();
+  DateTimeColumn get confirmedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {accountId};
+}
+
 @DriftDatabase(
   tables: [
     AppSettings,
@@ -407,6 +418,7 @@ class CachedHouseholdMembers extends Table {
     AdminAuditEvents,
     CachedRobotInstallations,
     CachedHouseholdMembers,
+    CachedMountedRobotAccess,
   ],
 )
 class DoseyDatabase extends _$DoseyDatabase {
@@ -430,7 +442,7 @@ class DoseyDatabase extends _$DoseyDatabase {
   final bool isDemo;
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -515,6 +527,9 @@ class DoseyDatabase extends _$DoseyDatabase {
       if (from < 16) {
         await migrator.createTable(cachedRobotInstallations);
         await migrator.createTable(cachedHouseholdMembers);
+      }
+      if (from < 17) {
+        await migrator.createTable(cachedMountedRobotAccess);
       }
     },
   );

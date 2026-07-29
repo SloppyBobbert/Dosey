@@ -9,6 +9,7 @@ enum RobotPairingFailureReason {
   invalidCode,
   missingSession,
   consumedCode,
+  deviceAlreadyMounted,
   expiredCode,
   blockedDevice,
   functionFailure,
