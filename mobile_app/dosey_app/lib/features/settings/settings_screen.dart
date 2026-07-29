@@ -12,6 +12,7 @@ import 'package:dosey_app/core/household/household_account_state.dart';
 import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
+import 'package:dosey_app/core/household/mounted_robot_access_service.dart';
 import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/action_pin_dialog.dart';
@@ -310,7 +311,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 12),
                 _accordion(
                   group: _SettingsGroup.household,
-                  title: 'Household & robot profile',
+                  title: role.canHostRobot
+                      ? 'Mounted robot authorization'
+                      : 'Household & robot profile',
                   child: _targeted(
                     SettingsSection.householdAccount,
                     _HouseholdAccountCard(platform: platform),
@@ -860,6 +863,56 @@ class _HouseholdAccountCard extends StatefulWidget {
   State<_HouseholdAccountCard> createState() => _HouseholdAccountCardState();
 }
 
+class _MountedRobotAuthorizationStatus extends StatelessWidget {
+  const _MountedRobotAuthorizationStatus({required this.state});
+
+  final MountedRobotAccessState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, detail, icon) = switch (state.status) {
+      MountedRobotAccessStatus.loading => (
+        'Checking authorization',
+        'Checking whether this phone is authorized to control a mounted robot.',
+        Icons.sync_outlined,
+      ),
+      MountedRobotAccessStatus.verifiedMounted => (
+        'Authorized',
+        'This phone is authorized for ${state.robot?.displayName ?? 'the mounted robot'}.',
+        Icons.verified_outlined,
+      ),
+      MountedRobotAccessStatus.verifiedUnmounted => (
+        'No robot authorized',
+        'This phone is not currently authorized for a mounted robot.',
+        Icons.link_off_outlined,
+      ),
+      MountedRobotAccessStatus.offlineUnverifiedCache => (
+        'Authorization not confirmed',
+        state.robot == null
+            ? 'The mounted robot authorization could not be checked while offline.'
+            : 'Offline. Last known robot: ${state.robot!.displayName}. Authorization is not confirmed.',
+        Icons.cloud_off_outlined,
+      ),
+      MountedRobotAccessStatus.error => (
+        'Authorization unavailable',
+        'The mounted robot authorization could not be verified. Try again when a connection is available.',
+        Icons.error_outline,
+      ),
+    };
+    final theme = Theme.of(context);
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon),
+      title: Text(label),
+      subtitle: Text(detail),
+      titleTextStyle: theme.textTheme.titleSmall,
+      subtitleTextStyle: theme.textTheme.bodyMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
 class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
   RobotPairingCredential? _pairingCredential;
   HouseholdInvitationCredential? _householdInvitation;
@@ -917,6 +970,36 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
             : fallbackRole;
 
         final robot = _visibleRobot;
+        if (role.canHostRobot) {
+          return StreamBuilder<MountedRobotAccessState>(
+            stream: dependencies.mountedRobotAccessService.watchState(),
+            initialData: dependencies.mountedRobotAccessService.currentState,
+            builder: (context, snapshot) {
+              return _SettingsSectionCard(
+                icon: Icons.verified_user_outlined,
+                title: 'Mounted robot authorization',
+                children: [
+                  _MountedRobotAuthorizationStatus(
+                    state:
+                        snapshot.data ??
+                        dependencies.mountedRobotAccessService.currentState,
+                  ),
+                  if (!dependencies.robotPairing.isAvailable) ...[
+                    const SizedBox(height: 12),
+                    const Text('Robot pairing is not configured.'),
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    FilledButton.icon(
+                      onPressed: _pairingBusy ? null : _showClaimDialog,
+                      icon: const Icon(Icons.link),
+                      label: const Text('Pair this robot phone'),
+                    ),
+                  ],
+                ],
+              );
+            },
+          );
+        }
         return StreamBuilder<CloudIdentity>(
           stream: dependencies.cloudIdentity.watchIdentity(),
           builder: (context, identitySnapshot) {
@@ -1475,14 +1558,19 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
         context,
       ).robotPairing.claimRobot(code: code);
       if (!mounted) return;
+      final dependencies = DoseyAppScope.of(context);
       var refreshedClaim = false;
       try {
-        final robot = await DoseyAppScope.of(
-          context,
-        ).householdSync.refreshRobot();
-        refreshedClaim = robot?.id == claimedRobotId;
+        final identity = await dependencies.cloudIdentity.watchIdentity().first;
+        if (identity.accountId != null) {
+          await dependencies.mountedRobotAccessService.requireClaimedRobot(
+            identity.accountId!,
+            claimedRobotId,
+          );
+          refreshedClaim = true;
+        }
       } on Object {
-        // The server-side claim succeeded; a display refresh cannot undo it.
+        // The claim succeeded; cloud authorization still needs a later retry.
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1526,6 +1614,8 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
             : 'Could not create the restricted robot session.',
       RobotPairingFailureReason.consumedCode =>
         'That pairing code has already been used.',
+      RobotPairingFailureReason.deviceAlreadyMounted =>
+        'This phone is already linked to another robot. The pairing code was not consumed.',
       RobotPairingFailureReason.expiredCode => 'That pairing code has expired.',
       RobotPairingFailureReason.blockedDevice =>
         'Too many attempts. Wait 15 minutes and try again.',

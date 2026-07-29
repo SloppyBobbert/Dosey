@@ -1165,7 +1165,7 @@ void main() {
     );
   });
 
-  testWidgets('Settings accordions open Household profile and History data', (
+  testWidgets('Settings accordions open mounted authorization and History', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -1177,17 +1177,12 @@ void main() {
     await _openBottomDestination(tester, 'Settings');
     await _scrollSettingsUntilVisible(
       tester,
-      find.text('Household & robot profile'),
+      find.text('Mounted robot authorization'),
     );
-    await tester.tap(find.text('Household & robot profile'));
+    await tester.tap(find.text('Mounted robot authorization'));
     await _pumpShellFrame(tester);
-    await _scrollSettingsUntilVisible(tester, find.text('Profile & device'));
-    await tester.tap(find.text('Profile & device'));
-    await tester.pumpAndSettle();
-    expect(
-      find.text('Edit household & robot profile').hitTestable(),
-      findsOneWidget,
-    );
+    expect(find.text('Checking authorization').hitTestable(), findsOneWidget);
+    expect(find.text('Edit household & robot profile'), findsNothing);
 
     await _scrollSettingsUntilVisible(tester, find.text('History & data'));
     await tester.tap(find.text('History & data'));

@@ -14,6 +14,8 @@ import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/local_household_cache_repository.dart';
 import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
+import 'package:dosey_app/core/household/mounted_robot_access_gateway.dart';
+import 'package:dosey_app/core/household/mounted_robot_access_service.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
@@ -86,7 +88,7 @@ void main() {
     final titles = _accordionTitles(tester);
     expect(titles, const [
       'Profile, account & device',
-      'Household & robot profile',
+      'Mounted robot authorization',
       'History & data',
       'Action PIN',
       'Reminder notifications',
@@ -271,6 +273,120 @@ void main() {
 
     expect(find.text('Sign in with Google'), findsNothing);
     expect(find.text('Account'), findsNothing);
+  });
+
+  testWidgets('Robot Mode shows mounted authorization instead of human sync', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.robot,
+        sectionTarget: SettingsSection.householdAccount,
+        cloudIdentityGateway: FakeCloudIdentityGateway(
+          identity: CloudIdentity.signedIn(
+            accountId: 'robot-account',
+            email: 'robot@example.com',
+          ),
+        ),
+        householdSyncGateway: _FakeHouseholdSyncGateway(_robotInstallation),
+        mountedRobotAccessGateway: _FakeMountedRobotAccessGateway(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mounted robot authorization'), findsAtLeastNWidgets(1));
+    expect(find.text('Authorized'), findsOneWidget);
+    expect(find.textContaining('Kitchen Dosey'), findsOneWidget);
+    expect(find.textContaining('Cloud sync'), findsNothing);
+    expect(find.text('People'), findsNothing);
+  });
+
+  testWidgets('Robot Mode represents each mounted authorization state', (
+    WidgetTester tester,
+  ) async {
+    final cases =
+        <({MountedRobotAccessStatus status, Object? error, String text})>[
+          (
+            status: MountedRobotAccessStatus.verifiedUnmounted,
+            error: null,
+            text: 'No robot authorized',
+          ),
+          (
+            status: MountedRobotAccessStatus.offlineUnverifiedCache,
+            error: const MountedRobotAccessTransportException('offline'),
+            text: 'Authorization not confirmed',
+          ),
+          (
+            status: MountedRobotAccessStatus.error,
+            error: const MountedRobotAccessException('unavailable'),
+            text: 'Authorization unavailable',
+          ),
+        ];
+    for (final testCase in cases) {
+      final database = DoseyDatabase.inMemory();
+      await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+      await tester.pumpWidget(
+        _TestSettingsApp(
+          database: database,
+          buildProfile: AppBuildProfile.robot,
+          sectionTarget: SettingsSection.householdAccount,
+          cloudIdentityGateway: FakeCloudIdentityGateway(
+            identity: CloudIdentity.signedIn(
+              accountId: 'robot-account',
+              email: 'robot@example.com',
+            ),
+          ),
+          mountedRobotAccessGateway: _FakeMountedRobotAccessGateway(
+            robot: testCase.status == MountedRobotAccessStatus.verifiedUnmounted
+                ? null
+                : const MountedRobotInstallation(
+                    robotId: 'robot-1',
+                    displayName: 'Kitchen Dosey',
+                  ),
+            error: testCase.error,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(testCase.text), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await database.close();
+    }
+  });
+
+  testWidgets('Robot Mode represents loading mounted authorization', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    final restore = Completer<MountedRobotInstallation?>();
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.robot,
+        sectionTarget: SettingsSection.householdAccount,
+        cloudIdentityGateway: FakeCloudIdentityGateway(
+          identity: CloudIdentity.signedIn(
+            accountId: 'robot-account',
+            email: 'robot@example.com',
+          ),
+        ),
+        mountedRobotAccessGateway: _FakeMountedRobotAccessGateway(
+          restoreFuture: restore.future,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Checking authorization'), findsOneWidget);
+    restore.complete();
   });
 
   testWidgets('Personal Mode retains account sign-in', (
@@ -1539,7 +1655,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
     final pairing = _FakeRobotPairingGateway();
-    final household = _RefreshingHouseholdSyncGateway(_robotInstallation);
+    final household = _FakeHouseholdSyncGateway(_robotInstallation);
 
     await tester.pumpWidget(
       _TestSettingsApp(
@@ -1548,12 +1664,14 @@ void main() {
         sectionTarget: SettingsSection.householdAccount,
         householdSyncGateway: household,
         robotPairingGateway: pairing,
+        mountedRobotAccessGateway: _FakeMountedRobotAccessGateway(),
+        cloudIdentityGateway: FakeCloudIdentityGateway(
+          identity: CloudIdentity.signedIn(accountId: 'anonymous-1', email: ''),
+        ),
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Robot linking'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Pair this robot phone'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -1564,9 +1682,46 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pairing.claimedCode, 'abcd2-efgh3');
-    expect(household.refreshCount, 1);
     expect(find.text('Robot phone paired.'), findsOneWidget);
-    expect(_findRichTextContaining('Cloud sync: Linked'), findsOneWidget);
+    expect(find.text('Authorized'), findsOneWidget);
+  });
+
+  testWidgets('Robot Mode warns after claim when identity lookup fails', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.robot,
+        sectionTarget: SettingsSection.householdAccount,
+        householdSyncGateway: _FakeHouseholdSyncGateway(_robotInstallation),
+        robotPairingGateway: _FakeRobotPairingGateway(),
+        mountedRobotAccessGateway: _FakeMountedRobotAccessGateway(),
+        cloudIdentityGateway: _ThrowingCloudIdentityGateway(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pair this robot phone'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, '10-character pairing code'),
+      'abcd2-efgh3',
+    );
+    await tester.tap(find.text('Pair robot'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Robot phone paired, but linked status could not refresh.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Robot pairing is temporarily unavailable.'),
+      findsNothing,
+    );
   });
 
   testWidgets('disabled pairing configuration hides Robot Mode action', (
@@ -1584,8 +1739,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Robot linking'));
-    await tester.pumpAndSettle();
 
     expect(find.text('Pair this robot phone'), findsNothing);
     expect(find.text('Robot pairing is not configured.'), findsOneWidget);
@@ -1598,7 +1751,7 @@ void main() {
     addTearDown(database.close);
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
     final pairing = _FakeRobotPairingGateway(claimedRobotId: 'robot-2');
-    final household = _RefreshingHouseholdSyncGateway(_robotInstallation);
+    final household = _FakeHouseholdSyncGateway(_robotInstallation);
 
     await tester.pumpWidget(
       _TestSettingsApp(
@@ -1607,10 +1760,14 @@ void main() {
         sectionTarget: SettingsSection.householdAccount,
         householdSyncGateway: household,
         robotPairingGateway: pairing,
+        mountedRobotAccessGateway: _FakeMountedRobotAccessGateway(
+          error: const MountedRobotAccessTransportException('offline'),
+        ),
+        cloudIdentityGateway: FakeCloudIdentityGateway(
+          identity: CloudIdentity.signedIn(accountId: 'anonymous-1', email: ''),
+        ),
       ),
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Robot linking'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Pair this robot phone'));
     await tester.pumpAndSettle();
@@ -1644,8 +1801,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Robot linking'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Pair this robot phone'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -1660,7 +1815,7 @@ void main() {
     expect(pairing.claimedCode, isNull);
   });
 
-  testWidgets('Robot Mode shows the blocked-device pairing error', (
+  testWidgets('Robot Mode shows the already-mounted pairing error', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -1668,7 +1823,7 @@ void main() {
     await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
     final pairing = _FakeRobotPairingGateway(
       claimFailure: const RobotPairingException(
-        RobotPairingFailureReason.blockedDevice,
+        RobotPairingFailureReason.deviceAlreadyMounted,
       ),
     );
 
@@ -1681,8 +1836,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Robot linking'));
-    await tester.pumpAndSettle();
     await tester.tap(find.text('Pair this robot phone'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -1693,9 +1846,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('Too many attempts. Wait 15 minutes and try again.'),
+      find.text(
+        'This phone is already linked to another robot. The pairing code was not consumed.',
+      ),
       findsOneWidget,
     );
+    expect(find.text('That pairing code has already been used.'), findsNothing);
   });
 
   testWidgets('guided trial section shows saved completion status', (
@@ -1863,6 +2019,7 @@ class _TestSettingsApp extends StatelessWidget {
     this.householdSyncGateway,
     this.householdManagementGateway,
     this.robotPairingGateway,
+    this.mountedRobotAccessGateway,
     this.gateAccountId,
     this.buildProfile,
     this.robotPhoneSetupGateway,
@@ -1878,6 +2035,7 @@ class _TestSettingsApp extends StatelessWidget {
   final HouseholdSyncGateway? householdSyncGateway;
   final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
+  final MountedRobotAccessGateway? mountedRobotAccessGateway;
   final String? gateAccountId;
   final AppBuildProfile? buildProfile;
   final RobotPhoneSetupGateway? robotPhoneSetupGateway;
@@ -1898,6 +2056,7 @@ class _TestSettingsApp extends StatelessWidget {
       householdSyncGateway: householdSyncGateway,
       householdManagementGateway: householdManagementGateway,
       robotPairingGateway: robotPairingGateway,
+      mountedRobotAccessGateway: mountedRobotAccessGateway,
       robotPhoneSetupGateway: robotPhoneSetupGateway,
       voicePlayer: voicePlayer,
       child: Builder(
@@ -1955,6 +2114,37 @@ class _FakeRobotPhoneSetupGateway implements RobotPhoneSetupGateway {
   Future<Map<RobotPhoneSetupItem, SetupReadiness>> readStatus() async => {
     for (final item in RobotPhoneSetupItem.values) item: SetupReadiness.ready,
   };
+}
+
+class _FakeMountedRobotAccessGateway implements MountedRobotAccessGateway {
+  _FakeMountedRobotAccessGateway({
+    this.robot = const MountedRobotInstallation(
+      robotId: 'robot-1',
+      displayName: 'Kitchen Dosey',
+    ),
+    this.error,
+    this.restoreFuture,
+  });
+
+  final MountedRobotInstallation? robot;
+  final Object? error;
+  final Future<MountedRobotInstallation?>? restoreFuture;
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<MountedRobotInstallation?> restore() async {
+    if (error case final error?) throw error;
+    if (restoreFuture case final future?) return future;
+    return robot;
+  }
+}
+
+class _ThrowingCloudIdentityGateway extends FakeCloudIdentityGateway {
+  @override
+  Stream<CloudIdentity> watchIdentity() =>
+      Stream<CloudIdentity>.error(StateError('identity lookup failed'));
 }
 
 final _robotInstallation = RobotInstallation(
@@ -2028,29 +2218,6 @@ class _ControllableHouseholdSyncGateway implements HouseholdSyncGateway {
 
   @override
   Future<RobotInstallation?> refreshRobot() async => _robot;
-}
-
-class _RefreshingHouseholdSyncGateway implements HouseholdSyncGateway {
-  _RefreshingHouseholdSyncGateway(this.robot);
-
-  final RobotInstallation robot;
-  final _changes = StreamController<RobotInstallation?>.broadcast();
-  RobotInstallation? _current;
-  var refreshCount = 0;
-
-  @override
-  Stream<RobotInstallation?> watchRobot() async* {
-    yield _current;
-    yield* _changes.stream;
-  }
-
-  @override
-  Future<RobotInstallation?> refreshRobot() async {
-    refreshCount += 1;
-    _current = robot;
-    _changes.add(robot);
-    return robot;
-  }
 }
 
 class _FakeRobotPairingGateway implements RobotPairingGateway {
