@@ -1208,7 +1208,7 @@ class _DoseStatusBanner extends StatelessWidget {
   }
 }
 
-class _ScheduleTimelineCard extends StatelessWidget {
+class _ScheduleTimelineCard extends StatefulWidget {
   const _ScheduleTimelineCard({
     required this.schedules,
     required this.events,
@@ -1220,13 +1220,26 @@ class _ScheduleTimelineCard extends StatelessWidget {
   final Map<String, Prescription> prescriptionsById;
 
   @override
+  State<_ScheduleTimelineCard> createState() => _ScheduleTimelineCardState();
+}
+
+class _ScheduleTimelineCardState extends State<_ScheduleTimelineCard> {
+  static const _collapsedRowCount = 4;
+
+  var _showAll = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final timelineRows = _timelineRows(
-      schedules,
-      events,
+      widget.schedules,
+      widget.events,
       DoseyAppScope.of(context).appClock.now(),
-    ).take(4).toList();
+    ).toList();
+    final hasMoreRows = timelineRows.length > _collapsedRowCount;
+    final visibleRows = _showAll && hasMoreRows
+        ? timelineRows
+        : timelineRows.take(_collapsedRowCount);
 
     return Card(
       child: Padding(
@@ -1260,15 +1273,24 @@ class _ScheduleTimelineCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            if (timelineRows.isEmpty)
+            if (visibleRows.isEmpty)
               const _EmptyReminderState()
             else
-              for (final row in timelineRows)
+              for (final row in visibleRows)
                 _TimelineRow(
                   statusLabel: row.statusLabel,
                   schedule: row.schedule,
-                  prescription: prescriptionsById[row.schedule.prescriptionId],
+                  prescription:
+                      widget.prescriptionsById[row.schedule.prescriptionId],
                 ),
+            if (hasMoreRows) ...[
+              const SizedBox(height: 2),
+              TextButton.icon(
+                onPressed: () => setState(() => _showAll = !_showAll),
+                icon: Icon(_showAll ? Icons.expand_less : Icons.expand_more),
+                label: Text(_showAll ? 'Show fewer' : 'Show all reminders'),
+              ),
+            ],
           ],
         ),
       ),
