@@ -1,46 +1,29 @@
-name: Web Production Sites
+name: Web Production Pages
 
 on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Full 40-character main commit SHA to build or activate
+        description: Full 40-character current main SHA to deploy
         required: true
-        type: string
-      mode:
-        description: Upload without activation, or explicitly activate a mapped deployment
-        required: true
-        type: choice
-        options:
-          - upload
-          - activate
-        default: upload
-      mapping_artifact_id:
-        description: Required only for activate mode; immutable provenance artifact ID
-        required: false
-        default: ''
         type: string
 
 permissions:
-  actions: read
   contents: read
 
 concurrency:
-  group: web-production-sites
+  group: web-production-pages
   cancel-in-progress: false
 
-env:
-  APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
-  APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
-  APPWRITE_SITE_ID: ${{ vars.APPWRITE_PRODUCTION_SITE_ID }}
-
 jobs:
-  upload:
-    if: inputs.mode == 'upload'
-    name: Upload production deployment without activation
+  build:
+    name: Build production Pages artifact
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
     env:
+      APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
+      APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
       SOURCE_SHA: ${{ inputs.source_sha }}
     defaults:
       run:
@@ -51,34 +34,41 @@ jobs:
         with:
           ref: ${{ inputs.source_sha }}
           fetch-depth: 0
-      - name: Verify selected SHA is on origin/main
+
+      - name: Validate selected main SHA
         id: validate-source
         working-directory: .
         run: |
           set -euo pipefail
-          SOURCE_SHA="${SOURCE_SHA,,}"
-          [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || {
-            printf 'source_sha must be a full 40-character commit SHA\n' >&2
+          source_sha="${SOURCE_SHA,,}"
+          [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]] || {
+            printf 'source_sha must be exactly 40 hexadecimal characters\n' >&2
             exit 1
           }
-          git fetch --no-tags origin main
-          git rev-parse --verify "${SOURCE_SHA}^{commit}"
-          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
+          git fetch --no-tags origin main:refs/remotes/origin/main
           checked_out_sha="$(git rev-parse HEAD)"
-          [[ "$checked_out_sha" == "$SOURCE_SHA" ]] || {
+          origin_main_sha="$(git rev-parse refs/remotes/origin/main)"
+          [[ "$checked_out_sha" == "$source_sha" ]] || {
             printf 'Checked-out HEAD does not match source_sha\n' >&2
             exit 1
           }
-          printf 'SOURCE_SHA=%s\n' "$SOURCE_SHA" >> "$GITHUB_ENV"
-          printf 'source_sha=%s\n' "$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          [[ "$origin_main_sha" == "$source_sha" ]] || {
+            printf 'source_sha is not the current origin/main SHA\n' >&2
+            exit 1
+          }
+          printf 'SOURCE_SHA=%s\n' "$source_sha" >> "$GITHUB_ENV"
+          printf 'source_sha=%s\n' "$source_sha" >> "$GITHUB_OUTPUT"
+
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
         with:
           flutter-version: '3.44.6'
           channel: stable
           cache: true
+
       - name: Install locked dependencies
         run: flutter pub get --enforce-lockfile
+
       - name: Validate production web configuration
         run: |
           set -euo pipefail
@@ -90,6 +80,16 @@ jobs:
             printf 'APPWRITE_PROJECT_ID is required\n' >&2
             exit 1
           }
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze Flutter code
+        run: flutter analyze
+
+      - name: Test web and auth paths
+        run: flutter test test/app/web test/core/auth
+
       - name: Build auth-enabled production web release
         run: |
           flutter build web --release --target=lib/main_web.dart \
@@ -98,410 +98,48 @@ jobs:
             --dart-define=WEB_APP_ORIGIN=https://dosey.dev \
             --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
             --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID"
-      - name: Verify and archive web contents
+
+      - name: Verify web contents
         run: |
           set -euo pipefail
           test -s build/web/index.html
           test -s build/web/auth.html
           test -s build/web/flutter_bootstrap.js
           test -s build/web/manifest.json
-          tar -czf "$GITHUB_WORKSPACE/dosey-web-production.tar.gz" -C build/web .
-          tar -tzf "$GITHUB_WORKSPACE/dosey-web-production.tar.gz" | grep -Fx './index.html'
-          tar -tzf "$GITHUB_WORKSPACE/dosey-web-production.tar.gz" | grep -Fx './auth.html'
-      - name: Upload production archive
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: dosey-web-production-${{ steps.validate-source.outputs.source_sha }}
-          path: dosey-web-production.tar.gz
-          if-no-files-found: error
-          retention-days: 30
-      - name: Create Appwrite deployment and provenance manifest
-        id: create-deployment
-        env:
-          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
-        run: |
-          set -euo pipefail
-          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
-            printf 'Unexpected Appwrite endpoint\n' >&2
-            exit 1
-          }
-          test -n "$APPWRITE_ENDPOINT"
-          test -n "$APPWRITE_PROJECT_ID"
-          test -n "$APPWRITE_SITE_ID"
-          test -n "$APPWRITE_SITES_API_KEY"
-          response="$GITHUB_WORKSPACE/production-deployment-response.json"
-          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
-            --connect-timeout 10 --max-time 1800 \
-            --request POST "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments" \
-            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
-            --form "code=@$GITHUB_WORKSPACE/dosey-web-production.tar.gz" \
-            --form 'installCommand=' --form 'buildCommand=' --form 'outputDirectory=' \
-            --form 'activate=false')"
-          REDACTION_SECRET="$APPWRITE_SITES_API_KEY" python3 -c 'import os, pathlib, sys; p=pathlib.Path(sys.argv[1]); p.write_text(p.read_text().replace(os.environ["REDACTION_SECRET"], "[REDACTED]"))' "$response"
-          [ "$status" = 202 ] || {
-            printf 'Appwrite production upload failed with HTTP %s\n' "$status" >&2
-            exit 1
-          }
-          deployment_id="$(ruby -rjson -e '
-            data = JSON.parse(File.read(ARGV.fetch(0)))
-            id = data["$id"]
-            abort "Deployment ID missing from Appwrite response" unless id.is_a?(String)
-            abort "Deployment ID has an invalid format" unless id.match?(/\A[A-Za-z0-9][A-Za-z0-9._-]{0,35}\z/)
-            puts id
-          ' "$response")"
-          checked_out_sha="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
-          archive_sha256="$(shasum -a 256 "$GITHUB_WORKSPACE/dosey-web-production.tar.gz" | cut -d ' ' -f 1)"
-          [[ "$archive_sha256" =~ ^[0-9a-fA-F]{64}$ ]] || {
-            printf 'Unable to compute archive SHA-256\n' >&2
-            exit 1
-          }
-          provenance="$RUNNER_TEMP/production-provenance.json"
-          export PROVENANCE_PATH="$provenance"
-          export PROVENANCE_SOURCE_SHA="$checked_out_sha"
-          export PROVENANCE_DEPLOYMENT_ID="$deployment_id"
-          export PROVENANCE_ARCHIVE_SHA256="$archive_sha256"
-          export PROVENANCE_ENDPOINT="$APPWRITE_ENDPOINT"
-          export PROVENANCE_PROJECT_ID="$APPWRITE_PROJECT_ID"
-          export PROVENANCE_SITE_ID="$APPWRITE_SITE_ID"
-          export PROVENANCE_REPOSITORY="$GITHUB_REPOSITORY"
-          export PROVENANCE_WORKFLOW='.github/workflows/web-production.yml'
-          export PROVENANCE_RUN_ID="$GITHUB_RUN_ID"
-          export PROVENANCE_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT"
-          ruby -rjson <<'RUBY'
-          values = {
-            schema_version: 1,
-            source_sha: ENV.fetch('PROVENANCE_SOURCE_SHA'),
-            deployment_id: ENV.fetch('PROVENANCE_DEPLOYMENT_ID'),
-            archive_sha256: ENV.fetch('PROVENANCE_ARCHIVE_SHA256'),
-            endpoint: ENV.fetch('PROVENANCE_ENDPOINT'),
-            project_id: ENV.fetch('PROVENANCE_PROJECT_ID'),
-            site_id: ENV.fetch('PROVENANCE_SITE_ID'),
-            repository: ENV.fetch('PROVENANCE_REPOSITORY'),
-            workflow: ENV.fetch('PROVENANCE_WORKFLOW'),
-            run_id: ENV.fetch('PROVENANCE_RUN_ID'),
-            run_attempt: ENV.fetch('PROVENANCE_RUN_ATTEMPT')
-          }
-          File.write(ENV.fetch('PROVENANCE_PATH'), JSON.generate(values) + "\n")
-          RUBY
-          test -s "$provenance"
-          printf 'deployment_id=%s\n' "$deployment_id" >> "$GITHUB_OUTPUT"
-          printf 'source_sha=%s\n' "$checked_out_sha" >> "$GITHUB_OUTPUT"
-      - name: Upload production provenance manifest
-        id: upload-provenance
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: dosey-web-production-provenance-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/production-provenance.json
-          if-no-files-found: error
-          retention-days: 90
-      - name: Summarize production provenance
-        env:
-          PROVENANCE_ARTIFACT_ID: ${{ steps.upload-provenance.outputs.artifact-id }}
-          PROVENANCE_ARTIFACT_DIGEST: ${{ steps.upload-provenance.outputs.artifact-digest }}
-          PROVENANCE_ARTIFACT_NAME: dosey-web-production-provenance-${{ github.run_id }}-${{ github.run_attempt }}
-          PROVENANCE_DEPLOYMENT_ID: ${{ steps.create-deployment.outputs.deployment_id }}
-          PROVENANCE_SOURCE_SHA: ${{ steps.create-deployment.outputs.source_sha }}
-        run: |
-          set -euo pipefail
-          {
-            printf '### Production provenance\n'
-            printf -- '- Artifact name: `%s`\n' "$PROVENANCE_ARTIFACT_NAME"
-            printf -- '- Artifact ID: `%s`\n' "$PROVENANCE_ARTIFACT_ID"
-            printf -- '- Artifact digest: `%s`\n' "$PROVENANCE_ARTIFACT_DIGEST"
-            printf -- '- Deployment ID: `%s`\n' "$PROVENANCE_DEPLOYMENT_ID"
-            printf -- '- Source SHA: `%s`\n' "$PROVENANCE_SOURCE_SHA"
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Preserve Appwrite response
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: dosey-web-production-response-${{ steps.validate-source.outputs.source_sha }}
-          path: ${{ github.workspace }}/production-deployment-response.json
-          if-no-files-found: warn
-          retention-days: 30
-
-  activate:
-    if: inputs.mode == 'activate'
-    name: Explicitly activate mapped production deployment
-    runs-on: ubuntu-latest
-    environment: production
-    env:
-      SOURCE_SHA: ${{ inputs.source_sha }}
-      MAPPING_ARTIFACT_ID: ${{ inputs.mapping_artifact_id }}
-    steps:
-      - name: Check out selected source commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: ${{ inputs.source_sha }}
-          fetch-depth: 0
-      - name: Validate source commit and mapping artifact ID
-        working-directory: .
-        run: |
-          set -euo pipefail
-          SOURCE_SHA="${SOURCE_SHA,,}"
-          [[ "$SOURCE_SHA" =~ ^[0-9a-fA-F]{40}$ ]] || {
-            printf 'source_sha must be a full 40-character commit SHA\n' >&2
-            exit 1
-          }
-          [[ "$MAPPING_ARTIFACT_ID" =~ ^[1-9][0-9]*$ ]] || {
-            printf 'mapping_artifact_id must be a positive numeric ID\n' >&2
-            exit 1
-          }
-          git fetch --no-tags origin main
-          git rev-parse --verify "${SOURCE_SHA}^{commit}"
-          git merge-base --is-ancestor "$SOURCE_SHA" origin/main
-          printf 'SOURCE_SHA=%s\n' "$SOURCE_SHA" >> "$GITHUB_ENV"
-      - name: Fetch and validate provenance artifact metadata
-        id: artifact-metadata
-        working-directory: .
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          metadata="$RUNNER_TEMP/production-artifact-metadata.json"
-          status="$(curl --silent --show-error --output "$metadata" --write-out '%{http_code}' \
-            --connect-timeout 10 --max-time 60 --retry 3 --retry-delay 2 --retry-connrefused \
-            --header "Authorization: Bearer $GITHUB_TOKEN" \
-            --header 'Accept: application/vnd.github+json' \
-            --header 'X-GitHub-Api-Version: 2022-11-28' \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$MAPPING_ARTIFACT_ID")"
-          [ "$status" = 200 ] || { printf 'Artifact metadata request failed with HTTP %s\n' "$status" >&2; exit 1; }
-          export METADATA_PATH="$metadata"
-          export EXPECTED_REPOSITORY="$GITHUB_REPOSITORY"
-          export EXPECTED_REPOSITORY_ID="$GITHUB_REPOSITORY_ID"
-          export EXPECTED_ARTIFACT_ID="$MAPPING_ARTIFACT_ID"
-          ruby -rjson <<'RUBY'
-          data = JSON.parse(File.read(ENV.fetch('METADATA_PATH')))
-          abort 'Artifact metadata is not an object' unless data.is_a?(Hash)
-          abort 'Artifact metadata ID mismatch' unless data['id'].to_s == ENV.fetch('EXPECTED_ARTIFACT_ID')
-          abort 'Artifact is expired' unless data['expired'] == false
-          name = data['name']
-          match = /\Adosey-web-production-provenance-(\d+)-(\d+)\z/.match(name.to_s)
-          abort 'Artifact name is not an immutable production provenance name' unless match
-          digest = data['digest'].to_s
-          abort 'Artifact digest is invalid' unless digest.match?(/\Asha256:[0-9a-fA-F]{64}\z/)
-          workflow_run = data['workflow_run']
-          abort 'Artifact workflow run metadata is missing' unless workflow_run.is_a?(Hash)
-          run_id = workflow_run['id'].to_s
-          abort 'Artifact workflow run ID is invalid' unless run_id.match?(/\A[1-9][0-9]*\z/)
-          abort 'Artifact name run ID mismatch' unless match[1] == run_id
-          head_sha = workflow_run['head_sha'].to_s
-          abort 'Artifact producer head SHA is invalid' unless head_sha.match?(/\A[0-9a-fA-F]{40}\z/)
-          repository_id = ENV.fetch('EXPECTED_REPOSITORY_ID')
-          abort 'Artifact repository ownership is not exact' unless workflow_run['repository_id'].to_s == repository_id && workflow_run['head_repository_id'].to_s == repository_id
-          File.write(ENV.fetch('RUNNER_TEMP') + '/production-artifact-name', name)
-          File.write(ENV.fetch('RUNNER_TEMP') + '/production-artifact-digest', digest)
-          File.write(ENV.fetch('RUNNER_TEMP') + '/production-artifact-run-id', run_id)
-          File.write(ENV.fetch('RUNNER_TEMP') + '/production-artifact-run-attempt', match[2])
-          File.write(ENV.fetch('RUNNER_TEMP') + '/production-artifact-head-sha', head_sha)
-          RUBY
-      - name: Fetch and validate provenance workflow run
-        working-directory: .
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          run_id="$(< "$RUNNER_TEMP/production-artifact-run-id")"
-          run_metadata="$RUNNER_TEMP/production-workflow-run.json"
-          status="$(curl --silent --show-error --output "$run_metadata" --write-out '%{http_code}' \
-            --connect-timeout 10 --max-time 60 --retry 3 --retry-delay 2 --retry-connrefused \
-            --header "Authorization: Bearer $GITHUB_TOKEN" \
-            --header 'Accept: application/vnd.github+json' \
-            --header 'X-GitHub-Api-Version: 2022-11-28' \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/runs/$run_id")"
-          [ "$status" = 200 ] || { printf 'Workflow run request failed with HTTP %s\n' "$status" >&2; exit 1; }
-          export RUN_METADATA_PATH="$run_metadata"
-          export EXPECTED_RUN_ID="$run_id"
-          export EXPECTED_RUN_ATTEMPT="$(< "$RUNNER_TEMP/production-artifact-run-attempt")"
-          export EXPECTED_HEAD_SHA="$(< "$RUNNER_TEMP/production-artifact-head-sha")"
-          export EXPECTED_REPOSITORY="$GITHUB_REPOSITORY"
-          ruby -rjson <<'RUBY'
-          data = JSON.parse(File.read(ENV.fetch('RUN_METADATA_PATH')))
-          abort 'Workflow run metadata is not an object' unless data.is_a?(Hash)
-          abort 'Workflow run ID mismatch' unless data['id'].to_s == ENV.fetch('EXPECTED_RUN_ID')
-          repository = data['repository']
-          abort 'Workflow run repository is not exact' unless repository.is_a?(Hash) && repository['full_name'] == ENV.fetch('EXPECTED_REPOSITORY')
-          path = data['path'].to_s.sub(%r{\A\./}, '')
-          abort 'Workflow run path is not the production workflow' unless path == '.github/workflows/web-production.yml'
-          abort 'Workflow run event is not workflow_dispatch' unless data['event'] == 'workflow_dispatch'
-          abort 'Workflow run did not complete successfully' unless data['status'] == 'completed' && data['conclusion'] == 'success'
-          abort 'Workflow run attempt mismatch' unless data['run_attempt'].to_s == ENV.fetch('EXPECTED_RUN_ATTEMPT')
-          head_sha = data['head_sha'].to_s
-          abort 'Workflow producer head SHA is invalid' unless head_sha.match?(/\A[0-9a-fA-F]{40}\z/)
-          abort 'Workflow producer head SHA mismatch' unless head_sha == ENV.fetch('EXPECTED_HEAD_SHA')
-          File.write(ENV.fetch('RUNNER_TEMP') + '/production-producer-head-sha', head_sha)
-          RUBY
-          producer_head_sha="$(< "$RUNNER_TEMP/production-producer-head-sha")"
-          git rev-parse --verify "${producer_head_sha}^{commit}" >/dev/null || {
-            printf 'Producer workflow head SHA is not available locally\n' >&2
-            exit 1
-          }
-          git merge-base --is-ancestor "$producer_head_sha" origin/main || {
-            printf 'Producer workflow head SHA is not on origin/main\n' >&2
-            exit 1
-          }
-      - name: Download and validate provenance artifact
-        working-directory: .
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          artifact_zip="$RUNNER_TEMP/production-provenance-artifact.zip"
-          redirect_headers="$(mktemp "$RUNNER_TEMP/production-artifact-headers.XXXXXX")"
-          trap 'rm -f "$redirect_headers"' EXIT
-          status="$(curl --silent --dump-header "$redirect_headers" --output /dev/null --write-out '%{http_code}' \
-            --connect-timeout 10 --max-time 60 \
-            --header "Authorization: Bearer $GITHUB_TOKEN" \
-            --header 'Accept: application/vnd.github+json' \
-            --header 'X-GitHub-Api-Version: 2022-11-28' \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/$MAPPING_ARTIFACT_ID/zip")"
-          [ "$status" = 302 ] || { printf 'Artifact redirect request failed with HTTP %s\n' "$status" >&2; exit 1; }
-          download_url="$(ruby -ruri -e '
-            headers = File.binread(ARGV.fetch(0)).split(/\r?\n/)
-            locations = headers.select { |line| line.match?(/\A[ \t]*location[ \t]*:/i) }
-            abort "Artifact redirect must contain exactly one Location header" unless locations.length == 1
-            value = locations.first.sub(/\A[ \t]*location[ \t]*:/i, "")
-            value = value.sub(/\A[ \t]+/, "").sub(/[ \t]+\z/, "")
-            abort "Artifact redirect Location is invalid" if value.empty? || value.match?(/[\x00-\x1F\x7F\s]/)
-            uri = URI.parse(value)
-            abort "Artifact redirect Location is invalid" unless uri.scheme == "https" && !uri.host.to_s.empty? && uri.userinfo.nil?
-            puts value
-          ' "$redirect_headers")"
-          rm -f "$redirect_headers"
-          trap - EXIT
-          set +e
-          status="$(curl --silent --connect-timeout 10 --max-time 1800 --proto '=https' --max-redirs 0 --output "$artifact_zip" --write-out '%{http_code}' "$download_url")"
-          curl_exit=$?
-          set -e
-          unset download_url
-          [ "$curl_exit" -eq 0 ] && [ "$status" = 200 ] || {
-            printf 'Artifact storage download failed with HTTP %s\n' "$status" >&2
-            exit 1
-          }
-          actual_digest="$(shasum -a 256 "$artifact_zip" | cut -d ' ' -f 1)"
-          expected_digest="$(< "$RUNNER_TEMP/production-artifact-digest")"
-          expected_digest="${expected_digest#sha256:}"
-          [ "$actual_digest" = "$expected_digest" ] || { printf 'Artifact SHA-256 does not match GitHub metadata\n' >&2; exit 1; }
-          unzip -tqq "$artifact_zip" >/dev/null
-          mapfile -t entries < <(unzip -Z1 "$artifact_zip")
-          [ "${#entries[@]}" -eq 1 ] && [ "${entries[0]}" = 'production-provenance.json' ] || {
-            printf 'Provenance artifact must contain exactly one root manifest\n' >&2
-            exit 1
-          }
-          extract_dir="$RUNNER_TEMP/production-provenance-extracted"
-          mkdir -p "$extract_dir"
-          unzip -qq "$artifact_zip" -d "$extract_dir"
-          test -f "$extract_dir/production-provenance.json"
-          test ! -L "$extract_dir/production-provenance.json"
-      - name: Validate provenance manifest
-        id: provenance
-        working-directory: .
-        run: |
-          set -euo pipefail
-          export MANIFEST_PATH="$RUNNER_TEMP/production-provenance-extracted/production-provenance.json"
-          export EXPECTED_SOURCE_SHA="${SOURCE_SHA,,}"
-          export EXPECTED_REPOSITORY="$GITHUB_REPOSITORY"
-          export EXPECTED_WORKFLOW='.github/workflows/web-production.yml'
-          export EXPECTED_RUN_ID="$(< "$RUNNER_TEMP/production-artifact-run-id")"
-          export EXPECTED_RUN_ATTEMPT="$(< "$RUNNER_TEMP/production-artifact-run-attempt")"
-          export EXPECTED_ENDPOINT="$APPWRITE_ENDPOINT"
-          export EXPECTED_PROJECT_ID="$APPWRITE_PROJECT_ID"
-          export EXPECTED_SITE_ID="$APPWRITE_SITE_ID"
-          ruby -rjson <<'RUBY'
-          data = JSON.parse(File.read(ENV.fetch('MANIFEST_PATH')))
-          abort 'Provenance manifest is not an object' unless data.is_a?(Hash)
-          abort 'Unsupported provenance schema' unless data['schema_version'] == 1
-          abort 'Provenance source SHA mismatch' unless data['source_sha'] == ENV.fetch('EXPECTED_SOURCE_SHA') && data['source_sha'].match?(/\A[0-9a-fA-F]{40}\z/)
-          deployment_id = data['deployment_id'].to_s
-          abort 'Provenance deployment ID is invalid' unless deployment_id.match?(/\A[A-Za-z0-9][A-Za-z0-9._-]{0,35}\z/)
-          archive_sha256 = data['archive_sha256'].to_s
-          abort 'Provenance archive SHA-256 is invalid' unless archive_sha256.match?(/\A[0-9a-fA-F]{64}\z/)
-          abort 'Provenance endpoint mismatch' unless data['endpoint'] == ENV.fetch('EXPECTED_ENDPOINT') && data['endpoint'] == 'https://api.dosey.dev/v1'
-          abort 'Provenance project mismatch' unless data['project_id'] == ENV.fetch('EXPECTED_PROJECT_ID')
-          abort 'Provenance site mismatch' unless data['site_id'] == ENV.fetch('EXPECTED_SITE_ID')
-          abort 'Provenance repository mismatch' unless data['repository'] == ENV.fetch('EXPECTED_REPOSITORY')
-          abort 'Provenance workflow mismatch' unless data['workflow'] == ENV.fetch('EXPECTED_WORKFLOW')
-          abort 'Provenance run ID mismatch' unless data['run_id'].to_s == ENV.fetch('EXPECTED_RUN_ID')
-          abort 'Provenance run attempt mismatch' unless data['run_attempt'].to_s == ENV.fetch('EXPECTED_RUN_ATTEMPT')
-          File.write(ENV.fetch('RUNNER_TEMP') + '/provenance-deployment-id', deployment_id)
-          RUBY
-      - name: Verify selected deployment is ready
-        id: selected-deployment
-        working-directory: .
-        env:
-          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
-        run: |
-          set -euo pipefail
-          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
-            printf 'Unexpected Appwrite endpoint\n' >&2
-            exit 1
-          }
-          deployment_id="$(< "$RUNNER_TEMP/provenance-deployment-id")"
-          response="$RUNNER_TEMP/production-selected-deployment.json"
-          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
-            --connect-timeout 10 --max-time 120 \
-            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
-            "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployments/$deployment_id")"
-          [ "$status" = 200 ] || { printf 'Selected deployment lookup failed with HTTP %s\n' "$status" >&2; exit 1; }
-          export DEPLOYMENT_RESPONSE="$response"
-          export EXPECTED_DEPLOYMENT_ID="$deployment_id"
-          ruby -rjson <<'RUBY'
-          data = JSON.parse(File.read(ENV.fetch('DEPLOYMENT_RESPONSE')))
-          abort 'Selected deployment response is not an object' unless data.is_a?(Hash)
-          abort 'Selected deployment ID mismatch' unless data['$id'] == ENV.fetch('EXPECTED_DEPLOYMENT_ID')
-          abort 'Selected deployment is not ready' unless data['status'] == 'ready'
-          RUBY
-      - name: Activate selected deployment
-        id: activate-deployment
-        working-directory: .
-        env:
-          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
-        run: |
-          set -euo pipefail
-          deployment_id="$(< "$RUNNER_TEMP/provenance-deployment-id")"
-          response="$RUNNER_TEMP/production-activation-response.json"
-          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
-            --connect-timeout 10 --max-time 120 \
-            --request PATCH "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID/deployment" \
-            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
-            --header 'Content-Type: application/json' \
-            --data-raw "{\"deploymentId\":\"$deployment_id\"}")" || {
-              printf 'Activation request result is ambiguous; manual inspection is required.\n' >&2
-              exit 1
-            }
-          if [ "$status" != 200 ]; then
-            printf 'Activation returned HTTP %s; manual inspection is required.\n' "$status" >&2
+          if find build/web \( -name '.env' -o -name '.env.*' \) -print -quit | grep -q .; then
+            printf 'Unexpected environment file in web artifact\n' >&2
             exit 1
           fi
-          export ACTIVATION_RESPONSE="$response"
-          export EXPECTED_DEPLOYMENT_ID="$deployment_id"
-          ruby -rjson <<'RUBY'
-          data = JSON.parse(File.read(ENV.fetch('ACTIVATION_RESPONSE')))
-          abort 'Activation response is not an object; manual inspection is required' unless data.is_a?(Hash)
-          abort 'Activation response deployment ID mismatch; manual inspection is required' unless data['deploymentId'] == ENV.fetch('EXPECTED_DEPLOYMENT_ID')
-          RUBY
-      - name: Verify active production deployment
-        working-directory: .
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: mobile_app/dosey_app/build/web
+
+      - name: Summarize selected source
         env:
-          APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
+          SELECTED_SOURCE_SHA: ${{ steps.validate-source.outputs.source_sha }}
         run: |
-          set -euo pipefail
-          deployment_id="$(< "$RUNNER_TEMP/provenance-deployment-id")"
-          response="$RUNNER_TEMP/production-site-response.json"
-          status="$(curl --silent --show-error --output "$response" --write-out '%{http_code}' \
-            --connect-timeout 10 --max-time 120 \
-            --header "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-            --header "X-Appwrite-Key: $APPWRITE_SITES_API_KEY" \
-            "$APPWRITE_ENDPOINT/sites/$APPWRITE_SITE_ID")"
-          [ "$status" = 200 ] || { printf 'Production site verification failed with HTTP %s; manual inspection is required.\n' "$status" >&2; exit 1; }
-          export SITE_RESPONSE="$response"
-          export EXPECTED_DEPLOYMENT_ID="$deployment_id"
-          ruby -rjson <<'RUBY'
-          data = JSON.parse(File.read(ENV.fetch('SITE_RESPONSE')))
-          abort 'Production site response is not an object; manual inspection is required' unless data.is_a?(Hash)
-          abort 'Active deployment ID mismatch; manual inspection is required' unless data['deploymentId'] == ENV.fetch('EXPECTED_DEPLOYMENT_ID')
-          RUBY
-          printf 'Activated and verified production deployment: %s\n' "$deployment_id"
+          printf '### Web Production Pages\n\n- Source SHA: `%s`\n' "$SELECTED_SOURCE_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy production Pages site
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # The deploy job only needs Pages publishing and its OIDC token.
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
+
+      - name: Summarize deployed page
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          printf '### Web Production Pages deployment\n\n- Page URL: %s\n' "$PAGE_URL" >> "$GITHUB_STEP_SUMMARY"
