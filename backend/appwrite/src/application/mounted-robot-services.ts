@@ -23,7 +23,7 @@ export class GetMountedRobotService {
 
     const installation = await this.lookup.getRobotInstallation(access.robotId);
     if (installation == null || installation.status !== 'active') {
-      throw new Error('Mounted robot installation is missing or inactive.');
+      return { robot: null };
     }
     return {
       robot: {

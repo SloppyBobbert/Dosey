@@ -17,18 +17,16 @@ export function createGetMountedRobotHandler(
     if (identityResult == null) {
       return context.res.json({ error: 'authentication_required' }, 401);
     }
-    if (!isEmptyObject(context.req.bodyJson)) {
+    if (!isValidEmptyBody(context.req.bodyJson)) {
       return context.res.json({ error: 'invalid_request' }, 400);
     }
     return context.res.json(await service.get(identityResult));
   };
 }
 
-function isEmptyObject(value: unknown): value is Record<string, never> {
+function isValidEmptyBody(value: unknown): boolean {
   return (
-    value != null &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    Object.keys(value).length === 0
+    value == null ||
+    (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0)
   );
 }

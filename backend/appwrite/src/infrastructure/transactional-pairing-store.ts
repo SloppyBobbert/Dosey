@@ -160,11 +160,13 @@ export class TransactionalPairingStore
       });
     } catch (error) {
       if (error instanceof PairingTransactionConflictError) {
-        const resolution = await this.persistence.resolveClaimConflict?.({
-          codeDigest: input.codeDigest,
-          robotId: conflictRobotId ?? '',
-          mountedDeviceAccountId: input.mountedDeviceAccountId,
-        });
+        const resolution = conflictRobotId == null
+          ? undefined
+          : await this.persistence.resolveClaimConflict?.({
+              codeDigest: input.codeDigest,
+              robotId: conflictRobotId,
+              mountedDeviceAccountId: input.mountedDeviceAccountId,
+            });
         if (resolution === 'accepted' && conflictRobotId != null) {
           return { status: 'accepted' as const, robotId: conflictRobotId };
         }

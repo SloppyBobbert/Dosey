@@ -97,17 +97,16 @@ describe('get mounted robot function', () => {
     assert.deepEqual(lookup.calls, ['access:device-1']);
   });
 
-  test('rejects a provisioning installation without returning a robot identity', async () => {
+  test('returns no robot for a provisioning installation', async () => {
     const lookup = new FakeLookup();
     lookup.robot = { ...installation, status: 'provisioning' };
 
-    await assert.rejects(
-      new GetMountedRobotService(lookup).get('device-1'),
-      /missing or inactive/,
-    );
+    assert.deepEqual(await new GetMountedRobotService(lookup).get('device-1'), {
+      robot: null,
+    });
   });
 
-  test('rejects duplicate access rows and missing installations as integrity failures', async () => {
+  test('rejects duplicate access rows but returns no robot for a missing installation', async () => {
     const duplicate = new FakeLookup();
     duplicate.accesses = [access, { ...access, robotId: 'robot-2' }];
     await assert.rejects(
@@ -117,10 +116,9 @@ describe('get mounted robot function', () => {
 
     const missing = new FakeLookup();
     missing.robot = null;
-    await assert.rejects(
-      new GetMountedRobotService(missing).get('device-1'),
-      /Mounted robot installation is missing/,
-    );
+    assert.deepEqual(await new GetMountedRobotService(missing).get('device-1'), {
+      robot: null,
+    });
   });
 
   test('propagates access database failures instead of returning null', async () => {
@@ -148,11 +146,15 @@ describe('get mounted robot function', () => {
     }
   });
 
-  test('requires an empty object request body', async () => {
+  test('accepts empty request bodies and rejects non-empty or non-object bodies', async () => {
     const handler = createGetMountedRobotHandler(
       new GetMountedRobotService(new FakeLookup()), anonymousIdentity,
     );
-    for (const body of [null, [], { extra: true }]) {
+    for (const body of [undefined, null, {}]) {
+      const response = (await handler(context(body))) as { body: unknown; status: number };
+      assert.equal(response.status, 200);
+    }
+    for (const body of [[], { extra: true }, 'invalid', 1, true]) {
       const response = (await handler(context(body))) as { body: unknown; status: number };
       assert.equal(response.status, 400);
       assert.deepEqual(response.body, { error: 'invalid_request' });

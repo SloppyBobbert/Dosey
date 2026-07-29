@@ -1,6 +1,7 @@
 import { Query, Teams, type Models } from 'node-appwrite';
 
 import type { RobotAccessDirectory } from '../application/pairing-services.js';
+import { isNotFound } from './appwrite-errors.js';
 
 const robotMarkerKey = 'doseyRobot';
 const ownerAccountIdKey = 'ownerAccountId';
@@ -85,13 +86,4 @@ function stringPreference(
 ): string | null {
   const value = preferences[key];
   return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-function isNotFound(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error != null &&
-    'code' in error &&
-    error.code === 404
-  );
 }

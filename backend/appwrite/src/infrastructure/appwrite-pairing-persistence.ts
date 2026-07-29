@@ -1,9 +1,4 @@
-import {
-  AppwriteException,
-  Query,
-  TablesDB,
-  type Models,
-} from 'node-appwrite';
+import { Query, TablesDB, type Models } from 'node-appwrite';
 
 import type { PairingClaimRecord } from '../domain/pairing-claim.js';
 import type { MountedRobotAccessRecord } from '../domain/mounted-robot-access.js';
@@ -12,6 +7,7 @@ import type {
   PairingPersistence,
   PairingTransaction,
 } from './transactional-pairing-store.js';
+import { isNotFound } from './appwrite-errors.js';
 
 export type PairingRow = Readonly<Record<string, unknown>> & {
   readonly $id: string;
@@ -460,13 +456,6 @@ function mountedAccessTableId(
     throw new Error('Mounted robot access table is required for claim operations.');
   }
   return configuration.mountedRobotAccessTableId;
-}
-
-function isNotFound(error: unknown): boolean {
-  return (
-    (error instanceof AppwriteException && error.code === 404) ||
-    (typeof error === 'object' && error != null && 'code' in error && error.code === 404)
-  );
 }
 
 function requiredString(row: PairingRow, key: string): string {

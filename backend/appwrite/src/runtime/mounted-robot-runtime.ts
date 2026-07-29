@@ -4,10 +4,17 @@ import { GetMountedRobotService } from '../application/mounted-robot-services.js
 import { AppwriteMountedRobotAccessReader } from '../infrastructure/appwrite-mounted-robot-access.js';
 import { AppwriteFunctionIdentityVerifier } from '../functions/function-identity.js';
 
+interface MountedRobotUserAccount {
+  get(): Promise<{ readonly $id: string }>;
+  getSession(input: { readonly sessionId: string }): Promise<{
+    readonly userId: string;
+    readonly provider: string;
+  }>;
+}
+
 export function createMountedRobotRuntime(
   headers: Readonly<Record<string, string | undefined>>,
   environment: Readonly<Record<string, string | undefined>> = process.env,
-  reportError: (message: string) => void = () => {},
 ) {
   const endpoint = required(
     environment.APPWRITE_FUNCTION_API_ENDPOINT ?? environment.APPWRITE_ENDPOINT,
@@ -21,11 +28,11 @@ export function createMountedRobotRuntime(
   const identity = new AppwriteFunctionIdentityVerifier({
     getCurrentAccountId: async () => {
       if (!userJwt) throw new Error('Authenticated user JWT is required.');
-      return (await new Account(new Client().setEndpoint(endpoint).setProject(projectId).setJWT(userJwt)).get()).$id;
+      return (await createUserAccount(endpoint, projectId, userJwt).get()).$id;
     },
     getCurrentAnonymousAccount: async () => {
       if (!userJwt) throw new Error('Authenticated user JWT is required.');
-      const account = new Account(new Client().setEndpoint(endpoint).setProject(projectId).setJWT(userJwt));
+      const account = createUserAccount(endpoint, projectId, userJwt);
       const [user, session] = await Promise.all([
         account.get(),
         account.getSession({ sessionId: 'current' }),
@@ -53,8 +60,15 @@ export function createMountedRobotRuntime(
       'DOSEY_ROBOT_INSTALLATIONS_TABLE_ID',
     ),
   });
-  void reportError;
   return { identity, service: new GetMountedRobotService(reader) };
+}
+
+function createUserAccount(
+  endpoint: string,
+  projectId: string,
+  userJwt: string,
+): MountedRobotUserAccount {
+  return new Account(new Client().setEndpoint(endpoint).setProject(projectId).setJWT(userJwt));
 }
 
 function required(value: string | undefined, name: string): string {

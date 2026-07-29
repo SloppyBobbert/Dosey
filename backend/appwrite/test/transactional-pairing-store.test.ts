@@ -96,7 +96,16 @@ function claim(id: string, robotId: string, digest: string): PairingClaimRecord 
 describe('transactional pairing store', () => {
   test('maps a concurrent claim transaction conflict to consumed', async () => {
     const store = new TransactionalPairingStore({
-      transaction: async () => {
+      transaction: async (operation) => {
+        await operation({
+          getAttempt: async () => null,
+          findActiveClaimByDigest: async () => claim('claim-1', 'robot-1', 'digest'),
+          saveClaim: async () => {},
+          findMountedAccessByDevice: async () => [],
+          getMountedAccessByRobot: async () => null,
+          createMountedAccess: async () => {},
+          saveAttempt: async () => {},
+        });
         throw new PairingTransactionConflictError();
       },
       resolveClaimConflict: async () => 'consumed',
@@ -113,8 +122,13 @@ describe('transactional pairing store', () => {
   });
 
   test('does not classify an unresolved conflict as a safe rejection', async () => {
+    let resolutionCalls = 0;
     const store = new TransactionalPairingStore({
       transaction: async () => { throw new PairingTransactionConflictError(); },
+      resolveClaimConflict: async () => {
+        resolutionCalls += 1;
+        return 'unknown';
+      },
     });
 
     await assert.rejects(
@@ -124,11 +138,29 @@ describe('transactional pairing store', () => {
       }),
       PairingTransactionConflictError,
     );
+    assert.equal(resolutionCalls, 0);
   });
 
   test('classifies a unique mounted-device race from authoritative conflict checks', async () => {
     const store = new TransactionalPairingStore({
-      transaction: async () => { throw new PairingTransactionConflictError(); },
+      transaction: async (operation) => {
+        await operation({
+          getAttempt: async () => null,
+          findActiveClaimByDigest: async () => claim('claim-1', 'robot-2', 'digest'),
+          saveClaim: async () => {},
+          findMountedAccessByDevice: async () => [{
+            robotId: 'robot-1',
+            mountedDeviceAccountId: 'device-1',
+            pairingClaimId: 'old',
+            createdAt: new Date('2026-07-26T11:00:00.000Z'),
+            updatedAt: new Date('2026-07-26T11:00:00.000Z'),
+          }],
+          getMountedAccessByRobot: async () => null,
+          createMountedAccess: async () => {},
+          saveAttempt: async () => {},
+        });
+        throw new PairingTransactionConflictError();
+      },
       resolveClaimConflict: async () => 'device_already_mounted',
     });
 
@@ -215,7 +247,7 @@ describe('transactional pairing store', () => {
     assert.equal(persistence.claims.get('claim-1')?.consumedAt, null);
   });
 
-  test('rejects Team-member candidates before any pairing transaction write', async () => {
+  test('rejects ineligible candidates before any pairing transaction write', async () => {
     const persistence = new MemoryPairingPersistence();
     const store = new TransactionalPairingStore(persistence);
     await store.replaceActive(claim('claim-1', 'robot-1', 'digest'));

@@ -7,7 +7,6 @@ export default async function getMountedRobot(
   const runtime = createMountedRobotRuntime(
     context.req.headers,
     process.env,
-    context.error,
   );
   return createGetMountedRobotHandler(runtime.service, runtime.identity)(context);
 }

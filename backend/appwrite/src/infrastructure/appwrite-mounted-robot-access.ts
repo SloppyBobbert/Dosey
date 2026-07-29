@@ -1,10 +1,11 @@
-import { AppwriteException, Query, TablesDB, type Models } from 'node-appwrite';
+import { Query, TablesDB, type Models } from 'node-appwrite';
 
 import type {
   MountedRobotAccessRecord,
   RobotInstallationRecord,
 } from '../domain/mounted-robot-access.js';
 import type { MountedRobotLookup } from '../application/mounted-robot-services.js';
+import { isNotFound } from './appwrite-errors.js';
 
 export interface AppwriteMountedRobotAccessConfiguration {
   readonly databaseId: string;
@@ -92,11 +93,4 @@ function requiredDate(row: Models.Row, key: string): Date {
     throw new Error(`Invalid mounted robot row field: ${key}.`);
   }
   return date;
-}
-
-function isNotFound(error: unknown): boolean {
-  return (
-    (error instanceof AppwriteException && error.code === 404) ||
-    (typeof error === 'object' && error != null && 'code' in error && error.code === 404)
-  );
 }
