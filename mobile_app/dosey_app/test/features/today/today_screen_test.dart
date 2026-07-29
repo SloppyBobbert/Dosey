@@ -7,6 +7,7 @@ import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/features/today/today_screen.dart';
+import 'package:dosey_app/features/today/today_next_dose_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -95,6 +96,100 @@ void main() {
     expect(find.text('Medications'), findsNothing);
   });
 
+  testWidgets(
+    'Today timeline shows four eligible reminders without a control',
+    (tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _seedTimelineSchedules(database, const [
+        'First reminder',
+        'Second reminder',
+        'Third reminder',
+        'Fourth reminder',
+      ]);
+
+      await tester.pumpWidget(_todayApp(database));
+      await tester.pumpAndSettle();
+
+      expect(find.text('First reminder'), findsNWidgets(2));
+      for (final label in const [
+        'Second reminder',
+        'Third reminder',
+        'Fourth reminder',
+      ]) {
+        expect(find.text(label), findsOneWidget);
+      }
+      expect(find.text('Show all reminders'), findsNothing);
+      expect(find.text('Show fewer'), findsNothing);
+    },
+  );
+
+  testWidgets('Today timeline expands and collapses eligible reminders', (
+    tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 9));
+    addTearDown(database.close);
+    addTearDown(clock.close);
+    await _seedTimelineSchedules(database, const [
+      'First reminder',
+      'Terminal reminder',
+      'Third reminder',
+      'Fourth reminder',
+      'Fifth reminder',
+      'Sixth reminder',
+    ]);
+    await DriftDoseLogRepository(database).addEvent(
+      DoseLogEvent.doseSkipped(
+        doseId: TodayNextDoseHelper.doseIdForDate('timeline-2', clock.now()),
+        occurredAt: clock.now(),
+      ),
+    );
+
+    await tester.pumpWidget(_todayApp(database, appClock: clock));
+    await tester.pumpAndSettle();
+
+    expect(find.text('First reminder'), findsNWidgets(2));
+    for (final label in const [
+      'Third reminder',
+      'Fourth reminder',
+      'Fifth reminder',
+    ]) {
+      expect(find.text(label), findsOneWidget);
+    }
+    expect(find.text('Terminal reminder'), findsNothing);
+    expect(find.text('Sixth reminder'), findsNothing);
+    expect(find.text('Show all reminders'), findsOneWidget);
+    _expectTimelineRowsInVerticalOrder(tester, const [
+      'First reminder',
+      'Third reminder',
+      'Fourth reminder',
+      'Fifth reminder',
+    ]);
+
+    await tester.scrollUntilVisible(find.text('Show all reminders'), 200);
+    await tester.tap(find.text('Show all reminders').hitTestable());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sixth reminder'), findsOneWidget);
+    expect(find.text('Show fewer'), findsOneWidget);
+    expect(find.text('Show all reminders'), findsNothing);
+    _expectTimelineRowsInVerticalOrder(tester, const [
+      'First reminder',
+      'Third reminder',
+      'Fourth reminder',
+      'Fifth reminder',
+      'Sixth reminder',
+    ]);
+
+    await tester.scrollUntilVisible(find.text('Show fewer'), 200);
+    await tester.tap(find.text('Show fewer').hitTestable());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sixth reminder'), findsNothing);
+    expect(find.text('Show all reminders'), findsOneWidget);
+  });
+
   testWidgets('Today ignores review slots from an inactive profile', (
     tester,
   ) async {
@@ -167,16 +262,48 @@ void main() {
   });
 }
 
-Widget _todayApp(DoseyDatabase database, {VoidCallback? onOpenCarousel}) =>
-    DoseyAppScope(
-      database: database,
-      bleGateway: FakeBleGateway(),
-      connectivityGateway: FakeConnectivityGateway(),
-      missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
-      child: MaterialApp(
-        home: Scaffold(body: TodayScreen(onOpenCarousel: onOpenCarousel)),
-      ),
+Widget _todayApp(
+  DoseyDatabase database, {
+  AppClock? appClock,
+  VoidCallback? onOpenCarousel,
+}) => DoseyAppScope(
+  database: database,
+  appClock: appClock,
+  bleGateway: FakeBleGateway(),
+  connectivityGateway: FakeConnectivityGateway(),
+  missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
+  child: MaterialApp(
+    home: Scaffold(body: TodayScreen(onOpenCarousel: onOpenCarousel)),
+  ),
+);
+
+void _expectTimelineRowsInVerticalOrder(
+  WidgetTester tester,
+  List<String> labels,
+) {
+  final timelineCard = find.ancestor(
+    of: find.text('Upcoming doses'),
+    matching: find.byType(Card),
+  );
+  expect(timelineCard, findsOneWidget);
+
+  var previousTop = double.negativeInfinity;
+  for (final label in labels) {
+    final rowLabel = find.descendant(
+      of: timelineCard,
+      matching: find.text(label),
     );
+    expect(rowLabel, findsOneWidget);
+
+    final top = tester.getTopLeft(rowLabel).dy;
+    expect(
+      top,
+      greaterThan(previousTop),
+      reason: '$label must follow the prior row',
+    );
+    previousTop = top;
+  }
+}
 
 Future<void> _seedActiveProfile(DoseyDatabase database, DateTime now) {
   return LocalScheduleProfileRepository(database).upsertProfile(
@@ -196,11 +323,12 @@ Future<void> _seedSchedule(
   int hour, {
   String profileId = ScheduleProfile.defaultProfileId,
   bool isEnabled = true,
+  String? label,
 }) {
   return LocalReminderRepository(database).upsertSchedule(
     ReminderSchedule(
       id: id,
-      label: '$id dose',
+      label: label ?? '$id dose',
       profileId: profileId,
       hour: hour,
       minute: 0,
@@ -209,6 +337,20 @@ Future<void> _seedSchedule(
       updatedAt: DateTime(2040),
     ),
   );
+}
+
+Future<void> _seedTimelineSchedules(
+  DoseyDatabase database,
+  List<String> labels,
+) async {
+  for (var index = 0; index < labels.length; index++) {
+    await _seedSchedule(
+      database,
+      'timeline-${index + 1}',
+      7 + index,
+      label: labels[index],
+    );
+  }
 }
 
 Future<void> _insertSlot(

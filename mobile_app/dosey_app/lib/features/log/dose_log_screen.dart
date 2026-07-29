@@ -2,8 +2,17 @@ import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:flutter/material.dart';
 
-class DoseLogScreen extends StatelessWidget {
+enum _DoseLogFilter { all, confirmedTaken, needsAttention, otherActivity }
+
+class DoseLogScreen extends StatefulWidget {
   const DoseLogScreen({super.key});
+
+  @override
+  State<DoseLogScreen> createState() => _DoseLogScreenState();
+}
+
+class _DoseLogScreenState extends State<DoseLogScreen> {
+  _DoseLogFilter _filter = _DoseLogFilter.all;
 
   @override
   Widget build(BuildContext context) {
@@ -13,10 +22,18 @@ class DoseLogScreen extends StatelessWidget {
       stream: doseLog.watchEvents(),
       builder: (context, snapshot) {
         final events = snapshot.data ?? const <DoseLogEvent>[];
+        final filteredEvents = events
+            .where((event) => _filter.matches(event))
+            .toList();
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
             _DoseLogHeroCard(events: events),
+            const SizedBox(height: 12),
+            _DoseLogFilters(
+              selected: _filter,
+              onSelected: (filter) => setState(() => _filter = filter),
+            ),
             const SizedBox(height: 12),
             if (events.isEmpty)
               const Card(
@@ -25,13 +42,22 @@ class DoseLogScreen extends StatelessWidget {
                   child: Text('No local dose log events yet.'),
                 ),
               )
+            else if (filteredEvents.isEmpty)
+              _FilteredDoseLogEmptyState(filter: _filter)
             else
-              for (final event in events)
+              for (final event in filteredEvents)
                 Card(
                   child: ListTile(
                     leading: CircleAvatar(child: Icon(_iconFor(event.kind))),
                     title: Text(_labelFor(event.kind)),
-                    subtitle: Text(event.doseId),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_formatOccurredAt(context, event.occurredAt)),
+                        Text(event.doseId),
+                      ],
+                    ),
+                    isThreeLine: true,
                     trailing: Icon(
                       event.marksDoseTaken
                           ? Icons.check_circle_outline
@@ -79,6 +105,99 @@ class DoseLogScreen extends StatelessWidget {
       DoseLogEventKind.doseMissedRecognized => Icons.visibility_outlined,
       DoseLogEventKind.error => Icons.error_outline,
     };
+  }
+
+  static String _formatOccurredAt(BuildContext context, DateTime occurredAt) {
+    final local = occurredAt.toLocal();
+    final localizations = MaterialLocalizations.of(context);
+    return '${localizations.formatFullDate(local)} at '
+        '${localizations.formatTimeOfDay(TimeOfDay.fromDateTime(local), alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context))}';
+  }
+}
+
+extension on _DoseLogFilter {
+  String get label => switch (this) {
+    _DoseLogFilter.all => 'All',
+    _DoseLogFilter.confirmedTaken => 'Confirmed taken',
+    _DoseLogFilter.needsAttention => 'Needs attention',
+    _DoseLogFilter.otherActivity => 'Other activity',
+  };
+
+  bool matches(DoseLogEvent event) {
+    if (this == _DoseLogFilter.all) {
+      return true;
+    }
+    if (event.marksDoseTaken) {
+      return this == _DoseLogFilter.confirmedTaken;
+    }
+    final needsAttention = switch (event.kind) {
+      DoseLogEventKind.doseMissed ||
+      DoseLogEventKind.doseMissedRecognized ||
+      DoseLogEventKind.doseSkipped ||
+      DoseLogEventKind.caregiverHelpRequested ||
+      DoseLogEventKind.error => true,
+      _ => false,
+    };
+    return switch (this) {
+      _DoseLogFilter.confirmedTaken => false,
+      _DoseLogFilter.needsAttention => needsAttention,
+      _DoseLogFilter.otherActivity => !needsAttention,
+      _DoseLogFilter.all => true,
+    };
+  }
+}
+
+class _DoseLogFilters extends StatelessWidget {
+  const _DoseLogFilters({required this.selected, required this.onSelected});
+
+  final _DoseLogFilter selected;
+  final ValueChanged<_DoseLogFilter> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Filter dose history',
+      child: Material(
+        type: MaterialType.transparency,
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final filter in _DoseLogFilter.values)
+              ChoiceChip(
+                label: Text(filter.label),
+                selected: selected == filter,
+                onSelected: (_) => onSelected(filter),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FilteredDoseLogEmptyState extends StatelessWidget {
+  const _FilteredDoseLogEmptyState({required this.filter});
+
+  final _DoseLogFilter filter;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('No ${filter.label.toLowerCase()} events yet.'),
+            const SizedBox(height: 4),
+            const Text(
+              'Try another filter to view the rest of your local log.',
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
