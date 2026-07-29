@@ -523,13 +523,6 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     WidgetsBinding.instance.removeObserver(this);
     _missedDoseReconciliationTimer?.cancel();
     if (_dependenciesInitialized) {
-      if (_ownsAppClock) {
-        if (_appClock case final SystemAppClock clock) {
-          unawaited(clock.close());
-        } else if (_appClock case final ControllableAppClock clock) {
-          unawaited(clock.close());
-        }
-      }
       unawaited(_shutdownFuture ??= _shutdownDependencies());
     }
     super.dispose();
@@ -557,10 +550,19 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       }
     }
 
-    await attempt(() async {
-      await _controllerRoleSubscription?.cancel();
-      _controllerRoleSubscription = null;
-    });
+    _isForeground = false;
+    final roleSubscriptionCancellation = _controllerRoleSubscription?.cancel();
+    _controllerRoleSubscription = null;
+    final monitoringDisable = _controllerHealthSupervisor
+        ?.setMonitoringEligible(false);
+    if (_ownsAppClock) {
+      if (_appClock case final SystemAppClock clock) {
+        attemptSync(clock.stop);
+      }
+    }
+
+    await attempt(() async => roleSubscriptionCancellation);
+    await attempt(() async => monitoringDisable);
     await attempt(() async => _dependencies.demoScenarios?.close());
     await attempt(() async => _dependencies.demoFaceLab?.close());
     await attempt(_dependencies.robotFaceController.close);
@@ -570,6 +572,16 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     // Consumers must release their subscriptions before producer gateways close.
     await attempt(_dependencies.controller.close);
     await attempt(_dependencies.ble.close);
+    if (_ownsAppClock) {
+      await attempt(() async {
+        switch (_appClock) {
+          case final SystemAppClock clock:
+            await clock.close();
+          case final ControllableAppClock clock:
+            await clock.close();
+        }
+      });
+    }
     if (_ownsNotificationTapController) {
       attemptSync(_dependencies.notificationTaps.dispose);
     }

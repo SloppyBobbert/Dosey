@@ -15,6 +15,7 @@ class SystemAppClock implements AppClock {
   final StreamController<DateTime> _ticks =
       StreamController<DateTime>.broadcast();
   late final Timer _timer;
+  Future<void>? _closeFuture;
 
   @override
   DateTime now() => DateTime.now();
@@ -22,8 +23,14 @@ class SystemAppClock implements AppClock {
   @override
   Stream<DateTime> get ticks => _ticks.stream;
 
-  Future<void> close() async {
+  void stop() {
     _timer.cancel();
+  }
+
+  Future<void> close() => _closeFuture ??= _close();
+
+  Future<void> _close() async {
+    stop();
     await _ticks.close();
   }
 }
@@ -34,6 +41,7 @@ class ControllableAppClock implements AppClock {
   final StreamController<DateTime> _ticks =
       StreamController<DateTime>.broadcast(sync: true);
   DateTime _value;
+  Future<void>? _closeFuture;
 
   @override
   DateTime now() => _value;
@@ -48,5 +56,5 @@ class ControllableAppClock implements AppClock {
     _ticks.add(_value);
   }
 
-  Future<void> close() => _ticks.close();
+  Future<void> close() => _closeFuture ??= _ticks.close();
 }
