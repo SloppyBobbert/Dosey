@@ -32,8 +32,9 @@ current `origin/main` SHA. Do not deploy an arbitrary historical SHA.
    changing records during the incident.
 4. Check the certificate chain and expiry for `dosey.dev`.
 5. Check Appwrite CORS for origin `https://dosey.dev`, the
-   `x-appwrite-project` request header, and the `POST` method. Keep Appwrite
-   configuration changes separate from frontend rollback decisions.
+   `x-appwrite-project` and `content-type` request headers, and the `POST`
+   method. Keep Appwrite configuration changes separate from frontend rollback
+   decisions.
 6. If the issue is not explained by propagation, open the relevant workflow
    logs and the change that introduced it. Do not change staging while handling
    a production incident; staging remains independent.
