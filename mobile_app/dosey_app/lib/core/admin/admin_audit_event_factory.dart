@@ -221,6 +221,20 @@ class AdminAuditEventFactory {
     occurredAt: occurredAt,
   );
 
+  AdminAuditEvent maintenanceEntered({
+    required AdminAuditActorIdentity actor,
+    required String sourceDeviceRole,
+    required String summary,
+    DateTime? occurredAt,
+  }) => _build(
+    eventType: AdminAuditEventType.maintenanceEntered,
+    targetType: AdminAuditTargetType.maintenance,
+    actor: actor,
+    sourceDeviceRole: sourceDeviceRole,
+    summary: summary,
+    occurredAt: occurredAt,
+  );
+
   AdminAuditEvent householdProfileUpdated({
     required AdminAuditActorIdentity actor,
     required String sourceDeviceRole,

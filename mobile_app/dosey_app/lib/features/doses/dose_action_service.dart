@@ -31,6 +31,37 @@ class DoseActionService {
     CarouselSlot? retireLoadedSlot,
     String? inventoryPrescriptionId,
   }) async {
+    return database.transaction(
+      () => _recordInTransaction(
+        event,
+        retireLoadedSlot: retireLoadedSlot,
+        inventoryPrescriptionId: inventoryPrescriptionId,
+      ),
+    );
+  }
+
+  Future<DoseActionResult> recordRobotFaceVisibleAndTaken({
+    required String doseId,
+    required DateTime occurredAt,
+  }) {
+    return database.transaction(
+      () => _recordInTransaction(
+        DoseLogEvent.doseTakenConfirmed(
+          doseId: doseId,
+          occurredAt: occurredAt.toUtc(),
+        ),
+        addGuidedVisibilityAttestation: true,
+      ),
+    );
+  }
+
+  Future<DoseActionResult> _recordInTransaction(
+    DoseLogEvent event, {
+    CarouselSlot? retireLoadedSlot,
+    String? inventoryPrescriptionId,
+    bool addGuidedVisibilityAttestation = false,
+  }) async {
+    var result = DoseActionResult.recorded;
     final resolvedContext = await _resolveDoseContext(event);
     final effectiveLoadedSlot = retireLoadedSlot ?? resolvedContext?.loadedSlot;
     final effectiveInventoryPrescriptionId =
@@ -41,25 +72,45 @@ class DoseActionService {
         effectiveLoadedSlot != null && _isTerminalDoseEvent(event);
     final recordsInventory =
         event.marksDoseTaken && effectiveInventoryPrescriptionId != null;
-    var result = DoseActionResult.recorded;
-
-    await database.transaction(() async {
-      if (await _shouldIgnorePostTerminalAuditEvent(event) ||
-          (!_canPersistAfterTerminal(event) &&
-              await _hasPersistedTerminalEventForDose(event.doseId))) {
-        result = DoseActionResult.ignored;
-        return;
-      }
-      if (effectiveGuidedDispenseContext != null &&
-          _isTerminalDoseEvent(event) &&
+    if (await _shouldIgnorePostTerminalAuditEvent(event) ||
+        (!_canPersistAfterTerminal(event) &&
+            await _hasPersistedTerminalEventForDose(event.doseId))) {
+      result = DoseActionResult.ignored;
+      return result;
+    }
+    if (effectiveGuidedDispenseContext != null) {
+      if (event.kind == DoseLogEventKind.doseVisibleConfirmed &&
           !effectiveGuidedDispenseContext.canResolveAfterMovement) {
         throw StateError(
-          'Confirm movement or visible/review state before logging a terminal dose outcome.',
+          'Confirm controller movement before logging dose visibility.',
         );
       }
-      if (effectiveGuidedDispenseContext != null &&
-          _isTerminalDoseEvent(event) &&
-          !event.marksDoseTaken) {
+      final hasVisibleConfirmation = await _hasPersistedEventKindForDose(
+        event.doseId,
+        DoseLogEventKind.doseVisibleConfirmed.name,
+      );
+      if (event.marksDoseTaken &&
+          (!effectiveGuidedDispenseContext.canResolveAfterMovement ||
+              (!hasVisibleConfirmation && !addGuidedVisibilityAttestation))) {
+        throw StateError(
+          'Confirm controller movement and dose visibility before logging a taken dose outcome.',
+        );
+      }
+      if (event.marksDoseTaken &&
+          addGuidedVisibilityAttestation &&
+          !hasVisibleConfirmation) {
+        await doseLog.addEvent(
+          DoseLogEvent.doseVisibleConfirmed(
+            doseId: event.doseId,
+            occurredAt: event.occurredAt,
+          ),
+        );
+      }
+    }
+    if (effectiveGuidedDispenseContext != null &&
+        _isTerminalDoseEvent(event) &&
+        !event.marksDoseTaken) {
+      if (effectiveGuidedDispenseContext.canResolveAfterMovement) {
         await guidedCarouselLoads.confirmDispensedSlotNeedsReview(
           profileId: effectiveGuidedDispenseContext.profileId,
           activeSessionId: effectiveGuidedDispenseContext.sessionId,
@@ -67,27 +118,35 @@ class DoseActionService {
           occurredAt: event.occurredAt,
           reason: event.kind.name,
         );
+      } else {
+        await guidedCarouselLoads.quarantineSlotForReview(
+          profileId: effectiveGuidedDispenseContext.profileId,
+          activeSessionId: effectiveGuidedDispenseContext.sessionId,
+          slotNumber: effectiveGuidedDispenseContext.slotNumber,
+          occurredAt: event.occurredAt,
+          reason: event.kind.name,
+        );
       }
-      if (retiresLoadedSlot && effectiveGuidedDispenseContext == null) {
-        await carouselSlots.markNeedsReview(effectiveLoadedSlot.id);
+    }
+    if (retiresLoadedSlot && effectiveGuidedDispenseContext == null) {
+      await carouselSlots.markNeedsReview(effectiveLoadedSlot.id);
+    }
+    if (recordsInventory) {
+      if (effectiveGuidedDispenseContext != null) {
+        await guidedCarouselLoads.confirmDispensedSlotTaken(
+          profileId: effectiveGuidedDispenseContext.profileId,
+          activeSessionId: effectiveGuidedDispenseContext.sessionId,
+          slotNumber: effectiveGuidedDispenseContext.slotNumber,
+          occurredAt: event.occurredAt,
+        );
+      } else {
+        await prescriptions.recordTakenDose(
+          effectiveInventoryPrescriptionId,
+          occurredAt: event.occurredAt,
+        );
       }
-      if (recordsInventory) {
-        if (effectiveGuidedDispenseContext != null) {
-          await guidedCarouselLoads.confirmDispensedSlotTaken(
-            profileId: effectiveGuidedDispenseContext.profileId,
-            activeSessionId: effectiveGuidedDispenseContext.sessionId,
-            slotNumber: effectiveGuidedDispenseContext.slotNumber,
-            occurredAt: event.occurredAt,
-          );
-        } else {
-          await prescriptions.recordTakenDose(
-            effectiveInventoryPrescriptionId,
-            occurredAt: event.occurredAt,
-          );
-        }
-      }
-      await doseLog.addEvent(event);
-    });
+    }
+    await doseLog.addEvent(event);
     return result;
   }
 

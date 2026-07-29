@@ -25,6 +25,7 @@ import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/onboarding/household_membership_gate.dart';
+import 'package:dosey_app/features/controller/controller_screen.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/settings/settings_accordion.dart';
 import 'package:flutter/foundation.dart';
@@ -33,9 +34,10 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../support/fake_app_scope_dependencies.dart';
 import '../../support/fake_cloud_identity_gateway.dart';
+import '../../support/settings_accordion_test_helper.dart';
 
 void main() {
-  testWidgets('personal settings use eight accordions in the required order', (
+  testWidgets('personal settings show compact collapsed daily groups', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -55,23 +57,20 @@ void main() {
 
     final titles = _accordionTitles(tester);
     expect(titles, const [
-      'Profile, account & device',
-      'Household & robot profile',
-      'History & data',
-      'Action PIN',
-      'Reminder notifications',
+      'Account & household',
+      'Reminders',
       'Appearance',
-      'Help, guided trial & setup',
-      'Safety & limitations',
+      'Help & safety',
     ]);
-    expect(find.text('Device mode'), findsOneWidget);
-    expect(_accordion(tester, 'Profile, account & device').expanded, isTrue);
-    expect(_accordion(tester, 'Reminder notifications').expanded, isTrue);
-    expect(_accordion(tester, 'Household & robot profile').expanded, isFalse);
+    for (final accordion in _accordions(tester)) {
+      expect(accordion.expanded, isFalse);
+    }
+    expect(find.text('Maintenance'), findsNothing);
     expect(find.text('No local admin changes recorded yet.'), findsNothing);
+    expect(find.text('Backup and database'), findsNothing);
   });
 
-  testWidgets('robot settings add Robot Face options in the required order', (
+  testWidgets('robot settings show service access outside daily groups', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -85,19 +84,19 @@ void main() {
 
     final titles = _accordionTitles(tester);
     expect(titles, const [
-      'Profile, account & device',
-      'Household & robot profile',
-      'History & data',
-      'Action PIN',
-      'Reminder notifications',
+      'Device & connection',
+      'Robot Face',
+      'Reminders',
       'Appearance',
-      'Robot Face options',
-      'Help, guided trial & setup',
-      'Safety & limitations',
+      'Help & safety',
     ]);
+    for (final accordion in _accordions(tester)) {
+      expect(accordion.expanded, isFalse);
+    }
+    expect(find.text('Maintenance'), findsOneWidget);
   });
 
-  testWidgets('backup database section exposes local maintenance actions', (
+  testWidgets('targeted settings section expands only its matching group', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -110,16 +109,252 @@ void main() {
     await tester.pumpWidget(
       _TestSettingsApp(
         database: database,
-        sectionTarget: SettingsSection.backupDatabase,
+        sectionTarget: SettingsSection.notifications,
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Backup and database'), findsOneWidget);
-    expect(find.text('Export backup'), findsOneWidget);
-    expect(find.text('Restore backup'), findsOneWidget);
-    expect(find.text('Check database'), findsOneWidget);
+    final accordions = _accordions(tester);
+    final reminders = accordions.singleWhere(
+      (accordion) => accordion.title == 'Reminders',
+    );
+    final helpSafety = accordions.singleWhere(
+      (accordion) => accordion.title == 'Help & safety',
+    );
+    expect(reminders.expanded, isTrue);
+    expect(helpSafety.expanded, isFalse);
+
+    await openSettingsAccordion(
+      tester,
+      'Reminders',
+      pumpAfterTap: tester.pumpAndSettle,
+    );
+    expect(
+      tester.widget<SettingsAccordion>(settingsAccordion('Reminders')).expanded,
+      isFalse,
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.notifications,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<SettingsAccordion>(settingsAccordion('Reminders')).expanded,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<SettingsAccordion>(settingsAccordion('Help & safety'))
+          .expanded,
+      isFalse,
+    );
   });
+
+  testWidgets('maintenance lookup failure stays in Settings without auditing', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
+    await tester.pumpAndSettle();
+    expect(await database.select(database.adminAuditEvents).get(), isEmpty);
+
+    await database.close();
+    await tester.tap(find.byKey(const Key('open-maintenance-tools')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Maintenance availability failed:'),
+      findsOneWidget,
+    );
+    expect(find.text('Enter Action PIN'), findsNothing);
+    expect(find.byType(ControllerScreen, skipOffstage: false), findsNothing);
+    expect(find.text('For setup and repairs'), findsNothing);
+    expect(find.text('Hardware bench'), findsNothing);
+  });
+
+  testWidgets('cancelling Maintenance PIN leaves tools closed and unaudited', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
+    await tester.pumpWidget(
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('open-maintenance-tools')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ControllerScreen, skipOffstage: false), findsNothing);
+    expect(find.text('For setup and repairs'), findsNothing);
+    expect(find.text('Hardware bench'), findsNothing);
+    expect(await database.select(database.adminAuditEvents).get(), isEmpty);
+  });
+
+  testWidgets('Maintenance request accepts a lower token after reset', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    final acknowledgements = <int>[];
+
+    Future<void> pumpRequest(int request) => tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.robot,
+        openMaintenanceRequest: request,
+        onMaintenanceRequestAcknowledged: acknowledgements.add,
+      ),
+    );
+
+    await pumpRequest(7);
+    await tester.pumpAndSettle();
+    expect(acknowledgements, [7]);
+
+    await pumpRequest(0);
+    await tester.pumpAndSettle();
+    expect(acknowledgements, [7]);
+
+    await pumpRequest(1);
+    await tester.pumpAndSettle();
+    expect(acknowledgements, [7, 1]);
+
+    await pumpRequest(1);
+    await tester.pumpAndSettle();
+    expect(acknowledgements, [7, 1]);
+  });
+
+  testWidgets('Maintenance entry audits once after a successful PIN check', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
+    final app = _TestSettingsApp(
+      database: database,
+      buildProfile: AppBuildProfile.robot,
+    );
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('open-maintenance-tools')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('For setup and repairs'), findsOneWidget);
+    final auditRows = await database.select(database.adminAuditEvents).get();
+    expect(auditRows, hasLength(1));
+    expect(
+      auditRows.single.eventType,
+      AdminAuditEventType.maintenanceEntered.name,
+    );
+    expect(auditRows.single.targetType, AdminAuditTargetType.maintenance.name);
+    expect(
+      auditRows.single.sourceDeviceRole,
+      AppDeviceRole.androidRobot.storageValue,
+    );
+    expect(auditRows.single.summary, 'Opened Robot Maintenance tools.');
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+    expect(
+      await database.select(database.adminAuditEvents).get(),
+      hasLength(1),
+    );
+  });
+
+  testWidgets(
+    'robot maintenance asks for the Action PIN before service tools',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final settings = LocalAppSettingsRepository(
+        database,
+        defaultRole: AppDeviceRole.androidRobot,
+      );
+      await settings.setDeviceRole(AppDeviceRole.androidRobot);
+      await settings.setActionPin('1234');
+
+      await tester.pumpWidget(
+        _TestSettingsApp(
+          database: database,
+          buildProfile: AppBuildProfile.robot,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open tools'));
+      await tester.pumpAndSettle();
+      expect(find.text('Enter Action PIN'), findsOneWidget);
+      expect(find.byType(ControllerScreen, skipOffstage: false), findsNothing);
+      expect(find.text('Hardware bench'), findsNothing);
+
+      await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('For setup and repairs'), findsOneWidget);
+      expect(find.text('Hardware bench'), findsOneWidget);
+      expect(find.text('Robot phone setup'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'technical records stay out of ordinary settings and in Maintenance',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+      await LocalAppSettingsRepository(
+        database,
+        defaultRole: AppDeviceRole.androidRobot,
+      ).setActionPin('1234');
+
+      await tester.pumpWidget(
+        _TestSettingsApp(
+          database: database,
+          buildProfile: AppBuildProfile.robot,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Admin history'), findsNothing);
+      expect(find.text('Backup and database'), findsNothing);
+      await _openMaintenanceRecords(tester);
+      expect(find.text('Admin history'), findsOneWidget);
+      expect(find.text('Backup and database'), findsOneWidget);
+      expect(find.text('Export backup'), findsOneWidget);
+      expect(find.text('Restore backup'), findsOneWidget);
+      expect(find.text('Check database'), findsOneWidget);
+    },
+  );
 
   testWidgets('demo mode disables backup and restore actions', (
     WidgetTester tester,
@@ -133,10 +368,15 @@ void main() {
       _TestSettingsApp(
         database: database,
         appClock: clock,
-        sectionTarget: SettingsSection.backupDatabase,
+        buildProfile: AppBuildProfile.robot,
       ),
     );
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
     await tester.pumpAndSettle();
+    await _openMaintenanceRecords(tester);
 
     expect(
       find.text(
@@ -169,21 +409,22 @@ void main() {
     addTearDown(database.close);
     final settings = LocalAppSettingsRepository(
       database,
-      defaultRole: AppDeviceRole.androidPersonal,
+      defaultRole: AppDeviceRole.androidRobot,
     );
-    await settings.setDeviceRole(AppDeviceRole.androidPersonal);
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
     await settings.setOnboardingCompleted(true);
     await settings.setActionPin('1234');
 
     await tester.pumpWidget(
-      _TestSettingsApp(
-        database: database,
-        sectionTarget: SettingsSection.backupDatabase,
-      ),
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
     );
     await tester.pumpAndSettle();
+    await _openMaintenanceRecords(tester);
 
-    await tester.tap(find.text('Export backup'));
+    final exportBackup = find.widgetWithText(FilledButton, 'Export backup');
+    await tester.ensureVisible(exportBackup);
+    await tester.pumpAndSettle();
+    await tester.tap(exportBackup.hitTestable());
     await tester.pumpAndSettle();
     expect(find.text('Export unencrypted backup?'), findsOneWidget);
 
@@ -199,19 +440,17 @@ void main() {
     addTearDown(database.close);
     final settings = LocalAppSettingsRepository(
       database,
-      defaultRole: AppDeviceRole.androidPersonal,
+      defaultRole: AppDeviceRole.androidRobot,
     );
-    await settings.setDeviceRole(AppDeviceRole.androidPersonal);
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
     await settings.setOnboardingCompleted(true);
     await settings.setActionPin('1234');
 
     await tester.pumpWidget(
-      _TestSettingsApp(
-        database: database,
-        sectionTarget: SettingsSection.backupDatabase,
-      ),
+      _TestSettingsApp(database: database, buildProfile: AppBuildProfile.robot),
     );
     await tester.pumpAndSettle();
+    await _openMaintenanceRecords(tester);
     final checkDatabaseButton = find.widgetWithText(
       OutlinedButton,
       'Check database',
@@ -229,10 +468,8 @@ void main() {
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
-    await _markOnboardingComplete(
-      database,
-      role: AppDeviceRole.androidPersonal,
-    );
+    addTearDown(database.close);
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
     final document = await LocalBackupStore(database).readSnapshot();
     final gateway = _FakeBackupFileGateway(
       picked: const BackupCodec().encode(document),
@@ -242,12 +479,24 @@ void main() {
       _TestSettingsApp(
         database: database,
         backupFileGateway: gateway,
-        sectionTarget: SettingsSection.backupDatabase,
+        buildProfile: AppBuildProfile.robot,
       ),
     );
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Restore backup'));
+    await _openMaintenanceRecords(tester);
+    final restoreBackup = find.widgetWithText(FilledButton, 'Restore backup');
+    await tester.ensureVisible(restoreBackup);
+    await tester.pumpAndSettle();
+    await tester.tap(restoreBackup.hitTestable());
     await tester.pump();
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Replace local backup data?'), findsOneWidget);
     expect(
@@ -285,12 +534,17 @@ void main() {
 
     await tester.pumpWidget(_TestSettingsApp(database: database));
     await tester.pumpAndSettle();
+    await openSettingsAccordion(
+      tester,
+      'Account & household',
+      pumpAfterTap: tester.pumpAndSettle,
+    );
 
     expect(find.text('Sign in with Google'), findsOneWidget);
     expect(find.text('Account'), findsOneWidget);
   });
 
-  testWidgets('Personal distribution cannot change its fixed device role', (
+  testWidgets('Personal phone cannot change its fixed device role', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -304,22 +558,28 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await openSettingsAccordion(
+      tester,
+      'Account & household',
+      pumpAfterTap: tester.pumpAndSettle,
+    );
 
-    expect(find.text('Personal distribution'), findsOneWidget);
+    expect(find.text('Personal phone'), findsOneWidget);
     expect(find.byType(DropdownButton<AppDeviceRole>), findsNothing);
     expect(find.text('Leave Robot Mode?'), findsNothing);
   });
 
-  testWidgets('Robot distribution exposes setup without account actions', (
+  testWidgets('Robot phone exposes setup without account actions', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     final setupGateway = _FakeRobotPhoneSetupGateway();
-    await _markOnboardingComplete(
+    await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+    await LocalAppSettingsRepository(
       database,
-      role: AppDeviceRole.androidPersonal,
-    );
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setActionPin('1234');
 
     await tester.pumpWidget(
       _TestSettingsApp(
@@ -329,28 +589,39 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Robot distribution'), findsOneWidget);
+    await openSettingsAccordion(
+      tester,
+      'Device & connection',
+      pumpAfterTap: tester.pumpAndSettle,
+    );
+    expect(find.text('Robot phone'), findsOneWidget);
     expect(find.text('Sign in with Google'), findsNothing);
+    final settingsScrollable = find
+        .descendant(
+          of: find.byType(SettingsScreen),
+          matching: find.byType(Scrollable),
+        )
+        .first;
     await tester.scrollUntilVisible(
-      find.text('Help, guided trial & setup'),
+      find.text('Maintenance'),
       300,
-      scrollable: find.byType(Scrollable).first,
+      scrollable: settingsScrollable,
     );
-    await tester.tap(find.text('Help, guided trial & setup'));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Robot phone setup'),
-      300,
-      scrollable: find.byType(Scrollable).first,
-    );
 
-    expect(find.text('Robot phone setup'), findsOneWidget);
-    final openSetup = find.widgetWithText(
-      OutlinedButton,
-      'Open robot phone setup',
-    );
-    await tester.ensureVisible(openSetup);
+    final openTools = find.byKey(const Key('open-maintenance-tools'));
+    expect(openTools, findsOneWidget);
+
+    await tester.ensureVisible(openTools);
     await tester.pumpAndSettle();
+
+    expect(openTools.hitTestable(), findsOneWidget);
+    await tester.tap(openTools);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    final openSetup = find.widgetWithText(OutlinedButton, 'Robot phone setup');
     expect(openSetup.hitTestable(), findsOneWidget);
     await tester.tap(openSetup);
     await tester.pumpAndSettle();
@@ -376,7 +647,7 @@ void main() {
 
     await _scrollToRobotFace(tester);
 
-    expect(find.text('Robot Face'), findsOneWidget);
+    expect(_robotFaceAccordion(), findsOneWidget);
     expect(find.text('Flip face 180°'), findsOneWidget);
     expect(find.text('For upside-down mounts.'), findsOneWidget);
     expect(find.text('Dim after inactivity'), findsOneWidget);
@@ -462,10 +733,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Robot Face'), findsNothing);
-    expect(find.text('Robot Face options'), findsNothing);
     expect(find.text('Flip face 180°'), findsNothing);
     expect(find.text('Dim after inactivity'), findsNothing);
-    expect(_accordionTitles(tester), isNot(contains('Robot Face options')));
+    expect(_accordionTitles(tester), isNot(contains('Robot Face')));
   });
 
   testWidgets('robot face controls persist and update state', (
@@ -1053,10 +1323,7 @@ void main() {
       expect(find.text('Dim after inactivity'), findsNothing);
       expect(find.text('Wake before dose'), findsNothing);
       expect(find.text('Stay awake after dose'), findsNothing);
-      expect(
-        find.text('iOS always uses the Personal distribution.'),
-        findsOneWidget,
-      );
+      expect(find.text('iOS always uses the Personal phone.'), findsOneWidget);
       expect(_findRichTextContaining('iOS personal phone'), findsOneWidget);
     } finally {
       debugDefaultTargetPlatformOverride = null;
@@ -1064,7 +1331,7 @@ void main() {
   });
 
   testWidgets(
-    'section targets scroll to Household & robot profile and Admin history',
+    'section target opens Account & household for Household profile',
     (WidgetTester tester) async {
       final database = DoseyDatabase.inMemory();
       addTearDown(database.close);
@@ -1082,20 +1349,6 @@ void main() {
         findsWidgets,
       );
       expect(find.text('Profile & device').hitTestable(), findsOneWidget);
-
-      await tester.pumpWidget(
-        _TestSettingsApp(
-          database: database,
-          sectionTarget: SettingsSection.adminHistory,
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Admin history').hitTestable(), findsOneWidget);
-      expect(
-        find.text('No local admin changes recorded yet.').hitTestable(),
-        findsOneWidget,
-      );
     },
   );
 
@@ -1698,9 +1951,7 @@ void main() {
     );
   });
 
-  testWidgets('guided trial section shows saved completion status', (
-    tester,
-  ) async {
+  testWidgets('practice mode shows saved completion status', (tester) async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
     final settings = LocalAppSettingsRepository(
@@ -1720,22 +1971,20 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Guided Trial Run'),
+      find.text('Practice mode'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
 
-    expect(find.text('Guided Trial Run'), findsOneWidget);
+    expect(find.text('Practice mode'), findsOneWidget);
     expect(
       find.text('Last completed 2026-07-26 UTC with app 1.2.3+4'),
       findsOneWidget,
     );
-    expect(find.text('Run guided trial again'), findsOneWidget);
+    expect(find.text('Practice again'), findsOneWidget);
   });
 
-  testWidgets('guided trial section disables start while trial is active', (
-    tester,
-  ) async {
+  testWidgets('practice mode disables start while active', (tester) async {
     final database = DoseyDatabase.inMemory(isDemo: true);
     final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
     addTearDown(database.close);
@@ -1750,17 +1999,17 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
-      find.text('Guided Trial Run'),
+      find.text('Practice mode'),
       500,
       scrollable: find.byType(Scrollable).first,
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Trial in progress'), findsOneWidget);
+    expect(find.text('Practice in progress'), findsOneWidget);
     expect(
       tester
           .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Trial in progress'),
+            find.widgetWithText(FilledButton, 'Practice in progress'),
           )
           .onPressed,
       isNull,
@@ -1779,10 +2028,14 @@ List<SettingsAccordion> _accordions(WidgetTester tester) {
   return children.whereType<SettingsAccordion>().toList();
 }
 
-SettingsAccordion _accordion(WidgetTester tester, String title) {
-  return _accordions(
-    tester,
-  ).singleWhere((accordion) => accordion.title == title);
+Future<void> _openMaintenanceRecords(WidgetTester tester) async {
+  await tester.tap(find.text('Open tools'));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+  await tester.tap(find.text('Continue'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Service records'));
+  await tester.pumpAndSettle();
 }
 
 Finder _findRichTextContaining(String text) {
@@ -1792,36 +2045,50 @@ Finder _findRichTextContaining(String text) {
 }
 
 Future<void> _scrollToRobotFace(WidgetTester tester) async {
+  final accordion = _robotFaceAccordion();
   await tester.scrollUntilVisible(
-    find.text('Robot Face options'),
+    accordion,
     300,
     scrollable: find.byType(Scrollable).first,
   );
   await tester.pumpAndSettle();
-  if (find.text('Robot Face').evaluate().isEmpty) {
-    await tester.tap(find.text('Robot Face options'));
+  if (!(tester.widget<SettingsAccordion>(accordion).expanded ?? false)) {
+    await tester.tap(
+      find.descendant(of: accordion, matching: find.text('Robot Face')).first,
+    );
     await tester.pumpAndSettle();
   }
   await tester.scrollUntilVisible(
-    find.text('Robot Face'),
+    find.text('Flip face 180°'),
     300,
     scrollable: find.byType(Scrollable).first,
   );
   await tester.pumpAndSettle();
 }
 
+Finder _robotFaceAccordion() {
+  return find.byWidgetPredicate(
+    (widget) => widget is SettingsAccordion && widget.title == 'Robot Face',
+  );
+}
+
 Future<void> _scrollToActionPin(WidgetTester tester) async {
+  await openSettingsAccordion(
+    tester,
+    'Account & household',
+    pumpAfterTap: tester.pumpAndSettle,
+  );
+  final isPinEnabled = find.text('PIN is on').evaluate().isNotEmpty;
+  final isPinDisabled = find.text('PIN is off').evaluate().isNotEmpty;
+  if (!isPinEnabled && !isPinDisabled) {
+    throw StateError('Action PIN controls did not render.');
+  }
   await tester.scrollUntilVisible(
-    find.text('Action PIN'),
-    300,
+    find.text(isPinEnabled ? 'Disable PIN' : 'Enable PIN'),
+    240,
     scrollable: find.byType(Scrollable).first,
   );
   await tester.pumpAndSettle();
-  if (find.text('PIN is off').evaluate().isEmpty &&
-      find.text('PIN is on').evaluate().isEmpty) {
-    await tester.tap(find.text('Action PIN').first);
-    await tester.pumpAndSettle();
-  }
 }
 
 Future<void> _setDropdownValue<T>(
@@ -1857,6 +2124,8 @@ class _TestSettingsApp extends StatelessWidget {
     this.voicePlayer,
     this.previewVoicePlayer,
     this.sectionTarget,
+    this.openMaintenanceRequest = 0,
+    this.onMaintenanceRequestAcknowledged,
     this.backupFileGateway,
     this.appClock,
     this.cloudIdentityGateway,
@@ -1872,6 +2141,8 @@ class _TestSettingsApp extends StatelessWidget {
   final DoseyVoicePlayer? voicePlayer;
   final DoseyVoicePlayer? previewVoicePlayer;
   final SettingsSection? sectionTarget;
+  final int openMaintenanceRequest;
+  final ValueChanged<int>? onMaintenanceRequestAcknowledged;
   final BackupFileGateway? backupFileGateway;
   final AppClock? appClock;
   final CloudIdentityGateway? cloudIdentityGateway;
@@ -1905,6 +2176,9 @@ class _TestSettingsApp extends StatelessWidget {
           final settings = Scaffold(
             body: SettingsScreen(
               sectionTarget: sectionTarget,
+              openMaintenanceRequest: openMaintenanceRequest,
+              onMaintenanceRequestAcknowledged:
+                  onMaintenanceRequestAcknowledged,
               previewVoicePlayer: previewVoicePlayer,
             ),
           );

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/core/carousel/eligible_carousel_slots.dart';
 import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/carousel/carousel_load_session.dart';
 import 'package:dosey_app/core/carousel/carousel_position.dart';
@@ -70,13 +71,11 @@ class _CarouselScreenState extends State<CarouselScreen> {
                   builder: (context, slotSnapshot) {
                     final slotRows =
                         slotSnapshot.data ?? const <CarouselSlot>[];
-                    final scheduleIds = {
-                      for (final schedule in schedules)
-                        if (schedule.isEnabled) schedule.id,
-                    };
-                    final slots = slotRows
-                        .where((slot) => scheduleIds.contains(slot.scheduleId))
-                        .toList();
+                    final slots = eligibleCarouselSlots(
+                      slots: slotRows,
+                      activeProfileId: activeProfile?.id,
+                      schedules: schedules,
+                    );
                     // Hide slots for disabled or inactive-profile schedules so
                     // this screen matches what Today can actually dispense.
                     return StreamBuilder<AppDeviceRole>(

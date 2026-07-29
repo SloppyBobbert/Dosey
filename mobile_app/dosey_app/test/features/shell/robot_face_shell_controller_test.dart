@@ -140,7 +140,7 @@ void main() {
     );
   });
 
-  test('portrait-to-landscape edge reopens Face only from Dashboard', () {
+  test('portrait-to-landscape edge reopens Face only from Today', () {
     expect(
       decide(
         event: RobotFaceShellEvent.orientationChanged,
@@ -166,7 +166,7 @@ void main() {
     }
   });
 
-  test('landscape level never reopens Face after a Dashboard exit', () {
+  test('landscape level never reopens Face after a Today exit', () {
     expect(
       decide(
         event: RobotFaceShellEvent.orientationChanged,
