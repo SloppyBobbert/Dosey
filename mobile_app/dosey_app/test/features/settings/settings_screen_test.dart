@@ -387,19 +387,11 @@ void main() {
       );
       await tester.drag(controllerList, const Offset(0, -500));
       await tester.pumpAndSettle();
-      await tester.drag(controllerList, const Offset(0, 500));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Hardware bench'), findsOneWidget);
-      expect(
-        tester
-            .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Connect controller'),
-            )
-            .onPressed,
-        isNotNull,
+      final controllerScrollState = tester.state<ScrollableState>(
+        find.descendant(of: controllerList, matching: find.byType(Scrollable)),
       );
-      expect(tester.takeException(), isNull);
+      final scrolledOffset = controllerScrollState.position.pixels;
+      expect(scrolledOffset, greaterThan(0));
 
       final tabView = find.byType(TabBarView);
       await tester.drag(tabView, const Offset(-500, 0));
@@ -407,6 +399,11 @@ void main() {
       expect(find.text('Admin history'), findsOneWidget);
 
       await tester.drag(tabView, const Offset(500, 0));
+      await tester.pumpAndSettle();
+
+      expect(controllerScrollState.position.pixels, scrolledOffset);
+
+      await tester.drag(controllerList, const Offset(0, 500));
       await tester.pumpAndSettle();
 
       expect(find.text('Hardware bench'), findsOneWidget);
