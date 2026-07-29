@@ -28,8 +28,8 @@ void setup() {
     return;
   }
 
-  digitalWrite(dosey::hardware::kDigitalOutputPin, inactiveLevel());
   pinMode(dosey::hardware::kDigitalOutputPin, OUTPUT);
+  digitalWrite(dosey::hardware::kDigitalOutputPin, inactiveLevel());
   Serial.println("TYPE RUN TO PULSE OUTPUT");
 }
 

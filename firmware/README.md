@@ -64,16 +64,16 @@ The commands below use that pinned executable directly.
 
 | Environment | Purpose | Current hardware state |
 | --- | --- | --- |
-| `01_blink_serial` | USB serial and onboard user LED | Ready for XIAO-only physical test |
-| `02_digital_output` | One external digital output | Disabled; pin unconfirmed |
-| `03_button_input` | One button input | Disabled; Dual Button integration remains pending |
-| `04_pir_input` | PIR input | Disabled; Mini PIR selected for `D0/A0` but pin behavior unverified |
-| `05_analog_input` | One analog input | Disabled; Light Sensor selected for `D1/A1` but 3.3 V behavior remains to be verified |
-| `06_i2c_scanner` | Scan a verified Grove I2C path | Disabled; DHT20 selected but the Grove Base bus has not been scanned |
+| `01_blink_serial` | USB serial and onboard user LED | [Physically validated on bare XIAO](HARDWARE_VALIDATION.md#bare-xiao-usb-bring-up) |
+| `02_digital_output` | One external digital output | Disabled by default; [Active Buzzer `D2/GPIO2` physically produced three bounded beeps after the initialization-order fix](HARDWARE_VALIDATION.md#i2c-button-pir-and-buzzer-local-builds) |
+| `03_button_input` | One button input | Disabled; [baseline raw `1`, no observed K1 transition on the selected first pin, K2 untested](HARDWARE_VALIDATION.md#i2c-button-pir-and-buzzer-local-builds) |
+| `04_pir_input` | PIR input | Disabled; [Mini PIR `D0/GPIO0` physically showed still/motion/still `0`→`1`→`0`](HARDWARE_VALIDATION.md#i2c-button-pir-and-buzzer-local-builds) |
+| `05_analog_input` | One analog input | Generic analog bench support remains available; Grove Light Sensor on `D1/GPIO1` was [physically validated](HARDWARE_VALIDATION.md#grove-light-sensor) on 2026-07-28 and is not planned product hardware |
+| `06_i2c_scanner` | Scan a verified Grove I2C path | Disabled; [physical DHT20 scan found only `0x38`](HARDWARE_VALIDATION.md#i2c-button-pir-and-buzzer-local-builds) |
 | `07_servo_sweep` | Commanded 10-degree servo test | Disabled; Grove Servo selected for `D8/A8`; repeated one-slot behavior remains unverified |
-| `08_serial_protocol` | Versioned USB serial command demo | Compiles; external commands stay disabled |
+| `08_serial_protocol` | Versioned USB serial command demo | [Safe-default physical USB protocol validated](HARDWARE_VALIDATION.md#bare-xiao-usb-bring-up) |
 | `09_ble_protocol` | Same D1 engine over BLE GATT | Compiles; radio behavior and external hardware unverified |
-| `controller_baseline` | Primary flash target using the BLE D1 engine | Safe defaults compile; physical radio and hardware behavior remain unverified |
+| `controller_baseline` | Primary flash target using the BLE D1 engine | [Safe-default BLE physically connected to the Android Robot app and fail-closed actions were observed; servo remains absent/deferred](HARDWARE_VALIDATION.md#bare-xiao-ble-controller-baseline) |
 | `controller_debug` | Same safe defaults with runtime USB diagnostics available | Debug starts off after every boot; BLE toggles USB output only |
 
 Disabled programs print `CONFIGURATION_REQUIRED` and do not configure or drive their external pins. The servo is detached at boot and cannot move unless the local configuration enables it and assigns a pin after physical verification. `DISPENSE_NEXT` remains disabled regardless of that flag.
