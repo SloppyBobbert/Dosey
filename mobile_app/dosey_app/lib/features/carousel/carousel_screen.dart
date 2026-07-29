@@ -1342,6 +1342,7 @@ class _FullReloadFlowSheetState extends State<_FullReloadFlowSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final didPersistUnload = _didUnload;
     final occupiedStates = <int, _CarouselPlanVisualState>{
       for (var slot = 1; slot <= GuidedCarouselLoadPlanner.capacity; slot += 1)
         slot: _didUnload || widget.activeLoad == null
@@ -1458,8 +1459,10 @@ class _FullReloadFlowSheetState extends State<_FullReloadFlowSheet> {
                 const SizedBox(height: 18),
                 const _ReloadLockedCard(),
               ] else ...[
-                const _FlowCheckpointCard(
-                  title: 'Empty carousel confirmed',
+                _FlowCheckpointCard(
+                  title: didPersistUnload
+                      ? 'Empty carousel confirmed'
+                      : 'Verify empty carousel',
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1469,18 +1472,24 @@ class _FullReloadFlowSheetState extends State<_FullReloadFlowSheet> {
                         children: [
                           _FlowStatusChip(
                             icon: Icons.check_circle_outline,
-                            label: 'Unload saved',
-                            isAccent: true,
+                            label: didPersistUnload
+                                ? 'Unload saved'
+                                : 'Confirm physical carousel is empty',
+                            isAccent: didPersistUnload,
                           ),
                           _FlowStatusChip(
                             icon: Icons.visibility_outlined,
-                            label: 'Carousel should now look empty',
+                            label: didPersistUnload
+                                ? 'Carousel should now look empty'
+                                : 'Align at START/home',
                           ),
                         ],
                       ),
                       SizedBox(height: 10),
                       Text(
-                        'Now confirm the new load. This reload starts at START/home and should end at START/home.',
+                        didPersistUnload
+                            ? 'Now confirm the new load. This reload starts at START/home and should end at START/home.'
+                            : 'Confirm the physical carousel is empty and aligned at START/home before you confirm the new load.',
                       ),
                     ],
                   ),
@@ -1504,15 +1513,21 @@ class _FullReloadFlowSheetState extends State<_FullReloadFlowSheet> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Empty after the saved unload. Keep the carousel at START/home.',
+                Text(
+                  didPersistUnload
+                      ? 'Empty after the saved unload. Keep the carousel at START/home.'
+                      : 'Confirm the physical carousel is empty and aligned at START/home.',
                 ),
                 const SizedBox(height: 8),
                 _CarouselPlanView(
                   slotStates: occupiedStates,
                   keyNamespace: 'full-reload-current',
-                  semanticLabel:
-                      'Current physical carousel, empty and display only',
+                  semanticLabel: didPersistUnload
+                      ? 'Current physical carousel, confirmed empty and display only'
+                      : 'Current physical carousel, verify empty and display only',
+                  slotSemanticLabelBuilder: (_, _) => didPersistUnload
+                      ? 'confirmed empty'
+                      : 'expected empty, verify physical carousel',
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -1646,6 +1661,7 @@ class _CarouselPlanView extends StatelessWidget {
     this.onSlotTap,
     this.keyNamespace,
     this.semanticLabel,
+    this.slotSemanticLabelBuilder,
   });
 
   static const ringKey = ValueKey<String>('carousel-plan-ring');
@@ -1659,6 +1675,8 @@ class _CarouselPlanView extends StatelessWidget {
   final ValueChanged<int>? onSlotTap;
   final String? keyNamespace;
   final String? semanticLabel;
+  final String Function(int, _CarouselPlanVisualState)?
+  slotSemanticLabelBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -1708,6 +1726,10 @@ class _CarouselPlanView extends StatelessWidget {
                               slotStates[slot] ??
                               _CarouselPlanVisualState.empty,
                           slotKey: _slotKey(slot),
+                          semanticLabel: slotSemanticLabelBuilder?.call(
+                            slot,
+                            slotStates[slot] ?? _CarouselPlanVisualState.empty,
+                          ),
                           onTap:
                               onSlotTap == null ||
                                   !interactiveSlotNumbers.contains(slot)
@@ -1947,12 +1969,14 @@ class _CarouselPlanSlotChip extends StatelessWidget {
     required this.slotNumber,
     required this.state,
     required this.slotKey,
+    this.semanticLabel,
     this.onTap,
   });
 
   final int slotNumber;
   final _CarouselPlanVisualState state;
   final Key slotKey;
+  final String? semanticLabel;
   final VoidCallback? onTap;
 
   @override
@@ -2013,7 +2037,7 @@ class _CarouselPlanSlotChip extends StatelessWidget {
     return Semantics(
       container: true,
       sortKey: OrdinalSortKey(slotNumber.toDouble()),
-      label: 'Slot $slotNumber, ${state.semanticLabel}',
+      label: 'Slot $slotNumber, ${semanticLabel ?? state.semanticLabel}',
       button: isInteractive ? true : null,
       enabled: isInteractive ? true : null,
       onTap: onTap,

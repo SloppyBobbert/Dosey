@@ -649,8 +649,36 @@ void main() {
       find.byKey(const ValueKey<String>('full-reload-next-ring')),
       findsOneWidget,
     );
+    expect(find.text('Verify empty carousel'), findsOneWidget);
+    expect(
+      find.text(
+        'Confirm the physical carousel is empty and aligned at START/home before you confirm the new load.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Confirm the physical carousel is empty and aligned at START/home.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Empty carousel confirmed'), findsNothing);
+    expect(find.text('Unload saved'), findsNothing);
+    expect(
+      find.text(
+        'Empty after the saved unload. Keep the carousel at START/home.',
+      ),
+      findsNothing,
+    );
+    final currentRing = tester.getSemantics(
+      find.byKey(const ValueKey<String>('full-reload-current-ring')),
+    );
+    expect(
+      currentRing.label,
+      'Current physical carousel, verify empty and display only',
+    );
     final slot = tester.getSemantics(_fullReloadCurrentSlot(1));
-    expect(slot.label, 'Slot 1, empty');
+    expect(slot.label, 'Slot 1, expected empty, verify physical carousel');
     expect(slot.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
     final nextSlot = tester.getSemantics(_fullReloadNextSlot(1));
     expect(nextSlot.label, 'Slot 1, planned to load');
@@ -697,6 +725,8 @@ void main() {
 
       expect(find.text('Current physical carousel'), findsOneWidget);
       expect(find.text('Next load plan'), findsOneWidget);
+      expect(find.text('Empty carousel confirmed'), findsOneWidget);
+      expect(find.text('Unload saved'), findsOneWidget);
       expect(
         find.text(
           'Empty after the saved unload. Keep the carousel at START/home.',
@@ -724,6 +754,14 @@ void main() {
         findsOneWidget,
       );
 
+      final currentRing = tester.getSemantics(
+        find.byKey(const ValueKey<String>('full-reload-current-ring')),
+      );
+      expect(
+        currentRing.label,
+        'Current physical carousel, confirmed empty and display only',
+      );
+
       final currentStart = tester.getSemantics(
         find.byKey(const ValueKey<String>('full-reload-current-start-marker')),
       );
@@ -743,7 +781,7 @@ void main() {
 
       final currentSlot = tester.getSemantics(_fullReloadCurrentSlot(1));
       final nextSlot = tester.getSemantics(_fullReloadNextSlot(1));
-      expect(currentSlot.label, 'Slot 1, empty');
+      expect(currentSlot.label, 'Slot 1, confirmed empty');
       expect(nextSlot.label, 'Slot 1, planned to load');
       expect(
         currentSlot.getSemanticsData().hasAction(SemanticsAction.tap),
