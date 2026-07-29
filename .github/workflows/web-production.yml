@@ -143,3 +143,24 @@ jobs:
           PAGE_URL: ${{ steps.deployment.outputs.page_url }}
         run: |
           printf '### Web Production Pages deployment\n\n- Page URL: %s\n' "$PAGE_URL" >> "$GITHUB_STEP_SUMMARY"
+
+  verify-production:
+    name: Verify production Pages site
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out deployed source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run production smoke check
+        run: .github/scripts/check-web-production.sh
+
+      - name: Summarize verification
+        run: printf '### Web Production Pages verification\n\n- Production smoke check passed.\n' >> "$GITHUB_STEP_SUMMARY"
