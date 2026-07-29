@@ -662,26 +662,33 @@ class _CarouselHeroChip extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(context).width - 64,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 16, color: colorScheme.onTertiaryContainer),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: colorScheme.onTertiaryContainer,
-                    fontWeight: FontWeight.w700,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final maxWidth = constraints.hasBoundedWidth
+                ? math.max(0.0, constraints.maxWidth)
+                : null;
+            return ConstrainedBox(
+              constraints: maxWidth == null
+                  ? const BoxConstraints()
+                  : BoxConstraints(maxWidth: maxWidth),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon, size: 16, color: colorScheme.onTertiaryContainer),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: colorScheme.onTertiaryContainer,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ),
     );
@@ -1764,7 +1771,8 @@ class _CarouselPlanView extends StatelessWidget {
     required double radius,
     required Widget child,
   }) {
-    final angle = math.pi / 2 + index * (2 * math.pi / 15);
+    final itemCount = GuidedCarouselLoadPlanner.capacity + 1;
+    final angle = math.pi / 2 + index * (2 * math.pi / itemCount);
     return Positioned(
       left: side / 2 + radius * math.cos(angle) - itemSize / 2,
       top: side / 2 + radius * math.sin(angle) - itemSize / 2,
@@ -1793,13 +1801,18 @@ class _CarouselStartMarker extends StatelessWidget {
             shape: BoxShape.circle,
             color: Color(0xFFFF8A32),
           ),
-          child: const Center(
-            child: Text(
-              'START',
-              style: TextStyle(
-                color: Color(0xFF3B1600),
-                fontSize: 11,
-                fontWeight: FontWeight.w900,
+          child: const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'START',
+                maxLines: 1,
+                style: TextStyle(
+                  color: Color(0xFF3B1600),
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
             ),
           ),
@@ -1934,6 +1947,8 @@ class _NextLoadSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final details = <String>[
       '$plannedCompartmentCount planned ${plannedCompartmentCount == 1 ? 'compartment' : 'compartments'}',
       if (shortageCount > 0)
@@ -1943,7 +1958,7 @@ class _NextLoadSummaryCard extends StatelessWidget {
     ];
     return Card(
       margin: EdgeInsets.zero,
-      color: Theme.of(context).colorScheme.primaryContainer,
+      color: colorScheme.primaryContainer,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -1951,12 +1966,16 @@ class _NextLoadSummaryCard extends StatelessWidget {
           children: [
             Text(
               'Ready to confirm',
-              style: Theme.of(
-                context,
-              ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: colorScheme.onPrimaryContainer,
+                fontWeight: FontWeight.w800,
+              ),
             ),
             const SizedBox(height: 4),
-            Text('${details.join(' · ')}. Confirm the reload at START/home.'),
+            Text(
+              '${details.join(' · ')}. Confirm the reload at START/home.',
+              style: TextStyle(color: colorScheme.onPrimaryContainer),
+            ),
           ],
         ),
       ),
