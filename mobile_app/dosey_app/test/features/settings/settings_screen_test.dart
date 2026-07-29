@@ -356,6 +356,72 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Maintenance Controller remains usable after scrolling and switching tabs',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database, role: AppDeviceRole.androidRobot);
+      await LocalAppSettingsRepository(
+        database,
+        defaultRole: AppDeviceRole.androidRobot,
+      ).setActionPin('1234');
+
+      await tester.pumpWidget(
+        _TestSettingsApp(
+          database: database,
+          buildProfile: AppBuildProfile.robot,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Open tools'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      final controllerList = find.descendant(
+        of: find.byType(ControllerScreen),
+        matching: find.byType(ListView),
+      );
+      await tester.drag(controllerList, const Offset(0, -500));
+      await tester.pumpAndSettle();
+      await tester.drag(controllerList, const Offset(0, 500));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hardware bench'), findsOneWidget);
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Connect controller'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+
+      final tabView = find.byType(TabBarView);
+      await tester.drag(tabView, const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('Admin history'), findsOneWidget);
+
+      await tester.drag(tabView, const Offset(500, 0));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hardware bench'), findsOneWidget);
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Connect controller'),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('demo mode disables backup and restore actions', (
     WidgetTester tester,
   ) async {
