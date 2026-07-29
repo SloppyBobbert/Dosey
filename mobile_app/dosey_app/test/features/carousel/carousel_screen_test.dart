@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:drift/drift.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/carousel/carousel_position.dart';
-import 'package:dosey_app/core/carousel/guided_carousel_load_plan.dart';
+import 'package:dosey_app/core/carousel/guided_carousel_load_planner.dart';
 import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
@@ -196,7 +198,7 @@ void main() {
       expect(confirmButton.onPressed, equals(null));
 
       for (var slot = 2; slot <= 6; slot += 1) {
-        await tester.tap(find.text('$slot').last);
+        await _tapCarouselSlot(tester, slot);
         await tester.pump();
       }
 
@@ -207,6 +209,17 @@ void main() {
         ),
       );
       expect(enabledConfirmButton.onPressed, isNot(equals(null)));
+
+      await _tapCarouselSlot(tester, 2);
+      await tester.pump();
+
+      final disabledConfirmButton = tester.widget<FilledButton>(
+        find.widgetWithText(
+          FilledButton,
+          'Return to slot 5 and confirm top-off',
+        ),
+      );
+      expect(disabledConfirmButton.onPressed, equals(null));
     },
   );
 
@@ -333,7 +346,7 @@ void main() {
     );
     expect(confirmBeforeSelection.onPressed, equals(null));
 
-    await tester.tap(find.text('3').last);
+    await _tapCarouselSlot(tester, 3);
     await tester.pump();
 
     expect(
@@ -343,7 +356,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.text('2').last);
+    await _tapCarouselSlot(tester, 2);
     await tester.pump();
 
     expect(
@@ -457,6 +470,498 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'carousel ring keeps circular controls unambiguous at 400 and 320dp',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await _seedPrescription(database, availableDoses: 6);
+      await _seedReminder(database);
+      final repository = LocalGuidedCarouselLoadRepository(database);
+      final now = DateTime.utc(2026, 7, 23, 8);
+      await repository.confirmFullLoad(
+        sessionId: 'session-ring-layout',
+        profileId: ReminderSchedule.defaultProfileId,
+        plan: _plan(now),
+        startedAt: now,
+        confirmedAt: now,
+      );
+
+      await tester.binding.setSurfaceSize(const Size(400, 900));
+      await tester.pumpWidget(_TestApp(database: database));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start refill/loading'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Top off empty slots'));
+      await tester.pumpAndSettle();
+
+      _expectCarouselRingGeometry(tester);
+
+      await _withSemantics(tester, () async {
+        final startMarker = tester.getSemantics(
+          find.byKey(const ValueKey<String>('carousel-start-marker')),
+        );
+        expect(startMarker.label, 'START/home marker');
+        expect(
+          startMarker.getSemanticsData().hasAction(SemanticsAction.tap),
+          isFalse,
+        );
+
+        final availableSlot = tester.getSemantics(_carouselSlot(2));
+        expect(availableSlot.label, 'Slot 2, empty and available to load');
+        expect(availableSlot.flagsCollection.isButton, isTrue);
+        expect(
+          availableSlot.getSemanticsData().hasAction(SemanticsAction.tap),
+          isTrue,
+        );
+        expect(availableSlot.flagsCollection.isToggled, Tristate.isFalse);
+
+        await _tapSharedRectangleGap(tester, 1, 2);
+        await tester.pump();
+        expect(
+          tester.getSemantics(_carouselSlot(2)).label,
+          'Slot 2, empty and available to load',
+        );
+
+        await _tapCarouselSlot(tester, 2);
+        await tester.pump();
+        final selectedSlot = tester.getSemantics(_carouselSlot(2));
+        expect(selectedSlot.label, 'Slot 2, selected to load');
+        expect(selectedSlot.flagsCollection.isToggled, Tristate.isTrue);
+
+        await tester.binding.setSurfaceSize(const Size(320, 900));
+        await tester.pumpAndSettle();
+        _expectCarouselRingGeometry(tester);
+        await _tapSharedRectangleGap(tester, 1, 2);
+        await tester.pump();
+        expect(
+          tester.getSemantics(_carouselSlot(2)).label,
+          'Slot 2, selected to load',
+        );
+      });
+    },
+  );
+
+  testWidgets('top-off exposes controls only for fillable slots', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _seedPrescription(database, availableDoses: 1);
+    await _seedReminder(database);
+    final repository = LocalGuidedCarouselLoadRepository(database);
+    final now = DateTime.utc(2026, 7, 23, 8);
+    await repository.confirmFullLoad(
+      sessionId: 'session-top-off-inert-slots',
+      profileId: ReminderSchedule.defaultProfileId,
+      plan: _plan(now),
+      startedAt: now,
+      confirmedAt: now,
+    );
+
+    await tester.pumpWidget(_TestApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start refill/loading'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Top off empty slots'));
+    await tester.pumpAndSettle();
+
+    await _withSemantics(tester, () async {
+      for (final slot in [1, 2, 3]) {
+        final node = tester.getSemantics(_carouselSlot(slot));
+        expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
+      }
+      expect(tester.getSemantics(_carouselSlot(1)).label, 'Slot 1, loaded');
+      expect(
+        tester.getSemantics(_carouselSlot(2)).label,
+        'Slot 2, blocked by a shortage',
+      );
+      expect(
+        tester.getSemantics(_carouselSlot(3)).label,
+        'Slot 3, empty for a later pass',
+      );
+    });
+  });
+
+  testWidgets('full reload lets a recovered slot be unmarked', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _seedPrescription(database, availableDoses: 6);
+    await _seedReminder(database);
+    final repository = LocalGuidedCarouselLoadRepository(database);
+    final now = DateTime.utc(2026, 7, 23, 8);
+    await repository.confirmFullLoad(
+      sessionId: 'session-unmark-recovered',
+      profileId: ReminderSchedule.defaultProfileId,
+      plan: _plan(now),
+      startedAt: now,
+      confirmedAt: now,
+    );
+
+    await tester.pumpWidget(_TestApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start refill/loading'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Empty and reload all'));
+    await tester.pumpAndSettle();
+
+    await _tapCarouselSlot(tester, 1);
+    await tester.pump();
+
+    await _withSemantics(tester, () async {
+      expect(
+        tester.getSemantics(_carouselSlot(1)).label,
+        'Slot 1, recovered during unload',
+      );
+
+      await _tapCarouselSlot(tester, 1);
+      await tester.pump();
+      final unmarkedSlot = tester.getSemantics(_carouselSlot(1));
+      expect(unmarkedSlot.label, 'Slot 1, loaded');
+      expect(unmarkedSlot.flagsCollection.isToggled, Tristate.isFalse);
+    });
+  });
+
+  testWidgets('display-only reload plans use inert namespaced rings', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _seedPrescription(database, availableDoses: 6);
+    await _seedReminder(database);
+
+    await tester.pumpWidget(_TestApp(database: database));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start refill/loading'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Empty and reload all'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('full-reload-current-ring')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('full-reload-next-ring')),
+      findsOneWidget,
+    );
+    expect(find.text('Verify empty carousel'), findsOneWidget);
+    expect(
+      find.text(
+        'Confirm the physical carousel is empty and aligned at START/home before you confirm the new load.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'Confirm the physical carousel is empty and aligned at START/home.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Empty carousel confirmed'), findsNothing);
+    expect(find.text('Unload saved'), findsNothing);
+    expect(
+      find.text(
+        'Empty after the saved unload. Keep the carousel at START/home.',
+      ),
+      findsNothing,
+    );
+    await _withSemantics(tester, () async {
+      final currentRing = tester.getSemantics(
+        find.byKey(const ValueKey<String>('full-reload-current-ring')),
+      );
+      expect(
+        currentRing.label,
+        'Current physical carousel, verify empty and display only',
+      );
+      final slot = tester.getSemantics(_fullReloadCurrentSlot(1));
+      expect(slot.label, 'Slot 1, expected empty, verify physical carousel');
+      expect(slot.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
+      final nextSlot = tester.getSemantics(_fullReloadNextSlot(1));
+      expect(nextSlot.label, 'Slot 1, planned to load');
+      expect(
+        nextSlot.getSemanticsData().hasAction(SemanticsAction.tap),
+        isFalse,
+      );
+    });
+  });
+
+  testWidgets(
+    'post-unload reload separates current carousel from next plan at 320dp',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await _seedPrescription(database, availableDoses: 6);
+      await _seedReminder(database);
+      final repository = LocalGuidedCarouselLoadRepository(database);
+      final now = DateTime.utc(2026, 7, 23, 8);
+      await repository.confirmFullLoad(
+        sessionId: 'session-current-next-plan',
+        profileId: ReminderSchedule.defaultProfileId,
+        plan: _plan(now),
+        startedAt: now,
+        confirmedAt: now,
+      );
+
+      await tester.binding.setSurfaceSize(const Size(400, 900));
+      await tester.pumpWidget(_TestApp(database: database));
+      await tester.pumpAndSettle();
+      final startLoading = find.text('Start refill/loading');
+      await tester.tap(startLoading);
+      await tester.pumpAndSettle();
+      final fullReload = find.text('Empty and reload all');
+      await tester.tap(fullReload);
+      await tester.pumpAndSettle();
+      await _tapCarouselSlot(tester, 1);
+      await tester.pump();
+      final confirmUnload = find.text('Confirm physical unload');
+      await tester.ensureVisible(confirmUnload);
+      await tester.tap(confirmUnload);
+      await tester.pumpAndSettle();
+      await tester.binding.setSurfaceSize(const Size(320, 900));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Current physical carousel'), findsOneWidget);
+      expect(find.text('Next load plan'), findsOneWidget);
+      expect(find.text('Empty carousel confirmed'), findsOneWidget);
+      expect(find.text('Unload saved'), findsOneWidget);
+      expect(
+        find.text(
+          'Empty after the saved unload. Keep the carousel at START/home.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Display only. Check the planned compartments before confirming the reload at START/home.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          '5 planned compartments · 1 shortage slot · 8 compartments not planned in this reload. Confirm the reload at START/home.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('full-reload-current-ring')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey<String>('full-reload-next-ring')),
+        findsOneWidget,
+      );
+      _expectCarouselRingGeometry(tester, keyNamespace: 'full-reload-current');
+      _expectCarouselRingGeometry(tester, keyNamespace: 'full-reload-next');
+
+      await _withSemantics(tester, () async {
+        final currentRing = tester.getSemantics(
+          find.byKey(const ValueKey<String>('full-reload-current-ring')),
+        );
+        expect(
+          currentRing.label,
+          'Current physical carousel, confirmed empty and display only',
+        );
+
+        final currentStart = tester.getSemantics(
+          find.byKey(
+            const ValueKey<String>('full-reload-current-start-marker'),
+          ),
+        );
+        final nextStart = tester.getSemantics(
+          find.byKey(const ValueKey<String>('full-reload-next-start-marker')),
+        );
+        expect(currentStart.label, 'START/home marker');
+        expect(nextStart.label, 'START/home marker');
+        expect(
+          currentStart.getSemanticsData().hasAction(SemanticsAction.tap),
+          isFalse,
+        );
+        expect(
+          nextStart.getSemanticsData().hasAction(SemanticsAction.tap),
+          isFalse,
+        );
+
+        final currentSlot = tester.getSemantics(_fullReloadCurrentSlot(1));
+        final nextSlot = tester.getSemantics(_fullReloadNextSlot(1));
+        expect(currentSlot.label, 'Slot 1, confirmed empty');
+        expect(nextSlot.label, 'Slot 1, planned to load');
+        expect(
+          currentSlot.getSemanticsData().hasAction(SemanticsAction.tap),
+          isFalse,
+        );
+        expect(
+          nextSlot.getSemanticsData().hasAction(SemanticsAction.tap),
+          isFalse,
+        );
+      });
+    },
+  );
+}
+
+Future<void> _withSemantics(
+  WidgetTester tester,
+  Future<void> Function() body,
+) async {
+  final handle = tester.ensureSemantics();
+  var isDisposed = false;
+
+  void dispose() {
+    if (isDisposed) return;
+    isDisposed = true;
+    handle.dispose();
+  }
+
+  addTearDown(dispose);
+
+  try {
+    await body();
+  } finally {
+    dispose();
+  }
+}
+
+const _minimumTapTarget = 48.0;
+const _layoutTolerance = 0.001;
+const _ringEdgePadding = 2.0;
+
+Finder _carouselRing({String? keyNamespace}) => find.byKey(
+  ValueKey<String>(
+    keyNamespace == null ? 'carousel-plan-ring' : '$keyNamespace-ring',
+  ),
+);
+
+Finder _carouselStartMarker({String? keyNamespace}) => find.byKey(
+  ValueKey<String>(
+    keyNamespace == null
+        ? 'carousel-start-marker'
+        : '$keyNamespace-start-marker',
+  ),
+);
+
+Finder _carouselSlot(int slotNumber, {String? keyNamespace}) => find.byKey(
+  ValueKey<String>(
+    keyNamespace == null
+        ? 'carousel-slot-$slotNumber'
+        : '$keyNamespace-slot-$slotNumber',
+  ),
+);
+
+Finder _fullReloadCurrentSlot(int slotNumber) =>
+    _carouselSlot(slotNumber, keyNamespace: 'full-reload-current');
+
+Finder _fullReloadNextSlot(int slotNumber) =>
+    _carouselSlot(slotNumber, keyNamespace: 'full-reload-next');
+
+Future<void> _tapCarouselSlot(WidgetTester tester, int slotNumber) async {
+  final slot = _carouselSlot(slotNumber);
+  await tester.ensureVisible(slot);
+  await tester.tap(slot);
+}
+
+void _expectCarouselRingGeometry(WidgetTester tester, {String? keyNamespace}) {
+  final ring = tester.getRect(_carouselRing(keyNamespace: keyNamespace));
+  final start = tester.getRect(
+    _carouselStartMarker(keyNamespace: keyNamespace),
+  );
+  final slots = <Rect>[
+    for (var slot = 1; slot <= GuidedCarouselLoadPlanner.capacity; slot += 1)
+      tester.getRect(_carouselSlot(slot, keyNamespace: keyNamespace)),
+  ];
+  final slotOne = slots.first;
+  final slotFourteen = slots.last;
+
+  expect(start.center.dy, greaterThan(slotOne.center.dy));
+  expect(start.center.dy, greaterThan(slotFourteen.center.dy));
+  expect(slotOne.center.dx, lessThan(start.center.dx));
+  expect(slotOne.center.dy, lessThan(start.center.dy));
+  expect(slotFourteen.center.dx, greaterThan(start.center.dx));
+  expect(slotFourteen.center.dy, lessThan(start.center.dy));
+  expect(
+    start.width,
+    greaterThanOrEqualTo(_minimumTapTarget - _layoutTolerance),
+  );
+  expect(
+    start.height,
+    greaterThanOrEqualTo(_minimumTapTarget - _layoutTolerance),
+  );
+  for (final slot in slots) {
+    expect(
+      slot.width,
+      greaterThanOrEqualTo(_minimumTapTarget - _layoutTolerance),
+    );
+    expect(
+      slot.height,
+      greaterThanOrEqualTo(_minimumTapTarget - _layoutTolerance),
+    );
+  }
+
+  final allItems = [start, ...slots];
+  final center = ring.center;
+  final radius = (start.center - center).distance;
+  final ringSide = math.min(ring.width, 360.0);
+  final expectedInnerClearance = ringSide / 2 - start.width - _ringEdgePadding;
+  for (final item in allItems) {
+    expect(ring.contains(item.topLeft), isTrue);
+    expect(ring.contains(item.bottomRight), isTrue);
+    expect(
+      (item.center - center).distance,
+      moreOrLessEquals(radius, epsilon: 0.1),
+    );
+    expect(
+      (item.center - center).distance - item.width / 2,
+      moreOrLessEquals(expectedInnerClearance, epsilon: _layoutTolerance),
+    );
+  }
+
+  for (var index = 0; index < allItems.length; index += 1) {
+    final angle = math.atan2(
+      allItems[index].center.dy - center.dy,
+      allItems[index].center.dx - center.dx,
+    );
+    final itemCount = GuidedCarouselLoadPlanner.capacity + 1;
+    final expected = math.pi / 2 + index * (2 * math.pi / itemCount);
+    final delta = math.atan2(
+      math.sin(angle - expected),
+      math.cos(angle - expected),
+    );
+    expect(delta.abs(), lessThan(0.01));
+  }
+
+  for (var index = 0; index < allItems.length; index += 1) {
+    for (var other = index + 1; other < allItems.length; other += 1) {
+      final separation =
+          (allItems[index].center - allItems[other].center).distance;
+      final radii = (allItems[index].width + allItems[other].width) / 2;
+      expect(separation, greaterThanOrEqualTo(radii));
+    }
+  }
+}
+
+Future<void> _tapSharedRectangleGap(
+  WidgetTester tester,
+  int firstSlot,
+  int secondSlot,
+) async {
+  await tester.ensureVisible(_carouselSlot(firstSlot));
+  await tester.ensureVisible(_carouselSlot(secondSlot));
+  final first = tester.getRect(_carouselSlot(firstSlot));
+  final second = tester.getRect(_carouselSlot(secondSlot));
+  final overlap = first.intersect(second);
+  expect(overlap.isEmpty, isFalse);
+  final point = Offset(
+    (first.center.dx + second.center.dx) / 2,
+    (first.center.dy + second.center.dy) / 2,
+  );
+  expect(overlap.contains(point), isTrue);
+  expect((point - first.center).distance, greaterThan(first.width / 2));
+  expect((point - second.center).distance, greaterThan(second.width / 2));
+  await tester.tapAt(point);
 }
 
 GuidedCarouselLoadPlan _plan(DateTime now) {
