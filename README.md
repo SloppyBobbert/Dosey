@@ -169,7 +169,7 @@ The app lives in `mobile_app/dosey_app/`. The current shell has Today, Medicatio
 
 BLE, notifications, local storage, auth, and permissions sit behind app-owned interfaces so early prototypes can change libraries without rewriting the app. The current background foundation package set is:
 
-- `flutter_blue_plus` for the compile-tested D1 BLE transport and staged controller gateway; Android-to-bare-XIAO connection, safe-default HEARTBEAT, device/config/safety status, LED test, and disconnect indication were observed. Integrated external-hardware lifecycle, reconnect, power-loss, movement cancellation/timeout, and movement/dispensing behavior remain unverified.
+- `flutter_blue_plus` for the compile-tested D1 BLE transport and staged controller gateway; Android-to-bare-XIAO connection, safe-default HEARTBEAT, device/config/safety status, LED test, and disconnect indication were observed. That bench evidence does not qualify the identified APK or integrated carousel/hardware path. Integrated external-hardware lifecycle, reconnect, power-loss, movement cancellation/timeout, and movement/dispensing behavior remain unverified.
 - `connectivity_plus` for advisory connectivity and Wi-Fi status only; this is not Wi-Fi provisioning.
 - `appwrite` for Google cloud identity, robot ownership, and server-authorized mounted-phone pairing behind Dosey-owned interfaces.
 - `google_sign_in` and a native iOS Apple sign-in bridge remain available for local/provider-specific auth paths.
