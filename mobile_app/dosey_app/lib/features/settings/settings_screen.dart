@@ -90,8 +90,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _previewVoicePlayer =
         widget.previewVoicePlayer ??
         DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway());
-    final target = widget.sectionTarget;
-    if (target != null) _expandedGroups.add(_SettingsGroup.helpSafety);
     _scrollToTargetAfterBuild();
   }
 
@@ -123,10 +121,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void didUpdateWidget(SettingsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sectionTarget != widget.sectionTarget) {
-      final target = widget.sectionTarget;
-      if (target != null) {
-        setState(() => _expandedGroups.add(_SettingsGroup.helpSafety));
-      }
       _scrollToTargetAfterBuild();
     }
   }

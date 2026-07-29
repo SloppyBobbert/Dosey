@@ -359,14 +359,14 @@ class _RobotFaceExitButton extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Semantics(
             button: true,
-            label: 'Exit Robot Mode',
+            label: 'Open Today',
             child: SizedBox(
               height: 48,
               child: OutlinedButton.icon(
                 key: RobotFaceScreen.exitButtonKey,
                 onPressed: onPressed,
                 icon: const Icon(Icons.arrow_back_rounded),
-                label: const Text('Exit Robot Mode'),
+                label: const Text('Open Today'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFFD5F4FF),
                   backgroundColor: const Color(0xED102A43),

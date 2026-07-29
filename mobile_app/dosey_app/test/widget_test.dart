@@ -1483,33 +1483,34 @@ void main() {
     expect(slot.status, CarouselSlotStatus.loaded.storageValue);
   });
 
-  testWidgets('Today keeps manual confirmation available for a loaded legacy slot', (
-    WidgetTester tester,
-  ) async {
-    final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
-    await _markOnboardingComplete(database);
-    await _addVitaminPrescription(database);
-    await _addVitaminReminder(database, id: 'vitamin-d-morning');
-    await _addLoadedVitaminSlot(database);
+  testWidgets(
+    'Today keeps manual confirmation available for a loaded legacy slot',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(database);
+      await _addVitaminPrescription(database);
+      await _addVitaminReminder(database, id: 'vitamin-d-morning');
+      await _addLoadedVitaminSlot(database);
 
-    await tester.pumpWidget(_TestDoseyApp(database: database));
-    await _pumpAppFrame(tester);
-    await _openControllerHub(tester);
-    await tester.tap(find.text('Connect controller'));
-    await _pumpAppFrame(tester);
-    await _openToday(tester);
-    await _pumpAppFrame(tester);
+      await tester.pumpWidget(_TestDoseyApp(database: database));
+      await _pumpAppFrame(tester);
+      await _openControllerHub(tester);
+      await tester.tap(find.text('Connect controller'));
+      await _pumpAppFrame(tester);
+      await _openToday(tester);
+      await _pumpAppFrame(tester);
 
-    final dispenseButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Dispense this dose'),
-    );
-    final confirmButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Mark dose as taken').last,
-    );
-    expect(dispenseButton.onPressed, isNotNull);
-    expect(confirmButton.onPressed, isNotNull);
-  });
+      final dispenseButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Dispense this dose'),
+      );
+      final confirmButton = tester.widget<FilledButton>(
+        find.widgetWithText(FilledButton, 'Mark dose as taken').last,
+      );
+      expect(dispenseButton.onPressed, isNotNull);
+      expect(confirmButton.onPressed, isNotNull);
+    },
+  );
 
   testWidgets('Today action PIN blocks confirm taken and inventory spend', (
     WidgetTester tester,

@@ -2168,10 +2168,10 @@ void main() {
       await tester.pump();
 
       expect(find.byKey(RobotFaceScreen.exitButtonKey), findsOneWidget);
-      expect(find.text('Exit Robot Mode'), findsOneWidget);
+      expect(find.text('Open Today'), findsOneWidget);
       expect(
         tester.getSemantics(find.byKey(RobotFaceScreen.exitButtonKey)).label,
-        'Exit Robot Mode',
+        'Open Today',
       );
       expect(
         tester.getSize(find.byKey(RobotFaceScreen.exitButtonKey)).height,

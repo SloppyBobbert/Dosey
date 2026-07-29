@@ -94,6 +94,35 @@ void main() {
     expect(find.text('Maintenance'), findsOneWidget);
   });
 
+  testWidgets('targeted settings section expands only its matching group', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        sectionTarget: SettingsSection.notifications,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final accordions = _accordions(tester);
+    final reminders = accordions.singleWhere(
+      (accordion) => accordion.title == 'Reminders',
+    );
+    final helpSafety = accordions.singleWhere(
+      (accordion) => accordion.title == 'Help & safety',
+    );
+    expect(reminders.expanded, isTrue);
+    expect(helpSafety.expanded, isFalse);
+  });
+
   testWidgets(
     'robot maintenance asks for the Action PIN before service tools',
     (WidgetTester tester) async {
