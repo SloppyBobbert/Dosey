@@ -2,6 +2,7 @@ import type {
   PairingClaimStore,
   PairingCredentialStore,
 } from '../application/pairing-services.js';
+import type { MountedRobotAccessRecord } from '../domain/mounted-robot-access.js';
 import {
   evaluatePairingClaim,
   maximumPairingAttempts,
@@ -25,10 +26,19 @@ export interface PairingTransaction {
   saveClaim(record: PairingClaimRecord): Promise<void>;
   getAttempt(deviceAccountId: string): Promise<PairingAttemptRecord | null>;
   saveAttempt(record: PairingAttemptRecord): Promise<void>;
+  findMountedAccessByDevice(deviceAccountId: string): Promise<readonly MountedRobotAccessRecord[]>;
+  getMountedAccessByRobot(robotId: string): Promise<MountedRobotAccessRecord | null>;
+  createMountedAccess(record: MountedRobotAccessRecord): Promise<void>;
+  updateMountedAccess(record: MountedRobotAccessRecord): Promise<void>;
 }
 
 export interface PairingPersistence {
   transaction<T>(operation: (transaction: PairingTransaction) => Promise<T>): Promise<T>;
+  resolveClaimConflict?(input: {
+    codeDigest: string;
+    robotId: string;
+    mountedDeviceAccountId: string;
+  }): Promise<'accepted' | 'consumed' | 'device_already_mounted' | 'unknown'>;
 }
 
 export class TransactionalPairingStore
@@ -56,6 +66,7 @@ export class TransactionalPairingStore
     now: Date;
     canClaim: (robotId: string) => Promise<boolean>;
   }) {
+    let conflictRobotId: string | null = null;
     try {
       return await this.persistence.transaction(async (transaction) => {
         const attempts = await transaction.getAttempt(
@@ -83,6 +94,7 @@ export class TransactionalPairingStore
           });
           return rejected(exhausted ? 'attempts_exhausted' : 'invalid');
         }
+        conflictRobotId = claim.robotId;
 
         const result = evaluatePairingClaim({
           record: claim,
@@ -92,7 +104,53 @@ export class TransactionalPairingStore
         if (result.status === 'rejected') return rejected(result.reason);
         if (!(await input.canClaim(claim.robotId))) return rejected('invalid');
 
-        if (!result.alreadyConsumed) await transaction.saveClaim(result.record);
+        const deviceAccess = await transaction.findMountedAccessByDevice(
+          input.mountedDeviceAccountId,
+        );
+        if (deviceAccess.length > 1) {
+          throw new Error('Multiple mounted robot access rows share one device.');
+        }
+        const existingDeviceAccess = deviceAccess[0] ?? null;
+        if (
+          existingDeviceAccess != null &&
+          existingDeviceAccess.robotId !== claim.robotId
+        ) {
+          return rejected('device_already_mounted');
+        }
+        const robotAccess = await transaction.getMountedAccessByRobot(claim.robotId);
+        if (existingDeviceAccess != null && robotAccess == null) {
+          throw new Error('Mounted robot access rows are inconsistent.');
+        }
+
+        if (result.alreadyConsumed) {
+          if (
+            existingDeviceAccess == null ||
+            existingDeviceAccess.robotId !== claim.robotId ||
+            existingDeviceAccess.pairingClaimId !== claim.id
+          ) {
+            throw new Error('Consumed pairing claim has no matching mounted access.');
+          }
+          await transaction.saveAttempt({
+            deviceAccountId: input.mountedDeviceAccountId,
+            failedAttempts: 0,
+            blockedUntil: null,
+          });
+          return { status: 'accepted' as const, robotId: claim.robotId };
+        }
+
+        await transaction.saveClaim(result.record);
+        const access = {
+          robotId: claim.robotId,
+          mountedDeviceAccountId: input.mountedDeviceAccountId,
+          pairingClaimId: claim.id,
+          createdAt: robotAccess?.createdAt ?? input.now,
+          updatedAt: input.now,
+        };
+        if (robotAccess == null) {
+          await transaction.createMountedAccess(access);
+        } else {
+          await transaction.updateMountedAccess(access);
+        }
         await transaction.saveAttempt({
           deviceAccountId: input.mountedDeviceAccountId,
           failedAttempts: 0,
@@ -102,7 +160,18 @@ export class TransactionalPairingStore
       });
     } catch (error) {
       if (error instanceof PairingTransactionConflictError) {
-        return rejected('consumed');
+        const resolution = await this.persistence.resolveClaimConflict?.({
+          codeDigest: input.codeDigest,
+          robotId: conflictRobotId ?? '',
+          mountedDeviceAccountId: input.mountedDeviceAccountId,
+        });
+        if (resolution === 'accepted' && conflictRobotId != null) {
+          return { status: 'accepted' as const, robotId: conflictRobotId };
+        }
+        if (resolution === 'consumed' || resolution === 'device_already_mounted') {
+          return rejected(resolution);
+        }
+        throw error;
       }
       throw error;
     }
@@ -110,7 +179,7 @@ export class TransactionalPairingStore
 }
 
 function rejected(
-  reason: 'invalid' | 'expired' | 'consumed' | 'attempts_exhausted',
+  reason: 'invalid' | 'expired' | 'consumed' | 'attempts_exhausted' | 'device_already_mounted',
 ) {
   return { status: 'rejected' as const, reason };
 }

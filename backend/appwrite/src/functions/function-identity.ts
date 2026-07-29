@@ -4,6 +4,17 @@ export interface FunctionIdentityVerifier {
   ): Promise<string | null>;
 }
 
+export type AnonymousIdentityVerification =
+  | string
+  | { readonly reason: 'provider' }
+  | null;
+
+export interface AnonymousFunctionIdentityVerifier {
+  verifyAnonymous(
+    headers: Readonly<Record<string, string | undefined>>,
+  ): Promise<AnonymousIdentityVerification>;
+}
+
 export interface HumanFunctionIdentity {
   readonly accountId: string;
   readonly email: string;
@@ -17,6 +28,11 @@ export interface HumanFunctionIdentityVerifier {
 
 export interface FunctionAccountApi {
   getCurrentAccountId(): Promise<string>;
+  getCurrentAnonymousAccount?(): Promise<{
+    readonly accountId: string;
+    readonly sessionUserId: string;
+    readonly provider: string;
+  }>;
   getCurrentHumanAccount?(): Promise<{
     readonly id: string;
     readonly email: string;
@@ -26,7 +42,10 @@ export interface FunctionAccountApi {
 }
 
 export class AppwriteFunctionIdentityVerifier
-  implements FunctionIdentityVerifier, HumanFunctionIdentityVerifier
+  implements
+    FunctionIdentityVerifier,
+    AnonymousFunctionIdentityVerifier,
+    HumanFunctionIdentityVerifier
 {
   constructor(private readonly account: FunctionAccountApi) {}
 
@@ -40,6 +59,26 @@ export class AppwriteFunctionIdentityVerifier
     try {
       const authenticatedId = await this.account.getCurrentAccountId();
       return authenticatedId === claimedId ? authenticatedId : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async verifyAnonymous(
+    headers: Readonly<Record<string, string | undefined>>,
+  ): Promise<AnonymousIdentityVerification> {
+    const claimedId = headers['x-appwrite-user-id'];
+    const jwt = headers['x-appwrite-user-jwt'];
+    if (!claimedId || !jwt || this.account.getCurrentAnonymousAccount == null) {
+      return null;
+    }
+
+    try {
+      const account = await this.account.getCurrentAnonymousAccount();
+      if (account.accountId !== claimedId || account.sessionUserId !== claimedId) {
+        return null;
+      }
+      return account.provider === 'anonymous' ? claimedId : { reason: 'provider' };
     } catch (_) {
       return null;
     }
