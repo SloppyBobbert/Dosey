@@ -11,9 +11,14 @@ import type { Teams } from 'node-appwrite';
 
 class FakeRobotTeamsApi implements RobotTeamsApi {
   teams = new Map<string, RobotTeam>();
+  memberships = new Set<string>();
 
   getRobot(robotId: string) {
     return Promise.resolve(this.teams.get(robotId) ?? null);
+  }
+
+  hasMembership(_robotId: string, accountId: string) {
+    return Promise.resolve(this.memberships.has(accountId));
   }
 }
 
@@ -24,7 +29,6 @@ describe('Appwrite robot access directory', () => {
       id: 'robot-1',
       isDoseyRobot: true,
       ownerAccountId: 'owner-1',
-      teamMemberAccountIds: ['owner-1'],
     });
     const directory = new AppwriteRobotAccessDirectory(api);
 
@@ -38,8 +42,8 @@ describe('Appwrite robot access directory', () => {
       id: 'robot-1',
       isDoseyRobot: true,
       ownerAccountId: 'owner-1',
-      teamMemberAccountIds: ['owner-1', 'family-1'],
     });
+    api.memberships = new Set(['owner-1', 'family-1']);
     const directory = new AppwriteRobotAccessDirectory(api);
 
     assert.equal(await directory.canMountDevice({ robotId: 'robot-1', accountId: 'owner-1' }), false);
@@ -76,7 +80,6 @@ describe('Appwrite robot access directory', () => {
       id: 'team-1',
       isDoseyRobot: false,
       ownerAccountId: 'owner-1',
-      teamMemberAccountIds: ['owner-1'],
     });
     const directory = new AppwriteRobotAccessDirectory(api);
 
@@ -106,5 +109,28 @@ describe('Appwrite robot access directory', () => {
         false,
       );
     }
+  });
+
+  test('uses a candidate-specific membership query instead of a roster page', async () => {
+    const queryCalls: string[][] = [];
+    const teams = {
+      get: async () => ({ $id: 'robot-1', prefs: {
+        doseyRobot: true, ownerAccountId: 'owner-1',
+      } }),
+      listMemberships: async (input: { queries: readonly string[] }) => {
+        queryCalls.push([...input.queries]);
+        return { memberships: [{ userId: 'device-1', confirm: false, roles: [] }] };
+      },
+    } as unknown as Teams;
+
+    const directory = new AppwriteRobotAccessDirectory(new AppwriteRobotTeamsApi(teams));
+    assert.equal(
+      await directory.canMountDevice({ robotId: 'robot-1', accountId: 'device-1' }),
+      false,
+    );
+    assert.deepEqual(queryCalls, [[
+      '{"method":"equal","attribute":"userId","values":["device-1"]}',
+      '{"method":"limit","values":[1]}',
+    ]]);
   });
 });

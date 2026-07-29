@@ -90,6 +90,14 @@ mounted-robot restore state. A deployment of the old Team-writing
 `claim-robot` implementation is not a safe rollback target after this contract
 is deployed.
 
+## Rollout note
+
+The backend may merge and deploy inactive Functions independently. Secure claim
+activation requires the corresponding Android mounted-access client and the
+public `get-mounted-robot` Function ID. Do not activate the secure claim path
+without both client and Function support; do not roll back to the old
+Team-writing claim.
+
 ## Tables
 
 Create a server-only database with no client row permissions. This contract has

@@ -1,4 +1,4 @@
-import { Teams, type Models } from 'node-appwrite';
+import { Query, Teams, type Models } from 'node-appwrite';
 
 import type { RobotAccessDirectory } from '../application/pairing-services.js';
 
@@ -9,11 +9,11 @@ export interface RobotTeam {
   readonly id: string;
   readonly isDoseyRobot: boolean;
   readonly ownerAccountId: string | null;
-  readonly teamMemberAccountIds: readonly string[];
 }
 
 export interface RobotTeamsApi {
   getRobot(robotId: string): Promise<RobotTeam | null>;
+  hasMembership(robotId: string, accountId: string): Promise<boolean>;
 }
 
 export class AppwriteRobotAccessDirectory implements RobotAccessDirectory {
@@ -34,10 +34,14 @@ export class AppwriteRobotAccessDirectory implements RobotAccessDirectory {
     accountId: string;
   }): Promise<boolean> {
     const robot = await this.teams.getRobot(input.robotId);
+    if (
+      robot?.isDoseyRobot !== true ||
+      robot.ownerAccountId === input.accountId
+    ) {
+      return false;
+    }
     return (
-      robot?.isDoseyRobot === true &&
-      robot.ownerAccountId !== input.accountId &&
-      !robot.teamMemberAccountIds.includes(input.accountId)
+      !(await this.teams.hasMembership(input.robotId, input.accountId))
     );
   }
 
@@ -50,19 +54,23 @@ export class AppwriteRobotTeamsApi implements RobotTeamsApi {
     try {
       const team = await this.teams.get({ teamId: robotId });
       const preferences = preferencesOf(team);
-      const memberships = await this.teams.listMemberships({ teamId: robotId });
       return {
         id: team.$id,
         isDoseyRobot: preferences[robotMarkerKey] === true,
         ownerAccountId: stringPreference(preferences, ownerAccountIdKey),
-        teamMemberAccountIds: memberships.memberships.map(
-          (membership) => membership.userId,
-        ),
       };
     } catch (error) {
       if (isNotFound(error)) return null;
       throw error;
     }
+  }
+
+  async hasMembership(robotId: string, accountId: string): Promise<boolean> {
+    const memberships = await this.teams.listMemberships({
+      teamId: robotId,
+      queries: [Query.equal('userId', [accountId]), Query.limit(1)],
+    });
+    return memberships.memberships.length > 0;
   }
 
 }
