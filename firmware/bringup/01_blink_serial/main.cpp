@@ -16,8 +16,8 @@ constexpr int activeLedLevel() {
 } // namespace
 
 void setup() {
-  digitalWrite(dosey::hardware::kOnboardLedPin, inactiveLedLevel());
   pinMode(dosey::hardware::kOnboardLedPin, OUTPUT);
+  digitalWrite(dosey::hardware::kOnboardLedPin, inactiveLedLevel());
 
   Serial.begin(dosey::safety::kSerialBaud);
   delay(dosey::safety::kSerialStartupWaitMs);

@@ -35,8 +35,8 @@ void readSerial() {
 } // namespace
 
 void setup() {
-  digitalWrite(dosey::hardware::kOnboardLedPin, dosey::inactiveLedLevel());
   pinMode(dosey::hardware::kOnboardLedPin, OUTPUT);
+  digitalWrite(dosey::hardware::kOnboardLedPin, dosey::inactiveLedLevel());
   hardware.begin();
 
   Serial.begin(dosey::safety::kSerialBaud);

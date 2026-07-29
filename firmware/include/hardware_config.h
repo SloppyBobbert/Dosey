@@ -148,6 +148,8 @@ inline constexpr EnabledPin kExternalSignalPins[] = {
 static_assert(!kDigitalOutputConfigured ||
                   kDigitalOutputPin != kUnconfiguredPin,
               "Digital output cannot be enabled without a verified pin");
+static_assert(!kDigitalOutputConfigured || kDigitalOutputActiveHigh,
+              "Configured digital output must be active-high until verified");
 static_assert(!kButtonConfigured || kButtonPin != kUnconfiguredPin,
               "Button input cannot be enabled without a verified pin");
 static_assert(!kPirConfigured || kPirPin != kUnconfiguredPin,
