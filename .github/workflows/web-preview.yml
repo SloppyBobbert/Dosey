@@ -54,7 +54,8 @@ jobs:
           flutter build web --release --target=lib/main_web.dart \
             --dart-define=DOSEY_BUILD_PROFILE=personal \
             --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted \
-            --dart-define=WEB_AUTH_ENABLED=false
+            --dart-define=WEB_AUTH_ENABLED=false \
+            --dart-define=CAREGIVER_SYNC_ENABLED=false
 
       - name: Verify static web files and archive contents
         run: |
@@ -87,22 +88,19 @@ jobs:
           APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ci-create-household-invitation
           APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ci-accept-household-invitation
           APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ci-remove-household-member
-          APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: medication-sync-push-v1
-          APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: medication-sync-pull-v1
         run: |
           flutter build web --release --target=lib/main_web.dart \
             --dart-define=DOSEY_BUILD_PROFILE=personal \
             --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted \
             --dart-define=WEB_AUTH_ENABLED=true \
+            --dart-define=CAREGIVER_SYNC_ENABLED=false \
             --dart-define=WEB_APP_ORIGIN=https://preview.example.invalid \
             --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
             --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID" \
             --dart-define=APPWRITE_CREATE_ROBOT_FUNCTION_ID="$APPWRITE_CREATE_ROBOT_FUNCTION_ID" \
             --dart-define=APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID" \
             --dart-define=APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID" \
-            --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID" \
-            --dart-define=APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" \
-            --dart-define=APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID"
+            --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID"
 
       - name: Verify auth-enabled web files and archive contents
         run: |
@@ -119,10 +117,7 @@ jobs:
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-auth-preview.tar.gz" | grep -Fx './index.html'
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-auth-preview.tar.gz" | grep -Fx './auth.html'
 
-      - name: Verify caregiver web integration when present
-        env:
-          APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: medication-sync-push-v1
-          APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: medication-sync-pull-v1
+      - name: Verify caregiver foundation remains inactive
         run: bash ../../.github/scripts/check-caregiver-web-integration.sh
 
       - name: Upload auth-enabled web preview artifact

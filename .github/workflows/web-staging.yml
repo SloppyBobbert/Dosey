@@ -34,8 +34,6 @@ env:
   APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID }}
   APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID }}
   APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ${{ vars.APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID }}
-  APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID }}
-  APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID }}
   APPWRITE_SITE_ID: ${{ vars.APPWRITE_STAGING_SITE_ID }}
 
 jobs:
@@ -78,29 +76,20 @@ jobs:
               exit 1
             fi
           done
-          test "${APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID:-}" = "medication-sync-push-v1" || {
-            printf 'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID must be medication-sync-push-v1\n' >&2
-            exit 1
-          }
-          test "${APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID:-}" = "medication-sync-pull-v1" || {
-            printf 'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID must be medication-sync-pull-v1\n' >&2
-            exit 1
-          }
       - name: Build auth-enabled staging web release
         run: |
           flutter build web --release --target=lib/main_web.dart \
             --dart-define=DOSEY_BUILD_PROFILE=personal \
             --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted \
             --dart-define=WEB_AUTH_ENABLED=true \
+            --dart-define=CAREGIVER_SYNC_ENABLED=false \
             --dart-define=WEB_APP_ORIGIN=https://staging.dosey.dev \
             --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
             --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID" \
             --dart-define=APPWRITE_CREATE_ROBOT_FUNCTION_ID="$APPWRITE_CREATE_ROBOT_FUNCTION_ID" \
             --dart-define=APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID" \
             --dart-define=APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID" \
-            --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID" \
-            --dart-define=APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" \
-            --dart-define=APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID"
+            --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID"
       - name: Verify and archive web contents
         run: |
           set -euo pipefail
@@ -111,8 +100,8 @@ jobs:
           tar -czf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" -C build/web .
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './index.html'
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './auth.html'
-      - name: Verify caregiver staging integration
-        run: bash ../../.github/scripts/check-caregiver-web-integration.sh "$PWD" require-complete
+      - name: Verify caregiver foundation remains inactive
+        run: bash ../../.github/scripts/check-caregiver-web-integration.sh "$PWD"
       - name: Report archive byte size
         run: |
           printf 'Staging archive bytes: %s\n' "$(wc -c < "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz")"

@@ -30,6 +30,7 @@ def assert_android_build(job:, name:, mode:, flavor:, capability:)
     '--dart-define-from-file=.env',
     "--dart-define=DOSEY_BUILD_PROFILE=#{flavor}",
     "--dart-define=DOSEY_RUNTIME_CAPABILITY=#{capability}",
+    '--dart-define=CAREGIVER_SYNC_ENABLED=false',
   ]
   abort("#{name} must use the exact #{flavor}/#{capability} build contract") unless tokens == expected
 end
@@ -43,6 +44,7 @@ def assert_ios_build(job:)
     '--dart-define-from-file=.env',
     '--dart-define=DOSEY_BUILD_PROFILE=personal',
     '--dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted',
+    '--dart-define=CAREGIVER_SYNC_ENABLED=false',
   ]
   abort("#{name} must use the exact personal/hardware-assisted build contract") unless tokens == expected
 end

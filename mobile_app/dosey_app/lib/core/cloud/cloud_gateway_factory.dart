@@ -2,6 +2,8 @@ import 'package:appwrite/appwrite.dart';
 import 'package:dosey_app/core/cloud/appwrite_cloud_identity_gateway.dart';
 import 'package:dosey_app/core/cloud/cloud_configuration.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
+import 'package:dosey_app/core/caregiver/caregiver_snapshot_controller.dart';
+import 'package:dosey_app/core/caregiver/appwrite_caregiver_sync_gateway.dart';
 import 'package:dosey_app/core/household/appwrite_household_sync_gateway.dart';
 import 'package:dosey_app/core/household/appwrite_household_management_gateway.dart';
 import 'package:dosey_app/core/household/appwrite_robot_pairing_gateway.dart';
@@ -32,6 +34,104 @@ typedef AppwritePairingApiFactory =
     AppwriteRobotPairingApi Function(CloudConfiguration configuration);
 typedef AppwriteHouseholdFunctionsApiFactory =
     AppwriteHouseholdFunctionsApi Function(CloudConfiguration configuration);
+typedef CaregiverSyncGatewayFactory =
+    CaregiverSyncGateway Function(CloudConfiguration configuration);
+typedef AppwriteMedicationSyncFunctionsApiFactory =
+    AppwriteMedicationSyncFunctionsApi Function(
+      CloudConfiguration configuration,
+    );
+
+class WebCloudGateways {
+  const WebCloudGateways({
+    required this.identity,
+    required this.household,
+    required this.householdManagement,
+    required this.caregiver,
+  });
+
+  final CloudIdentityGateway identity;
+  final HouseholdSyncGateway household;
+  final HouseholdManagementGateway householdManagement;
+  final CaregiverSyncGateway caregiver;
+}
+
+WebCloudGateways createWebCloudGateways(
+  CloudConfiguration configuration, {
+  AppwriteAccountApiFactory? accountApiFactory,
+  AppwriteTeamsApiFactory? teamsApiFactory,
+  AppwriteHouseholdFunctionsApiFactory? householdFunctionsApiFactory,
+  CaregiverSyncGatewayFactory? caregiverGatewayFactory,
+  AppwriteMedicationSyncFunctionsApiFactory? medicationSyncFunctionsApiFactory,
+  String? webDeviceId,
+  String Function()? newSyncId,
+}) {
+  if (!configuration.isEnabled) {
+    return const WebCloudGateways(
+      identity: DisabledCloudIdentityGateway(),
+      household: DisabledHouseholdSyncGateway(),
+      householdManagement: DisabledHouseholdManagementGateway(),
+      caregiver: DisabledCaregiverSyncGateway(),
+    );
+  }
+
+  if (accountApiFactory != null ||
+      teamsApiFactory != null ||
+      householdFunctionsApiFactory != null ||
+      medicationSyncFunctionsApiFactory != null) {
+    final accountApi = (accountApiFactory ?? _createAppwriteAccountApi)(
+      configuration,
+    );
+    return WebCloudGateways(
+      identity: AppwriteCloudIdentityGateway(accountApi),
+      household: AppwriteHouseholdSyncGateway(
+        (teamsApiFactory ?? _createAppwriteTeamsApi)(configuration),
+      ),
+      householdManagement: _createHouseholdManagementGateway(
+        configuration,
+        householdFunctionsApiFactory,
+      ),
+      caregiver: _createCaregiverGateway(
+        configuration,
+        gatewayFactory: caregiverGatewayFactory,
+        apiFactory: medicationSyncFunctionsApiFactory,
+        deviceId: webDeviceId,
+        newId: newSyncId,
+      ),
+    );
+  }
+
+  final client = _createAppwriteClient(configuration);
+  return WebCloudGateways(
+    identity: AppwriteCloudIdentityGateway(
+      AppwriteAccountApiAdapter(Account(client)),
+    ),
+    household: AppwriteHouseholdSyncGateway(
+      AppwriteTeamsApiAdapter(Teams(client), Account(client)),
+    ),
+    householdManagement: configuration.isHouseholdManagementEnabled
+        ? AppwriteHouseholdManagementGateway(
+            AppwriteHouseholdFunctionsApiAdapter(Functions(client)),
+            createRobotFunctionId: configuration.createRobotFunctionId!,
+            createInvitationFunctionId:
+                configuration.createHouseholdInvitationFunctionId!,
+            acceptInvitationFunctionId:
+                configuration.acceptHouseholdInvitationFunctionId!,
+            removeMemberFunctionId:
+                configuration.removeHouseholdMemberFunctionId!,
+          )
+        : const DisabledHouseholdManagementGateway(),
+    caregiver: _createCaregiverGateway(
+      configuration,
+      gatewayFactory: caregiverGatewayFactory,
+      api: AppwriteMedicationSyncFunctionsApiAdapter(
+        Functions(client),
+        Account(client),
+      ),
+      deviceId: webDeviceId,
+      newId: newSyncId,
+    ),
+  );
+}
 
 class CloudGateways {
   const CloudGateways({
@@ -163,6 +263,40 @@ AppwriteRobotPairingApi _createAppwritePairingApi(
 ) {
   final client = _createAppwriteClient(configuration);
   return AppwriteRobotPairingApiAdapter(Account(client), Functions(client));
+}
+
+CaregiverSyncGateway _createCaregiverGateway(
+  CloudConfiguration configuration, {
+  CaregiverSyncGatewayFactory? gatewayFactory,
+  AppwriteMedicationSyncFunctionsApiFactory? apiFactory,
+  AppwriteMedicationSyncFunctionsApi? api,
+  String? deviceId,
+  String Function()? newId,
+}) {
+  if (!configuration.isMedicationSyncEnabled) {
+    return const DisabledCaregiverSyncGateway();
+  }
+  if (gatewayFactory != null) return gatewayFactory(configuration);
+  return AppwriteCaregiverSyncGateway(
+    api ??
+        (apiFactory ?? _createAppwriteMedicationSyncFunctionsApi)(
+          configuration,
+        ),
+    pushFunctionId: configuration.medicationSyncPushFunctionId!,
+    pullFunctionId: configuration.medicationSyncPullFunctionId!,
+    deviceId: deviceId ?? 'web-${ID.unique()}',
+    newId: newId ?? ID.unique,
+  );
+}
+
+AppwriteMedicationSyncFunctionsApi _createAppwriteMedicationSyncFunctionsApi(
+  CloudConfiguration configuration,
+) {
+  final client = _createAppwriteClient(configuration);
+  return AppwriteMedicationSyncFunctionsApiAdapter(
+    Functions(client),
+    Account(client),
+  );
 }
 
 Client _createAppwriteClient(CloudConfiguration configuration) =>

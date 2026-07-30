@@ -14,13 +14,6 @@ runs:
             exit 1
           fi
         done
-        sync_push="${APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID:-}"
-        sync_pull="${APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID:-}"
-        if { [ -n "$sync_push" ] && [ -z "$sync_pull" ]; } || \
-           { [ -z "$sync_push" ] && [ -n "$sync_pull" ]; }; then
-          echo "Medication sync Function IDs must be configured together." >&2
-          exit 1
-        fi
         umask 077
         printf '%s=%s\n' \
           APPWRITE_ENDPOINT "$APPWRITE_ENDPOINT" \
@@ -38,8 +31,3 @@ runs:
             printf '%s=%s\n' "$name" "$value" >> .env
           fi
         done
-        if [ -n "$sync_push" ]; then
-          printf '%s=%s\n' \
-            APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID "$sync_push" \
-            APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID "$sync_pull" >> .env
-        fi
