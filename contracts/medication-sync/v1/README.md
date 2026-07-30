@@ -52,7 +52,15 @@ Dart uses the already-locked `timezone` package's `latest_all` database for
 offset conversion. To update the set, obtain an official IANA `tzdata.zi` and
 run the artifact's recorded `generationCommand`. Commit the artifact and both
 generated mirrors together, then run both parity suites. The generator itself
-is `generate-timezones.mjs` and has no package dependency.
+is `generate-timezones.mjs` and has no package dependency. It validates and
+prepares every requested output before writing, stages replacements beside
+their targets, awaits every staging write before cleanup, and uses per-file
+atomic renames with rollback. A filesystem cannot atomically rename multiple
+files as one transaction, so all backups remain available until every target
+replacement succeeds. That success is the commit point: an earlier failure
+restores every original and removes temporary files, while a later backup
+cleanup failure leaves every new target installed and retains the affected
+collision-safe backup for recovery.
 
 The name artifact and the runtime transition databases are distinct. At the
 time v1 was frozen, the artifact came from IANA 2026b-rearguard, the deployed
@@ -66,6 +74,9 @@ runtimes must pass the representative DST fixtures and ordinary-date
 occurrence conversion for every canonical zone before release; any observed
 fixture mismatch blocks deployment. Updating a runtime timezone database
 requires rerunning those checks against the other runtime.
+If any other canonical identifier is absent from a deployed runtime database,
+the parser rejects it with `UNSUPPORTED_TIMEZONE_DATABASE`; raw runtime lookup
+errors are not part of the wire contract.
 
 ### Occurrence reference
 
@@ -130,6 +141,9 @@ integers, but their content is numeric: canonical non-negative base-10
 safe-integer spelling (`0` or `[1-9][0-9]*`, maximum
 `9007199254740991`). `limit` is an integer from `1` through `100`; a push has at
 most 100 operations. The initial pull sends both cursor and checkpoint as null.
+Integral JSON numbers are accepted whether a runtime decoder represents them
+as integer or floating-point values. Fractional, non-finite, and unsafe values
+are rejected, and negative zero is normalized to zero.
 Later pulls send both. The checkpoint is the stable inclusive high-water mark
 for one traversal. A page satisfies `cursor <= nextCursor <= checkpoint`, its
 change cursors are strictly increasing after the requested cursor and do not
@@ -222,8 +236,10 @@ string `checkpoint` and `nextCursor`, `hasMore`, and ordered `changes`.
 For idempotency storage, call
 `canonicalMutationHashInput(request.robotId, mutation)`. It reparses and
 normalizes the mutation, includes the validated robot scope, recursively sorts
-object keys, preserves array order, and emits compact JSON. The server computes
-SHA-256 over the UTF-8 bytes of that returned string. The database lookup key
+object keys by case-sensitive UTF-16 code-unit order, preserves array order,
+and emits compact JSON. TypeScript and Dart exercise the same ordering,
+including non-ASCII and surrogate-pair keys. The server computes SHA-256 over
+the UTF-8 bytes of that returned string. The database lookup key
 remains `(robotId, idempotencyKey)`; the hash detects changed replays. Hashes,
 canonical payload JSON, actor IDs, household IDs, revisions, and cursors are
 always server-derived. Client claims for any hash or authoritative field are
