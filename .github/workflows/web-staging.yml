@@ -15,6 +15,10 @@ on:
         description: Required only for activate mode; never inferred from an upload
         required: false
         type: string
+      upload_run_id:
+        description: Successful upload-mode workflow run that created deployment_id; required for activate mode
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -26,6 +30,12 @@ concurrency:
 env:
   APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
   APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+  APPWRITE_CREATE_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_ROBOT_FUNCTION_ID }}
+  APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID }}
+  APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID }}
+  APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ${{ vars.APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID }}
+  APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID }}
+  APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID }}
   APPWRITE_SITE_ID: ${{ vars.APPWRITE_STAGING_SITE_ID }}
 
 jobs:
@@ -51,14 +61,46 @@ jobs:
           cache: true
       - name: Install locked dependencies
         run: flutter pub get --enforce-lockfile
+      - name: Validate staging web configuration
+        run: |
+          set -euo pipefail
+          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
+            printf 'Unexpected Appwrite endpoint\n' >&2
+            exit 1
+          }
+          test -n "${APPWRITE_PROJECT_ID:-}" || {
+            printf 'APPWRITE_PROJECT_ID is required\n' >&2
+            exit 1
+          }
+          for name in APPWRITE_CREATE_ROBOT_FUNCTION_ID APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID; do
+            if [ -z "${!name:-}" ]; then
+              printf '%s is required\n' "$name" >&2
+              exit 1
+            fi
+          done
+          test "${APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID:-}" = "medication-sync-push-v1" || {
+            printf 'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID must be medication-sync-push-v1\n' >&2
+            exit 1
+          }
+          test "${APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID:-}" = "medication-sync-pull-v1" || {
+            printf 'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID must be medication-sync-pull-v1\n' >&2
+            exit 1
+          }
       - name: Build auth-enabled staging web release
         run: |
           flutter build web --release --target=lib/main_web.dart \
             --dart-define=DOSEY_BUILD_PROFILE=personal \
+            --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted \
             --dart-define=WEB_AUTH_ENABLED=true \
             --dart-define=WEB_APP_ORIGIN=https://staging.dosey.dev \
             --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
-            --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID"
+            --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID" \
+            --dart-define=APPWRITE_CREATE_ROBOT_FUNCTION_ID="$APPWRITE_CREATE_ROBOT_FUNCTION_ID" \
+            --dart-define=APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID" \
+            --dart-define=APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID" \
+            --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID" \
+            --dart-define=APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" \
+            --dart-define=APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID"
       - name: Verify and archive web contents
         run: |
           set -euo pipefail
@@ -69,6 +111,8 @@ jobs:
           tar -czf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" -C build/web .
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './index.html'
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './auth.html'
+      - name: Verify caregiver staging integration
+        run: bash ../../.github/scripts/check-caregiver-web-integration.sh "$PWD" require-complete
       - name: Report archive byte size
         run: |
           printf 'Staging archive bytes: %s\n' "$(wc -c < "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz")"
@@ -80,6 +124,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
       - name: Create Appwrite staging deployment
+        id: create-deployment
         env:
           APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
         run: |
@@ -104,7 +149,11 @@ jobs:
             exit 1
           fi
           deployment_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("$id", ""))' "$response")"
-          test -n "$deployment_id" || { printf 'Deployment ID missing from Appwrite response\n' >&2; exit 1; }
+          [[ "$deployment_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
+            printf 'Deployment ID missing or invalid in Appwrite response\n' >&2
+            exit 1
+          }
+          printf 'deployment_id=%s\n' "$deployment_id" >> "$GITHUB_OUTPUT"
           printf 'Created staging deployment: %s\n' "$deployment_id"
           state=""
           for attempt in $(seq 1 30); do
@@ -151,7 +200,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: dosey-web-staging-response
+          name: dosey-web-staging-response-${{ steps.create-deployment.outputs.deployment_id }}
           path: |
             ${{ github.workspace }}/staging-deployment-response.json
             ${{ github.workspace }}/staging-deployment-status.json
@@ -164,16 +213,62 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: staging
+    # Required to query the upload run and its gated-evidence artifact.
+    permissions:
+      actions: read
     steps:
       - name: Validate explicit deployment ID
         env:
           DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          UPLOAD_RUN_ID: ${{ inputs.upload_run_id }}
         run: |
           set -euo pipefail
           [[ "$DEPLOYMENT_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] || {
             printf 'deployment_id has an invalid format\n' >&2
             exit 1
           }
+          [[ "$UPLOAD_RUN_ID" =~ ^[1-9][0-9]*$ ]] || {
+            printf 'upload_run_id must be a positive integer\n' >&2
+            exit 1
+          }
+      - name: Verify deployment came from this gated workflow revision
+        env:
+          DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          THIS_RUN_SHA: ${{ github.sha }}
+          UPLOAD_RUN_ID: ${{ inputs.upload_run_id }}
+        run: |
+          set -euo pipefail
+          run_response="$RUNNER_TEMP/staging-upload-run.json"
+          artifacts_response="$RUNNER_TEMP/staging-upload-artifacts.json"
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 60 \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$REPOSITORY/actions/runs/$UPLOAD_RUN_ID" \
+            --output "$run_response"
+          curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 60 \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "https://api.github.com/repos/$REPOSITORY/actions/runs/$UPLOAD_RUN_ID/artifacts?per_page=100" \
+            --output "$artifacts_response"
+          EXPECTED_ARTIFACT="dosey-web-staging-response-$DEPLOYMENT_ID" \
+          EXPECTED_SHA="$THIS_RUN_SHA" \
+          ruby -rjson -e '
+            run = JSON.parse(File.read(ARGV.fetch(0)))
+            artifacts = JSON.parse(File.read(ARGV.fetch(1))).fetch("artifacts")
+            abort "Upload evidence is not from Web Staging Sites" unless run["path"] == ".github/workflows/web-staging.yml"
+            abort "Upload evidence is not a workflow_dispatch run" unless run["event"] == "workflow_dispatch"
+            abort "Upload evidence did not succeed" unless run["conclusion"] == "success"
+            abort "Upload evidence used a different workflow revision" unless run["head_sha"] == ENV.fetch("EXPECTED_SHA")
+            expected = ENV.fetch("EXPECTED_ARTIFACT")
+            match = artifacts.find { |artifact| artifact["name"] == expected && !artifact["expired"] }
+            abort "Matching unexpired gated deployment evidence was not found" unless match
+          ' "$run_response" "$artifacts_response"
       - name: Verify selected staging deployment is ready
         env:
           APPWRITE_SITES_API_KEY: ${{ secrets.APPWRITE_SITES_API_KEY }}
