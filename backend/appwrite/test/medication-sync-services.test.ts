@@ -27,7 +27,7 @@ describe('Medication sync application services', () => {
     }, store(), () => now);
 
     await assert.rejects(
-      service.push({ accountId: 'member-1', robotId: 'robot-1', operations: [] }),
+      service.push({ accountId: 'member-1', actorType: 'human', robotId: 'robot-1', operations: [] }),
       MedicationSyncAuthorizationError,
     );
   });
@@ -47,6 +47,7 @@ describe('Medication sync application services', () => {
 
     const result = await service.push({
       accountId: 'member-1',
+      actorType: 'human',
       robotId: 'robot-1',
       operations: [
         {
@@ -85,6 +86,7 @@ describe('Medication sync application services', () => {
 
     assert.deepEqual(await service.push({
       accountId: 'owner-1',
+      actorType: 'human',
       robotId: 'robot-1',
       operations: [{
         type: 'upsertDocument', operationId: 'mutation-1', idempotencyKey: 'key-1', deviceId: 'device-1', canonicalHashInput: 'schedule-1',
@@ -133,7 +135,7 @@ describe('Medication sync application services', () => {
     };
 
     await service.push({
-      accountId: 'member-1', robotId: 'robot-1',
+      accountId: 'member-1', actorType: 'human', robotId: 'robot-1',
       operations: [
         { ...base, operationId: 'mutation-1', canonicalHashInput: 'snoozed', payload: '{"kind":"snoozed"}' },
         { ...base, operationId: 'mutation-2', canonicalHashInput: 'help_requested', payload: '{"kind":"help_requested"}' },
@@ -156,7 +158,49 @@ describe('Medication sync application services', () => {
     );
 
     assert.deepEqual(await service.pull({
-      accountId: 'member-1', robotId: 'robot-1', cursor: 5, checkpoint: 9, limit: 20,
+      accountId: 'member-1', actorType: 'human', robotId: 'robot-1', cursor: 5, checkpoint: 9, limit: 20,
     }), { changes: [], nextCursor: 5, checkpoint: 9, complete: false });
+  });
+
+  test('lets a claimed device append events and pull but rejects document mutations', async () => {
+    const roles: string[] = [];
+    const access = {
+      authorize: async (input: { actorType: string }) => {
+        assert.equal(input.actorType, 'device');
+        return { robotId: 'robot-1', role: 'device' as const };
+      },
+    };
+    const applicationStore = store({
+      appendEvent: async (input) => {
+        roles.push(input.actorRole);
+        return { status: 'applied', sequence: 2 };
+      },
+    });
+    const push = new MedicationSyncPushService(access, applicationStore, () => now);
+    const result = await push.push({
+      accountId: 'mounted-1', actorType: 'device', robotId: 'robot-1', operations: [
+        {
+          type: 'archiveDocument', operationId: 'mutation-1', idempotencyKey: 'key-1',
+          deviceId: 'mounted-1', canonicalHashInput: 'delete', resourceType: 'medication',
+          resourceId: 'medication-1', baseVersion: 1,
+        },
+        {
+          type: 'appendEvent', operationId: 'mutation-2', idempotencyKey: 'key-2',
+          deviceId: 'mounted-1', canonicalHashInput: 'event', eventId: 'event-1',
+          kind: 'taken_confirmed', doseId: 'dose-1', scheduleId: 'schedule-1',
+          occurredAt: now, payload: '{}',
+        },
+      ],
+    });
+    assert.deepEqual(result.acknowledgements, [
+      { operationId: 'mutation-1', status: 'rejected', code: 'owner_required' },
+      { operationId: 'mutation-2', status: 'applied', sequence: 2 },
+    ]);
+    assert.deepEqual(roles, ['device']);
+
+    await new MedicationSyncPullService(access, applicationStore).pull({
+      accountId: 'mounted-1', actorType: 'device', robotId: 'robot-1',
+      cursor: 0, limit: 20,
+    });
   });
 });

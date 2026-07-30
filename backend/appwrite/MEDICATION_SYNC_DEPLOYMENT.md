@@ -9,13 +9,16 @@ template is additive and does not contain credentials. Do not target production.
    `backend/appwrite`.
 2. Copy `appwrite.medication-sync.template.json` outside the repository and
    replace only `<APPWRITE_ENDPOINT>`, `<APPWRITE_PROJECT_ID>`,
-   `<DOSEY_DATABASE_ID>`, and `<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>`.
+   `<DOSEY_DATABASE_ID>`, `<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>`,
+   `<DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID>`, and
+   `<DOSEY_ROBOT_INSTALLATIONS_TABLE_ID>`.
 3. Confirm the target project is disposable staging and the existing
    `human_robot_links` table uses account ID as row ID with `robotId`, `role`, and
    `status` columns.
 4. Keep `DOSEY_HUMAN_AUTH_PROVIDERS=google`. Enable `email` only after a staging
    Function proves the current Appwrite session reports provider `email` and a
-   verified email. Never enable `anonymous`.
+   verified email. Never add `anonymous` to this human-provider allowlist;
+   claimed Robot sessions use the separate anonymous identity verifier.
 
 ## Additive apply
 
@@ -34,17 +37,19 @@ template creates:
 - `medication-sync-pull-v1`
 
 All six tables have empty client permissions. Both Functions execute for signed-in
-users but authenticate the forwarded user JWT and authorize the exact active
-`human_robot_links` row before reading synchronized data.
+users but authenticate the forwarded user JWT. Humans require the exact active
+`human_robot_links` row. Claimed anonymous Robots require exactly one matching
+`mounted_robot_access` row for the requested Robot.
 
 ## Required staging gates
 
 Do not release client Function IDs until all gates pass:
 
-1. Google owner and member calls authenticate; anonymous, inactive-link, and
-   cross-household calls return no data.
-2. Members can append dose events but receive `OWNER_REQUIRED` for medication or
-   schedule mutations.
+1. Google owner and member calls authenticate. A claimed anonymous Robot may
+   pull and append dose events only for its exact Robot. Unclaimed, revoked,
+   inactive-link, duplicate-link, and cross-Robot calls return no data.
+2. Members and claimed Robots can append dose events but receive `OWNER_REQUIRED`
+   for medication or schedule mutations.
 3. Two concurrent first writes to one household produce unique contiguous change
    sequences, with no domain record missing its receipt and immutable change.
 4. Repeating the same `(robotId,idempotencyKey)` and normalized mutation returns
@@ -75,7 +80,7 @@ Function status from `Execution.responseStatusCode` and JSON from
 - Unknown server failures remain Function 5xx responses.
 
 Retry transport failures, timeouts, 429, and 5xx with the identical body and
-idempotency keys. Refresh the human session and retry a 401 once. Do not blindly
+idempotency keys. Refresh the current human or anonymous session and retry a 401 once. Do not blindly
 retry 400, 403, 405, mutation conflicts, or rejected acknowledgements.
 
 An initial pull sends null cursor and checkpoint. The first response captures a

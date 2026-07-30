@@ -80,6 +80,8 @@ test('defines additive server-only sync tables and callable human function deplo
     const variables = new Map(definition.vars.map(({ key, value }) => [key, value]));
     assert.equal(variables.get('DOSEY_DATABASE_ID'), '<DOSEY_DATABASE_ID>');
     assert.equal(variables.get('DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID'), '<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>');
+    assert.equal(variables.get('DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID'), '<DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID>');
+    assert.equal(variables.get('DOSEY_ROBOT_INSTALLATIONS_TABLE_ID'), '<DOSEY_ROBOT_INSTALLATIONS_TABLE_ID>');
     assert.equal(
       variables.get('DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID'),
       'dosey_sync_changes_v1',

@@ -182,6 +182,27 @@ describe('Transactional medication sync store', () => {
     assert.equal(persistence.changes.size, 1);
   });
 
+  test('scopes idempotency receipts and sequences to the exact robot', async () => {
+    const persistence = new MemoryPersistence();
+    const store = new TransactionalMedicationSyncStore(persistence);
+
+    const first = await store.appendEvent({
+      ...mutation, eventId: 'event-1', eventHash: 'event-hash', kind: 'snoozed',
+      doseId: 'dose-1', scheduleId: 'schedule-1', occurredAt: mutation.now, payload: '{}',
+    });
+    const second = await store.appendEvent({
+      ...mutation, robotId: 'robot-2', actorAccountId: 'device-2', actorRole: 'device',
+      eventId: 'event-1', eventHash: 'event-hash', kind: 'snoozed',
+      doseId: 'dose-1', scheduleId: 'schedule-1', occurredAt: mutation.now, payload: '{}',
+    });
+
+    assert.deepEqual(first, { status: 'applied', sequence: 1 });
+    assert.deepEqual(second, { status: 'applied', sequence: 1 });
+    assert.deepEqual([...persistence.receipts.keys()].sort(), [
+      'robot-1:operation-1', 'robot-2:operation-1',
+    ]);
+  });
+
   test('archives an existing document as a versioned tombstone', async () => {
     const persistence = new MemoryPersistence();
     const store = new TransactionalMedicationSyncStore(persistence);

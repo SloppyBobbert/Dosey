@@ -5,14 +5,15 @@ restore, human household lifecycle, and medication synchronization foundations.
 It does not schedule doses or command dispensing.
 
 Appwrite Teams remain the household projection. Active `human_robot_links` rows
-are the medication-sync authorization authority. TablesDB is the authority for
+authorize humans for medication sync; the exact `mounted_robot_access` row
+authorizes a claimed anonymous Robot account. TablesDB is the authority for
 pairing, mounted-device access, and synchronized records.
 On the target secure path, mounted anonymous Robot accounts never become Team
 members. Flutter invokes Functions for every server operation and never reads
 the server-only tables.
 
 The original household path has seven server-authorized Functions and six
-server-only TablesDB tables. Medication sync adds two human-only Functions and
+server-only TablesDB tables. Medication sync adds two authenticated Functions and
 six additive server-only tables. The live staging backend rollout remains pending
 and incomplete until the approved cloud rollout is performed. Personal account
 and household use requires human authentication; the mounted Robot
@@ -24,7 +25,8 @@ settings, or local medication data, and pairing does not alter human
 authentication. Appwrite/auth outages must not block the local Robot shell.
 Mounted credentials never save, swap, or restore a human session. Medication
 and schedule records plus the four v1 dose-event kinds can sync for verified
-human household members. Hardware inventory and missed-dose derivation remain local.
+human household members. A claimed anonymous Robot may pull its exact Robot and
+append dose events only. Hardware inventory and missed-dose derivation remain local.
 
 ## Functions
 
@@ -35,8 +37,8 @@ human household members. Hardware inventory and missed-dose derivation remain lo
 - `src/entrypoints/accept-household-invitation.ts`: atomically reserves a human slot before creating the Team membership.
 - `src/entrypoints/remove-household-member.ts`: removes a member as the owner, or lets a non-owner member leave.
 - `src/entrypoints/get-mounted-robot.ts`: restores the robot identity for the authenticated anonymous mounted account.
-- `src/entrypoints/medication-sync-push.ts`: validates and applies a bounded v1 mutation batch for an authorized human.
-- `src/entrypoints/medication-sync-pull.ts`: returns a fixed-checkpoint page of immutable v1 changes for an authorized human.
+- `src/entrypoints/medication-sync-push.ts`: validates and applies a bounded v1 mutation batch for an authorized human or claimed Robot.
+- `src/entrypoints/medication-sync-pull.ts`: returns a fixed-checkpoint page of immutable v1 changes for an authorized human or claimed Robot.
 
 The target Android Robot configuration will include the active versioned secure
 claim Function ID and the public `get-mounted-robot` Function ID. A pending

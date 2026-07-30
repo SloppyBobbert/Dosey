@@ -12,6 +12,8 @@ const environment = {
   APPWRITE_FUNCTION_PROJECT_ID: 'project-1',
   DOSEY_DATABASE_ID: 'database-1',
   DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID: 'links',
+  DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID: 'mounted-access',
+  DOSEY_ROBOT_INSTALLATIONS_TABLE_ID: 'robot-installations',
   DOSEY_MEDICATION_SYNC_DOCUMENTS_TABLE_ID: 'sync-documents',
   DOSEY_MEDICATION_SYNC_EVENTS_TABLE_ID: 'sync-events',
   DOSEY_MEDICATION_SYNC_HELP_REQUESTS_TABLE_ID: 'sync-help-requests',
@@ -48,6 +50,16 @@ describe('Medication sync runtime', () => {
         missing,
       ),
       /DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID/,
+    );
+  });
+
+  test('requires server-side mounted access configuration for anonymous devices', () => {
+    const { DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID: _, ...missing } = environment;
+    assert.throws(
+      () => createMedicationSyncRuntime(
+        { 'x-appwrite-key': 'dynamic-key' }, parser, missing,
+      ),
+      /DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID/,
     );
   });
 

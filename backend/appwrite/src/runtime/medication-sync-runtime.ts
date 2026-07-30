@@ -4,7 +4,10 @@ import {
   MedicationSyncPullService,
   MedicationSyncPushService,
 } from '../application/medication-sync-services.js';
-import { HouseholdAccessAuthorizer } from '../application/household-access.js';
+import {
+  HouseholdAccessAuthorizer,
+  MedicationSyncAccessAuthorizer,
+} from '../application/household-access.js';
 import { AppwriteFunctionIdentityVerifier } from '../functions/function-identity.js';
 import type { MedicationSyncRequestParser } from '../functions/medication-sync-handlers.js';
 import { medicationSyncContractParser } from '../functions/medication-sync-contract-adapter.js';
@@ -17,6 +20,7 @@ import {
   AppwriteMedicationSyncRowsApi,
 } from '../infrastructure/appwrite-medication-sync-persistence.js';
 import { TransactionalMedicationSyncStore } from '../infrastructure/transactional-medication-sync-store.js';
+import { AppwriteMountedRobotAccessReader } from '../infrastructure/appwrite-mounted-robot-access.js';
 
 export function createMedicationSyncRuntime(
   headers: Readonly<Record<string, string | undefined>>,
@@ -55,6 +59,18 @@ export function createMedicationSyncRuntime(
       async getCurrentAccountId() {
         return (await currentAccount().get()).$id;
       },
+      async getCurrentAnonymousAccount() {
+        const account = currentAccount();
+        const [user, session] = await Promise.all([
+          account.get(),
+          account.getSession({ sessionId: 'current' }),
+        ]);
+        return {
+          accountId: user.$id,
+          sessionUserId: session.userId,
+          provider: session.provider,
+        };
+      },
       async getCurrentHumanAccount() {
         const account = currentAccount();
         const [user, session] = await Promise.all([
@@ -72,10 +88,23 @@ export function createMedicationSyncRuntime(
     configuredHumanProviders(environment.DOSEY_HUMAN_AUTH_PROVIDERS),
   );
   const tables = new TablesDB(adminClient);
-  const access = new HouseholdAccessAuthorizer(
-    new AppwriteHouseholdLinkLookup(
-      new AppwriteHouseholdAccessRowsApi(tables, databaseId, humanRobotLinksTableId),
+  const access = new MedicationSyncAccessAuthorizer(
+    new HouseholdAccessAuthorizer(
+      new AppwriteHouseholdLinkLookup(
+        new AppwriteHouseholdAccessRowsApi(tables, databaseId, humanRobotLinksTableId),
+      ),
     ),
+    new AppwriteMountedRobotAccessReader(tables, {
+      databaseId,
+      mountedRobotAccessTableId: required(
+        environment.DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID,
+        'DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID',
+      ),
+      robotInstallationsTableId: required(
+        environment.DOSEY_ROBOT_INSTALLATIONS_TABLE_ID,
+        'DOSEY_ROBOT_INSTALLATIONS_TABLE_ID',
+      ),
+    }),
   );
   const rows = new AppwriteMedicationSyncRowsApi(tables, {
     databaseId,

@@ -3,6 +3,7 @@ import { describe, test } from 'node:test';
 
 import {
   HouseholdAccessAuthorizer,
+  MedicationSyncAccessAuthorizer,
   type HouseholdLinkLookup,
 } from '../src/application/household-access.js';
 
@@ -50,6 +51,45 @@ describe('Household sync authorization', () => {
         }),
         null,
       );
+    }
+  });
+});
+
+describe('Mounted-device sync authorization', () => {
+  test('authorizes only the claimed anonymous account for its exact robot', async () => {
+    const mounted = {
+      findByDevice: async () => [{
+        robotId: 'robot-1', mountedDeviceAccountId: 'device-1', pairingClaimId: 'claim-1',
+        createdAt: new Date('2026-07-29T10:00:00Z'), updatedAt: new Date('2026-07-29T10:00:00Z'),
+      }],
+    };
+    const access = new MedicationSyncAccessAuthorizer(
+      new HouseholdAccessAuthorizer({ getLink: async () => null }),
+      mounted,
+    );
+
+    assert.deepEqual(await access.authorize({
+      accountId: 'device-1', actorType: 'device', robotId: 'robot-1',
+    }), { robotId: 'robot-1', role: 'device' });
+    assert.equal(await access.authorize({
+      accountId: 'device-1', actorType: 'device', robotId: 'other-robot',
+    }), null);
+  });
+
+  test('denies revoked, duplicate, and human-link-only device accounts', async () => {
+    for (const records of [[], [
+      { robotId: 'robot-1', mountedDeviceAccountId: 'device-1' },
+      { robotId: 'robot-2', mountedDeviceAccountId: 'device-1' },
+    ]]) {
+      const access = new MedicationSyncAccessAuthorizer(
+        new HouseholdAccessAuthorizer({ getLink: async () => ({
+          accountId: 'device-1', robotId: 'robot-1', role: 'owner', status: 'active',
+        }) }),
+        { findByDevice: async () => records },
+      );
+      assert.equal(await access.authorize({
+        accountId: 'device-1', actorType: 'device', robotId: 'robot-1',
+      }), null);
     }
   });
 });

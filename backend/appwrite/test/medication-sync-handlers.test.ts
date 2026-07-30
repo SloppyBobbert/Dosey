@@ -34,6 +34,7 @@ function context(input: { method?: string; body?: unknown } = {}) {
 
 const identity = {
   verifyHuman: async () => ({ accountId: 'owner-1', email: 'owner@example.com' }),
+  verifyAnonymous: async () => null,
 };
 
 const parser: MedicationSyncRequestParser = {
@@ -62,7 +63,7 @@ describe('Medication sync function boundaries', () => {
     const unauthenticated = context();
     await medicationSyncPushHandler(
       service,
-      { verifyHuman: async () => null },
+      { verifyHuman: async () => null, verifyAnonymous: async () => null },
       guardedParser,
     )(unauthenticated.value);
     assert.deepEqual(unauthenticated.response(), {
@@ -97,7 +98,7 @@ describe('Medication sync function boundaries', () => {
       },
     }, identity, parser)(request.value);
 
-    assert.deepEqual(calls, [{ accountId: 'owner-1', robotId: 'robot-1', operations: [] }]);
+    assert.deepEqual(calls, [{ accountId: 'owner-1', actorType: 'human', robotId: 'robot-1', operations: [] }]);
     assert.deepEqual(request.response(), {
       body: {
         contractVersion: 1,
@@ -109,6 +110,24 @@ describe('Medication sync function boundaries', () => {
       },
       status: 200,
     });
+  });
+
+  test('uses only the server-verified anonymous identity for mounted-device sync', async () => {
+    const calls: unknown[] = [];
+    const request = context({ body: { accountId: 'forged', role: 'owner' } });
+    await medicationSyncPushHandler({
+      push: async (input) => {
+        calls.push(input);
+        return { acknowledgements: [] };
+      },
+    }, {
+      verifyHuman: async () => null,
+      verifyAnonymous: async () => 'mounted-1',
+    }, parser)(request.value);
+
+    assert.deepEqual(calls, [{
+      accountId: 'mounted-1', actorType: 'device', robotId: 'robot-1', operations: [],
+    }]);
   });
 
   test('maps household authorization denial to a detail-free forbidden response', async () => {

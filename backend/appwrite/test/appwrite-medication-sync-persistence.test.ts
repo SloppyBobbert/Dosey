@@ -89,7 +89,7 @@ describe('Appwrite medication sync persistence', () => {
       await transaction.createChange({
         robotId: 'robot-1', sequence: 1, resourceType: 'doseEvent', resourceId: 'event-1',
         resourceVersion: null, operation: 'event', payload: '{}', actorAccountId: 'member-1',
-        actorRole: 'member', changedAt: now, operationId: 'operation-1',
+        actorRole: 'device', changedAt: now, operationId: 'operation-1',
         operationHash: 'operation-hash',
       });
 
@@ -98,8 +98,8 @@ describe('Appwrite medication sync persistence', () => {
       assert.equal((await transaction.getReceipt('robot-1', 'operation-1'))?.resourceVersion, null);
       assert.equal((await transaction.getState('robot-1'))?.highWatermark, 1);
       assert.deepEqual(
-        (await transaction.listChanges('robot-1', 0, 1, 10)).map((change) => change.sequence),
-        [1],
+        (await transaction.listChanges('robot-1', 0, 1, 10)).map((change) => [change.sequence, change.actorRole]),
+        [[1, 'device']],
       );
     });
   });
