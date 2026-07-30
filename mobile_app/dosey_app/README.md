@@ -88,12 +88,12 @@ schema and deployment details.
 
 Dosey ships as two fixed Android distributions rather than a runtime mode choice:
 
-- **Dosey Personal:** package `com.sloppybobbert.dosey_app`. It updates the existing Android app in place, requires sign-in, and owns the only Android Appwrite OAuth callback. iOS always uses Personal behavior.
-- **Dosey Robot:** package `com.sloppybobbert.dosey_app.robot`. It is Android-only, works locally without sign-in, and has no OAuth callback or account actions. It retains schedule, carousel, history, household, and other management features. It uses soft in-app navigation and screen-awake guardrails, not device-owner or lock-task kiosk provisioning.
+- **Dosey Personal:** package `com.sloppybobbert.dosey_app`. It updates the existing Android app in place, requires sign-in, owns the only Android Appwrite OAuth callback, and cannot host the mounted Robot UI. Pairing a robot does not turn a Personal installation into Robot Mode. iOS always uses Personal behavior.
+- **Dosey Robot:** package `com.sloppybobbert.dosey_app.robot`. It is Android-only, works locally without sign-in, and has no OAuth callback or account actions. Its phone-only runtime retains schedule, history, household, and other local management features, but does not construct carousel services. It uses soft in-app navigation and screen-awake guardrails, not device-owner or lock-task kiosk provisioning.
 
 The phone is the brain. It handles schedules, medication data, refill logic, dose history, PIN, caregiver logic, UI, reminders, Bluetooth commands, and future cloud, voice-command, or local AI features. The XIAO should only execute hardware actions and report status.
 
-The build profile is authoritative. Imported or stale local role settings cannot enable Robot capabilities in Personal or disable them in Robot.
+The build profile is authoritative. Personal permits only Personal behavior and Robot permits only Robot behavior; imported or stale local role settings cannot cross that boundary.
 
 ### Runtime capability
 
@@ -103,10 +103,9 @@ Every production launch also receives an explicit `DOSEY_RUNTIME_CAPABILITY`:
   Today confirmations, missed-dose acknowledgement, and a pending local sync
   outbox without constructing cloud, BLE, controller, carousel, or Bluetooth
   permission services.
-- `hardware-assisted` preserves the existing Personal/iOS/web behavior and is
-  the explicit Robot hardware-bench mode.
+- `hardware-assisted` preserves the existing Personal/iOS/web behavior.
 
-Android Robot launches fail closed when this value is omitted or invalid. The
+Android Robot launches accept only `phone-only` and fail closed when this value is omitted or invalid. The
 first accepted value is persisted locally, and a later launch cannot silently
 switch capabilities. `phone-only` is rejected outside the Android Robot build;
 there is no fallback from it to BLE hardware.

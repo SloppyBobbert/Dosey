@@ -1,7 +1,7 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/logging/phone_dose_action_service.dart';
 import 'package:dosey_app/core/reminders/active_profile_schedules_stream.dart';
-import 'package:dosey_app/core/reminders/reminder_occurrence.dart';
+import 'package:dosey_app/core/reminders/reminder_occurrence_resolver.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -186,20 +186,15 @@ class _PhoneDoseCardState extends State<_PhoneDoseCard> {
     }
     setState(() => _recording = true);
     try {
-      final now = dependencies.appClock.now();
-      final scheduledLocal = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        widget.schedule.hour,
-        widget.schedule.minute,
-      );
-      final occurrence = ReminderOccurrence(
-        scheduleId: widget.schedule.id,
-        scheduleRevision: widget.schedule.revision,
-        scheduledAt: scheduledLocal.toUtc(),
-        localDate: _localDate(scheduledLocal),
-        timezoneId: await phone.timezoneId(),
+      final now = dependencies.appClock.now().toUtc();
+      final timezoneId = await phone.timezoneId();
+      final occurrence = const ReminderOccurrenceResolver().resolve(
+        schedule: widget.schedule,
+        localDate: const ReminderOccurrenceResolver().localDateFor(
+          now,
+          timezoneId,
+        ),
+        timezoneId: timezoneId,
       );
       await phone.doseActions.record(
         PhoneDoseActionRequest(

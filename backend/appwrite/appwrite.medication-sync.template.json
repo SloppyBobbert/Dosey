@@ -1,0 +1,183 @@
+{
+  "projectId": "<APPWRITE_PROJECT_ID>",
+  "endpoint": "<APPWRITE_ENDPOINT>",
+  "tables": [
+    {
+      "$id": "dosey_sync_documents_v1",
+      "$permissions": [],
+      "databaseId": "<DOSEY_DATABASE_ID>",
+      "name": "Dosey sync documents v1",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "resourceType", "type": "varchar", "size": 16, "required": true, "array": false, "elements": ["medication", "schedule"], "format": "enum", "default": null },
+        { "key": "resourceId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "version", "type": "integer", "required": true, "array": false, "min": 1, "max": 9007199254740991, "default": null },
+        { "key": "archived", "type": "boolean", "required": true, "array": false, "default": null },
+        { "key": "payload", "type": "text", "required": true, "array": false, "default": null },
+        { "key": "createdAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
+        { "key": "createdByAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "updatedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
+        { "key": "updatedByAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null }
+      ],
+      "indexes": []
+    },
+    {
+      "$id": "dosey_sync_events_v1",
+      "$permissions": [],
+      "databaseId": "<DOSEY_DATABASE_ID>",
+      "name": "Dosey sync events v1",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "eventId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "eventHash", "type": "varchar", "size": 64, "required": true, "array": false, "default": null },
+        { "key": "kind", "type": "varchar", "size": 32, "required": true, "array": false, "elements": ["taken_confirmed", "skipped", "snoozed", "help_requested"], "format": "enum", "default": null },
+        { "key": "doseId", "type": "varchar", "size": 256, "required": true, "array": false, "default": null },
+        { "key": "scheduleId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "payload", "type": "text", "required": true, "array": false, "default": null },
+        { "key": "occurredAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
+        { "key": "receivedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
+        { "key": "actorAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "sequence", "type": "integer", "required": true, "array": false, "min": 1, "max": 9007199254740991, "default": null }
+      ],
+      "indexes": []
+    },
+    {
+      "$id": "dosey_sync_help_requests_v1",
+      "$permissions": [],
+      "databaseId": "<DOSEY_DATABASE_ID>",
+      "name": "Dosey sync open help requests v1",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "helpRequestId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "sourceEventId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "status", "type": "varchar", "size": 8, "required": true, "array": false, "elements": ["open"], "format": "enum", "default": null },
+        { "key": "version", "type": "integer", "required": true, "array": false, "min": 1, "max": 1, "default": null },
+        { "key": "openedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
+        { "key": "openedByAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "updatedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
+        { "key": "updatedByAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null }
+      ],
+      "indexes": []
+    },
+    {
+      "$id": "dosey_sync_receipts_v1",
+      "$permissions": [],
+      "databaseId": "<DOSEY_DATABASE_ID>",
+      "name": "Dosey sync receipts v1",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "idempotencyKey", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "operationHash", "type": "varchar", "size": 64, "required": true, "array": false, "default": null },
+        { "key": "sequence", "type": "integer", "required": true, "array": false, "min": 1, "max": 9007199254740991, "default": null },
+        { "key": "resourceVersion", "type": "integer", "required": false, "array": false, "min": 1, "max": 9007199254740991, "default": null },
+        { "key": "createdAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null }
+      ],
+      "indexes": []
+    },
+    {
+      "$id": "dosey_sync_state_v1",
+      "$permissions": [],
+      "databaseId": "<DOSEY_DATABASE_ID>",
+      "name": "Dosey sync state v1",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "highWatermark", "type": "integer", "required": true, "array": false, "min": 0, "max": 9007199254740991, "default": null },
+        { "key": "updatedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null }
+      ],
+      "indexes": []
+    },
+    {
+      "$id": "dosey_sync_changes_v1",
+      "$permissions": [],
+      "databaseId": "<DOSEY_DATABASE_ID>",
+      "name": "Dosey sync changes v1",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "sequence", "type": "integer", "required": true, "array": false, "min": 1, "max": 9007199254740991, "default": null },
+        { "key": "resourceType", "type": "varchar", "size": 16, "required": true, "array": false, "elements": ["medication", "schedule", "doseEvent"], "format": "enum", "default": null },
+        { "key": "resourceId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "resourceVersion", "type": "integer", "required": false, "array": false, "min": 1, "max": 9007199254740991, "default": null },
+        { "key": "operation", "type": "varchar", "size": 8, "required": true, "array": false, "elements": ["upsert", "archive", "event"], "format": "enum", "default": null },
+        { "key": "payload", "type": "text", "required": true, "array": false, "default": null },
+        { "key": "actorAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "actorRole", "type": "varchar", "size": 8, "required": true, "array": false, "elements": ["owner", "member", "device"], "format": "enum", "default": null },
+        { "key": "changedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
+        { "key": "idempotencyKey", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "operationHash", "type": "varchar", "size": 64, "required": true, "array": false, "default": null }
+      ],
+      "indexes": [
+        { "key": "robot_sequence", "type": "unique", "columns": ["robotId", "sequence"], "orders": ["ASC", "ASC"] }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "$id": "medication-sync-push-v1",
+      "name": "Medication sync push v1",
+      "execute": ["users"],
+      "enabled": true,
+      "logging": true,
+      "runtime": "node-22",
+      "events": [],
+      "schedule": "",
+      "timeout": 30,
+      "entrypoint": "dist/entrypoints/medication-sync-push.js",
+      "commands": "npm ci && npm run build",
+      "path": ".",
+      "scopes": ["rows.read", "rows.write"],
+      "vars": [
+        { "key": "DOSEY_DATABASE_ID", "value": "<DOSEY_DATABASE_ID>" },
+        { "key": "DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID", "value": "<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>" },
+        { "key": "DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID", "value": "<DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID>" },
+        { "key": "DOSEY_ROBOT_INSTALLATIONS_TABLE_ID", "value": "<DOSEY_ROBOT_INSTALLATIONS_TABLE_ID>" },
+        { "key": "DOSEY_MEDICATION_SYNC_DOCUMENTS_TABLE_ID", "value": "dosey_sync_documents_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_EVENTS_TABLE_ID", "value": "dosey_sync_events_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_HELP_REQUESTS_TABLE_ID", "value": "dosey_sync_help_requests_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_RECEIPTS_TABLE_ID", "value": "dosey_sync_receipts_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_STATE_TABLE_ID", "value": "dosey_sync_state_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID", "value": "dosey_sync_changes_v1" },
+        { "key": "DOSEY_HUMAN_AUTH_PROVIDERS", "value": "google" }
+      ]
+    },
+    {
+      "$id": "medication-sync-pull-v1",
+      "name": "Medication sync pull v1",
+      "execute": ["users"],
+      "enabled": true,
+      "logging": true,
+      "runtime": "node-22",
+      "events": [],
+      "schedule": "",
+      "timeout": 30,
+      "entrypoint": "dist/entrypoints/medication-sync-pull.js",
+      "commands": "npm ci && npm run build",
+      "path": ".",
+      "scopes": ["rows.read", "rows.write"],
+      "vars": [
+        { "key": "DOSEY_DATABASE_ID", "value": "<DOSEY_DATABASE_ID>" },
+        { "key": "DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID", "value": "<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>" },
+        { "key": "DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID", "value": "<DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID>" },
+        { "key": "DOSEY_ROBOT_INSTALLATIONS_TABLE_ID", "value": "<DOSEY_ROBOT_INSTALLATIONS_TABLE_ID>" },
+        { "key": "DOSEY_MEDICATION_SYNC_DOCUMENTS_TABLE_ID", "value": "dosey_sync_documents_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_EVENTS_TABLE_ID", "value": "dosey_sync_events_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_HELP_REQUESTS_TABLE_ID", "value": "dosey_sync_help_requests_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_RECEIPTS_TABLE_ID", "value": "dosey_sync_receipts_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_STATE_TABLE_ID", "value": "dosey_sync_state_v1" },
+        { "key": "DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID", "value": "dosey_sync_changes_v1" },
+        { "key": "DOSEY_HUMAN_AUTH_PROVIDERS", "value": "google" }
+      ]
+    }
+  ]
+}

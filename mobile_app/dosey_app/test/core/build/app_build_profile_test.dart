@@ -21,13 +21,10 @@ void main() {
     final iosRobotDefine = AppBuildProfile.robot.resolve(AppDevicePlatform.ios);
 
     expect(personal.defaultRole, AppDeviceRole.androidPersonal);
-    expect(
-      personal.allowedRoles,
-      containsAll([AppDeviceRole.androidPersonal, AppDeviceRole.androidRobot]),
-    );
+    expect(personal.allowedRoles, [AppDeviceRole.androidPersonal]);
     expect(personal.requiresSignInFor(AppDeviceRole.androidPersonal), isTrue);
-    expect(personal.canHostRobotFor(AppDeviceRole.androidRobot), isTrue);
-    expect(personal.showsRobotFaceFor(AppDeviceRole.androidRobot), isTrue);
+    expect(personal.canHostRobotFor(AppDeviceRole.androidRobot), isFalse);
+    expect(personal.showsRobotFaceFor(AppDeviceRole.androidRobot), isFalse);
 
     expect(robot.defaultRole, AppDeviceRole.androidRobot);
     expect(robot.allowedRoles, [AppDeviceRole.androidRobot]);

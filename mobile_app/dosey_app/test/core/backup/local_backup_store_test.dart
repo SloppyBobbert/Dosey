@@ -90,40 +90,37 @@ void main() {
     );
   });
 
-  test(
-    'restored role follows selectable and specialized Android policies',
-    () async {
-      final database = DoseyDatabase.inMemory();
-      addTearDown(database.close);
-      final store = LocalBackupStore(database);
-      final settings = LocalAppSettingsRepository(
-        database,
-        defaultRole: AppDeviceRole.androidPersonal,
-      );
-      await settings.setDeviceRole(AppDeviceRole.androidRobot);
-      final snapshot = await store.readSnapshot();
+  test('restored raw role is constrained by fixed Android profiles', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final store = LocalBackupStore(database);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
+    final snapshot = await store.readSnapshot();
 
-      await database.transaction(() => store.replaceSnapshot(snapshot));
+    await database.transaction(() => store.replaceSnapshot(snapshot));
 
-      expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
-      expect(
-        await EffectiveDeviceRoleSource(
-          settings,
-          profile: AppBuildProfile.personal,
-          platform: AppDevicePlatform.android,
-        ).getDeviceRole(),
-        AppDeviceRole.androidRobot,
-      );
-      expect(
-        await EffectiveDeviceRoleSource(
-          settings,
-          profile: AppBuildProfile.robot,
-          platform: AppDevicePlatform.android,
-        ).getDeviceRole(),
-        AppDeviceRole.androidRobot,
-      );
-    },
-  );
+    expect(await settings.getDeviceRole(), AppDeviceRole.androidRobot);
+    expect(
+      await EffectiveDeviceRoleSource(
+        settings,
+        profile: AppBuildProfile.personal,
+        platform: AppDevicePlatform.android,
+      ).getDeviceRole(),
+      AppDeviceRole.androidPersonal,
+    );
+    expect(
+      await EffectiveDeviceRoleSource(
+        settings,
+        profile: AppBuildProfile.robot,
+        platform: AppDevicePlatform.android,
+      ).getDeviceRole(),
+      AppDeviceRole.androidRobot,
+    );
+  });
 
   test(
     'replacement deletes only exact deferred-delete prefix matches',

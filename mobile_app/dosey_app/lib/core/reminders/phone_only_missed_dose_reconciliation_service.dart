@@ -1,8 +1,7 @@
 import 'package:dosey_app/core/logging/phone_dose_action_service.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
-import 'package:dosey_app/core/reminders/reminder_occurrence.dart';
-import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/reminders/reminder_occurrence_resolver.dart';
 
 class PhoneOnlyMissedDoseReconciliationService implements MissedDoseReconciler {
   PhoneOnlyMissedDoseReconciliationService({
@@ -36,26 +35,25 @@ class PhoneOnlyMissedDoseReconciliationService implements MissedDoseReconciler {
   }
 
   Future<void> _reconcileOnce() async {
-    final now = this.now();
+    final now = this.now().toUtc();
     final schedules = await reminders.watchSchedules().first;
     final resolvedDeviceId = await deviceId();
     final resolvedTimezoneId = await timezoneId();
+    const resolver = ReminderOccurrenceResolver();
+    final localToday = resolver.localDateFor(now, resolvedTimezoneId);
     for (final dayOffset in const [-1, 0]) {
-      final date = DateTime(now.year, now.month, now.day + dayOffset);
+      final date = DateTime.utc(
+        localToday.year,
+        localToday.month,
+        localToday.day + dayOffset,
+      );
       for (final schedule in schedules.where((row) => row.isEnabled)) {
-        final scheduledLocal = DateTime(
-          date.year,
-          date.month,
-          date.day,
-          schedule.hour,
-          schedule.minute,
+        final occurrence = resolver.resolve(
+          schedule: schedule,
+          localDate: date,
+          timezoneId: resolvedTimezoneId,
         );
-        if (scheduledLocal.add(gracePeriod).isAfter(now)) continue;
-        final occurrence = _occurrence(
-          schedule,
-          scheduledLocal,
-          resolvedTimezoneId,
-        );
+        if (occurrence.scheduledAt.add(gracePeriod).isAfter(now)) continue;
         await actions.recordMissedIfNoTerminal(
           PhoneDoseActionRequest(
             occurrence: occurrence,
@@ -67,23 +65,5 @@ class PhoneOnlyMissedDoseReconciliationService implements MissedDoseReconciler {
         );
       }
     }
-  }
-
-  static ReminderOccurrence _occurrence(
-    ReminderSchedule schedule,
-    DateTime scheduledLocal,
-    String timezoneId,
-  ) {
-    final localDate =
-        '${scheduledLocal.year.toString().padLeft(4, '0')}-'
-        '${scheduledLocal.month.toString().padLeft(2, '0')}-'
-        '${scheduledLocal.day.toString().padLeft(2, '0')}';
-    return ReminderOccurrence(
-      scheduleId: schedule.id,
-      scheduleRevision: schedule.revision,
-      scheduledAt: scheduledLocal.toUtc(),
-      localDate: localDate,
-      timezoneId: timezoneId,
-    );
   }
 }

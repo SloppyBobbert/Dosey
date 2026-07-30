@@ -8,7 +8,7 @@
 [![Flutter](https://img.shields.io/badge/Flutter-02569B?logo=flutter&logoColor=white)](https://flutter.dev/)
 [![Dart](https://img.shields.io/badge/Dart-0175C2?logo=dart&logoColor=white)](https://dart.dev/)
 [![Android](https://img.shields.io/badge/Android-3DDC84?logo=android&logoColor=white)](#mobile-app)
-[![iOS](https://img.shields.io/badge/iOS-work%20in%20progress-lightgrey?logo=apple&logoColor=white)](#mobile-app)
+[![iOS](https://img.shields.io/badge/iOS-i'm%20poor-lightgrey?logo=apple&logoColor=white)](#mobile-app)
 [![Local data](https://img.shields.io/badge/local%20data-Drift%20%2F%20SQLite-336791)](#mobile-app)
 [![ESP32-C6](https://img.shields.io/badge/ESP32--C6-E7352C?logo=espressif&logoColor=white)](#firmware)
 [![Mobile CI](https://github.com/SloppyBobbert/Dosey/actions/workflows/mobile-ci.yml/badge.svg)](https://github.com/SloppyBobbert/Dosey/actions/workflows/mobile-ci.yml)

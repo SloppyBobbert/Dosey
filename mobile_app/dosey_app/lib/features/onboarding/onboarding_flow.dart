@@ -150,16 +150,13 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
 
   Future<void> _restoreSetup() async {
     try {
-      final settings = DoseyAppScope.of(context).settings;
+      final dependencies = DoseyAppScope.of(context);
+      final settings = dependencies.settings;
       final safetyAcknowledged = await settings.getSafetyAcknowledged();
-      final role = await settings.getPersistedDeviceRole();
+      final role = await dependencies.effectiveRole.getDeviceRole();
       if (!mounted) return;
       if (!safetyAcknowledged) {
         setState(() => _step = _OnboardingStep.medicalNotice);
-        return;
-      }
-      if (role == null) {
-        setState(() => _step = _OnboardingStep.roleSelection);
         return;
       }
       _selectedRole = role;
@@ -196,7 +193,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     if (!saved) return;
     if (!mounted) return;
     final dependencies = DoseyAppScope.of(context);
-    final role = await dependencies.settings.getPersistedDeviceRole();
+    final role = await dependencies.effectiveRole.getDeviceRole();
     if (!mounted) return;
     _selectedRole = role;
     final capabilities = dependencies.effectiveRole.capabilities;

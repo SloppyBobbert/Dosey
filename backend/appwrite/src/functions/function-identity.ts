@@ -47,7 +47,14 @@ export class AppwriteFunctionIdentityVerifier
     AnonymousFunctionIdentityVerifier,
     HumanFunctionIdentityVerifier
 {
-  constructor(private readonly account: FunctionAccountApi) {}
+  private readonly humanProviders: ReadonlySet<string>;
+
+  constructor(
+    private readonly account: FunctionAccountApi,
+    humanProviders: readonly string[] = ['google'],
+  ) {
+    this.humanProviders = new Set(humanProviders);
+  }
 
   async verify(
     headers: Readonly<Record<string, string | undefined>>,
@@ -98,7 +105,7 @@ export class AppwriteFunctionIdentityVerifier
       const email = account.email.trim().toLowerCase();
       if (
         account.id !== claimedId ||
-        account.provider !== 'google' ||
+        !this.humanProviders.has(account.provider) ||
         !account.emailVerified ||
         email.length === 0
       ) {

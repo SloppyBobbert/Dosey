@@ -31,10 +31,7 @@ enum AppBuildProfile {
     if (this == personal) {
       return const AppBuildCapabilities(
         defaultRole: AppDeviceRole.androidPersonal,
-        allowedRoles: [
-          AppDeviceRole.androidPersonal,
-          AppDeviceRole.androidRobot,
-        ],
+        allowedRoles: [AppDeviceRole.androidPersonal],
       );
     }
     return const AppBuildCapabilities(

@@ -34,6 +34,7 @@ val dartDefines = providers.gradleProperty("dart-defines").orNull
     ?.associate { define -> define.substringBefore('=') to define.substringAfter('=', "") }
     .orEmpty()
 val configuredProfile = dartDefines["DOSEY_BUILD_PROFILE"]
+val configuredRuntimeCapability = dartDefines["DOSEY_RUNTIME_CAPABILITY"]
 
 val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
 val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
@@ -68,6 +69,16 @@ gradle.taskGraph.whenReady(Action<TaskExecutionGraph> {
             throw GradleException(
                 "Android flavor '${requestedFlavors.joinToString()}' does not match " +
                     "DOSEY_BUILD_PROFILE='$configuredProfile'.",
+            )
+        }
+        if (configuredProfile == "robot" && configuredRuntimeCapability != "phone-only") {
+            throw GradleException(
+                "Android Robot builds require DOSEY_RUNTIME_CAPABILITY=phone-only.",
+            )
+        }
+        if (configuredProfile == "personal" && configuredRuntimeCapability != "hardware-assisted") {
+            throw GradleException(
+                "Android Personal builds require DOSEY_RUNTIME_CAPABILITY=hardware-assisted.",
             )
         }
         if (variantTasks.any { (it.startsWith("assemble") || it.startsWith("bundle")) && "release" in it } &&

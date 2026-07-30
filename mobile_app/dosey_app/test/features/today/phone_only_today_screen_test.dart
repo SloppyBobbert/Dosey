@@ -65,18 +65,44 @@ void main() {
       hasLength(1),
     );
   });
+
+  testWidgets(
+    'records the Los Angeles schedule occurrence instead of the UTC date',
+    (tester) async {
+      final fixture = await _Fixture.create(
+        now: DateTime.utc(2040, 1, 2, 1),
+        timezoneId: 'America/Los_Angeles',
+      );
+      addTearDown(fixture.close);
+      await fixture.pump(tester);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Taken'));
+      await tester.pumpAndSettle();
+
+      final events = await fixture.database
+          .select(fixture.database.phoneDoseActionEvents)
+          .get();
+      expect(events, hasLength(1));
+      expect(events.single.localDate, '2040-01-01');
+      expect(events.single.scheduledAt.toUtc(), DateTime.utc(2040, 1, 1, 16));
+    },
+  );
 }
 
 class _Fixture {
-  _Fixture(this.database, this.clock, this.scheduler);
+  _Fixture(this.database, this.clock, this.scheduler, this.timezoneId);
 
   final DoseyDatabase database;
   final ControllableAppClock clock;
   final _RecordingScheduler scheduler;
+  final String timezoneId;
 
-  static Future<_Fixture> create() async {
+  static Future<_Fixture> create({
+    DateTime? now,
+    String timezoneId = 'UTC',
+  }) async {
     final database = DoseyDatabase.inMemory();
-    final clock = ControllableAppClock(DateTime.utc(2040, 1, 2, 8));
+    final clock = ControllableAppClock(now ?? DateTime.utc(2040, 1, 2, 8));
     final scheduler = _RecordingScheduler();
     await LocalScheduleProfileRepository(database).upsertProfile(
       ScheduleProfile(
@@ -99,7 +125,7 @@ class _Fixture {
         updatedAt: clock.now(),
       ),
     );
-    return _Fixture(database, clock, scheduler);
+    return _Fixture(database, clock, scheduler, timezoneId);
   }
 
   Future<void> pump(WidgetTester tester) async {
@@ -110,7 +136,7 @@ class _Fixture {
         runtimeCapability: RuntimeCapability.phoneOnly,
         buildProfile: AppBuildProfile.robot,
         reminderScheduler: scheduler,
-        localTimezoneGateway: const _UtcTimezoneGateway(),
+        localTimezoneGateway: _TimezoneGateway(timezoneId),
         connectivityGateway: FakeConnectivityGateway(),
         missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
         voicePlayer: DoseyVoicePlayer(playbackGateway: _SilentVoiceGateway()),
@@ -152,11 +178,13 @@ class _RecordingScheduler implements ReminderScheduler {
   }
 }
 
-class _UtcTimezoneGateway implements LocalTimezoneGateway {
-  const _UtcTimezoneGateway();
+class _TimezoneGateway implements LocalTimezoneGateway {
+  const _TimezoneGateway(this.timezoneId);
+
+  final String timezoneId;
 
   @override
-  Future<String> localTimezoneName() async => 'UTC';
+  Future<String> localTimezoneName() async => timezoneId;
 }
 
 class _SilentVoiceGateway implements VoicePlaybackGateway {

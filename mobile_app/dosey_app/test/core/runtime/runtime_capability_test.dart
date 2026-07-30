@@ -49,16 +49,49 @@ void main() {
       );
     });
 
-    test('accepts phone-only for either Android profile', () {
+    test('rejects phone-only capability for the Android Personal profile', () {
+      expect(
+        RuntimeCapability.resolve(
+          configuredValue: 'hardware-assisted',
+          buildProfile: AppBuildProfile.personal,
+          platform: AppDevicePlatform.android,
+        ),
+        RuntimeCapability.hardwareAssisted,
+      );
+      expect(
+        () => RuntimeCapability.resolve(
+          configuredValue: 'phone-only',
+          buildProfile: AppBuildProfile.personal,
+          platform: AppDevicePlatform.android,
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('accepts phone-only capability for the Android Robot profile', () {
       expect(
         RuntimeCapability.resolve(
           configuredValue: 'phone-only',
-          buildProfile: AppBuildProfile.personal,
+          buildProfile: AppBuildProfile.robot,
           platform: AppDevicePlatform.android,
         ),
         RuntimeCapability.phoneOnly,
       );
     });
+
+    test(
+      'rejects hardware-assisted capability for the Android Robot profile',
+      () {
+        expect(
+          () => RuntimeCapability.resolve(
+            configuredValue: 'hardware-assisted',
+            buildProfile: AppBuildProfile.robot,
+            platform: AppDevicePlatform.android,
+          ),
+          throwsStateError,
+        );
+      },
+    );
 
     test('rejects phone-only outside Android', () {
       expect(

@@ -613,7 +613,7 @@ void main() {
     expect(find.text('Account'), findsOneWidget);
   });
 
-  testWidgets('selectable Android profile honors its persisted device role', (
+  testWidgets('Personal profile ignores a persisted Robot role', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -629,17 +629,14 @@ void main() {
     await tester.pumpAndSettle();
     await openSettingsAccordion(
       tester,
-      'Device & connection',
+      'Account & household',
       pumpAfterTap: tester.pumpAndSettle,
     );
 
-    expect(find.text('Robot phone'), findsOneWidget);
+    expect(find.text('Personal phone'), findsOneWidget);
+    expect(find.text('Robot phone'), findsNothing);
     expect(find.byType(DropdownButton<AppDeviceRole>), findsNothing);
     expect(find.text('Leave Robot Mode?'), findsNothing);
-    expect(
-      find.text('To use a different phone type, start setup again below.'),
-      findsOneWidget,
-    );
   });
 
   testWidgets('Robot phone exposes setup without account actions', (

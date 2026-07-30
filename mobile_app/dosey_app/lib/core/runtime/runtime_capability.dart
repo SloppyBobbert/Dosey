@@ -46,6 +46,17 @@ enum RuntimeCapability {
     if (capability == phoneOnly && platform != AppDevicePlatform.android) {
       throw StateError('phone-only is valid only for Android builds.');
     }
+    if (platform == AppDevicePlatform.android) {
+      if (buildProfile == AppBuildProfile.robot && capability != phoneOnly) {
+        throw StateError('Robot builds require phone-only capability.');
+      }
+      if (buildProfile == AppBuildProfile.personal &&
+          capability != hardwareAssisted) {
+        throw StateError(
+          'Personal builds require hardware-assisted capability.',
+        );
+      }
+    }
     return capability;
   }
 }

@@ -26,6 +26,7 @@ import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/settings/effective_device_role_source.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/settings/personal_setup_step.dart';
 import 'package:dosey_app/core/settings/robot_onboarding_step.dart';
@@ -135,8 +136,6 @@ void main() {
     await _acceptMedicalNotice(tester);
     await _pumpAppFrame(tester);
 
-    await tester.tap(find.text('Robot'));
-    await _pumpAppFrame(tester);
     await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Use local reminders'));
@@ -167,12 +166,6 @@ void main() {
     await _acceptMedicalNotice(tester);
     await _pumpAppFrame(tester);
 
-    expect(find.text('How will you use this phone?'), findsOneWidget);
-    await tester.tap(find.text('Personal'));
-    await _pumpAppFrame(tester);
-    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
-    await _pumpAppFrame(tester);
-
     expect(find.text('Sign in to continue'), findsOneWidget);
     expect(
       find.text('Personal Mode requires Google sign-in for now.'),
@@ -182,49 +175,51 @@ void main() {
     expect(find.text('Controller'), findsNothing);
   });
 
-  testWidgets('selectable Android build persists Robot local onboarding', (
-    WidgetTester tester,
-  ) async {
-    final database = DoseyDatabase.inMemory();
-    addTearDown(database.close);
+  testWidgets(
+    'specialized Android Robot build retains a persisted Robot role',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
 
-    await tester.pumpWidget(
-      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
-    );
-    await _pumpAppFrame(tester);
-    await _acceptMedicalNotice(tester);
-
-    expect(find.text('How will you use this phone?'), findsOneWidget);
-    await tester.tap(find.text('Robot'));
-    await _pumpAppFrame(tester);
-    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
-    await tester.pumpAndSettle();
-    expect(find.text('Set up this Robot phone'), findsOneWidget);
-    expect(
       await LocalAppSettingsRepository(
         database,
-        defaultRole: AppDeviceRole.androidPersonal,
-      ).getDeviceRole(),
-      AppDeviceRole.androidRobot,
-    );
+        defaultRole: AppDeviceRole.androidRobot,
+      ).setDeviceRole(AppDeviceRole.androidRobot);
+      await tester.pumpWidget(
+        _TestDoseyApp(database: database, buildProfile: AppBuildProfile.robot),
+      );
+      await _pumpAppFrame(tester);
+      await _acceptMedicalNotice(tester);
 
-    await tester.tap(find.text('Use local reminders'));
-    await _pumpAppFrame(tester);
-    expect(find.text('Allow reminder notifications'), findsOneWidget);
-    await tester.tap(find.text('Continue without notifications'));
-    await _pumpAppFrame(tester);
-    expect(find.text('Your Robot phone is ready'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Open Today'));
-    await _pumpAppFrame(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+      await tester.pumpAndSettle();
+      expect(find.text('Set up this Robot phone'), findsOneWidget);
+      expect(
+        await LocalAppSettingsRepository(
+          database,
+          defaultRole: AppDeviceRole.androidPersonal,
+        ).getDeviceRole(),
+        AppDeviceRole.androidRobot,
+      );
 
-    expect(find.text('Today'), findsWidgets);
-    expect(
-      (await database.getAppSettings({'onboarding_completed'})).single.value,
-      'true',
-    );
-  });
+      await tester.tap(find.text('Use local reminders'));
+      await _pumpAppFrame(tester);
+      expect(find.text('Allow reminder notifications'), findsOneWidget);
+      await tester.tap(find.text('Continue without notifications'));
+      await _pumpAppFrame(tester);
+      expect(find.text('Your Robot phone is ready'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Open Today'));
+      await _pumpAppFrame(tester);
 
-  testWidgets('selectable Android build resumes a persisted Robot role', (
+      expect(find.text('Today'), findsWidgets);
+      expect(
+        (await database.getAppSettings({'onboarding_completed'})).single.value,
+        'true',
+      );
+    },
+  );
+
+  testWidgets('Personal build fails closed for a persisted Robot role', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -242,13 +237,46 @@ void main() {
     await _acceptMedicalNotice(tester);
     await _pumpAppFrame(tester);
 
-    expect(find.text('How will you use this phone?'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
-    await tester.pumpAndSettle();
-    expect(find.text('Set up this Robot phone'), findsOneWidget);
-    expect(find.text('Continue with Google'), findsNothing);
+    expect(find.text('How will you use this phone?'), findsNothing);
+    expect(find.text('Set up this Robot phone'), findsNothing);
+    expect(find.text('Continue with Google'), findsOneWidget);
     expect(find.text('Controller'), findsNothing);
     expect(find.text('Robot Mode'), findsNothing);
+  });
+
+  testWidgets('Robot build overrides a persisted Personal role', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await database.setAppSetting(
+      'device_role',
+      AppDeviceRole.androidPersonal.storageValue,
+    );
+
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
+    await _pumpAppFrame(tester);
+    await _acceptMedicalNotice(tester);
+    await _pumpAppFrame(tester);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Set up this Robot phone'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsNothing);
+    expect(
+      await EffectiveDeviceRoleSource(
+        LocalAppSettingsRepository(
+          database,
+          defaultRole: AppDeviceRole.androidRobot,
+        ),
+        profile: AppBuildProfile.robot,
+        platform: AppDevicePlatform.android,
+      ).getDeviceRole(),
+      AppDeviceRole.androidRobot,
+    );
   });
 
   testWidgets(
@@ -273,8 +301,6 @@ void main() {
       );
       await _pumpAppFrame(tester);
       await _acceptMedicalNotice(tester);
-      await tester.tap(find.text('Robot'));
-      await _pumpAppFrame(tester);
       await tester.tap(find.text('Continue'));
       await _pumpAppFrame(tester);
       await tester.tap(find.text('Pair with Personal'));
@@ -434,10 +460,6 @@ void main() {
     await _pumpAppFrame(tester);
 
     await _acceptMedicalNotice(tester);
-    await _pumpAppFrame(tester);
-    await tester.tap(find.text('Personal'));
-    await _pumpAppFrame(tester);
-    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Continue with Google'));
     await _pumpAppFrame(tester);

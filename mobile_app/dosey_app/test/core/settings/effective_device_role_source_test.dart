@@ -19,21 +19,27 @@ void main() {
 
   tearDown(() => database.close());
 
-  test('selectable Android profile uses persisted Robot role', () async {
-    await settings.setDeviceRole(AppDeviceRole.androidRobot);
-    final source = EffectiveDeviceRoleSource(
-      settings,
-      profile: AppBuildProfile.personal,
-      platform: AppDevicePlatform.android,
-    );
+  test(
+    'Personal profile resolves a persisted Robot role to Personal',
+    () async {
+      await settings.setDeviceRole(AppDeviceRole.androidRobot);
+      final source = EffectiveDeviceRoleSource(
+        settings,
+        profile: AppBuildProfile.personal,
+        platform: AppDevicePlatform.android,
+      );
 
-    expect(await source.getDeviceRole(), AppDeviceRole.androidRobot);
-    expect(await source.watchDeviceRole().first, AppDeviceRole.androidRobot);
-    expect(
-      source.capabilities.canHostRobotFor(AppDeviceRole.androidRobot),
-      true,
-    );
-  });
+      expect(await source.getDeviceRole(), AppDeviceRole.androidPersonal);
+      expect(
+        await source.watchDeviceRole().first,
+        AppDeviceRole.androidPersonal,
+      );
+      expect(
+        source.capabilities.canHostRobotFor(AppDeviceRole.androidRobot),
+        false,
+      );
+    },
+  );
 
   test('imported Personal setting cannot disable Robot capabilities', () async {
     await settings.setDeviceRole(AppDeviceRole.androidPersonal);
