@@ -606,7 +606,7 @@ function integer(value: unknown, path: string, minimum: number, maximum?: number
   ) {
     fail('INVALID_INTEGER', path, `Expected an integer from ${minimum}${maximum === undefined ? '' : ` to ${maximum}`}.`);
   }
-  return value;
+  return Object.is(value, -0) ? 0 : value;
 }
 
 function booleanValue(value: unknown, path: string): boolean {
@@ -691,6 +691,18 @@ function timezone(value: unknown, path: string): string {
   const result = stringValue(value, path, 128);
   if (!canonicalTimezoneSet.has(result)) {
     fail('INVALID_TIMEZONE', path, 'Expected a canonical IANA timezone identifier.');
+  }
+  if (result !== 'Factory') {
+    try {
+      new Intl.DateTimeFormat('en-US', {timeZone: result});
+    } catch (error) {
+      if (!(error instanceof RangeError)) throw error;
+      fail(
+        'UNSUPPORTED_TIMEZONE_DATABASE',
+        path,
+        'Canonical timezone is unavailable in the runtime database.',
+      );
+    }
   }
   return result;
 }
@@ -1257,17 +1269,19 @@ export function parseMedicationSyncValue(type: string, value: unknown): unknown 
   }
 }
 
-function canonicalJson(value: unknown): string {
+export function canonicalMedicationSyncJson(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (Array.isArray(value)) {
+    return `[${value.map(canonicalMedicationSyncJson).join(',')}]`;
+  }
   const entries = Object.entries(value as JsonObject).sort(([left], [right]) =>
-    left.localeCompare(right),
+    left < right ? -1 : left > right ? 1 : 0,
   );
-  return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`).join(',')}}`;
+  return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalMedicationSyncJson(entry)}`).join(',')}}`;
 }
 
 export function canonicalMutationHashInput(robotId: string, value: unknown): string {
-  return canonicalJson({
+  return canonicalMedicationSyncJson({
     robotId: id(robotId, '$.robotId'),
     mutation: parseMutation(value, '$.mutation'),
   });

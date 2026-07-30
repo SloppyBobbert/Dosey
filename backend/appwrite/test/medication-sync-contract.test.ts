@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import {
   MedicationSyncContractError,
   assertMatchingIdempotentReplay,
+  canonicalMedicationSyncJson,
   canonicalMutationHashInput,
   medicationSyncCanonicalTimezones,
   parseMedicationSyncValue,
@@ -80,6 +83,334 @@ describe('medication sync contract v1', () => {
           updatedAt: '2026-07-29T08:15:30Z',
         }),
       );
+    }
+  });
+
+  test('maps a runtime-unavailable canonical timezone to a contract error', () => {
+    const original = Intl.DateTimeFormat;
+    Object.defineProperty(Intl, 'DateTimeFormat', {
+      configurable: true,
+      value: function DateTimeFormat(
+        locales?: Intl.LocalesArgument,
+        options?: Intl.DateTimeFormatOptions,
+      ) {
+        if (options?.timeZone === 'America/Los_Angeles') {
+          throw new RangeError('unsupported test timezone');
+        }
+        return new original(locales, options);
+      },
+    });
+
+    try {
+      assert.throws(
+        () =>
+          parseSchedule({
+            contractVersion: 1,
+            id: 'schedule-1',
+            householdId: 'robot-1',
+            medicationId: 'medication-1',
+            label: 'Daily',
+            hour: 8,
+            minute: 30,
+            timezoneId: 'America/Los_Angeles',
+            enabled: true,
+            revision: 1,
+            deletedAt: null,
+            updatedAt: '2026-07-29T08:15:30Z',
+          }),
+        (error: unknown) =>
+          error instanceof MedicationSyncContractError &&
+          error.code === 'UNSUPPORTED_TIMEZONE_DATABASE',
+      );
+    } finally {
+      Object.defineProperty(Intl, 'DateTimeFormat', {
+        configurable: true,
+        value: original,
+      });
+    }
+  });
+
+  test('orders canonical object keys by UTF-16 code units', () => {
+    assert.equal(
+      canonicalMedicationSyncJson({'\uE000': 4, '\u{10000}': 3, é: 2, a: 1}),
+      '{"a":1,"é":2,"𐀀":3,"":4}',
+    );
+  });
+
+  test('matches TypeScript integer semantics for integral JSON numbers', () => {
+    const schedule = {
+      contractVersion: 1,
+      id: 'schedule-1',
+      householdId: 'robot-1',
+      medicationId: 'medication-1',
+      label: 'Daily',
+      hour: 1,
+      minute: 30,
+      timezoneId: 'UTC',
+      enabled: true,
+      revision: 1,
+      deletedAt: null,
+      updatedAt: '2026-07-29T08:15:30Z',
+    };
+
+    assert.equal(parseSchedule({...schedule, hour: -0}).hour, 0);
+    assert.equal(
+      parseSchedule({...schedule, revision: 9_007_199_254_740_991}).revision,
+      9_007_199_254_740_991,
+    );
+    for (const value of [1.5, Number.NaN, Number.POSITIVE_INFINITY, 9_007_199_254_740_992]) {
+      assert.throws(
+        () => parseSchedule({...schedule, revision: value}),
+        MedicationSyncContractError,
+      );
+    }
+  });
+
+  test('timezone generation leaves originals intact when preflight validation fails', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dosey-timezones-'));
+    try {
+      const source = join(directory, 'tzdata.zi');
+      const artifact = join(directory, 'canonical-timezones.json');
+      const typescript = join(directory, 'contract.ts');
+      const dart = join(directory, 'contract.dart');
+      await writeFile(source, '# version 2026b-rearguard\nZ Test/Zone 0 - TEST\n');
+      await writeFile(artifact, 'artifact-original\n');
+      await writeFile(
+        typescript,
+        '// BEGIN GENERATED CANONICAL TIMEZONES\nold\n// END GENERATED CANONICAL TIMEZONES\n',
+      );
+      await writeFile(dart, 'dart-original-without-markers\n');
+      const moduleUrl = new URL(
+        '../../../contracts/medication-sync/v1/generate-timezones.mjs',
+        import.meta.url,
+      ).href;
+      const generator = (await import(moduleUrl)) as {
+        generateTimezones: (...args: readonly unknown[]) => Promise<void>;
+      };
+
+      await assert.rejects(() => generator.generateTimezones(source, artifact, typescript, dart));
+      assert.equal(await readFile(artifact, 'utf8'), 'artifact-original\n');
+      assert.match(await readFile(typescript, 'utf8'), /\nold\n/);
+      assert.equal(await readFile(dart, 'utf8'), 'dart-original-without-markers\n');
+      assert.deepEqual((await readdir(directory)).sort(), [
+        'canonical-timezones.json',
+        'contract.dart',
+        'contract.ts',
+        'tzdata.zi',
+      ]);
+    } finally {
+      await rm(directory, {recursive: true, force: true});
+    }
+  });
+
+  test('timezone generation restores originals after a later replacement fails', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dosey-timezones-'));
+    try {
+      const source = join(directory, 'tzdata.zi');
+      const artifact = join(directory, 'canonical-timezones.json');
+      const typescript = join(directory, 'contract.ts');
+      const dart = join(directory, 'contract.dart');
+      const marked =
+        '// BEGIN GENERATED CANONICAL TIMEZONES\nold\n// END GENERATED CANONICAL TIMEZONES\n';
+      await writeFile(source, '# version 2026b-rearguard\nZ Test/Zone 0 - TEST\n');
+      await writeFile(artifact, 'artifact-original\n');
+      await writeFile(typescript, marked);
+      await writeFile(dart, marked);
+      const moduleUrl = new URL(
+        '../../../contracts/medication-sync/v1/generate-timezones.mjs',
+        import.meta.url,
+      ).href;
+      const generator = (await import(moduleUrl)) as {
+        generateTimezones: (
+          sourcePath: string,
+          outputPath: string,
+          typescriptPath: string,
+          dartPath: string,
+          options: {beforeReplace: (index: number) => void},
+        ) => Promise<void>;
+      };
+
+      await assert.rejects(() =>
+        generator.generateTimezones(source, artifact, typescript, dart, {
+          beforeReplace(index) {
+            if (index === 2) throw new Error('injected later replacement failure');
+          },
+        }),
+      );
+      assert.equal(await readFile(artifact, 'utf8'), 'artifact-original\n');
+      assert.equal(await readFile(typescript, 'utf8'), marked);
+      assert.equal(await readFile(dart, 'utf8'), marked);
+      assert.deepEqual((await readdir(directory)).sort(), [
+        'canonical-timezones.json',
+        'contract.dart',
+        'contract.ts',
+        'tzdata.zi',
+      ]);
+    } finally {
+      await rm(directory, {recursive: true, force: true});
+    }
+  });
+
+  test('timezone generation restores originals when the first replacement fails', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dosey-timezones-'));
+    try {
+      const source = join(directory, 'tzdata.zi');
+      const artifact = join(directory, 'canonical-timezones.json');
+      const typescript = join(directory, 'contract.ts');
+      const dart = join(directory, 'contract.dart');
+      const marked =
+        '// BEGIN GENERATED CANONICAL TIMEZONES\nold\n// END GENERATED CANONICAL TIMEZONES\n';
+      await writeFile(source, '# version 2026b-rearguard\nZ Test/Zone 0 - TEST\n');
+      await writeFile(artifact, 'artifact-original\n');
+      await writeFile(typescript, marked);
+      await writeFile(dart, marked);
+      const moduleUrl = new URL(
+        '../../../contracts/medication-sync/v1/generate-timezones.mjs',
+        import.meta.url,
+      ).href;
+      const generator = (await import(moduleUrl)) as {
+        generateTimezones: (
+          sourcePath: string,
+          outputPath: string,
+          typescriptPath: string,
+          dartPath: string,
+          options: {beforeReplace: (index: number) => void},
+        ) => Promise<void>;
+      };
+
+      await assert.rejects(() =>
+        generator.generateTimezones(source, artifact, typescript, dart, {
+          beforeReplace(index) {
+            if (index === 0) throw new Error('injected first replacement failure');
+          },
+        }),
+      );
+      assert.equal(await readFile(artifact, 'utf8'), 'artifact-original\n');
+      assert.equal(await readFile(typescript, 'utf8'), marked);
+      assert.equal(await readFile(dart, 'utf8'), marked);
+      assert.deepEqual((await readdir(directory)).sort(), [
+        'canonical-timezones.json',
+        'contract.dart',
+        'contract.ts',
+        'tzdata.zi',
+      ]);
+    } finally {
+      await rm(directory, {recursive: true, force: true});
+    }
+  });
+
+  test('timezone generation waits for every staged write before cleaning a staging failure', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dosey-timezones-'));
+    try {
+      const source = join(directory, 'tzdata.zi');
+      const artifact = join(directory, 'canonical-timezones.json');
+      const typescript = join(directory, 'contract.ts');
+      const dart = join(directory, 'contract.dart');
+      const marked =
+        '// BEGIN GENERATED CANONICAL TIMEZONES\nold\n// END GENERATED CANONICAL TIMEZONES\n';
+      await writeFile(source, '# version 2026b-rearguard\nZ Test/Zone 0 - TEST\n');
+      await writeFile(artifact, 'artifact-original\n');
+      await writeFile(typescript, marked);
+      await writeFile(dart, marked);
+      const moduleUrl = new URL(
+        '../../../contracts/medication-sync/v1/generate-timezones.mjs',
+        import.meta.url,
+      ).href;
+      const generator = (await import(moduleUrl)) as {
+        generateTimezones: (
+          sourcePath: string,
+          outputPath: string,
+          typescriptPath: string,
+          dartPath: string,
+          options: {
+            writeTemporary: (
+              path: string,
+              content: string,
+              index: number,
+            ) => Promise<void>;
+          },
+        ) => Promise<void>;
+      };
+
+      await assert.rejects(() =>
+        generator.generateTimezones(source, artifact, typescript, dart, {
+          async writeTemporary(path, content, index) {
+            if (index === 1) throw new Error('injected staging failure');
+            if (index === 2) await new Promise((resolve) => setTimeout(resolve, 30));
+            await writeFile(path, content, {flag: 'wx'});
+          },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.equal(await readFile(artifact, 'utf8'), 'artifact-original\n');
+      assert.equal(await readFile(typescript, 'utf8'), marked);
+      assert.equal(await readFile(dart, 'utf8'), marked);
+      assert.deepEqual((await readdir(directory)).sort(), [
+        'canonical-timezones.json',
+        'contract.dart',
+        'contract.ts',
+        'tzdata.zi',
+      ]);
+    } finally {
+      await rm(directory, {recursive: true, force: true});
+    }
+  });
+
+  test('timezone generation keeps committed targets when backup cleanup fails', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'dosey-timezones-'));
+    try {
+      const source = join(directory, 'tzdata.zi');
+      const artifact = join(directory, 'canonical-timezones.json');
+      const typescript = join(directory, 'contract.ts');
+      const dart = join(directory, 'contract.dart');
+      const marked =
+        '// BEGIN GENERATED CANONICAL TIMEZONES\nold\n// END GENERATED CANONICAL TIMEZONES\n';
+      await writeFile(source, '# version 2026b-rearguard\nZ Test/Zone 0 - TEST\n');
+      await writeFile(artifact, 'artifact-original\n');
+      await writeFile(typescript, marked);
+      await writeFile(dart, marked);
+      const moduleUrl = new URL(
+        '../../../contracts/medication-sync/v1/generate-timezones.mjs',
+        import.meta.url,
+      ).href;
+      const generator = (await import(moduleUrl)) as {
+        generateTimezones: (
+          sourcePath: string,
+          outputPath: string,
+          typescriptPath: string,
+          dartPath: string,
+          options: {
+            removeBackup: (path: string, index: number) => Promise<void>;
+          },
+        ) => Promise<void>;
+      };
+
+      await assert.rejects(() =>
+        generator.generateTimezones(source, artifact, typescript, dart, {
+          async removeBackup(path, index) {
+            if (index === 1) throw new Error('injected backup cleanup failure');
+            await rm(path, {force: true});
+          },
+        }),
+      );
+      const artifactDocument = JSON.parse(await readFile(artifact, 'utf8')) as {
+        zones: string[];
+      };
+      assert.deepEqual(artifactDocument.zones, ['Test/Zone', 'UTC']);
+      const typescriptContent = await readFile(typescript, 'utf8');
+      const dartContent = await readFile(dart, 'utf8');
+      for (const zone of artifactDocument.zones) {
+        assert.match(typescriptContent, new RegExp(JSON.stringify(zone)));
+        assert.match(dartContent, new RegExp(`'${zone}'`));
+      }
+      const entries = await readdir(directory);
+      assert.ok(entries.includes('canonical-timezones.json'));
+      assert.ok(entries.includes('contract.ts'));
+      assert.ok(entries.includes('contract.dart'));
+      assert.equal(entries.some((entry) => entry.includes('.tmp-')), false);
+      assert.equal(entries.filter((entry) => entry.includes('.bak-')).length, 1);
+    } finally {
+      await rm(directory, {recursive: true, force: true});
     }
   });
 
@@ -235,7 +566,7 @@ describe('medication sync contract v1', () => {
 
     assert.equal(
       canonicalMutationHashInput('robot-1', mutation),
-      '{"mutation":{"baseRevision":null,"contractVersion":1,"deviceId":"android-1","entityId":"dose-event-1","entityType":"dose_event","idempotencyKey":"android-1:mutation-1","mutationId":"mutation-1","operation":"append","payload":{"kind":"taken_confirmed","medicationId":"medication-1","occurredAt":"2026-07-29T15:34:12.000Z","occurrence":{"contractVersion":1,"localDate":"2026-07-29","occurrenceId":"schedule-1:2:2026-07-29T15:30:00.000Z","scheduledAt":"2026-07-29T15:30:00.000Z","scheduleId":"schedule-1","scheduleRevision":2,"timezoneId":"America/Los_Angeles"}}},"robotId":"robot-1"}',
+      '{"mutation":{"baseRevision":null,"contractVersion":1,"deviceId":"android-1","entityId":"dose-event-1","entityType":"dose_event","idempotencyKey":"android-1:mutation-1","mutationId":"mutation-1","operation":"append","payload":{"kind":"taken_confirmed","medicationId":"medication-1","occurredAt":"2026-07-29T15:34:12.000Z","occurrence":{"contractVersion":1,"localDate":"2026-07-29","occurrenceId":"schedule-1:2:2026-07-29T15:30:00.000Z","scheduleId":"schedule-1","scheduleRevision":2,"scheduledAt":"2026-07-29T15:30:00.000Z","timezoneId":"America/Los_Angeles"}}},"robotId":"robot-1"}',
     );
     assert.equal(
       canonicalMutationHashInput('robot-1', mutation),

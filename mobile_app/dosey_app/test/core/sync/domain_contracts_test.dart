@@ -5,6 +5,10 @@ import 'package:dosey_app/core/sync/domain_contracts.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  setUpAll(() {
+    _packageRoot = File.fromUri(Platform.script).parent;
+  });
+
   group('medication sync contract v1', () {
     test('accepts every shared valid fixture', () {
       for (final fixture in _fixtures('valid')) {
@@ -33,8 +37,8 @@ void main() {
     });
 
     test('mirrors the shared canonical timezone artifact exactly', () {
-      final file = File(
-        '../../contracts/medication-sync/v1/canonical-timezones.json',
+      final file = _repositoryFile(
+        'contracts/medication-sync/v1/canonical-timezones.json',
       );
       final document =
           jsonDecode(file.readAsStringSync())! as Map<String, Object?>;
@@ -67,6 +71,94 @@ void main() {
         );
       }
     });
+
+    test('orders canonical object keys by UTF-16 code units', () {
+      expect(
+        canonicalMedicationSyncJson({
+          '\uE000': 4,
+          '\u{10000}': 3,
+          'é': 2,
+          'a': 1,
+        }),
+        '{"a":1,"é":2,"𐀀":3,"":4}',
+      );
+    });
+
+    test('accepts integral doubles with TypeScript integer semantics', () {
+      final schedule = <String, Object?>{
+        'contractVersion': 1,
+        'id': 'schedule-1',
+        'householdId': 'robot-1',
+        'medicationId': 'medication-1',
+        'label': 'Daily',
+        'hour': 1,
+        'minute': 30,
+        'timezoneId': 'UTC',
+        'enabled': true,
+        'revision': 1,
+        'deletedAt': null,
+        'updatedAt': '2026-07-29T08:15:30Z',
+      };
+
+      expect(
+        MedicationScheduleContract.fromJson({...schedule, 'hour': -0.0}).hour,
+        0,
+      );
+      expect(
+        MedicationScheduleContract.fromJson({
+          ...schedule,
+          'revision': 9007199254740991.0,
+        }).revision,
+        9007199254740991,
+      );
+      for (final value in <double>[
+        1.5,
+        double.nan,
+        double.infinity,
+        9007199254740992.0,
+      ]) {
+        expect(
+          () => MedicationScheduleContract.fromJson({
+            ...schedule,
+            'revision': value,
+          }),
+          throwsA(isA<MedicationSyncContractException>()),
+          reason: '$value',
+        );
+      }
+    });
+
+    test('rejects object maps with non-string keys using a contract error', () {
+      expect(
+        () => parseMedicationSyncValue('medication', <Object?, Object?>{
+          1: 'bad',
+        }),
+        throwsA(
+          isA<MedicationSyncContractException>().having(
+            (error) => error.code,
+            'code',
+            'INVALID_TYPE',
+          ),
+        ),
+      );
+    });
+
+    test(
+      'loads shared fixtures independently of the process working directory',
+      () {
+        final original = Directory.current;
+        final temporary = Directory.systemTemp.createTempSync(
+          'dosey-fixtures-',
+        );
+        try {
+          Directory.current = temporary;
+          expect(_fixtures('valid'), isNotEmpty);
+        } finally {
+          Directory.current = original;
+          temporary.deleteSync(recursive: true);
+        }
+      },
+    );
 
     test('converts an ordinary occurrence in every canonical timezone', () {
       for (final timezoneId in medicationSyncCanonicalTimezones) {
@@ -467,9 +559,16 @@ void main() {
 }
 
 List<Map<String, Object?>> _fixtures(String name) {
-  final file = File('../../contracts/medication-sync/v1/fixtures/$name.json');
+  final file = _repositoryFile(
+    'contracts/medication-sync/v1/fixtures/$name.json',
+  );
   final document = jsonDecode(file.readAsStringSync())! as Map<String, Object?>;
   return (document['cases']! as List<Object?>)
       .cast<Map<String, Object?>>()
       .toList(growable: false);
 }
+
+late final Directory _packageRoot;
+
+File _repositoryFile(String relativePath) =>
+    File('${_packageRoot.parent.parent.path}/$relativePath');

@@ -901,11 +901,14 @@ Never _fail(String code, String path, String message) {
 
 Map<String, Object?> _object(Object? value, String path) {
   if (value is! Map) _fail('INVALID_TYPE', path, 'Expected an object.');
-  try {
-    return value.cast<String, Object?>();
-  } on Object {
-    _fail('INVALID_TYPE', path, 'Expected an object with string keys.');
+  final result = <String, Object?>{};
+  for (final entry in value.entries) {
+    if (entry.key is! String) {
+      _fail('INVALID_TYPE', path, 'Expected an object with string keys.');
+    }
+    result[entry.key as String] = entry.value;
   }
+  return result;
 }
 
 void _exactKeys(Map<String, Object?> value, List<String> allowed, String path) {
@@ -947,17 +950,23 @@ String _occurrenceId(Object? value, String path) =>
     _string(value, path, maximum: 256);
 
 int _integer(Object? value, String path, {required int minimum, int? maximum}) {
-  if (value is! int ||
-      value > 9007199254740991 ||
-      value < minimum ||
-      (maximum != null && value > maximum)) {
+  final integer = switch (value) {
+    int number => number,
+    double number when number.isFinite && number.truncateToDouble() == number =>
+      number.toInt(),
+    _ => null,
+  };
+  if (integer == null ||
+      integer > 9007199254740991 ||
+      integer < minimum ||
+      (maximum != null && integer > maximum)) {
     _fail(
       'INVALID_INTEGER',
       path,
       'Expected an integer from $minimum${maximum == null ? '' : ' to $maximum'}.',
     );
   }
-  return value;
+  return integer;
 }
 
 bool _boolean(Object? value, String path) {
@@ -1883,6 +1892,9 @@ Object? _canonicalize(Object? value) {
   return value;
 }
 
+String canonicalMedicationSyncJson(Object? value) =>
+    jsonEncode(_canonicalize(value));
+
 void assertMatchingIdempotentReplay(
   String originalRobotId,
   MutationContract original,
@@ -1905,8 +1917,8 @@ void assertMatchingIdempotentReplay(
       'Mutations use different idempotency keys.',
     );
   }
-  if (jsonEncode(_canonicalize(original.toJson())) !=
-      jsonEncode(_canonicalize(replay.toJson()))) {
+  if (canonicalMedicationSyncJson(original.toJson()) !=
+      canonicalMedicationSyncJson(replay.toJson())) {
     _fail(
       'IDEMPOTENCY_KEY_REUSED',
       r'$.idempotencyKey',
