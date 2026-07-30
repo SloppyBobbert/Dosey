@@ -22,19 +22,16 @@ jobs:
   release-android:
     name: Signed Personal and Robot APKs
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
     outputs:
       version: ${{ steps.release.outputs.version }}
       tag: ${{ steps.release.outputs.tag }}
+      source_sha: ${{ steps.release.outputs.source_sha }}
     defaults:
       run:
         working-directory: mobile_app/dosey_app
-    env:
-      ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-      ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-      ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -55,6 +52,9 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Verify immutable release source policy
+        run: bash ../../.github/scripts/check-android-release-source.sh
+
       - name: Validate version and release tag
         id: release
         env:
@@ -62,9 +62,19 @@ jobs:
         run: |
           set -euo pipefail
           PUBSPEC_VERSION=$(awk '/^version: / { print $2; exit }' pubspec.yaml)
+          SOURCE_SHA=$(git rev-parse HEAD)
+          if [ "$SOURCE_SHA" != "$GITHUB_SHA" ]; then
+            echo "Checked-out source $SOURCE_SHA does not match workflow source $GITHUB_SHA." >&2
+            exit 1
+          fi
           if [ "${{ github.event_name }}" = "push" ]; then
             TAG="${GITHUB_REF_NAME}"
             VERSION="${TAG#android-v}"
+            TAG_SHA=$(git rev-list -n 1 "$TAG")
+            if [ "$TAG_SHA" != "$SOURCE_SHA" ]; then
+              echo "Pushed tag $TAG resolves to $TAG_SHA instead of built source $SOURCE_SHA." >&2
+              exit 1
+            fi
           else
             VERSION="$REQUESTED_VERSION"
             TAG="android-v$VERSION"
@@ -72,7 +82,7 @@ jobs:
             if [ -z "$EXISTING" ]; then
               EXISTING=$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)
             fi
-            if [ -n "$EXISTING" ] && [ "$EXISTING" != "$GITHUB_SHA" ]; then
+            if [ -n "$EXISTING" ] && [ "$EXISTING" != "$SOURCE_SHA" ]; then
               echo "Tag $TAG already points to another commit." >&2
               exit 1
             fi
@@ -83,6 +93,31 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Install locked dependencies
+        run: flutter pub get --enforce-lockfile
+
+      - name: Verify generated Drift code
+        run: |
+          dart run build_runner build
+          git diff --exit-code -- lib/core/storage/dosey_database.g.dart
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Verify runtime capability contracts
+        run: >-
+          flutter test
+          test/core/runtime/runtime_capability_test.dart
+          test/core/runtime/runtime_bootstrap_test.dart
+          test/core/runtime/local_runtime_capability_repository_test.dart
 
       - name: Prepare public Appwrite configuration
         env:
@@ -90,11 +125,21 @@ jobs:
           APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
           APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID }}
           APPWRITE_CLAIM_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CLAIM_ROBOT_FUNCTION_ID }}
+          APPWRITE_CREATE_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_ROBOT_FUNCTION_ID }}
+          APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID }}
+          APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID }}
+          APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ${{ vars.APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID }}
+          APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID }}
+          APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID }}
+          APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID }}
         uses: ./.github/actions/prepare-appwrite-env
 
       - name: Validate release signing configuration
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
@@ -112,6 +157,9 @@ jobs:
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/dosey-release.jks" >> "$GITHUB_ENV"
 
       - name: Reject debug signing certificate
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
           CERTIFICATE=$(keytool -list -v -keystore "$ANDROID_KEYSTORE_PATH" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS")
@@ -120,18 +168,26 @@ jobs:
             exit 1
           fi
 
-      - name: Install dependencies
-        run: flutter pub get
-
       - name: Build Personal release APK
-        run: flutter build apk --release --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: flutter build apk --release --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted
 
-      - name: Build Robot release APK
-        run: flutter build apk --release --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
+      - name: Build phone-only Robot release APK
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: flutter build apk --release --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only
 
       - name: Verify APK signers and name artifacts
         env:
           VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_SHA: ${{ steps.release.outputs.source_sha }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           set -euo pipefail
           APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -1)
@@ -151,6 +207,15 @@ jobs:
           done
           cp build/app/outputs/flutter-apk/app-personal-release.apk "Dosey-Personal-$VERSION.apk"
           cp build/app/outputs/flutter-apk/app-robot-release.apk "Dosey-Robot-$VERSION.apk"
+          sha256sum "Dosey-Personal-$VERSION.apk" "Dosey-Robot-$VERSION.apk" > "Dosey-Android-$VERSION-SHA256SUMS.txt"
+          {
+            printf '### Android release evidence\n\n'
+            printf -- '- Source SHA: `%s`\n' "$SOURCE_SHA"
+            printf -- '- Signer SHA-256: `%s`\n\n' "$EXPECTED"
+            printf '```text\n'
+            cat "Dosey-Android-$VERSION-SHA256SUMS.txt"
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload signed release APKs
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -159,6 +224,7 @@ jobs:
           path: |
             mobile_app/dosey_app/Dosey-Personal-${{ steps.release.outputs.version }}.apk
             mobile_app/dosey_app/Dosey-Robot-${{ steps.release.outputs.version }}.apk
+            mobile_app/dosey_app/Dosey-Android-${{ steps.release.outputs.version }}-SHA256SUMS.txt
           if-no-files-found: error
 
       - name: Remove temporary release files
@@ -173,16 +239,70 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out immutable release source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.release-android.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: Download signed release APKs
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: signed-android-release
           path: release-artifacts
 
+      - name: Create immutable release tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-android.outputs.tag }}
+          EXPECTED_SOURCE_SHA: ${{ needs.release-android.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if ! gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+            --raw-field "ref=refs/tags/$TAG" \
+            --raw-field "sha=$EXPECTED_SOURCE_SHA" >/dev/null 2>&1; then
+            TAG_SHA=$(git ls-remote --tags origin "refs/tags/$TAG^{}" | cut -f1)
+            if [ -z "$TAG_SHA" ]; then
+              TAG_SHA=$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)
+            fi
+            if [ "$TAG_SHA" != "$EXPECTED_SOURCE_SHA" ]; then
+              echo "Tag $TAG could not be created at artifact source $EXPECTED_SOURCE_SHA." >&2
+              exit 1
+            fi
+          fi
+          TAG_SHA=$(git ls-remote --tags origin "refs/tags/$TAG^{}" | cut -f1)
+          if [ -z "$TAG_SHA" ]; then
+            TAG_SHA=$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)
+          fi
+          if [ "$TAG_SHA" != "$EXPECTED_SOURCE_SHA" ]; then
+            echo "Tag $TAG resolves to $TAG_SHA instead of artifact source $EXPECTED_SOURCE_SHA." >&2
+            exit 1
+          fi
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ needs.release-android.outputs.tag }}
+          target_commitish: ${{ needs.release-android.outputs.source_sha }}
           name: Dosey Android ${{ needs.release-android.outputs.version }}
           generate_release_notes: true
-          files: release-artifacts/*.apk
+          files: |
+            release-artifacts/*.apk
+            release-artifacts/*-SHA256SUMS.txt
+
+      - name: Verify published tag matches artifact source
+        env:
+          TAG: ${{ needs.release-android.outputs.tag }}
+          EXPECTED_SOURCE_SHA: ${{ needs.release-android.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          TAG_SHA=$(git ls-remote --tags origin "refs/tags/$TAG^{}" | cut -f1)
+          if [ -z "$TAG_SHA" ]; then
+            TAG_SHA=$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)
+          fi
+          if [ "$TAG_SHA" != "$EXPECTED_SOURCE_SHA" ]; then
+            echo "Published tag $TAG resolves to $TAG_SHA instead of artifact source $EXPECTED_SOURCE_SHA." >&2
+            exit 1
+          fi
+          printf -- '- Published tag `%s` verified at `%s`.\n' "$TAG" "$TAG_SHA" >> "$GITHUB_STEP_SUMMARY"

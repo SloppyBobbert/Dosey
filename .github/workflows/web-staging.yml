@@ -26,6 +26,8 @@ concurrency:
 env:
   APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
   APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+  APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID }}
+  APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID }}
   APPWRITE_SITE_ID: ${{ vars.APPWRITE_STAGING_SITE_ID }}
 
 jobs:
@@ -51,14 +53,30 @@ jobs:
           cache: true
       - name: Install locked dependencies
         run: flutter pub get --enforce-lockfile
+      - name: Validate staging web configuration
+        run: |
+          set -euo pipefail
+          test "$APPWRITE_ENDPOINT" = "https://api.dosey.dev/v1" || {
+            printf 'Unexpected Appwrite endpoint\n' >&2
+            exit 1
+          }
+          for name in APPWRITE_PROJECT_ID APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID; do
+            if [ -z "${!name:-}" ]; then
+              printf '%s is required\n' "$name" >&2
+              exit 1
+            fi
+          done
       - name: Build auth-enabled staging web release
         run: |
           flutter build web --release --target=lib/main_web.dart \
             --dart-define=DOSEY_BUILD_PROFILE=personal \
+            --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted \
             --dart-define=WEB_AUTH_ENABLED=true \
             --dart-define=WEB_APP_ORIGIN=https://staging.dosey.dev \
             --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
-            --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID"
+            --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID" \
+            --dart-define=APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" \
+            --dart-define=APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID"
       - name: Verify and archive web contents
         run: |
           set -euo pipefail
@@ -66,6 +84,8 @@ jobs:
           test -s build/web/auth.html
           test -s build/web/flutter_bootstrap.js
           test -s build/web/manifest.json
+          grep -R -Fq -- "$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" build/web
+          grep -R -Fq -- "$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID" build/web
           tar -czf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" -C build/web .
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './index.html'
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-staging.tar.gz" | grep -Fx './auth.html'
