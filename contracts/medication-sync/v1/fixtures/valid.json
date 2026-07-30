@@ -1,0 +1,438 @@
+{
+  "cases": [
+    {
+      "name": "owner role",
+      "type": "householdRole",
+      "value": "owner"
+    },
+    {
+      "name": "member role",
+      "type": "householdRole",
+      "value": "member"
+    },
+    {
+      "name": "active medication",
+      "type": "medication",
+      "value": {
+        "contractVersion": 1,
+        "id": "medication-1",
+        "householdId": "robot-1",
+        "name": "Morning tablet",
+        "pillType": "tablet",
+        "instructions": "Take with water",
+        "revision": 3,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30.000Z"
+      }
+    },
+    {
+      "name": "deleted medication",
+      "type": "medication",
+      "value": {
+        "contractVersion": 1,
+        "id": "medication-2",
+        "householdId": "robot-1",
+        "name": "Old capsule",
+        "pillType": "capsule",
+        "instructions": null,
+        "revision": 4,
+        "deletedAt": "2026-07-29T10:00:00Z",
+        "updatedAt": "2026-07-29T10:00:00Z"
+      }
+    },
+    {
+      "name": "enabled daily schedule",
+      "type": "schedule",
+      "value": {
+        "contractVersion": 1,
+        "id": "schedule-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "label": "Breakfast",
+        "hour": 8,
+        "minute": 30,
+        "timezoneId": "America/Los_Angeles",
+        "enabled": true,
+        "revision": 2,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "occurrence reference",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+        "scheduleId": "schedule-1",
+        "scheduleRevision": 2,
+        "scheduledAt": "2026-07-29T15:30:00Z",
+        "localDate": "2026-07-29",
+        "timezoneId": "America/Los_Angeles"
+      }
+    },
+    {
+      "name": "occurrence id may exceed the general resource id limit",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-very-long-identifier-that-remains-valid-but-produces-an-occurrence-identifier-longer-than-one-hundred-twenty-eight:2:2026-07-29T15:30:00.000Z",
+        "scheduleId": "schedule-very-long-identifier-that-remains-valid-but-produces-an-occurrence-identifier-longer-than-one-hundred-twenty-eight",
+        "scheduleRevision": 2,
+        "scheduledAt": "2026-07-29T15:30:00Z",
+        "localDate": "2026-07-29",
+        "timezoneId": "America/Los_Angeles"
+      }
+    },
+    {
+      "name": "taken is an explicit immutable event",
+      "type": "doseEvent",
+      "value": {
+        "contractVersion": 1,
+        "id": "dose-event-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "occurrence": {
+          "contractVersion": 1,
+          "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+          "scheduleId": "schedule-1",
+          "scheduleRevision": 2,
+          "scheduledAt": "2026-07-29T15:30:00Z",
+          "localDate": "2026-07-29",
+          "timezoneId": "America/Los_Angeles"
+        },
+        "kind": "taken_confirmed",
+        "occurredAt": "2026-07-29T15:34:12Z",
+        "actorAccountId": "account-owner"
+      }
+    },
+    {
+      "name": "create medication mutation",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-create",
+        "deviceId": "android-phone-1",
+        "idempotencyKey": "android-phone-1:mutation-medication-create",
+        "entityType": "medication",
+        "operation": "upsert",
+        "entityId": "medication-3",
+        "baseRevision": null,
+        "payload": {
+          "name": "Evening pill",
+          "pillType": "pill",
+          "instructions": null
+        }
+      }
+    },
+    {
+      "name": "update schedule mutation",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-schedule-update",
+        "deviceId": "web-caregiver-1",
+        "idempotencyKey": "web-caregiver-1:mutation-schedule-update",
+        "entityType": "schedule",
+        "operation": "upsert",
+        "entityId": "schedule-1",
+        "baseRevision": 2,
+        "payload": {
+          "medicationId": "medication-1",
+          "label": "Breakfast",
+          "hour": 9,
+          "minute": 0,
+          "timezoneId": "America/Los_Angeles",
+          "enabled": true
+        }
+      }
+    },
+    {
+      "name": "delete medication mutation",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-delete",
+        "deviceId": "web-caregiver-1",
+        "idempotencyKey": "web-caregiver-1:mutation-medication-delete",
+        "entityType": "medication",
+        "operation": "delete",
+        "entityId": "medication-2",
+        "baseRevision": 4,
+        "payload": null
+      }
+    },
+    {
+      "name": "append explicit dose event mutation",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-dose-event-append",
+        "deviceId": "android-phone-1",
+        "idempotencyKey": "android-phone-1:mutation-dose-event-append",
+        "entityType": "dose_event",
+        "operation": "append",
+        "entityId": "dose-event-1",
+        "baseRevision": null,
+        "payload": {
+          "medicationId": "medication-1",
+          "occurrence": {
+            "contractVersion": 1,
+            "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+            "scheduleId": "schedule-1",
+            "scheduleRevision": 2,
+            "scheduledAt": "2026-07-29T15:30:00Z",
+            "localDate": "2026-07-29",
+            "timezoneId": "America/Los_Angeles"
+          },
+          "kind": "taken_confirmed",
+          "occurredAt": "2026-07-29T15:34:12Z"
+        }
+      }
+    },
+    {
+      "name": "push request scoped by robot id",
+      "type": "pushRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "operations": [
+          {
+            "contractVersion": 1,
+            "mutationId": "mutation-medication-create",
+            "deviceId": "android-phone-1",
+            "idempotencyKey": "android-phone-1:mutation-medication-create",
+            "entityType": "medication",
+            "operation": "upsert",
+            "entityId": "medication-3",
+            "baseRevision": null,
+            "payload": {
+              "name": "Evening pill",
+              "pillType": "pill",
+              "instructions": null
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "applied acknowledgement",
+      "type": "ack",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-create",
+        "outcome": "applied",
+        "revision": 1,
+        "cursor": "1042",
+        "errorCode": null,
+        "conflict": null
+      }
+    },
+    {
+      "name": "changed payload idempotency rejection acknowledgement",
+      "type": "ack",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-create-replay",
+        "outcome": "rejected",
+        "revision": null,
+        "cursor": null,
+        "errorCode": "IDEMPOTENCY_KEY_REUSED",
+        "conflict": null
+      }
+    },
+    {
+      "name": "push response returns per mutation acknowledgements",
+      "type": "pushResponse",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "acknowledgements": [
+          {
+            "contractVersion": 1,
+            "mutationId": "mutation-medication-create",
+            "outcome": "applied",
+            "revision": 1,
+            "cursor": "1042",
+            "errorCode": null,
+            "conflict": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "initial pull request",
+      "type": "pullRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": null,
+        "checkpoint": null,
+        "limit": 100
+      }
+    },
+    {
+      "name": "subsequent pull request uses paired numeric state",
+      "type": "pullRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": "1042",
+        "checkpoint": "1100",
+        "limit": 50
+      }
+    },
+    {
+      "name": "compare and swap conflict",
+      "type": "conflict",
+      "value": {
+        "contractVersion": 1,
+        "entityType": "schedule",
+        "entityId": "schedule-1",
+        "expectedRevision": 1,
+        "actualRevision": 2,
+        "authoritativeRecord": {
+          "contractVersion": 1,
+          "id": "schedule-1",
+          "householdId": "robot-1",
+          "medicationId": "medication-1",
+          "label": "Breakfast",
+          "hour": 8,
+          "minute": 30,
+          "timezoneId": "America/Los_Angeles",
+          "enabled": true,
+          "revision": 2,
+          "deletedAt": null,
+          "updatedAt": "2026-07-29T08:15:30Z"
+        }
+      }
+    },
+    {
+      "name": "conflict acknowledgement",
+      "type": "ack",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-schedule-update",
+        "outcome": "conflict",
+        "revision": null,
+        "cursor": null,
+        "errorCode": null,
+        "conflict": {
+          "contractVersion": 1,
+          "entityType": "schedule",
+          "entityId": "schedule-1",
+          "expectedRevision": 1,
+          "actualRevision": 2,
+          "authoritativeRecord": {
+            "contractVersion": 1,
+            "id": "schedule-1",
+            "householdId": "robot-1",
+            "medicationId": "medication-1",
+            "label": "Breakfast",
+            "hour": 8,
+            "minute": 30,
+            "timezoneId": "America/Los_Angeles",
+            "enabled": true,
+            "revision": 2,
+            "deletedAt": null,
+            "updatedAt": "2026-07-29T08:15:30Z"
+          }
+        }
+      }
+    },
+    {
+      "name": "canonical timezone across a daylight-saving transition",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-dst:3:2026-03-08T07:30:00.000Z",
+        "scheduleId": "schedule-dst",
+        "scheduleRevision": 3,
+        "scheduledAt": "2026-03-08T07:30:00Z",
+        "localDate": "2026-03-08",
+        "timezoneId": "America/New_York"
+      }
+    },
+    {
+      "name": "canonical Factory timezone occurrence",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-factory:1:2026-07-29T12:00:00.000Z",
+        "scheduleId": "schedule-factory",
+        "scheduleRevision": 1,
+        "scheduledAt": "2026-07-29T12:00:00Z",
+        "localDate": "2026-07-29",
+        "timezoneId": "Factory"
+      }
+    },
+    {
+      "name": "four-digit low year occurrence",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-ancient:1:0001-07-29T12:00:00.000Z",
+        "scheduleId": "schedule-ancient",
+        "scheduleRevision": 1,
+        "scheduledAt": "0001-07-29T12:00:00Z",
+        "localDate": "0001-07-29",
+        "timezoneId": "UTC"
+      }
+    },
+    {
+      "name": "ordered pull page",
+      "type": "pullPage",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": "1041",
+        "checkpoint": "1100",
+        "nextCursor": "1100",
+        "hasMore": false,
+        "changes": [
+          {
+            "cursor": "1042",
+            "entityType": "medication",
+            "entityId": "medication-1",
+            "operation": "upsert",
+            "record": {
+              "contractVersion": 1,
+              "id": "medication-1",
+              "householdId": "robot-1",
+              "name": "Morning tablet",
+              "pillType": "tablet",
+              "instructions": "Take with water",
+              "revision": 3,
+              "deletedAt": null,
+              "updatedAt": "2026-07-29T08:15:30Z"
+            }
+          },
+          {
+            "cursor": "1043",
+            "entityType": "dose_event",
+            "entityId": "dose-event-1",
+            "operation": "append",
+            "record": {
+              "contractVersion": 1,
+              "id": "dose-event-1",
+              "householdId": "robot-1",
+              "medicationId": "medication-1",
+              "occurrence": {
+                "contractVersion": 1,
+                "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+                "scheduleId": "schedule-1",
+                "scheduleRevision": 2,
+                "scheduledAt": "2026-07-29T15:30:00Z",
+                "localDate": "2026-07-29",
+                "timezoneId": "America/Los_Angeles"
+              },
+              "kind": "taken_confirmed",
+              "occurredAt": "2026-07-29T15:34:12Z",
+              "actorAccountId": "account-owner"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
