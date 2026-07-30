@@ -18,9 +18,13 @@ abstract interface class ReminderRepository {
 }
 
 class LocalReminderRepository implements ReminderRepository {
-  const LocalReminderRepository(this._database);
+  const LocalReminderRepository(
+    this._database, {
+    this.hardwareEffectsEnabled = true,
+  });
 
   final DoseyDatabase _database;
+  final bool hardwareEffectsEnabled;
 
   /// Watches schedules in clock order so Today and Schedule share one ordering.
   @override
@@ -62,9 +66,15 @@ class LocalReminderRepository implements ReminderRepository {
     final existing = await (_database.select(
       _database.reminderSchedules,
     )..where((row) => row.id.equals(schedule.id))).getSingleOrNull();
+    final revision = switch (existing) {
+      null => schedule.revision,
+      final row when _changesOccurrence(row, schedule) => row.revision + 1,
+      final row => row.revision,
+    };
     // If the schedule no longer maps to the same enabled dose, clear its slot
     // so the carousel cannot dispense stale loading instructions.
     final clearsLoadedSlot =
+        hardwareEffectsEnabled &&
         existing != null &&
         (!schedule.isEnabled ||
             existing.prescriptionId != schedule.prescriptionId ||
@@ -86,12 +96,13 @@ class LocalReminderRepository implements ReminderRepository {
               profileId: Value(schedule.profileId),
               hour: schedule.hour,
               minute: schedule.minute,
+              revision: Value(revision),
               isEnabled: schedule.isEnabled,
               createdAt: schedule.createdAt.toUtc(),
               updatedAt: schedule.updatedAt.toUtc(),
             ),
           );
-      if (existing != null) {
+      if (hardwareEffectsEnabled && existing != null) {
         final affectedProfiles = <String>{};
         final loadAffectingChange =
             existing.isEnabled != schedule.isEnabled ||
@@ -129,13 +140,18 @@ class LocalReminderRepository implements ReminderRepository {
       final existing = await (_database.select(
         _database.reminderSchedules,
       )..where((schedule) => schedule.id.equals(id))).getSingleOrNull();
-      await (_database.delete(
-        _database.carouselSlots,
-      )..where((slot) => slot.scheduleId.equals(id))).go();
+      if (hardwareEffectsEnabled) {
+        await (_database.delete(
+          _database.carouselSlots,
+        )..where((slot) => slot.scheduleId.equals(id))).go();
+      }
       final deleted = await (_database.delete(
         _database.reminderSchedules,
       )..where((schedule) => schedule.id.equals(id))).go();
-      if (deleted > 0 && existing != null && existing.isEnabled) {
+      if (hardwareEffectsEnabled &&
+          deleted > 0 &&
+          existing != null &&
+          existing.isEnabled) {
         await LocalGuidedCarouselLoadRepository.markActiveLoadStaleInDatabase(
           _database,
           profileId: existing.profileId,
@@ -162,10 +178,22 @@ class LocalReminderRepository implements ReminderRepository {
       profileId: row.profileId,
       hour: row.hour,
       minute: row.minute,
+      revision: row.revision,
       isEnabled: row.isEnabled,
       createdAt: row.createdAt.toUtc(),
       updatedAt: row.updatedAt.toUtc(),
     );
+  }
+
+  static bool _changesOccurrence(
+    ReminderScheduleRow existing,
+    ReminderSchedule schedule,
+  ) {
+    return existing.prescriptionId != schedule.prescriptionId ||
+        existing.profileId != schedule.profileId ||
+        existing.hour != schedule.hour ||
+        existing.minute != schedule.minute ||
+        existing.isEnabled != schedule.isEnabled;
   }
 
   static void _validateSchedule(ReminderSchedule schedule) {

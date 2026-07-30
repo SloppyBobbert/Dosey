@@ -19,19 +19,28 @@ import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:dosey_app/features/settings/settings_screen.dart';
 import 'package:dosey_app/features/shell/robot_face_shell_controller.dart';
 import 'package:dosey_app/features/today/today_screen.dart';
+import 'package:dosey_app/features/today/phone_only_today_screen.dart';
 import 'package:flutter/material.dart';
 
 final doseyRouteObserver = RouteObserver<ModalRoute<void>>();
+
+enum DoseyShellStartDestination { automatic, today, medications, settings }
 
 class DoseyShell extends StatefulWidget {
   const DoseyShell({
     super.key,
     this.forceTodayTab = false,
     this.startOnController = false,
+    this.startDestination = DoseyShellStartDestination.automatic,
+    this.onPersonalMedicationCompleted,
+    this.onPersonalPairingCompleted,
   });
 
   final bool forceTodayTab;
   final bool startOnController;
+  final DoseyShellStartDestination startDestination;
+  final Future<void> Function()? onPersonalMedicationCompleted;
+  final Future<void> Function()? onPersonalPairingCompleted;
 
   @override
   State<DoseyShell> createState() => _DoseyShellState();
@@ -110,21 +119,24 @@ class _DoseyShellState extends State<DoseyShell>
           .watchSettings()
           .listen(_handleRobotFaceSettingsChanged);
     }
-    if (!identical(dependencies.controller, _controllerEventSource)) {
+    final hardware = dependencies.hardware;
+    final controller = hardware?.controller;
+    if (!identical(controller, _controllerEventSource)) {
       unawaited(_controllerEventSubscription?.cancel());
-      _controllerEventSource = dependencies.controller;
-      _controllerEventSubscription = switch (dependencies.controller) {
+      _controllerEventSource = controller;
+      _controllerEventSubscription = switch (controller) {
         final ControllerEventGateway eventGateway =>
           eventGateway.watchControllerEvents().listen(_handleControllerEvent),
         _ => null,
       };
     }
-    if (!identical(dependencies.robotFaceController, _robotFaceStateSource)) {
+    final robotFaceController = dependencies.robotFaceController;
+    if (!identical(robotFaceController, _robotFaceStateSource)) {
       unawaited(_robotFaceStateSubscription?.cancel());
-      _robotFaceStateSource = dependencies.robotFaceController;
-      _robotFaceStateSubscription = dependencies.robotFaceController
-          .watchState()
-          .listen(_handleRobotFaceStateChanged);
+      _robotFaceStateSource = robotFaceController;
+      _robotFaceStateSubscription = robotFaceController.watchState().listen(
+        _handleRobotFaceStateChanged,
+      );
     }
     if (!identical(dependencies.demoScenarios, _demoScenarios)) {
       unawaited(_demoScenarioSubscription?.cancel());
@@ -214,7 +226,11 @@ class _DoseyShellState extends State<DoseyShell>
         _currentOrientation = orientation;
         final previousOrientation = _previousOrientation;
         _previousOrientation = orientation;
-        final tabs = _buildTabs(role, isDemo: dependencies.isDemo);
+        final tabs = _buildTabs(
+          role,
+          isDemo: dependencies.isDemo,
+          hasHardware: dependencies.hardware != null,
+        );
         final selectedIndex = _selectedIndexForTabs(tabs, role, orientation);
         final navigationTabs = tabs
             .where((tab) => tab.destination != null)
@@ -278,7 +294,11 @@ class _DoseyShellState extends State<DoseyShell>
     );
   }
 
-  List<_ShellTab> _buildTabs(AppDeviceRole role, {required bool isDemo}) {
+  List<_ShellTab> _buildTabs(
+    AppDeviceRole role, {
+    required bool isDemo,
+    required bool hasHardware,
+  }) {
     return [
       _ShellTab(
         id: _ShellTabId.today,
@@ -288,10 +308,12 @@ class _DoseyShellState extends State<DoseyShell>
           selectedIcon: Tooltip(message: 'Today', child: Icon(Icons.today)),
           label: 'Today',
         ),
-        screenBuilder: (selectedIndex, tabIndex) => TodayScreen(
-          onOpenCarousel: _openCarousel,
-          onOpenMaintenance: _openDeviceAttention,
-        ),
+        screenBuilder: (selectedIndex, tabIndex) => hasHardware
+            ? TodayScreen(
+                onOpenCarousel: _openCarousel,
+                onOpenMaintenance: _openDeviceAttention,
+              )
+            : const PhoneOnlyTodayScreen(),
       ),
       _ShellTab(
         id: _ShellTabId.medications,
@@ -307,17 +329,16 @@ class _DoseyShellState extends State<DoseyShell>
           ),
           label: 'Medications',
         ),
-        screenBuilder: (selectedIndex, tabIndex) => MedicationsHubScreen(
-          onOpenSchedules: () => _pushMedicationRoute(
-            title: 'Schedules',
-            child: const RemindersScreen(),
-          ),
-          onOpenPrescriptions: () => _pushMedicationRoute(
-            title: 'Prescriptions',
-            child: const PrescriptionsScreen(),
-          ),
-          onManageCarousel: _openCarousel,
-        ),
+        screenBuilder: (selectedIndex, tabIndex) => hasHardware
+            ? MedicationsHubScreen(
+                onOpenSchedules: _openSchedules,
+                onOpenPrescriptions: _openPrescriptions,
+                onManageCarousel: _openCarousel,
+              )
+            : _PhoneOnlyMedicationsHub(
+                onOpenSchedules: _openSchedules,
+                onOpenPrescriptions: _openPrescriptions,
+              ),
       ),
       // iOS and Personal Mode never expose the mounted robot face tab.
       if (role.canHostRobot)
@@ -330,15 +351,16 @@ class _DoseyShellState extends State<DoseyShell>
             onLongPress: _handleLongPressExit,
           ),
         ),
-      _ShellTab(
-        id: _ShellTabId.carousel,
-        title: 'Carousel',
-        destination: null,
-        screenBuilder: (selectedIndex, tabIndex) => CarouselHubScreen(
-          key: ValueKey('carousel-$_carouselNavigationRequest'),
+      if (hasHardware)
+        _ShellTab(
+          id: _ShellTabId.carousel,
+          title: 'Carousel',
+          destination: null,
+          screenBuilder: (selectedIndex, tabIndex) => CarouselHubScreen(
+            key: ValueKey('carousel-$_carouselNavigationRequest'),
+          ),
         ),
-      ),
-      if (isDemo && role.canHostRobot)
+      if (isDemo && role.canHostRobot && hasHardware)
         _ShellTab(
           id: _ShellTabId.guidedTrial,
           title: 'Guided trial',
@@ -366,10 +388,21 @@ class _DoseyShellState extends State<DoseyShell>
           sectionTarget: _settingsSectionTarget,
           openMaintenanceRequest: _maintenanceNavigationRequest,
           onMaintenanceRequestAcknowledged: _acknowledgeMaintenanceRequest,
+          onPersonalPairingCompleted: widget.onPersonalPairingCompleted,
         ),
       ),
     ];
   }
+
+  void _openSchedules() =>
+      _pushMedicationRoute(title: 'Schedules', child: const RemindersScreen());
+
+  void _openPrescriptions() => _pushMedicationRoute(
+    title: 'Prescriptions',
+    child: PrescriptionsScreen(
+      onPrescriptionUpserted: widget.onPersonalMedicationCompleted,
+    ),
+  );
 
   static AppDeviceRole _resolvedRole(
     AppDeviceRole? storedRole,
@@ -782,6 +815,16 @@ class _DoseyShellState extends State<DoseyShell>
     AppDeviceRole role, {
     RobotFaceShellOrientation? orientation,
   }) {
+    switch (widget.startDestination) {
+      case DoseyShellStartDestination.today:
+        return _ShellTabId.today;
+      case DoseyShellStartDestination.medications:
+        return _ShellTabId.medications;
+      case DoseyShellStartDestination.settings:
+        return _ShellTabId.settings;
+      case DoseyShellStartDestination.automatic:
+        break;
+    }
     if (widget.forceTodayTab) {
       return _ShellTabId.today;
     }
@@ -922,5 +965,46 @@ class _ShellTab {
 
   Widget buildScreen(int selectedIndex, int tabIndex) {
     return screenBuilder(selectedIndex, tabIndex);
+  }
+}
+
+class _PhoneOnlyMedicationsHub extends StatelessWidget {
+  const _PhoneOnlyMedicationsHub({
+    required this.onOpenSchedules,
+    required this.onOpenPrescriptions,
+  });
+
+  final VoidCallback onOpenSchedules;
+  final VoidCallback onOpenPrescriptions;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 24),
+      children: [
+        Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.alarm_outlined),
+                title: const Text('Schedules'),
+                subtitle: const Text('Change medication times'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: onOpenSchedules,
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.medication_outlined),
+                title: const Text('Prescriptions'),
+                subtitle: const Text('Add or update medications'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: onOpenPrescriptions,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }

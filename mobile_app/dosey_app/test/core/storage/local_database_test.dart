@@ -8,7 +8,7 @@ import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart'
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:dosey_app/features/robot_face/robot_face_settings.dart';
 import 'package:dosey_app/features/robot_face/robot_face_settings_repository.dart';
 import 'package:drift/native.dart';
@@ -768,6 +768,226 @@ void main() {
     expect(await settings.watchOnboardingCompleted().first, isTrue);
   });
 
+  test(
+    'populated schema sixteen upgrades schedules and sync storage',
+    () async {
+      final executor = NativeDatabase.memory(
+        setup: (database) {
+          database
+            ..execute('''
+            CREATE TABLE reminder_schedules (
+              id TEXT NOT NULL PRIMARY KEY,
+              label TEXT NOT NULL,
+              prescription_id TEXT NULL,
+              profile_id TEXT NOT NULL DEFAULT 'schedule-1',
+              hour INTEGER NOT NULL,
+              minute INTEGER NOT NULL,
+              is_enabled INTEGER NOT NULL CHECK (is_enabled IN (0, 1)),
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              CHECK (hour >= 0 AND hour <= 23),
+              CHECK (minute >= 0 AND minute <= 59)
+            );
+          ''')
+            ..execute('''
+            INSERT INTO reminder_schedules (
+              id, label, profile_id, hour, minute, is_enabled,
+              created_at, updated_at
+            ) VALUES ('morning', 'Morning', 'schedule-1', 8, 30, 1, 0, 0);
+          ''')
+            ..execute('PRAGMA user_version = 16;');
+        },
+      );
+      final database = DoseyDatabase(executor);
+      addTearDown(database.close);
+
+      final schedules = await database.select(database.reminderSchedules).get();
+
+      expect(schedules.single.id, 'morning');
+      expect(schedules.single.revision, 1);
+      expect(
+        await database.select(database.phoneDoseActionEvents).get(),
+        isEmpty,
+      );
+      expect(
+        await database.select(database.syncOutboxMutations).get(),
+        isEmpty,
+      );
+      expect(await database.select(database.syncCursors).get(), isEmpty);
+      expect(await database.select(database.syncConflicts).get(), isEmpty);
+    },
+  );
+
+  test('schema seventeen migration failure rolls back atomically', () async {
+    final sqlite = sqlite3.openInMemory();
+    addTearDown(sqlite.close);
+    sqlite
+      ..execute('''
+        CREATE TABLE reminder_schedules (
+          id TEXT NOT NULL PRIMARY KEY,
+          label TEXT NOT NULL,
+          prescription_id TEXT NULL,
+          profile_id TEXT NOT NULL DEFAULT 'schedule-1',
+          hour INTEGER NOT NULL,
+          minute INTEGER NOT NULL,
+          is_enabled INTEGER NOT NULL CHECK (is_enabled IN (0, 1)),
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      ''')
+      ..execute('''
+        INSERT INTO reminder_schedules (
+          id, label, profile_id, hour, minute, is_enabled,
+          created_at, updated_at
+        ) VALUES ('morning', 'Morning', 'schedule-1', 8, 30, 1, 0, 0);
+      ''')
+      // An index with the first v17 table name forces CREATE TABLE to fail after
+      // the revision ALTER, proving the migration transaction is all-or-none.
+      ..execute(
+        'CREATE INDEX phone_dose_action_events ON reminder_schedules(id);',
+      )
+      ..execute('PRAGMA user_version = 16;');
+    final database = DoseyDatabase(
+      DatabaseConnection(NativeDatabase.opened(sqlite)),
+    );
+
+    await expectLater(
+      database.select(database.reminderSchedules).get(),
+      throwsA(isA<SqliteException>()),
+    );
+
+    expect(sqlite.userVersion, 16);
+    expect(
+      sqlite
+          .select("PRAGMA table_info('reminder_schedules');")
+          .map((row) => row['name']),
+      isNot(contains('revision')),
+    );
+    expect(
+      sqlite.select('SELECT id, label FROM reminder_schedules;').single,
+      containsPair('id', 'morning'),
+    );
+    expect(
+      sqlite.select(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name IN ('sync_outbox_mutations', 'sync_cursors', "
+        "'sync_conflicts');",
+      ),
+      isEmpty,
+    );
+  });
+
+  test('populated schema eighteen upgrades scoped action storage', () async {
+    final sqlite = sqlite3.openInMemory();
+    addTearDown(sqlite.close);
+    _createSchemaEighteenPhoneTables(sqlite);
+    sqlite
+      ..execute(
+        "INSERT INTO phone_dose_action_events VALUES ('event-1', 'occurrence-1', 'schedule-1', 1, 0, '2040-01-02', 'UTC', 'med-1', 'skipped', 0, 0, 'key-1', 0);",
+      )
+      ..execute(
+        "INSERT INTO sync_outbox_mutations (mutation_id, device_id, idempotency_key, entity_type, operation, entity_id, payload_json, state, attempt_count, created_at, updated_at) VALUES ('mutation-1', 'device-1', 'mutation-key', 'dose_event', 'append', 'event-1', '{}', 'pending', 0, 0, 0);",
+      )
+      ..execute('PRAGMA user_version = 18;');
+    final database = DoseyDatabase(
+      DatabaseConnection(NativeDatabase.opened(sqlite)),
+    );
+    addTearDown(database.close);
+
+    final event = await database
+        .select(database.phoneDoseActionEvents)
+        .getSingle();
+    final mutation = await database
+        .select(database.syncOutboxMutations)
+        .getSingle();
+
+    expect(event.id, 'event-1');
+    expect(event.deviceId, 'legacy-unknown-device');
+    expect(mutation.mutationId, 'mutation-1');
+    expect(mutation.scopeState, 'local_only');
+    expect(mutation.actorAccountId, isNull);
+    expect(mutation.robotId, isNull);
+    await _insertMigratedScopedMutation(
+      database,
+      mutationId: 'bound-robot-1',
+      actorAccountId: 'account-1',
+      robotId: 'robot-1',
+      idempotencyKey: 'mutation-key',
+    );
+    await _insertMigratedScopedMutation(
+      database,
+      mutationId: 'bound-robot-2',
+      actorAccountId: 'account-1',
+      robotId: 'robot-2',
+      idempotencyKey: 'mutation-key',
+    );
+    await expectLater(
+      _insertMigratedScopedMutation(
+        database,
+        mutationId: 'bound-robot-1-other-actor',
+        actorAccountId: 'account-2',
+        robotId: 'robot-1',
+        idempotencyKey: 'mutation-key',
+      ),
+      throwsA(isA<SqliteException>()),
+    );
+    expect(
+      sqlite
+          .select(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name IN "
+            "('sync_outbox_local_idempotency_idx', "
+            "'sync_outbox_bound_robot_idempotency_idx') ORDER BY name;",
+          )
+          .map((row) => row['name']),
+      [
+        'sync_outbox_bound_robot_idempotency_idx',
+        'sync_outbox_local_idempotency_idx',
+      ],
+    );
+    expect(sqlite.userVersion, 19);
+  });
+
+  test('schema nineteen migration failure rolls back atomically', () async {
+    final sqlite = sqlite3.openInMemory();
+    addTearDown(sqlite.close);
+    _createSchemaEighteenPhoneTables(sqlite);
+    sqlite
+      ..execute(
+        "INSERT INTO phone_dose_action_events VALUES ('event-1', 'occurrence-1', 'schedule-1', 1, 0, '2040-01-02', 'UTC', 'med-1', 'skipped', 0, 0, 'key-1', 0);",
+      )
+      ..execute('CREATE TABLE migration_collision (id TEXT NOT NULL);')
+      ..execute(
+        'CREATE INDEX sync_outbox_mutations_scoped_pending_idx ON migration_collision(id);',
+      )
+      ..execute('PRAGMA user_version = 18;');
+    final database = DoseyDatabase(
+      DatabaseConnection(NativeDatabase.opened(sqlite)),
+    );
+
+    await expectLater(
+      database.select(database.phoneDoseActionEvents).get(),
+      throwsA(isA<SqliteException>()),
+    );
+
+    expect(sqlite.userVersion, 18);
+    expect(
+      sqlite
+          .select("PRAGMA table_info('phone_dose_action_events');")
+          .map((row) => row['name']),
+      isNot(contains('device_id')),
+    );
+    expect(
+      sqlite.select('SELECT id FROM phone_dose_action_events;').single['id'],
+      'event-1',
+    );
+    expect(
+      sqlite
+          .select("PRAGMA table_info('sync_outbox_mutations');")
+          .map((row) => row['name']),
+      isNot(contains('scope_state')),
+    );
+  });
+
   test('migration from schema one creates current schedule tables', () async {
     final executor = NativeDatabase.memory(
       setup: (database) {
@@ -1484,6 +1704,52 @@ void main() {
       expect(alert.resolvedAt, equals(null));
     },
   );
+}
+
+Future<void> _insertMigratedScopedMutation(
+  DoseyDatabase database, {
+  required String mutationId,
+  required String actorAccountId,
+  required String robotId,
+  required String idempotencyKey,
+}) {
+  return database.customStatement(
+    '''
+    INSERT INTO sync_outbox_mutations (
+      mutation_id, device_id, actor_account_id, robot_id, scope_state,
+      idempotency_key, entity_type, operation, entity_id, payload_json,
+      state, attempt_count, created_at, updated_at
+    ) VALUES (?, 'device-1', ?, ?, 'bound', ?, 'dose_event', 'append', ?,
+      '{}', 'pending', 0, 0, 0);
+  ''',
+    [mutationId, actorAccountId, robotId, idempotencyKey, 'event-$mutationId'],
+  );
+}
+
+void _createSchemaEighteenPhoneTables(Database sqlite) {
+  sqlite
+    ..execute('''
+      CREATE TABLE phone_dose_action_events (
+        id TEXT NOT NULL PRIMARY KEY, occurrence_id TEXT NOT NULL,
+        schedule_id TEXT NOT NULL, schedule_revision INTEGER NOT NULL,
+        scheduled_at INTEGER NOT NULL, local_date TEXT NOT NULL,
+        timezone_id TEXT NOT NULL, medication_id TEXT NOT NULL,
+        kind TEXT NOT NULL, occurred_at INTEGER NOT NULL,
+        marks_dose_taken INTEGER NOT NULL, idempotency_key TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL
+      );
+    ''')
+    ..execute('''
+      CREATE TABLE sync_outbox_mutations (
+        mutation_id TEXT NOT NULL PRIMARY KEY, device_id TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL UNIQUE, entity_type TEXT NOT NULL,
+        operation TEXT NOT NULL, entity_id TEXT NOT NULL,
+        base_revision INTEGER NULL, payload_json TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'pending', attempt_count INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at INTEGER NULL, last_attempt_at INTEGER NULL,
+        last_error_code TEXT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+    ''');
 }
 
 NativeDatabase _schemaEightExecutor({required String status}) {

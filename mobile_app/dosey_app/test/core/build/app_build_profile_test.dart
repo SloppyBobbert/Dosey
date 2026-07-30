@@ -20,20 +20,25 @@ void main() {
     final robot = AppBuildProfile.robot.resolve(AppDevicePlatform.android);
     final iosRobotDefine = AppBuildProfile.robot.resolve(AppDevicePlatform.ios);
 
-    expect(personal.fixedRole, AppDeviceRole.androidPersonal);
-    expect(personal.requiresSignIn, isTrue);
-    expect(personal.canHostRobot, isFalse);
-    expect(personal.showsRobotFace, isFalse);
-    expect(personal.showsRobotPhoneSetup, isFalse);
+    expect(personal.defaultRole, AppDeviceRole.androidPersonal);
+    expect(
+      personal.allowedRoles,
+      containsAll([AppDeviceRole.androidPersonal, AppDeviceRole.androidRobot]),
+    );
+    expect(personal.requiresSignInFor(AppDeviceRole.androidPersonal), isTrue);
+    expect(personal.canHostRobotFor(AppDeviceRole.androidRobot), isTrue);
+    expect(personal.showsRobotFaceFor(AppDeviceRole.androidRobot), isTrue);
 
-    expect(robot.fixedRole, AppDeviceRole.androidRobot);
-    expect(robot.requiresSignIn, isFalse);
-    expect(robot.canHostRobot, isTrue);
-    expect(robot.showsRobotFace, isTrue);
-    expect(robot.showsRobotPhoneSetup, isTrue);
+    expect(robot.defaultRole, AppDeviceRole.androidRobot);
+    expect(robot.allowedRoles, [AppDeviceRole.androidRobot]);
+    expect(robot.requiresSignInFor(AppDeviceRole.androidRobot), isFalse);
+    expect(robot.canHostRobotFor(AppDeviceRole.androidRobot), isTrue);
+    expect(robot.showsRobotFaceFor(AppDeviceRole.androidRobot), isTrue);
+    expect(robot.showsRobotPhoneSetupFor(AppDeviceRole.androidRobot), isTrue);
 
-    expect(iosRobotDefine.fixedRole, AppDeviceRole.iosPersonal);
-    expect(iosRobotDefine.requiresSignIn, isTrue);
-    expect(iosRobotDefine.canHostRobot, isFalse);
+    expect(iosRobotDefine.defaultRole, AppDeviceRole.iosPersonal);
+    expect(iosRobotDefine.allowedRoles, [AppDeviceRole.iosPersonal]);
+    expect(iosRobotDefine.requiresSignInFor(AppDeviceRole.iosPersonal), isTrue);
+    expect(iosRobotDefine.canHostRobotFor(AppDeviceRole.iosPersonal), isFalse);
   });
 }

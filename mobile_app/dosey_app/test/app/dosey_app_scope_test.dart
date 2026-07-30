@@ -15,16 +15,21 @@ import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:dosey_app/core/permissions/notification_permission_gateway.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/runtime/runtime_capability.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/sync/sync_outbox_repository.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
+import 'package:dosey_app/features/shell/dosey_shell.dart';
+import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:drift/drift.dart' hide isNull, isNotNull;
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -47,6 +52,167 @@ void main() {
 
     expect(dependencies, isNull);
   });
+
+  testWidgets('phone-only scope does not construct hardware dependencies', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    var bleFactoryCalls = 0;
+    var permissionFactoryCalls = 0;
+    final medicationSync = _RecordingMedicationSyncOutboxDrain();
+    late DoseyAppDependencies dependencies;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          runtimeCapability: RuntimeCapability.phoneOnly,
+          reminderScheduler: _FakeReminderScheduler(),
+          connectivityGateway: _FakeConnectivityGateway(),
+          missedDoseReconciliationService:
+              _FakeMissedDoseReconciliationService(),
+          medicationSyncOutboxDrain: medicationSync,
+          voicePlayer: DoseyVoicePlayer(
+            playbackGateway: _StoppingVoicePlaybackGateway(),
+          ),
+          bleGatewayFactory: () {
+            bleFactoryCalls += 1;
+            return _FakeBleGateway();
+          },
+          permissionGatewayFactory: () {
+            permissionFactoryCalls += 1;
+            return _FakePermissionGateway();
+          },
+          child: Builder(
+            builder: (context) {
+              dependencies = DoseyAppScope.of(context);
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(dependencies.runtimeCapability, RuntimeCapability.phoneOnly);
+    expect(dependencies.hardware, isNull);
+    expect(medicationSync.drainCalls, greaterThan(0));
+    expect(bleFactoryCalls, 0);
+    expect(permissionFactoryCalls, 0);
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('phone-only Robot renders its software face without hardware', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    late DoseyAppDependencies dependencies;
+
+    await tester.pumpWidget(
+      DoseyAppScope(
+        database: database,
+        buildProfile: AppBuildProfile.robot,
+        runtimeCapability: RuntimeCapability.phoneOnly,
+        reminderScheduler: _FakeReminderScheduler(),
+        connectivityGateway: _FakeConnectivityGateway(),
+        missedDoseReconciliationService: _FakeMissedDoseReconciliationService(),
+        voicePlayer: DoseyVoicePlayer(
+          playbackGateway: _StoppingVoicePlaybackGateway(),
+        ),
+        child: Builder(
+          builder: (context) {
+            dependencies = DoseyAppScope.of(context);
+            return const MaterialApp(home: DoseyShell());
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(dependencies.hardware, isNull);
+    expect(dependencies.robotFaceController, isNotNull);
+    final faceState = await dependencies.robotFaceController.watchState().first;
+    expect(faceState.controllerCondition, isNull);
+    expect(faceState.availableActions, isEmpty);
+    await expectLater(
+      dependencies.robotFaceController.requestDispenseForCurrentDose(),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('unavailable in phone-only mode'),
+        ),
+      ),
+    );
+    expect(find.byType(RobotFaceScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets(
+    'phone-only Settings and reminders use notification-only permissions',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      var bleFactoryCalls = 0;
+      var hardwarePermissionFactoryCalls = 0;
+      final notificationPermissions = _RecordingNotificationPermissionGateway();
+
+      await tester.pumpWidget(
+        DoseyAppScope(
+          database: database,
+          buildProfile: AppBuildProfile.robot,
+          runtimeCapability: RuntimeCapability.phoneOnly,
+          reminderScheduler: _FakeReminderScheduler(),
+          notificationPermissionGateway: notificationPermissions,
+          connectivityGateway: _FakeConnectivityGateway(),
+          missedDoseReconciliationService:
+              _FakeMissedDoseReconciliationService(),
+          voicePlayer: DoseyVoicePlayer(
+            playbackGateway: _StoppingVoicePlaybackGateway(),
+          ),
+          bleGatewayFactory: () {
+            bleFactoryCalls += 1;
+            return _FakeBleGateway();
+          },
+          permissionGatewayFactory: () {
+            hardwarePermissionFactoryCalls += 1;
+            return _FakePermissionGateway();
+          },
+          child: const MaterialApp(home: DoseyShell(forceTodayTab: true)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Settings').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Maintenance'), findsNothing);
+
+      await tester.tap(find.text('Reminders'));
+      await tester.pumpAndSettle();
+      expect(notificationPermissions.checkCalls, greaterThan(0));
+      await tester.tap(find.text('Check permissions'));
+      await tester.pumpAndSettle();
+      expect(notificationPermissions.requestCalls, 1);
+
+      await tester.tap(find.text('Medications').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Schedules'));
+      await tester.pumpAndSettle();
+      expect(find.text('Schedules'), findsWidgets);
+      await tester.tap(find.text('Check notification permission'));
+      await tester.pumpAndSettle();
+      expect(notificationPermissions.requestCalls, 2);
+      expect(bleFactoryCalls, 0);
+      expect(hardwarePermissionFactoryCalls, 0);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('app scope wires the combined auth service', (
     WidgetTester tester,
@@ -357,6 +523,33 @@ void main() {
       await database.close();
     },
   );
+}
+
+class _RecordingNotificationPermissionGateway
+    implements NotificationPermissionGateway {
+  var checkCalls = 0;
+  var requestCalls = 0;
+
+  @override
+  Future<AppPermissionState> check() async {
+    checkCalls += 1;
+    return AppPermissionState.denied;
+  }
+
+  @override
+  Future<AppPermissionState> request() async {
+    requestCalls += 1;
+    return AppPermissionState.denied;
+  }
+}
+
+class _RecordingMedicationSyncOutboxDrain implements MedicationSyncOutboxDrain {
+  var drainCalls = 0;
+
+  @override
+  Future<void> drain() async {
+    drainCalls += 1;
+  }
 }
 
 class _StoppingVoicePlaybackGateway implements VoicePlaybackGateway {

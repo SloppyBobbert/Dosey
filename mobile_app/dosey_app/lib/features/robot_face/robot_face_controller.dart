@@ -23,8 +23,8 @@ class RobotFaceController {
   RobotFaceController({
     required Stream<AppDeviceRole> roleStream,
     required this._robotFaceSettings,
-    required this._controller,
-    required this._controllerLifecycle,
+    this._controller,
+    this._controllerLifecycle,
     required this._scheduleProfiles,
     required this._reminders,
     required this._doseLog,
@@ -45,10 +45,6 @@ class RobotFaceController {
         _robotSettings = value;
         _emit();
       }),
-      _controller.watchController().listen((value) {
-        _controllerSnapshot = value;
-        _emit();
-      }),
       _scheduleProfiles.watchActiveProfile().listen((value) {
         _activeProfile = value;
         _emit();
@@ -62,6 +58,14 @@ class RobotFaceController {
         _emit();
       }),
     ];
+    if (_controller != null) {
+      _subscriptions.add(
+        _controller.watchController().listen((value) {
+          _controllerSnapshot = value;
+          _emit();
+        }),
+      );
+    }
     if (shortageAlerts != null) {
       _subscriptions.add(
         shortageAlerts.listen((value) {
@@ -90,8 +94,8 @@ class RobotFaceController {
   }
 
   final RobotFaceSettingsRepository _robotFaceSettings;
-  final ControllerGateway _controller;
-  final ControllerLifecycleService _controllerLifecycle;
+  final ControllerGateway? _controller;
+  final ControllerLifecycleService? _controllerLifecycle;
   final ScheduleProfileRepository _scheduleProfiles;
   final ReminderRepository _reminders;
   final DoseLogRepository _doseLog;
@@ -129,6 +133,12 @@ class RobotFaceController {
   }
 
   Future<void> requestDispenseForCurrentDose() async {
+    final controllerLifecycle = _controllerLifecycle;
+    if (controllerLifecycle == null) {
+      throw StateError(
+        'Physical dispensing is unavailable in phone-only mode.',
+      );
+    }
     final now = _current();
     final nextDose = _dueSchedule(now);
     if (nextDose == null) {
@@ -145,7 +155,7 @@ class RobotFaceController {
     _dispensingDoseId = doseId;
     _emit();
     try {
-      await _controllerLifecycle.requestDoseDispense(
+      await controllerLifecycle.requestDoseDispense(
         doseId: doseId,
         scheduleId: nextDose.id,
       );
@@ -234,7 +244,9 @@ class RobotFaceController {
       rampProgress: choreography.rampProgress,
       isInAwakeWindow: choreography.isInAwakeWindow,
       statusLabel: _statusFor(role, nextSchedule, dueDoseId, latestDoseEvent),
-      controllerCondition: _controllerConditionFor(_controllerSnapshot),
+      controllerCondition: _controller == null
+          ? null
+          : _controllerConditionFor(_controllerSnapshot),
       networkAdvisory: _connectivityState == ConnectivityState.offline
           ? RobotFaceNetworkAdvisory.internetOffline
           : null,
@@ -395,6 +407,9 @@ class RobotFaceController {
     required RobotFaceMode mode,
     required bool hasActiveMissedAlert,
   }) {
+    if (_controller == null) {
+      return const <RobotFaceActionKind>{};
+    }
     if (actionDoseId == null) {
       return const <RobotFaceActionKind>{};
     }
@@ -439,10 +454,12 @@ class RobotFaceController {
     if (hasActiveMissedAlert) {
       return RobotFaceMode.missed;
     }
-    if (_controllerSnapshot.healthState == ControllerHealthState.error) {
+    if (_controller != null &&
+        _controllerSnapshot.healthState == ControllerHealthState.error) {
       return RobotFaceMode.error;
     }
-    if (_controllerSnapshot.healthState != ControllerHealthState.online) {
+    if (_controller != null &&
+        _controllerSnapshot.healthState != ControllerHealthState.online) {
       return RobotFaceMode.offline;
     }
     if (nextSchedule == null) {
@@ -497,7 +514,8 @@ class RobotFaceController {
     if (role == null || !role.canHostRobot) {
       return 'Robot Face is only available in Robot Mode';
     }
-    if (_controllerSnapshot.healthState != ControllerHealthState.online) {
+    if (_controller != null &&
+        _controllerSnapshot.healthState != ControllerHealthState.online) {
       return _controllerSnapshot.statusLabel;
     }
     if (latestDoseEvent?.kind == DoseLogEventKind.doseMissedRecognized) {

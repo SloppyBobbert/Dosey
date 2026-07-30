@@ -2,10 +2,7 @@ import 'package:dosey_app/core/build/app_build_profile.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 
-/// Resolves an immutable device role from the build profile and platform.
-///
-/// [AppBuildProfile.resolve] guarantees that [capabilities.fixedRole] is valid
-/// for the supplied platform.
+/// Resolves a persisted role within the build profile's platform policy.
 class EffectiveDeviceRoleSource {
   EffectiveDeviceRoleSource(
     this._settings, {
@@ -16,14 +13,21 @@ class EffectiveDeviceRoleSource {
   final LocalAppSettingsRepository _settings;
   final AppBuildCapabilities capabilities;
 
-  /// Emits the fixed device role once and then closes.
   Stream<AppDeviceRole> watchDeviceRole() {
-    return Stream<AppDeviceRole>.value(capabilities.fixedRole);
+    return _settings.watchPersistedDeviceRole().map(
+      (role) => _validate(role ?? capabilities.defaultRole),
+    );
   }
 
-  Future<AppDeviceRole> getDeviceRole() async => capabilities.fixedRole;
+  Future<AppDeviceRole> getDeviceRole() async {
+    return _validate(await _settings.getDeviceRole());
+  }
 
   Future<AppDeviceRole> getLegacyRoleForDiagnostics() {
     return _settings.getDeviceRole();
+  }
+
+  AppDeviceRole _validate(AppDeviceRole role) {
+    return capabilities.allows(role) ? role : capabilities.defaultRole;
   }
 }

@@ -39,17 +39,23 @@ import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/household_membership_notifier.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
+import 'package:dosey_app/core/household/paired_robot_readiness_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
+import 'package:dosey_app/core/logging/phone_dose_action_service.dart';
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/permissions/ble_permission_preparer.dart';
+import 'package:dosey_app/core/permissions/notification_permission_gateway.dart';
 import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
+import 'package:dosey_app/core/reminders/phone_only_missed_dose_reconciliation_service.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
+import 'package:dosey_app/core/runtime/runtime_capability.dart';
+import 'package:dosey_app/core/runtime/local_phone_device_identity_repository.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
 import 'package:dosey_app/core/settings/action_pin_gate.dart';
@@ -57,6 +63,8 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/effective_device_role_source.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/sync/medication_sync_outbox_coordinator.dart';
+import 'package:dosey_app/core/sync/sync_outbox_repository.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/core/voice/voice_player.dart';
 import 'package:dosey_app/core/display/flutter_system_ui_gateway.dart';
@@ -90,8 +98,15 @@ class DoseyAppScope extends StatefulWidget {
     this.householdSyncGateway,
     this.householdManagementGateway,
     this.robotPairingGateway,
+    this.pairedRobotReadinessGateway,
     this.buildProfile,
     this.robotPhoneSetupGateway,
+    this.runtimeCapability,
+    this.localTimezoneGateway,
+    this.bleGatewayFactory,
+    this.permissionGatewayFactory,
+    this.notificationPermissionGateway,
+    this.medicationSyncOutboxDrain,
     this.enableDemoFaceLab = false,
   });
 
@@ -101,7 +116,7 @@ class DoseyAppScope extends StatefulWidget {
   final AppPermissionGateway? permissionGateway;
   final AndroidSdkGateway? androidSdkGateway;
   final ReminderNotificationTapController? notificationTapController;
-  final MissedDoseReconciliationService? missedDoseReconciliationService;
+  final MissedDoseReconciler? missedDoseReconciliationService;
   final BleGateway? bleGateway;
   final ConnectivityGateway? connectivityGateway;
   final DoseyVoicePlayer? voicePlayer;
@@ -114,8 +129,15 @@ class DoseyAppScope extends StatefulWidget {
   final HouseholdSyncGateway? householdSyncGateway;
   final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
+  final PairedRobotReadinessGateway? pairedRobotReadinessGateway;
   final AppBuildProfile? buildProfile;
   final RobotPhoneSetupGateway? robotPhoneSetupGateway;
+  final RuntimeCapability? runtimeCapability;
+  final LocalTimezoneGateway? localTimezoneGateway;
+  final BleGateway Function()? bleGatewayFactory;
+  final AppPermissionGateway Function()? permissionGatewayFactory;
+  final NotificationPermissionGateway? notificationPermissionGateway;
+  final MedicationSyncOutboxDrain? medicationSyncOutboxDrain;
   final bool enableDemoFaceLab;
 
   static DoseyAppDependencies of(BuildContext context) {
@@ -148,12 +170,13 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
   late final AppClock _appClock;
   late final bool _ownsAppClock;
   Timer? _missedDoseReconciliationTimer;
-  late final MissedDoseReconciliationService _missedDoseReconciliation;
+  late final MissedDoseReconciler _missedDoseReconciliation;
   late final DoseyAppDependencies _dependencies;
   Future<void>? _shutdownFuture;
   bool _dependenciesInitialized = false;
   StreamSubscription<AppDeviceRole>? _controllerRoleSubscription;
   ControllerHealthSupervisor? _controllerHealthSupervisor;
+  MedicationSyncOutboxCoordinator? _medicationSyncOutboxCoordinator;
   AppDeviceRole? _controllerRole;
   bool _isForeground = true;
 
@@ -198,13 +221,23 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     final householdMembership = HouseholdMembershipNotifier();
     final robotPairing =
         widget.robotPairingGateway ?? const DisabledRobotPairingGateway();
+    final pairedRobotReadiness =
+        widget.pairedRobotReadinessGateway ??
+        const DisabledPairedRobotReadinessGateway();
     final cloudGoogleAuth = cloudIdentity is DisabledCloudIdentityGateway
         ? null
         : GoogleAuthService(
             localAuth,
             googleAccountGateway: CloudGoogleAccountGateway(cloudIdentity),
           );
-    final reminders = LocalReminderRepository(_database);
+    final buildProfile = widget.buildProfile ?? AppBuildProfile.current;
+    final runtimeCapability =
+        widget.runtimeCapability ?? RuntimeCapability.hardwareAssisted;
+    final reminders = LocalReminderRepository(
+      _database,
+      hardwareEffectsEnabled:
+          runtimeCapability == RuntimeCapability.hardwareAssisted,
+    );
     final notificationTaps =
         widget.notificationTapController ?? ReminderNotificationTapController();
     _ownsNotificationTapController = widget.notificationTapController == null;
@@ -225,7 +258,6 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       _database,
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
     );
-    final buildProfile = widget.buildProfile ?? AppBuildProfile.current;
     final effectiveRole = EffectiveDeviceRoleSource(
       settings,
       profile: buildProfile,
@@ -243,106 +275,189 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
     final robotFaceSettings = RobotFaceSettingsRepository(_database);
     final scheduleProfiles = LocalScheduleProfileRepository(_database);
     final prescriptions = LocalPrescriptionRepository(_database);
-    final carouselSlots = LocalCarouselSlotRepository(_database);
-    final guidedCarouselLoads = LocalGuidedCarouselLoadRepository(
-      _database,
-      urgentShortageNotifier: urgentShortageNotifier,
-    );
     final demoStageGate = _database.isDemo ? DemoStageGate() : null;
     final demoIdGenerator = _database.isDemo
         ? DemoCommandSessionIdGenerator()
         : null;
-    final ble = _database.isDemo
-        ? const DemoBleGateway()
-        : widget.bleGateway ?? FlutterBluePlusBleGateway();
-    final permissions = _database.isDemo
-        ? const DemoPermissionGateway()
-        : widget.permissionGateway ?? PermissionHandlerGateway();
-    final StagedControllerGateway controller;
-    if (widget.controllerGateway != null) {
-      controller = widget.controllerGateway!;
-    } else if (_database.isDemo || ble is! DoseyBleGateway) {
-      controller = SimulatedControllerGateway(
-        canHostRobot: () async => effectiveRole.capabilities.canHostRobot,
-        delay: demoStageGate?.wait,
-      );
-    } else {
-      final transportController = BleControllerGateway(
-        transport: ble,
-        canHostRobot: () async => effectiveRole.capabilities.canHostRobot,
-        prepareBleAccess: () => BlePermissionPreparer(
-          permissions: permissions,
-          platform: currentAppDevicePlatform(),
-          androidSdk:
-              widget.androidSdkGateway ??
-              const MethodChannelAndroidSdkGateway(),
-        ).prepare(),
-        commandTimeout: const Duration(seconds: 5),
-      );
-      controller = ControllerHealthSupervisor(
-        delegate: transportController,
-        availability: ble.watchAvailability(),
-        eventSink: LocalControllerHealthEventRepository(_database),
+    final connectivity = _database.isDemo
+        ? const DemoConnectivityGateway()
+        : widget.connectivityGateway ?? ConnectivityPlusGateway();
+    final phoneDeviceIdentity = LocalPhoneDeviceIdentityRepository(_database);
+    final phoneDoseActions = PhoneDoseActionService(_database);
+    final timezoneGateway =
+        widget.localTimezoneGateway ??
+        const PlatformChannelLocalTimezoneGateway();
+    final notificationPermissions =
+        widget.notificationPermissionGateway ??
+        PermissionHandlerNotificationPermissionGateway();
+    final phone = runtimeCapability == RuntimeCapability.phoneOnly
+        ? PhoneRuntimeDependencies(
+            doseActions: phoneDoseActions,
+            deviceIdentity: phoneDeviceIdentity,
+            timezoneId: timezoneGateway.localTimezoneName,
+          )
+        : null;
+    if (phone != null) {
+      _medicationSyncOutboxCoordinator = MedicationSyncOutboxCoordinator(
+        repository: DriftSyncOutboxRepository(_database),
+        drain:
+            widget.medicationSyncOutboxDrain ??
+            const DisabledMedicationSyncOutboxDrain(),
+        connectivity: connectivity,
         now: _appClock.now,
       );
     }
-    if (!_database.isDemo && controller is ControllerHealthSupervisor) {
-      _controllerHealthSupervisor = controller;
-      _controllerRoleSubscription = effectiveRole.watchDeviceRole().listen((
-        role,
-      ) {
-        _controllerRole = role;
-        unawaited(_updateControllerMonitoring());
-      });
+    HardwareRuntimeDependencies? hardware;
+    StagedControllerGateway? controller;
+    ControllerLifecycleService? controllerLifecycle;
+    ControllerBenchService? controllerBench;
+    LocalControllerCommandRepository? commandRepository;
+    LocalControllerHealthEventRepository? controllerHealthEvents;
+    BleGateway? ble;
+    AppPermissionGateway? permissions;
+    LocalCarouselSlotRepository? carouselSlots;
+    LocalGuidedCarouselLoadRepository? guidedCarouselLoads;
+    DoseActionService? physicalDoseActions;
+    if (runtimeCapability == RuntimeCapability.hardwareAssisted) {
+      carouselSlots = LocalCarouselSlotRepository(_database);
+      guidedCarouselLoads = LocalGuidedCarouselLoadRepository(
+        _database,
+        urgentShortageNotifier: urgentShortageNotifier,
+      );
+      physicalDoseActions = DoseActionService(
+        database: _database,
+        carouselSlots: carouselSlots,
+        guidedCarouselLoads: guidedCarouselLoads,
+        prescriptions: prescriptions,
+        doseLog: doseLog,
+      );
+      ble = _database.isDemo
+          ? const DemoBleGateway()
+          : widget.bleGateway ??
+                widget.bleGatewayFactory?.call() ??
+                FlutterBluePlusBleGateway();
+      permissions = _database.isDemo
+          ? const DemoPermissionGateway()
+          : widget.permissionGateway ??
+                widget.permissionGatewayFactory?.call() ??
+                PermissionHandlerGateway();
+      if (widget.controllerGateway != null) {
+        controller = widget.controllerGateway!;
+      } else if (_database.isDemo || ble is! DoseyBleGateway) {
+        controller = SimulatedControllerGateway(
+          canHostRobot: () async =>
+              (await effectiveRole.getDeviceRole()).canHostRobot,
+          delay: demoStageGate?.wait,
+        );
+      } else {
+        final transportController = BleControllerGateway(
+          transport: ble,
+          canHostRobot: () async =>
+              (await effectiveRole.getDeviceRole()).canHostRobot,
+          prepareBleAccess: () => BlePermissionPreparer(
+            permissions: permissions!,
+            platform: currentAppDevicePlatform(),
+            androidSdk:
+                widget.androidSdkGateway ??
+                const MethodChannelAndroidSdkGateway(),
+          ).prepare(),
+          commandTimeout: const Duration(seconds: 5),
+        );
+        controller = ControllerHealthSupervisor(
+          delegate: transportController,
+          availability: ble.watchAvailability(),
+          eventSink: LocalControllerHealthEventRepository(_database),
+          now: _appClock.now,
+        );
+      }
+      if (!_database.isDemo && controller is ControllerHealthSupervisor) {
+        _controllerHealthSupervisor = controller;
+        _controllerRoleSubscription = effectiveRole.watchDeviceRole().listen((
+          role,
+        ) {
+          _controllerRole = role;
+          unawaited(_updateControllerMonitoring());
+        });
+      }
+      commandRepository = LocalControllerCommandRepository(
+        _database,
+        sessionIdGenerator: demoIdGenerator?.call,
+      );
+      controllerHealthEvents = LocalControllerHealthEventRepository(_database);
+      controllerLifecycle = ControllerLifecycleService(
+        controller: controller,
+        commandRepository: commandRepository,
+        doseLog: doseLog,
+        carouselSlots: carouselSlots,
+        guidedCarouselLoads: guidedCarouselLoads,
+        database: _database,
+        now: _appClock.now,
+      );
+      controllerBench = ControllerBenchService(
+        controller: controller,
+        lifecycle: controllerLifecycle,
+        commandRepository: commandRepository,
+        now: _appClock.now,
+      );
+      hardware = HardwareRuntimeDependencies(
+        controller: controller,
+        controllerLifecycle: controllerLifecycle,
+        controllerCommands: commandRepository,
+        controllerHealthEvents: controllerHealthEvents,
+        controllerBench: controllerBench,
+        ble: ble,
+        permissions: permissions,
+        robotPhoneSetup:
+            widget.robotPhoneSetupGateway ??
+            MethodChannelRobotPhoneSetupGateway(permissions: permissions),
+        carouselSlots: carouselSlots,
+        guidedCarouselLoads: guidedCarouselLoads,
+        doseActions: physicalDoseActions,
+      );
     }
-    final commandRepository = LocalControllerCommandRepository(
-      _database,
-      sessionIdGenerator: demoIdGenerator?.call,
-    );
-    final controllerHealthEvents = LocalControllerHealthEventRepository(
-      _database,
-    );
-    final controllerLifecycle = ControllerLifecycleService(
+    final robotFaceController = RobotFaceController(
+      roleStream: effectiveRole.watchDeviceRole(),
+      robotFaceSettings: robotFaceSettings,
       controller: controller,
-      commandRepository: commandRepository,
+      controllerLifecycle: controllerLifecycle,
+      scheduleProfiles: scheduleProfiles,
+      reminders: reminders,
       doseLog: doseLog,
-      carouselSlots: carouselSlots,
-      guidedCarouselLoads: guidedCarouselLoads,
-      database: _database,
+      carouselSlots: hardware == null ? null : carouselSlots,
+      shortageAlerts: hardware == null
+          ? null
+          : guidedCarouselLoads!.watchAllActiveShortageAlerts(),
+      connectivity: _database.isDemo ? null : connectivity.watchConnectivity(),
+      clock: _appClock.ticks,
       now: _appClock.now,
     );
     _missedDoseReconciliation =
         widget.missedDoseReconciliationService ??
-        MissedDoseReconciliationService(
-          reminders: reminders,
-          doseLog: doseLog,
-          carouselSlots: carouselSlots,
-          database: _database,
-          now: _appClock.now,
-        );
+        (phone != null
+            ? PhoneOnlyMissedDoseReconciliationService(
+                reminders: reminders,
+                actions: phoneDoseActions,
+                deviceId: phoneDeviceIdentity.getOrCreate,
+                timezoneId: timezoneGateway.localTimezoneName,
+                now: _appClock.now,
+              )
+            : MissedDoseReconciliationService(
+                reminders: reminders,
+                doseLog: doseLog,
+                carouselSlots: carouselSlots!,
+                database: _database,
+                now: _appClock.now,
+              ));
     if (!_database.isDemo) {
       _missedDoseReconciliationTimer = Timer.periodic(
         _missedDoseReconciliationInterval,
         (_) => unawaited(_runMissedDoseReconciliation()),
       );
     }
-    final controllerBench = ControllerBenchService(
-      controller: controller,
-      lifecycle: controllerLifecycle,
-      commandRepository: commandRepository,
-      now: _appClock.now,
-    );
-    final doseActions = DoseActionService(
-      database: _database,
-      carouselSlots: carouselSlots,
-      guidedCarouselLoads: guidedCarouselLoads,
-      prescriptions: prescriptions,
-      doseLog: doseLog,
-    );
     final demoFaceLab = _database.isDemo && widget.enableDemoFaceLab
         ? DemoFaceLabController()
         : null;
-    final demoScenarios = _database.isDemo
+    final demoScenarios = _database.isDemo && hardware != null
         ? DemoScenarioService(
             data: DemoDataRepository(
               _database,
@@ -354,36 +469,36 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
             ),
             database: _database,
             clock: _appClock as ControllableAppClock,
-            controller: controller as SimulatedControllerGateway,
+            controller: controller! as SimulatedControllerGateway,
             stageGate: demoStageGate!,
             idGenerator: demoIdGenerator!,
-            lifecycle: controllerLifecycle,
-            bench: controllerBench,
-            commandRepository: commandRepository,
-            doseActions: doseActions,
-            reconciliation: _missedDoseReconciliation,
+            lifecycle: controllerLifecycle!,
+            bench: controllerBench!,
+            commandRepository: commandRepository!,
+            doseActions: physicalDoseActions!,
+            reconciliation:
+                _missedDoseReconciliation as MissedDoseReconciliationService,
             onReset: demoFaceLab?.reset,
           )
         : null;
-    final connectivity = _database.isDemo
-        ? const DemoConnectivityGateway()
-        : widget.connectivityGateway ?? ConnectivityPlusGateway();
     _dependencies = DoseyAppDependencies(
       database: _database,
       isDemo: _database.isDemo,
       appClock: _appClock,
       settings: settings,
       buildProfile: buildProfile,
+      runtimeCapability: runtimeCapability,
+      hardware: hardware,
+      phone: phone,
+      robotFaceController: robotFaceController,
+      notificationPermissions: notificationPermissions,
       effectiveRole: effectiveRole,
       actionPinGate: actionPinGate,
       prescriptions: prescriptions,
-      doseActions: doseActions,
       scheduleProfiles: scheduleProfiles,
       reminders: reminders,
       reminderSchedules: reminderSchedules,
       backups: backups,
-      carouselSlots: carouselSlots,
-      guidedCarouselLoads: guidedCarouselLoads,
       doseLog: doseLog,
       adminAudit: adminAudit,
       household: household,
@@ -393,47 +508,23 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       householdManagement: householdManagement,
       householdMembership: householdMembership,
       robotPairing: robotPairing,
+      pairedRobotReadiness: pairedRobotReadiness,
+      phoneDeviceIdentity: phoneDeviceIdentity,
       localAuth: localAuth,
       auth: AppAuthService(
         localAuth: localAuth,
         householdCache: householdCache,
         googleAuthService: cloudGoogleAuth,
       ),
-      controller: controller,
-      controllerLifecycle: controllerLifecycle,
-      controllerCommands: commandRepository,
-      controllerHealthEvents: controllerHealthEvents,
-      controllerBench: controllerBench,
       demoScenarios: demoScenarios,
       demoFaceLab: demoFaceLab,
       robotFaceSettings: robotFaceSettings,
-      robotFaceController: RobotFaceController(
-        roleStream: effectiveRole.watchDeviceRole(),
-        robotFaceSettings: robotFaceSettings,
-        controller: controller,
-        controllerLifecycle: controllerLifecycle,
-        scheduleProfiles: scheduleProfiles,
-        reminders: reminders,
-        doseLog: doseLog,
-        carouselSlots: carouselSlots,
-        shortageAlerts: guidedCarouselLoads.watchAllActiveShortageAlerts(),
-        connectivity: _database.isDemo
-            ? null
-            : connectivity.watchConnectivity(),
-        clock: _appClock.ticks,
-        now: _appClock.now,
-      ),
-      ble: ble,
       connectivity: connectivity,
       reminderScheduler: reminderScheduler,
       voicePlayer:
           widget.voicePlayer ??
           DoseyVoicePlayer(playbackGateway: JustAudioVoicePlaybackGateway()),
       notificationTaps: notificationTaps,
-      permissions: permissions,
-      robotPhoneSetup:
-          widget.robotPhoneSetupGateway ??
-          MethodChannelRobotPhoneSetupGateway(permissions: permissions),
       // Keeping a mounted display awake is reversible device behavior, unlike
       // the network, notification, and backup effects disabled in demo mode.
       screenAwake:
@@ -443,7 +534,11 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       runMissedDoseReconciliation: _runMissedDoseReconciliation,
     );
     _dependenciesInitialized = true;
-    if (_database.isDemo) {
+    final medicationSyncCoordinator = _medicationSyncOutboxCoordinator;
+    if (medicationSyncCoordinator != null) {
+      unawaited(_startMedicationSync(medicationSyncCoordinator));
+    }
+    if (_database.isDemo && hardware != null) {
       unawaited(_connectDemoController());
     } else {
       unawaited(_runStartupMaintenance());
@@ -452,10 +547,26 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
 
   Future<void> _connectDemoController() async {
     try {
-      await _dependencies.controller.connect();
+      await _dependencies.hardware!.controller.connect();
     } on Object catch (error, stackTrace) {
       developer.log(
         'Demo controller connection failed; continuing app startup.',
+        name: 'dosey.app_scope',
+        level: 1000,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  Future<void> _startMedicationSync(
+    MedicationSyncOutboxCoordinator coordinator,
+  ) async {
+    try {
+      await coordinator.start();
+    } on Object catch (error, stackTrace) {
+      developer.log(
+        'Medication sync startup failed; preserving the local outbox.',
         name: 'dosey.app_scope',
         level: 1000,
         error: error,
@@ -563,15 +674,19 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
 
     await attempt(() async => roleSubscriptionCancellation);
     await attempt(() async => monitoringDisable);
+    await attempt(() async => _medicationSyncOutboxCoordinator?.dispose());
     await attempt(() async => _dependencies.demoScenarios?.close());
     await attempt(() async => _dependencies.demoFaceLab?.close());
     await attempt(_dependencies.robotFaceController.close);
+    final hardware = _dependencies.hardware;
     await attempt(_dependencies.voicePlayer.dispose);
     attemptSync(_dependencies.householdMembership.dispose);
 
     // Consumers must release their subscriptions before producer gateways close.
-    await attempt(_dependencies.controller.close);
-    await attempt(_dependencies.ble.close);
+    if (hardware != null) {
+      await attempt(hardware.controller.close);
+      await attempt(hardware.ble.close);
+    }
     if (_ownsAppClock) {
       await attempt(() async {
         switch (_appClock) {
@@ -603,6 +718,46 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
   }
 }
 
+class HardwareRuntimeDependencies {
+  const HardwareRuntimeDependencies({
+    required this.controller,
+    required this.controllerLifecycle,
+    required this.controllerCommands,
+    required this.controllerHealthEvents,
+    required this.controllerBench,
+    required this.ble,
+    required this.permissions,
+    required this.robotPhoneSetup,
+    required this.carouselSlots,
+    required this.guidedCarouselLoads,
+    required this.doseActions,
+  });
+
+  final ControllerGateway controller;
+  final ControllerLifecycleService controllerLifecycle;
+  final ControllerCommandRepository controllerCommands;
+  final LocalControllerHealthEventRepository controllerHealthEvents;
+  final ControllerBenchService controllerBench;
+  final BleGateway ble;
+  final AppPermissionGateway permissions;
+  final RobotPhoneSetupGateway robotPhoneSetup;
+  final LocalCarouselSlotRepository carouselSlots;
+  final LocalGuidedCarouselLoadRepository guidedCarouselLoads;
+  final DoseActionService doseActions;
+}
+
+class PhoneRuntimeDependencies {
+  const PhoneRuntimeDependencies({
+    required this.doseActions,
+    required this.deviceIdentity,
+    required this.timezoneId,
+  });
+
+  final PhoneDoseActionService doseActions;
+  final LocalPhoneDeviceIdentityRepository deviceIdentity;
+  final Future<String> Function() timezoneId;
+}
+
 class DoseyAppDependencies {
   const DoseyAppDependencies({
     required this.database,
@@ -610,16 +765,18 @@ class DoseyAppDependencies {
     required this.appClock,
     required this.settings,
     required this.buildProfile,
+    required this.runtimeCapability,
+    required this.hardware,
+    required this.phone,
+    required this.robotFaceController,
+    required this.notificationPermissions,
     required this.effectiveRole,
     required this.actionPinGate,
     required this.prescriptions,
-    required this.doseActions,
     required this.scheduleProfiles,
     required this.reminders,
     required this.reminderSchedules,
     required this.backups,
-    required this.carouselSlots,
-    required this.guidedCarouselLoads,
     required this.doseLog,
     required this.adminAudit,
     required this.household,
@@ -629,24 +786,17 @@ class DoseyAppDependencies {
     required this.householdManagement,
     required this.householdMembership,
     required this.robotPairing,
+    required this.pairedRobotReadiness,
+    required this.phoneDeviceIdentity,
     required this.localAuth,
     required this.auth,
-    required this.controller,
-    required this.controllerLifecycle,
-    required this.controllerCommands,
-    required this.controllerHealthEvents,
-    required this.controllerBench,
     required this.demoScenarios,
     required this.demoFaceLab,
     required this.robotFaceSettings,
-    required this.robotFaceController,
-    required this.ble,
     required this.connectivity,
     required this.reminderScheduler,
     required this.voicePlayer,
     required this.notificationTaps,
-    required this.permissions,
-    required this.robotPhoneSetup,
     required this.screenAwake,
     required this.systemUi,
     required this.externalActionResumeGuard,
@@ -658,16 +808,18 @@ class DoseyAppDependencies {
   final AppClock appClock;
   final LocalAppSettingsRepository settings;
   final AppBuildProfile buildProfile;
+  final RuntimeCapability runtimeCapability;
+  final HardwareRuntimeDependencies? hardware;
+  final PhoneRuntimeDependencies? phone;
+  final RobotFaceController robotFaceController;
+  final NotificationPermissionGateway notificationPermissions;
   final EffectiveDeviceRoleSource effectiveRole;
   final ActionPinGate actionPinGate;
   final LocalPrescriptionRepository prescriptions;
-  final DoseActionService doseActions;
   final LocalScheduleProfileRepository scheduleProfiles;
   final LocalReminderRepository reminders;
   final ReminderScheduleService reminderSchedules;
   final LocalBackupService backups;
-  final LocalCarouselSlotRepository carouselSlots;
-  final LocalGuidedCarouselLoadRepository guidedCarouselLoads;
   final DriftDoseLogRepository doseLog;
   final AdminAuditRepository adminAudit;
   final LocalHouseholdRepository household;
@@ -677,28 +829,37 @@ class DoseyAppDependencies {
   final HouseholdManagementGateway householdManagement;
   final HouseholdMembershipNotifier householdMembership;
   final RobotPairingGateway robotPairing;
+  final PairedRobotReadinessGateway pairedRobotReadiness;
+  final LocalPhoneDeviceIdentityRepository phoneDeviceIdentity;
   final LocalAuthRepository localAuth;
   final AuthService auth;
-  final ControllerGateway controller;
-  final ControllerLifecycleService controllerLifecycle;
-  final ControllerCommandRepository controllerCommands;
-  final LocalControllerHealthEventRepository controllerHealthEvents;
-  final ControllerBenchService controllerBench;
   final DemoScenarioService? demoScenarios;
   final DemoFaceLabController? demoFaceLab;
   final RobotFaceSettingsRepository robotFaceSettings;
-  final RobotFaceController robotFaceController;
-  final BleGateway ble;
   final ConnectivityGateway connectivity;
   final ReminderScheduler reminderScheduler;
   final DoseyVoicePlayer voicePlayer;
   final ReminderNotificationTapController notificationTaps;
-  final AppPermissionGateway permissions;
-  final RobotPhoneSetupGateway robotPhoneSetup;
   final ScreenAwakeGateway screenAwake;
   final SystemUiGateway systemUi;
   final ExternalActionResumeGuard<String> externalActionResumeGuard;
   final Future<void> Function() runMissedDoseReconciliation;
+
+  ControllerGateway get controller => hardware!.controller;
+  ControllerLifecycleService get controllerLifecycle =>
+      hardware!.controllerLifecycle;
+  ControllerCommandRepository get controllerCommands =>
+      hardware!.controllerCommands;
+  LocalControllerHealthEventRepository get controllerHealthEvents =>
+      hardware!.controllerHealthEvents;
+  ControllerBenchService get controllerBench => hardware!.controllerBench;
+  BleGateway get ble => hardware!.ble;
+  AppPermissionGateway get permissions => hardware!.permissions;
+  RobotPhoneSetupGateway get robotPhoneSetup => hardware!.robotPhoneSetup;
+  LocalCarouselSlotRepository get carouselSlots => hardware!.carouselSlots;
+  LocalGuidedCarouselLoadRepository get guidedCarouselLoads =>
+      hardware!.guidedCarouselLoads;
+  DoseActionService get doseActions => hardware!.doseActions;
 }
 
 class _DoseyAppScopeInherited extends InheritedWidget {

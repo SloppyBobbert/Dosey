@@ -95,6 +95,22 @@ The phone is the brain. It handles schedules, medication data, refill logic, dos
 
 The build profile is authoritative. Imported or stale local role settings cannot enable Robot capabilities in Personal or disable them in Robot.
 
+### Runtime capability
+
+Every production launch also receives an explicit `DOSEY_RUNTIME_CAPABILITY`:
+
+- `phone-only` is the Android Robot MVP. It runs local schedules, reminders,
+  Today confirmations, missed-dose acknowledgement, and a pending local sync
+  outbox without constructing cloud, BLE, controller, carousel, or Bluetooth
+  permission services.
+- `hardware-assisted` preserves the existing Personal/iOS/web behavior and is
+  the explicit Robot hardware-bench mode.
+
+Android Robot launches fail closed when this value is omitted or invalid. The
+first accepted value is persisted locally, and a later launch cannot silently
+switch capabilities. `phone-only` is rejected outside the Android Robot build;
+there is no fallback from it to BLE hardware.
+
 ## Local configuration
 
 `.env` is ignored and must be bootstrapped separately in every checkout or worktree. Never commit it or print its values. It must contain the four required public Appwrite keys listed above, plus the optional public Function IDs for features enabled in that build, and must not contain `DOSEY_BUILD_PROFILE`; each build command supplies the profile explicitly.
@@ -148,11 +164,11 @@ dart run build_runner build
 git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
-flutter run --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
-flutter run --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
-flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
-flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
-flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
+flutter run --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted
+flutter run --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only
+flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted
+flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only
+flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted
 git diff --check
 ```
 
@@ -169,8 +185,9 @@ git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 dart format --set-exit-if-changed .
 flutter analyze
 flutter test
-flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
-flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
+flutter test test/core/runtime/runtime_capability_test.dart test/core/runtime/runtime_bootstrap_test.dart test/core/runtime/local_runtime_capability_repository_test.dart
+flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted
+flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only
 ```
 
 The Ubuntu job uploads both debug APKs as short-lived artifacts. Its macOS job

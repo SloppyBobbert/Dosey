@@ -23,6 +23,7 @@ class ReminderSchedules extends Table {
       text().withDefault(const Constant('schedule-1'))();
   IntColumn get hour => integer()();
   IntColumn get minute => integer()();
+  IntColumn get revision => integer().withDefault(const Constant(1))();
   BoolColumn get isEnabled => boolean()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -31,6 +32,7 @@ class ReminderSchedules extends Table {
   List<String> get customConstraints => const [
     'CHECK (hour >= 0 AND hour <= 23)',
     'CHECK (minute >= 0 AND minute <= 59)',
+    'CHECK (revision > 0)',
   ];
 
   @override
@@ -267,6 +269,181 @@ class DoseLogEvents extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('PhoneDoseActionEventRow')
+class PhoneDoseActionEvents extends Table {
+  TextColumn get id => text()();
+  TextColumn get deviceId => text()();
+  TextColumn get occurrenceId => text()();
+  TextColumn get scheduleId => text()();
+  IntColumn get scheduleRevision => integer()();
+  DateTimeColumn get scheduledAt => dateTime()();
+  TextColumn get localDate => text()();
+  TextColumn get timezoneId => text()();
+  TextColumn get medicationId => text()();
+  TextColumn get kind => text()();
+  DateTimeColumn get occurredAt => dateTime()();
+  BoolColumn get marksDoseTaken => boolean()();
+  TextColumn get idempotencyKey => text().unique()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => const [
+    "CHECK (kind IN ('taken_confirmed', 'skipped', 'snoozed', 'help_requested', 'missed', 'missed_acknowledged'))",
+    "CHECK ((kind = 'taken_confirmed' AND marks_dose_taken = 1) OR (kind != 'taken_confirmed' AND marks_dose_taken = 0))",
+  ];
+}
+
+@DataClassName('SyncOutboxMutationRow')
+class SyncOutboxMutations extends Table {
+  TextColumn get mutationId => text()();
+  TextColumn get deviceId => text()();
+  TextColumn get actorAccountId => text().nullable()();
+  TextColumn get robotId => text().nullable()();
+  TextColumn get scopeState =>
+      text().withDefault(const Constant('local_only'))();
+  TextColumn get idempotencyKey => text()();
+  TextColumn get entityType => text()();
+  TextColumn get operation => text()();
+  TextColumn get entityId => text()();
+  IntColumn get baseRevision => integer().nullable()();
+  TextColumn get payloadJson => text()();
+  TextColumn get state => text().withDefault(const Constant('pending'))();
+  IntColumn get attemptCount => integer().withDefault(const Constant(0))();
+  DateTimeColumn get nextAttemptAt => dateTime().nullable()();
+  DateTimeColumn get lastAttemptAt => dateTime().nullable()();
+  TextColumn get lastErrorCode => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {mutationId};
+
+  @override
+  List<String> get customConstraints => const [
+    "CHECK (state IN ('pending', 'in_flight', 'succeeded', 'permanent_failure'))",
+    'CHECK (attempt_count >= 0)',
+    "CHECK ((scope_state = 'local_only' AND actor_account_id IS NULL AND robot_id IS NULL) OR (scope_state = 'bound' AND actor_account_id IS NOT NULL AND length(trim(actor_account_id)) BETWEEN 1 AND 128 AND robot_id IS NOT NULL AND length(trim(robot_id)) BETWEEN 1 AND 128))",
+  ];
+}
+
+@DataClassName('SyncCursorRow')
+class SyncCursors extends Table {
+  TextColumn get scopeKey => text()();
+  TextColumn get robotId => text().nullable()();
+  TextColumn get cursor => text().nullable()();
+  TextColumn get checkpoint => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {scopeKey};
+}
+
+@DataClassName('SyncConflictRow')
+class SyncConflicts extends Table {
+  TextColumn get mutationId => text()();
+  TextColumn get outcome => text()();
+  IntColumn get revision => integer().nullable()();
+  TextColumn get cursor => text().nullable()();
+  TextColumn get errorCode => text().nullable()();
+  TextColumn get conflictJson => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get resolvedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {mutationId};
+}
+
+@DataClassName('MedicationSyncPullStateRow')
+class MedicationSyncPullStates extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get robotId => text()();
+  TextColumn get cursor => text().nullable()();
+  TextColumn get checkpoint => text().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {accountId, robotId};
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK ((cursor IS NULL) = (checkpoint IS NULL))',
+  ];
+}
+
+@DataClassName('SyncedMedicationRow')
+class SyncedMedications extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get robotId => text()();
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get pillType => text()();
+  TextColumn get instructions => text().nullable()();
+  IntColumn get revision => integer()();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {accountId, robotId, id};
+
+  @override
+  List<String> get customConstraints => const ['CHECK (revision > 0)'];
+}
+
+@DataClassName('SyncedMedicationScheduleRow')
+class SyncedMedicationSchedules extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get robotId => text()();
+  TextColumn get id => text()();
+  TextColumn get medicationId => text()();
+  TextColumn get label => text()();
+  IntColumn get hour => integer()();
+  IntColumn get minute => integer()();
+  TextColumn get timezoneId => text()();
+  BoolColumn get isEnabled => boolean()();
+  IntColumn get revision => integer()();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {accountId, robotId, id};
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (hour >= 0 AND hour <= 23)',
+    'CHECK (minute >= 0 AND minute <= 59)',
+    'CHECK (revision > 0)',
+  ];
+}
+
+@DataClassName('SyncedDoseEventRow')
+class SyncedDoseEvents extends Table {
+  TextColumn get accountId => text()();
+  TextColumn get robotId => text()();
+  TextColumn get id => text()();
+  TextColumn get medicationId => text()();
+  TextColumn get occurrenceId => text()();
+  TextColumn get scheduleId => text()();
+  IntColumn get scheduleRevision => integer()();
+  DateTimeColumn get scheduledAt => dateTime()();
+  TextColumn get localDate => text()();
+  TextColumn get timezoneId => text()();
+  TextColumn get kind => text()();
+  DateTimeColumn get occurredAt => dateTime()();
+  TextColumn get actorAccountId => text()();
+
+  @override
+  Set<Column> get primaryKey => {accountId, robotId, id};
+
+  @override
+  List<String> get customConstraints => const [
+    'CHECK (schedule_revision > 0)',
+    "CHECK (kind IN ('taken_confirmed', 'skipped', 'snoozed', 'help_requested'))",
+  ];
+}
+
 @DataClassName('ControllerCommandSessionRow')
 class ControllerCommandSessions extends Table {
   TextColumn get id => text()();
@@ -401,6 +578,14 @@ class CachedHouseholdMembers extends Table {
     MedicationShortageAlerts,
     AuthSessions,
     DoseLogEvents,
+    PhoneDoseActionEvents,
+    SyncOutboxMutations,
+    SyncCursors,
+    SyncConflicts,
+    MedicationSyncPullStates,
+    SyncedMedications,
+    SyncedMedicationSchedules,
+    SyncedDoseEvents,
     ControllerCommandSessions,
     ControllerCommandEvents,
     ControllerHealthEvents,
@@ -430,12 +615,16 @@ class DoseyDatabase extends _$DoseyDatabase {
   final bool isDemo;
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) async {
       await migrator.createAll();
+      await _createPhoneDoseActionTerminalIndex();
+      await _createOutboxIdempotencyIndexes();
+      await _createScopedOutboxPendingIndex();
+      await _createOutboxScopeImmutabilityTrigger();
       await _seedOnboardingCompleted(completed: false);
       await _seedDefaultScheduleProfile();
       await _seedCarouselStates();
@@ -516,8 +705,149 @@ class DoseyDatabase extends _$DoseyDatabase {
         await migrator.createTable(cachedRobotInstallations);
         await migrator.createTable(cachedHouseholdMembers);
       }
+      if (from < 17) {
+        await transaction(() async {
+          if (from >= 2 && await _tableExists('reminder_schedules')) {
+            await migrator.addColumn(
+              reminderSchedules,
+              reminderSchedules.revision,
+            );
+          }
+          await migrator.createTable(phoneDoseActionEvents);
+          await migrator.createTable(syncOutboxMutations);
+          await migrator.createTable(syncCursors);
+          await migrator.createTable(syncConflicts);
+        });
+      }
+      if (from < 18) {
+        await transaction(() async {
+          await migrator.createTable(medicationSyncPullStates);
+          await migrator.createTable(syncedMedications);
+          await migrator.createTable(syncedMedicationSchedules);
+          await migrator.createTable(syncedDoseEvents);
+        });
+      }
+      if (from < 19) {
+        await transaction(() async {
+          if (from >= 17) {
+            await _rebuildPhoneDoseActionEventsWithDeviceScope();
+            await _rebuildSyncOutboxMutationsWithScope(migrator);
+          } else {
+            await _createPhoneDoseActionTerminalIndex();
+          }
+          await _createOutboxIdempotencyIndexes();
+          await _createScopedOutboxPendingIndex();
+          await _createOutboxScopeImmutabilityTrigger();
+        });
+      }
     },
   );
+
+  Future<bool> _tableExists(String tableName) async {
+    final row = await customSelect(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1",
+      variables: [Variable<String>(tableName)],
+    ).getSingleOrNull();
+    return row != null;
+  }
+
+  Future<void> _createOutboxScopeImmutabilityTrigger() {
+    return customStatement('''
+      CREATE TRIGGER IF NOT EXISTS sync_outbox_scope_immutable
+      BEFORE UPDATE OF scope_state, actor_account_id, robot_id
+      ON sync_outbox_mutations
+      WHEN NEW.scope_state IS NOT OLD.scope_state
+        OR NEW.actor_account_id IS NOT OLD.actor_account_id
+        OR NEW.robot_id IS NOT OLD.robot_id
+      BEGIN
+        SELECT RAISE(ABORT, 'sync outbox scope is immutable');
+      END;
+    ''');
+  }
+
+  Future<void> _createPhoneDoseActionTerminalIndex() {
+    return customStatement(
+      "CREATE UNIQUE INDEX phone_dose_action_events_one_terminal ON phone_dose_action_events (device_id, occurrence_id) WHERE kind IN ('taken_confirmed', 'skipped', 'missed_acknowledged');",
+    );
+  }
+
+  Future<void> _createScopedOutboxPendingIndex() {
+    return customStatement(
+      "CREATE INDEX sync_outbox_mutations_scoped_pending_idx ON sync_outbox_mutations (actor_account_id, robot_id, state, next_attempt_at, created_at, mutation_id) WHERE scope_state = 'bound' AND state = 'pending';",
+    );
+  }
+
+  Future<void> _createOutboxIdempotencyIndexes() async {
+    await customStatement(
+      "CREATE UNIQUE INDEX sync_outbox_local_idempotency_idx ON sync_outbox_mutations (idempotency_key) WHERE scope_state = 'local_only';",
+    );
+    await customStatement(
+      "CREATE UNIQUE INDEX sync_outbox_bound_robot_idempotency_idx ON sync_outbox_mutations (robot_id, idempotency_key) WHERE scope_state = 'bound';",
+    );
+  }
+
+  Future<void> _rebuildSyncOutboxMutationsWithScope(Migrator migrator) async {
+    await customStatement(
+      'ALTER TABLE sync_outbox_mutations RENAME TO sync_outbox_mutations_old;',
+    );
+    await migrator.createTable(syncOutboxMutations);
+    await customStatement('''
+      INSERT INTO sync_outbox_mutations (
+        mutation_id, device_id, actor_account_id, robot_id, scope_state,
+        idempotency_key, entity_type, operation, entity_id, base_revision,
+        payload_json, state, attempt_count, next_attempt_at, last_attempt_at,
+        last_error_code, created_at, updated_at
+      )
+      SELECT
+        mutation_id, device_id, NULL, NULL, 'local_only', idempotency_key,
+        entity_type, operation, entity_id, base_revision, payload_json, state,
+        attempt_count, next_attempt_at, last_attempt_at, last_error_code,
+        created_at, updated_at
+      FROM sync_outbox_mutations_old;
+    ''');
+    await customStatement('DROP TABLE sync_outbox_mutations_old;');
+  }
+
+  Future<void> _rebuildPhoneDoseActionEventsWithDeviceScope() async {
+    await customStatement(
+      'ALTER TABLE phone_dose_action_events RENAME TO phone_dose_action_events_old;',
+    );
+    await customStatement('''
+      CREATE TABLE phone_dose_action_events (
+        id TEXT NOT NULL PRIMARY KEY,
+        device_id TEXT NOT NULL,
+        occurrence_id TEXT NOT NULL,
+        schedule_id TEXT NOT NULL,
+        schedule_revision INTEGER NOT NULL,
+        scheduled_at INTEGER NOT NULL,
+        local_date TEXT NOT NULL,
+        timezone_id TEXT NOT NULL,
+        medication_id TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('taken_confirmed', 'skipped', 'snoozed', 'help_requested', 'missed', 'missed_acknowledged')),
+        occurred_at INTEGER NOT NULL,
+        marks_dose_taken INTEGER NOT NULL CHECK ((kind = 'taken_confirmed' AND marks_dose_taken = 1) OR (kind != 'taken_confirmed' AND marks_dose_taken = 0)),
+        idempotency_key TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL
+      );
+    ''');
+    await customStatement('''
+      INSERT INTO phone_dose_action_events (
+        id, device_id, occurrence_id, schedule_id, schedule_revision,
+        scheduled_at, local_date, timezone_id, medication_id, kind,
+        occurred_at, marks_dose_taken, idempotency_key, created_at
+      )
+      SELECT
+        id, 'legacy-unknown-device', occurrence_id, schedule_id,
+        schedule_revision, scheduled_at, local_date, timezone_id,
+        medication_id, kind, occurred_at, marks_dose_taken,
+        idempotency_key, created_at
+      FROM phone_dose_action_events_old;
+    ''');
+    await customStatement('DROP TABLE phone_dose_action_events_old;');
+    await customStatement(
+      "CREATE UNIQUE INDEX phone_dose_action_events_one_terminal ON phone_dose_action_events (device_id, occurrence_id) WHERE kind IN ('taken_confirmed', 'skipped', 'missed_acknowledged');",
+    );
+  }
 
   Future<void>
   _rebuildCarouselLoadSlotSnapshotsTableWithRetainedStatus() async {

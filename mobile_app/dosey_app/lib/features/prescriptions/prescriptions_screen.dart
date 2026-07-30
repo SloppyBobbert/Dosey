@@ -11,7 +11,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class PrescriptionsScreen extends StatelessWidget {
-  const PrescriptionsScreen({super.key});
+  const PrescriptionsScreen({super.key, this.onPrescriptionUpserted});
+
+  final Future<void> Function()? onPrescriptionUpserted;
 
   @override
   Widget build(BuildContext context) {
@@ -41,8 +43,11 @@ class PrescriptionsScreen extends StatelessWidget {
                         items,
                         schedules,
                       ),
-                      onAddPrescription: () =>
-                          _showPrescriptionSheet(context, prescriptions),
+                      onAddPrescription: () => _showPrescriptionSheet(
+                        context,
+                        prescriptions,
+                        onPrescriptionUpserted: onPrescriptionUpserted,
+                      ),
                     ),
                     const SizedBox(height: 16),
                     if (items.isEmpty)
@@ -73,6 +78,7 @@ class PrescriptionsScreen extends StatelessWidget {
                           ),
                           prescriptions: prescriptions,
                           reminderSchedules: dependencies.reminderSchedules,
+                          onPrescriptionUpserted: onPrescriptionUpserted,
                         ),
                   ],
                 );
@@ -184,6 +190,7 @@ class PrescriptionsScreen extends StatelessWidget {
     BuildContext context,
     PrescriptionRepository prescriptions, {
     Prescription? prescription,
+    Future<void> Function()? onPrescriptionUpserted,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -192,6 +199,7 @@ class PrescriptionsScreen extends StatelessWidget {
       builder: (context) => _PrescriptionSheet(
         prescriptions: prescriptions,
         prescription: prescription,
+        onPrescriptionUpserted: onPrescriptionUpserted,
       ),
     );
   }
@@ -384,6 +392,7 @@ class _PrescriptionTile extends StatelessWidget {
     required this.scheduleSummary,
     required this.prescriptions,
     required this.reminderSchedules,
+    this.onPrescriptionUpserted,
   });
 
   final Prescription prescription;
@@ -392,6 +401,7 @@ class _PrescriptionTile extends StatelessWidget {
   final _PrescriptionScheduleSummary scheduleSummary;
   final PrescriptionRepository prescriptions;
   final ReminderScheduleService reminderSchedules;
+  final Future<void> Function()? onPrescriptionUpserted;
 
   @override
   Widget build(BuildContext context) {
@@ -437,6 +447,7 @@ class _PrescriptionTile extends StatelessWidget {
                 context,
                 prescriptions,
                 prescription: prescription,
+                onPrescriptionUpserted: onPrescriptionUpserted,
               ),
               icon: const Icon(Icons.edit_outlined),
             ),
@@ -676,10 +687,15 @@ class _PrescriptionScheduleDetailsSheet extends StatelessWidget {
 }
 
 class _PrescriptionSheet extends StatefulWidget {
-  const _PrescriptionSheet({required this.prescriptions, this.prescription});
+  const _PrescriptionSheet({
+    required this.prescriptions,
+    this.prescription,
+    this.onPrescriptionUpserted,
+  });
 
   final PrescriptionRepository prescriptions;
   final Prescription? prescription;
+  final Future<void> Function()? onPrescriptionUpserted;
 
   @override
   State<_PrescriptionSheet> createState() => _PrescriptionSheetState();
@@ -893,6 +909,7 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
         if (mounted) setState(() => _isSaving = false);
         return;
       }
+      await widget.onPrescriptionUpserted?.call();
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {

@@ -4,6 +4,8 @@ import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
 import 'package:dosey_app/core/settings/app_theme_preference.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
+import 'package:dosey_app/core/settings/personal_setup_step.dart';
+import 'package:dosey_app/core/settings/robot_onboarding_step.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 
 class GuidedTrialCompletion {
@@ -37,6 +39,9 @@ class LocalAppSettingsRepository {
   static const _guidedTrialCompletedKey = 'guided_trial_completed';
   static const _guidedTrialCompletedAtKey = 'guided_trial_completed_at';
   static const _guidedTrialAppVersionKey = 'guided_trial_app_version';
+  static const _personalSetupStepKey = 'personal_setup_step_v1';
+  static const _robotOnboardingStepKey = 'robot_onboarding_step_v1';
+  static const _claimedRobotIdKey = 'claimed_robot_id_v1';
 
   final DoseyDatabase _database;
   final AppDeviceRole defaultRole;
@@ -57,28 +62,37 @@ class LocalAppSettingsRepository {
   }
 
   Stream<AppDeviceRole> watchDeviceRole() {
+    return watchPersistedDeviceRole().map((role) => role ?? defaultRole);
+  }
+
+  Stream<AppDeviceRole?> watchPersistedDeviceRole() {
     final query = _database.select(_database.appSettings)
       ..where((setting) => setting.key.equals(_deviceRoleKey));
 
     return query.watchSingleOrNull().map((setting) {
-      if (setting == null) {
-        // Fall back to the platform-specific default role until setup picks one.
-        return defaultRole;
+      if (setting == null) return null;
+      final role = AppDeviceRole.fromStorageValue(setting.value);
+      if (role == null) {
+        throw FormatException('Unsupported persisted device role.');
       }
-
-      return AppDeviceRole.fromStorageValue(setting.value) ?? defaultRole;
+      return role;
     });
   }
 
   Future<AppDeviceRole> getDeviceRole() async {
+    return await getPersistedDeviceRole() ?? defaultRole;
+  }
+
+  Future<AppDeviceRole?> getPersistedDeviceRole() async {
     final query = _database.select(_database.appSettings)
       ..where((setting) => setting.key.equals(_deviceRoleKey));
     final setting = await query.getSingleOrNull();
-    if (setting == null) {
-      return defaultRole;
+    if (setting == null) return null;
+    final role = AppDeviceRole.fromStorageValue(setting.value);
+    if (role == null) {
+      throw FormatException('Unsupported persisted device role.');
     }
-
-    return AppDeviceRole.fromStorageValue(setting.value) ?? defaultRole;
+    return role;
   }
 
   Future<void> setDeviceRole(AppDeviceRole role) {
@@ -98,6 +112,69 @@ class LocalAppSettingsRepository {
     return _setValue(_onboardingCompletedKey, completed.toString());
   }
 
+  Stream<PersonalSetupStep> watchPersonalSetupStep() {
+    return _database
+        .watchAppSettings({_personalSetupStepKey, _onboardingCompletedKey})
+        .map((settings) {
+          final values = {
+            for (final setting in settings) setting.key: setting.value,
+          };
+          final step = PersonalSetupStep.fromStorageValue(
+            values[_personalSetupStepKey] ?? '',
+          );
+          if (step != null) return step;
+          return values[_onboardingCompletedKey] == 'true'
+              ? PersonalSetupStep.complete
+              : PersonalSetupStep.chooseNextAction;
+        });
+  }
+
+  Future<void> setPersonalSetupStep(PersonalSetupStep step) {
+    return _setValue(_personalSetupStepKey, step.storageValue);
+  }
+
+  Future<void> beginPersonalSetup() {
+    return _database.transaction(() async {
+      await _setValue(
+        _personalSetupStepKey,
+        PersonalSetupStep.chooseNextAction.storageValue,
+      );
+      await _setValue(_onboardingCompletedKey, true.toString());
+    });
+  }
+
+  Future<RobotOnboardingStep> getRobotOnboardingStep() async {
+    final settings = await _database.getAppSettings({_robotOnboardingStepKey});
+    if (settings.isEmpty) return RobotOnboardingStep.chooseMode;
+    final step = RobotOnboardingStep.fromStorageValue(settings.single.value);
+    if (step == null) {
+      throw const FormatException('Invalid Robot onboarding step.');
+    }
+    return step;
+  }
+
+  Future<void> setRobotOnboardingStep(RobotOnboardingStep step) {
+    return _setValue(_robotOnboardingStepKey, step.storageValue);
+  }
+
+  Future<String?> getClaimedRobotId() async {
+    final settings = await _database.getAppSettings({_claimedRobotIdKey});
+    if (settings.isEmpty) return null;
+    final value = settings.single.value.trim();
+    if (value.isEmpty || value.length > 128) {
+      throw const FormatException('Invalid claimed Robot ID.');
+    }
+    return value;
+  }
+
+  Future<void> setClaimedRobotId(String robotId) {
+    final value = robotId.trim();
+    if (value.isEmpty || value.length > 128) {
+      throw ArgumentError.value(robotId, 'robotId', 'must be 1-128 characters');
+    }
+    return _setValue(_claimedRobotIdKey, value);
+  }
+
   Stream<bool> watchSafetyAcknowledged() {
     final query = _database.select(_database.appSettings)
       ..where((setting) => setting.key.equals(_safetyAcknowledgedKey));
@@ -105,6 +182,11 @@ class LocalAppSettingsRepository {
     return query.watchSingleOrNull().map((setting) {
       return setting?.value == 'true';
     });
+  }
+
+  Future<bool> getSafetyAcknowledged() async {
+    final settings = await _database.getAppSettings({_safetyAcknowledgedKey});
+    return settings.isNotEmpty && settings.single.value == 'true';
   }
 
   Future<void> setSafetyAcknowledged(bool acknowledged) {
@@ -116,6 +198,11 @@ class LocalAppSettingsRepository {
       // Keep device role intact; setup reset only replays safety/onboarding.
       await _setValue(_safetyAcknowledgedKey, false.toString());
       await _setValue(_onboardingCompletedKey, false.toString());
+      await _database.deleteAppSettings({_personalSetupStepKey});
+      await _database.deleteAppSettings({
+        _robotOnboardingStepKey,
+        _claimedRobotIdKey,
+      });
     });
   }
 
