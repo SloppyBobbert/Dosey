@@ -1,0 +1,763 @@
+{
+  "cases": [
+    {
+      "name": "unknown household role",
+      "type": "householdRole",
+      "value": "caregiver"
+    },
+    {
+      "name": "unsupported contract version",
+      "type": "medication",
+      "value": {
+        "contractVersion": 2,
+        "id": "medication-1",
+        "householdId": "robot-1",
+        "name": "Morning tablet",
+        "pillType": "tablet",
+        "instructions": null,
+        "revision": 1,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "medication rejects unknown field",
+      "type": "medication",
+      "value": {
+        "contractVersion": 1,
+        "id": "medication-1",
+        "householdId": "robot-1",
+        "name": "Morning tablet",
+        "pillType": "tablet",
+        "instructions": null,
+        "revision": 1,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z",
+        "inventory": 20
+      }
+    },
+    {
+      "name": "revision must be positive",
+      "type": "medication",
+      "value": {
+        "contractVersion": 1,
+        "id": "medication-1",
+        "householdId": "robot-1",
+        "name": "Morning tablet",
+        "pillType": "tablet",
+        "instructions": null,
+        "revision": 0,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "timestamp must be UTC",
+      "type": "medication",
+      "value": {
+        "contractVersion": 1,
+        "id": "medication-1",
+        "householdId": "robot-1",
+        "name": "Morning tablet",
+        "pillType": "tablet",
+        "instructions": null,
+        "revision": 1,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T01:15:30-07:00"
+      }
+    },
+    {
+      "name": "schedule hour is out of range",
+      "type": "schedule",
+      "value": {
+        "contractVersion": 1,
+        "id": "schedule-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "label": "Breakfast",
+        "hour": 24,
+        "minute": 0,
+        "timezoneId": "America/Los_Angeles",
+        "enabled": true,
+        "revision": 1,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "schedule timezone is required",
+      "type": "schedule",
+      "value": {
+        "contractVersion": 1,
+        "id": "schedule-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "label": "Breakfast",
+        "hour": 8,
+        "minute": 0,
+        "timezoneId": " ",
+        "enabled": true,
+        "revision": 1,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "schedule timezone must exist",
+      "type": "schedule",
+      "value": {
+        "contractVersion": 1,
+        "id": "schedule-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "label": "Breakfast",
+        "hour": 8,
+        "minute": 0,
+        "timezoneId": "Mars/Olympus",
+        "enabled": true,
+        "revision": 1,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "occurrence id must be deterministic",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-1:wrong",
+        "scheduleId": "schedule-1",
+        "scheduleRevision": 2,
+        "scheduledAt": "2026-07-29T15:30:00Z",
+        "localDate": "2026-07-29",
+        "timezoneId": "America/Los_Angeles"
+      }
+    },
+    {
+      "name": "occurrence local date must be real",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+        "scheduleId": "schedule-1",
+        "scheduleRevision": 2,
+        "scheduledAt": "2026-07-29T15:30:00Z",
+        "localDate": "2026-02-30",
+        "timezoneId": "America/Los_Angeles"
+      }
+    },
+    {
+      "name": "movement is not a dose action",
+      "type": "doseEvent",
+      "value": {
+        "contractVersion": 1,
+        "id": "dose-event-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "occurrence": {
+          "contractVersion": 1,
+          "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+          "scheduleId": "schedule-1",
+          "scheduleRevision": 2,
+          "scheduledAt": "2026-07-29T15:30:00Z",
+          "localDate": "2026-07-29",
+          "timezoneId": "America/Los_Angeles"
+        },
+        "kind": "controller_moved",
+        "occurredAt": "2026-07-29T15:34:12Z",
+        "actorAccountId": "account-owner"
+      }
+    },
+    {
+      "name": "missed remains local in synced v1",
+      "type": "doseEvent",
+      "value": {
+        "contractVersion": 1,
+        "id": "dose-event-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "occurrence": {
+          "contractVersion": 1,
+          "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+          "scheduleId": "schedule-1",
+          "scheduleRevision": 2,
+          "scheduledAt": "2026-07-29T15:30:00Z",
+          "localDate": "2026-07-29",
+          "timezoneId": "America/Los_Angeles"
+        },
+        "kind": "missed",
+        "occurredAt": "2026-07-29T15:34:12Z",
+        "actorAccountId": "account-owner"
+      }
+    },
+    {
+      "name": "taken cannot be supplied as a boolean",
+      "type": "doseEvent",
+      "value": {
+        "contractVersion": 1,
+        "id": "dose-event-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "occurrence": {
+          "contractVersion": 1,
+          "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+          "scheduleId": "schedule-1",
+          "scheduleRevision": 2,
+          "scheduledAt": "2026-07-29T15:30:00Z",
+          "localDate": "2026-07-29",
+          "timezoneId": "America/Los_Angeles"
+        },
+        "kind": "skipped",
+        "occurredAt": "2026-07-29T15:34:12Z",
+        "actorAccountId": "account-owner",
+        "marksDoseTaken": true
+      }
+    },
+    {
+      "name": "client cannot claim a role",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-create",
+        "deviceId": "android-phone-1",
+        "idempotencyKey": "android-phone-1:mutation-medication-create",
+        "entityType": "medication",
+        "operation": "upsert",
+        "entityId": "medication-3",
+        "baseRevision": null,
+        "payload": {
+          "name": "Evening pill",
+          "pillType": "pill",
+          "instructions": null
+        },
+        "role": "owner"
+      }
+    },
+    {
+      "name": "delete requires a base revision",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-delete",
+        "deviceId": "web-caregiver-1",
+        "idempotencyKey": "web-caregiver-1:mutation-medication-delete",
+        "entityType": "medication",
+        "operation": "delete",
+        "entityId": "medication-2",
+        "baseRevision": null,
+        "payload": null
+      }
+    },
+    {
+      "name": "delete payload must be null",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-delete",
+        "deviceId": "web-caregiver-1",
+        "idempotencyKey": "web-caregiver-1:mutation-medication-delete",
+        "entityType": "medication",
+        "operation": "delete",
+        "entityId": "medication-2",
+        "baseRevision": 4,
+        "payload": {}
+      }
+    },
+    {
+      "name": "dose event must use append",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-dose-event",
+        "deviceId": "android-phone-1",
+        "idempotencyKey": "android-phone-1:mutation-dose-event",
+        "entityType": "dose_event",
+        "operation": "upsert",
+        "entityId": "dose-event-1",
+        "baseRevision": null,
+        "payload": null
+      }
+    },
+    {
+      "name": "dose event input cannot claim an actor",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-dose-event",
+        "deviceId": "android-phone-1",
+        "idempotencyKey": "android-phone-1:mutation-dose-event",
+        "entityType": "dose_event",
+        "operation": "append",
+        "entityId": "dose-event-1",
+        "baseRevision": null,
+        "payload": {
+          "medicationId": "medication-1",
+          "occurrence": {
+            "contractVersion": 1,
+            "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+            "scheduleId": "schedule-1",
+            "scheduleRevision": 2,
+            "scheduledAt": "2026-07-29T15:30:00Z",
+            "localDate": "2026-07-29",
+            "timezoneId": "America/Los_Angeles"
+          },
+          "kind": "taken_confirmed",
+          "occurredAt": "2026-07-29T15:34:12Z",
+          "actorAccountId": "account-owner"
+        }
+      }
+    },
+    {
+      "name": "push request requires robot scope",
+      "type": "pushRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": " ",
+        "operations": []
+      }
+    },
+    {
+      "name": "pull request limit is bounded",
+      "type": "pullRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": null,
+        "checkpoint": null,
+        "limit": 101
+      }
+    },
+    {
+      "name": "applied acknowledgement requires a cursor",
+      "type": "ack",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-create",
+        "outcome": "applied",
+        "revision": 1,
+        "cursor": null,
+        "errorCode": null,
+        "conflict": null
+      }
+    },
+    {
+      "name": "conflict acknowledgement requires conflict details",
+      "type": "ack",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-schedule-update",
+        "outcome": "conflict",
+        "revision": 2,
+        "cursor": null,
+        "errorCode": "REVISION_CONFLICT",
+        "conflict": null
+      }
+    },
+    {
+      "name": "rejected acknowledgement requires an error code",
+      "type": "ack",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-create",
+        "outcome": "rejected",
+        "revision": null,
+        "cursor": null,
+        "errorCode": null,
+        "conflict": null
+      }
+    },
+    {
+      "name": "conflict authoritative record type must match",
+      "type": "conflict",
+      "value": {
+        "contractVersion": 1,
+        "entityType": "medication",
+        "entityId": "medication-1",
+        "expectedRevision": 1,
+        "actualRevision": 2,
+        "authoritativeRecord": {
+          "contractVersion": 1,
+          "id": "schedule-1",
+          "householdId": "robot-1",
+          "medicationId": "medication-1",
+          "label": "Breakfast",
+          "hour": 8,
+          "minute": 30,
+          "timezoneId": "America/Los_Angeles",
+          "enabled": true,
+          "revision": 2,
+          "deletedAt": null,
+          "updatedAt": "2026-07-29T08:15:30Z"
+        }
+      }
+    },
+    {
+      "name": "pull page next cursor cannot be blank",
+      "type": "pullPage",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": null,
+        "checkpoint": "1",
+        "nextCursor": " ",
+        "hasMore": false,
+        "changes": []
+      }
+    },
+    {
+      "name": "pull change operation must match entity type",
+      "type": "pullPage",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": null,
+        "checkpoint": "1",
+        "nextCursor": "1",
+        "hasMore": false,
+        "changes": [
+          {
+            "cursor": "1",
+            "entityType": "dose_event",
+            "entityId": "dose-event-1",
+            "operation": "delete",
+            "record": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "occurrence local date must match its scheduled instant and timezone",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+        "scheduleId": "schedule-1",
+        "scheduleRevision": 2,
+        "scheduledAt": "2026-07-29T15:30:00Z",
+        "localDate": "2026-07-30",
+        "timezoneId": "America/Los_Angeles"
+      }
+    },
+    {
+      "name": "integers must be exactly representable across runtimes",
+      "type": "medication",
+      "value": {
+        "contractVersion": 1,
+        "id": "medication-1",
+        "householdId": "robot-1",
+        "name": "Morning tablet",
+        "pillType": "tablet",
+        "instructions": null,
+        "revision": 9007199254740992,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "timestamp year zero is outside the shared range",
+      "type": "medication",
+      "value": {
+        "contractVersion": 1,
+        "id": "medication-1",
+        "householdId": "robot-1",
+        "name": "Morning tablet",
+        "pillType": "tablet",
+        "instructions": null,
+        "revision": 1,
+        "deletedAt": null,
+        "updatedAt": "0000-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "applied acknowledgement cannot carry an error",
+      "type": "ack",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-create",
+        "outcome": "applied",
+        "revision": 1,
+        "cursor": "1042",
+        "errorCode": "UNEXPECTED",
+        "conflict": null
+      }
+    },
+    {
+      "name": "rejected acknowledgement cannot carry receipt state",
+      "type": "ack",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-medication-create",
+        "outcome": "rejected",
+        "revision": 1,
+        "cursor": "1042",
+        "errorCode": "INVALID_MUTATION",
+        "conflict": null
+      }
+    },
+    {
+      "name": "conflict acknowledgement cannot carry revision or error state",
+      "type": "ack",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-schedule-update",
+        "outcome": "conflict",
+        "revision": 2,
+        "cursor": null,
+        "errorCode": "REVISION_CONFLICT",
+        "conflict": {
+          "contractVersion": 1,
+          "entityType": "schedule",
+          "entityId": "schedule-1",
+          "expectedRevision": 1,
+          "actualRevision": 2,
+          "authoritativeRecord": {
+            "contractVersion": 1,
+            "id": "schedule-1",
+            "householdId": "robot-1",
+            "medicationId": "medication-1",
+            "label": "Breakfast",
+            "hour": 8,
+            "minute": 30,
+            "timezoneId": "America/Los_Angeles",
+            "enabled": true,
+            "revision": 2,
+            "deletedAt": null,
+            "updatedAt": "2026-07-29T08:15:30Z"
+          }
+        }
+      }
+    },
+    {
+      "name": "timezone identifiers are case sensitive",
+      "type": "schedule",
+      "value": {
+        "contractVersion": 1,
+        "id": "schedule-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "label": "Breakfast",
+        "hour": 8,
+        "minute": 30,
+        "timezoneId": "america/los_angeles",
+        "enabled": true,
+        "revision": 1,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "timezone aliases are not canonical",
+      "type": "schedule",
+      "value": {
+        "contractVersion": 1,
+        "id": "schedule-1",
+        "householdId": "robot-1",
+        "medicationId": "medication-1",
+        "label": "Breakfast",
+        "hour": 8,
+        "minute": 30,
+        "timezoneId": "US/Pacific",
+        "enabled": true,
+        "revision": 1,
+        "deletedAt": null,
+        "updatedAt": "2026-07-29T08:15:30Z"
+      }
+    },
+    {
+      "name": "local date year zero is outside the shared range",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+        "scheduleId": "schedule-1",
+        "scheduleRevision": 2,
+        "scheduledAt": "2026-07-29T15:30:00Z",
+        "localDate": "0000-07-29",
+        "timezoneId": "UTC"
+      }
+    },
+    {
+      "name": "DST local date must match the scheduled instant",
+      "type": "occurrenceRef",
+      "value": {
+        "contractVersion": 1,
+        "occurrenceId": "schedule-dst:3:2026-03-08T04:30:00.000Z",
+        "scheduleId": "schedule-dst",
+        "scheduleRevision": 3,
+        "scheduledAt": "2026-03-08T04:30:00Z",
+        "localDate": "2026-03-08",
+        "timezoneId": "America/New_York"
+      }
+    },
+    {
+      "name": "pull cursor requires checkpoint",
+      "type": "pullRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": "1042",
+        "checkpoint": null,
+        "limit": 50
+      }
+    },
+    {
+      "name": "pull checkpoint requires cursor",
+      "type": "pullRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": null,
+        "checkpoint": "1100",
+        "limit": 50
+      }
+    },
+    {
+      "name": "cursor strings use canonical decimal spelling",
+      "type": "pullRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": "01",
+        "checkpoint": "1100",
+        "limit": 50
+      }
+    },
+    {
+      "name": "cursor strings stay within the shared safe integer range",
+      "type": "pullRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": "9007199254740992",
+        "checkpoint": "9007199254740992",
+        "limit": 50
+      }
+    },
+    {
+      "name": "pull cursor cannot exceed its checkpoint",
+      "type": "pullRequest",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": "1101",
+        "checkpoint": "1100",
+        "limit": 50
+      }
+    },
+    {
+      "name": "pull page records must match robot scope",
+      "type": "pullPage",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-2",
+        "cursor": null,
+        "checkpoint": "2",
+        "nextCursor": "2",
+        "hasMore": false,
+        "changes": [
+          {
+            "cursor": "2",
+            "entityType": "medication",
+            "entityId": "medication-1",
+            "operation": "upsert",
+            "record": {
+              "contractVersion": 1,
+              "id": "medication-1",
+              "householdId": "robot-1",
+              "name": "Morning tablet",
+              "pillType": "tablet",
+              "instructions": null,
+              "revision": 1,
+              "deletedAt": null,
+              "updatedAt": "2026-07-29T08:15:30Z"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "conflict revisions must differ",
+      "type": "conflict",
+      "value": {
+        "contractVersion": 1,
+        "entityType": "medication",
+        "entityId": "medication-1",
+        "expectedRevision": 2,
+        "actualRevision": 2,
+        "authoritativeRecord": {
+          "contractVersion": 1,
+          "id": "medication-1",
+          "householdId": "robot-1",
+          "name": "Morning tablet",
+          "pillType": "tablet",
+          "instructions": null,
+          "revision": 2,
+          "deletedAt": null,
+          "updatedAt": "2026-07-29T08:15:30Z"
+        }
+      }
+    },
+    {
+      "name": "terminal pull page must reach checkpoint",
+      "type": "pullPage",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": "1",
+        "checkpoint": "3",
+        "nextCursor": "2",
+        "hasMore": false,
+        "changes": []
+      }
+    },
+    {
+      "name": "nonterminal pull page must advance",
+      "type": "pullPage",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-1",
+        "cursor": "1",
+        "checkpoint": "3",
+        "nextCursor": "1",
+        "hasMore": true,
+        "changes": []
+      }
+    },
+    {
+      "name": "push response conflict must match robot scope",
+      "type": "pushResponse",
+      "value": {
+        "contractVersion": 1,
+        "robotId": "robot-2",
+        "acknowledgements": [
+          {
+            "contractVersion": 1,
+            "mutationId": "mutation-medication-update",
+            "outcome": "conflict",
+            "revision": null,
+            "cursor": null,
+            "errorCode": null,
+            "conflict": {
+              "contractVersion": 1,
+              "entityType": "medication",
+              "entityId": "medication-1",
+              "expectedRevision": 1,
+              "actualRevision": 2,
+              "authoritativeRecord": {
+                "contractVersion": 1,
+                "id": "medication-1",
+                "householdId": "robot-1",
+                "name": "Morning tablet",
+                "pillType": "tablet",
+                "instructions": null,
+                "revision": 2,
+                "deletedAt": null,
+                "updatedAt": "2026-07-29T08:15:30Z"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
