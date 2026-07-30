@@ -21,7 +21,6 @@ on:
         type: string
 
 permissions:
-  actions: read
   contents: read
 
 concurrency:
@@ -214,6 +213,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: staging
+    # Required to query the upload run and its gated-evidence artifact.
+    permissions:
+      actions: read
     steps:
       - name: Validate explicit deployment ID
         env:
@@ -241,12 +243,14 @@ jobs:
           run_response="$RUNNER_TEMP/staging-upload-run.json"
           artifacts_response="$RUNNER_TEMP/staging-upload-artifacts.json"
           curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 60 \
             --header 'Accept: application/vnd.github+json' \
             --header "Authorization: Bearer $GH_TOKEN" \
             --header 'X-GitHub-Api-Version: 2022-11-28' \
             "https://api.github.com/repos/$REPOSITORY/actions/runs/$UPLOAD_RUN_ID" \
             --output "$run_response"
           curl --fail-with-body --silent --show-error \
+            --connect-timeout 10 --max-time 60 \
             --header 'Accept: application/vnd.github+json' \
             --header "Authorization: Bearer $GH_TOKEN" \
             --header 'X-GitHub-Api-Version: 2022-11-28' \

@@ -14,6 +14,12 @@ run_checker() {
     bash "$CHECKER" "$1" "${2:-allow-absent}"
 }
 
+run_checker_without_ids() {
+  env -u APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID \
+    -u APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID \
+    bash "$CHECKER" "$1" "${2:-allow-absent}"
+}
+
 make_file() {
   mkdir -p "$(dirname -- "$1")"
   : > "$1"
@@ -60,11 +66,16 @@ make_complete_artifact() {
 
 prerequisite_only="$TEMP_DIR/prerequisite-only"
 make_file "$prerequisite_only/test/core/sync/domain_contracts_test.dart"
-output=$(run_checker "$prerequisite_only")
+output=$(run_checker_without_ids "$prerequisite_only")
 grep -Fq 'skipping this pre-consumer integration gate' <<< "$output"
 
 partial="$TEMP_DIR/partial"
 make_file "$partial/lib/core/caregiver/caregiver_snapshot.dart"
+if run_checker_without_ids "$partial" > "$TEMP_DIR/partial-without-ids.out" 2>&1; then
+  printf 'A started caregiver rollout must not skip medication sync ID validation.\n' >&2
+  exit 1
+fi
+grep -Fq 'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID must be' "$TEMP_DIR/partial-without-ids.out"
 if run_checker "$partial" > "$TEMP_DIR/partial.out" 2>&1; then
   printf 'A partial caregiver consumer set must fail.\n' >&2
   exit 1

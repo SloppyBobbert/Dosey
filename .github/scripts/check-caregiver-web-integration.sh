@@ -11,15 +11,6 @@ case "$MODE" in
   *) printf 'Unknown caregiver integration mode: %s\n' "$MODE" >&2; exit 1 ;;
 esac
 
-if [ "${APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID:-}" != "$EXPECTED_PUSH_ID" ]; then
-  printf 'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID must be %s\n' "$EXPECTED_PUSH_ID" >&2
-  exit 1
-fi
-if [ "${APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID:-}" != "$EXPECTED_PULL_ID" ]; then
-  printf 'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID must be %s\n' "$EXPECTED_PULL_ID" >&2
-  exit 1
-fi
-
 consumer_files=(
   lib/core/caregiver/appwrite_caregiver_sync_gateway.dart
   lib/core/caregiver/caregiver_snapshot.dart
@@ -75,6 +66,14 @@ if [ ${#present_consumer_indicators[@]} -eq 0 ]; then
     printf '%s\n' "$message" >> "$GITHUB_STEP_SUMMARY"
   fi
   exit 0
+fi
+if [ "${APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID:-}" != "$EXPECTED_PUSH_ID" ]; then
+  printf 'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID must be %s\n' "$EXPECTED_PUSH_ID" >&2
+  exit 1
+fi
+if [ "${APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID:-}" != "$EXPECTED_PULL_ID" ]; then
+  printf 'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID must be %s\n' "$EXPECTED_PULL_ID" >&2
+  exit 1
 fi
 if [ ${#missing_indicators[@]} -ne 0 ]; then
   printf 'Caregiver web integration is only partially present. Missing:\n' >&2
