@@ -5,6 +5,7 @@ import 'package:appwrite/appwrite.dart';
 import 'package:dosey_app/core/caregiver/appwrite_caregiver_sync_gateway.dart';
 import 'package:dosey_app/core/caregiver/caregiver_snapshot.dart';
 import 'package:dosey_app/core/caregiver/caregiver_snapshot_controller.dart';
+import 'package:dosey_app/core/caregiver/caregiver_status_projection.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -104,6 +105,32 @@ void main() {
     expect(result.snapshot.medications, isEmpty);
     expect(result.cursor, '2');
   });
+
+  test(
+    'pull preserves the authoritative occurrence identity and revision',
+    () async {
+      final api = _FakeMedicationSyncFunctionsApi([
+        MedicationSyncFunctionResponse(
+          statusCode: 200,
+          body: jsonEncode(
+            _pullPage(
+              cursor: null,
+              checkpoint: '1',
+              nextCursor: '1',
+              hasMore: false,
+              changes: [_doseEventChange()],
+            ),
+          ),
+        ),
+      ]);
+
+      final result = await _gateway(api).pull('robot-1');
+
+      final event = result.snapshot.events.single;
+      expect(event.occurrenceId, 'schedule-1:7:2026-07-29T09:00:00.000Z');
+      expect(event.scheduleRevision, 7);
+    },
+  );
 
   test('pull cache is isolated when the signed-in account changes', () async {
     final api = _FakeMedicationSyncFunctionsApi([
@@ -310,7 +337,7 @@ void main() {
   );
 
   test(
-    'push derives a parser-valid occurrence for an explicit dose event',
+    'push passes through the projected immutable occurrence unchanged',
     () async {
       var sequence = 0;
       final api = _FakeMedicationSyncFunctionsApi([
@@ -357,8 +384,14 @@ void main() {
 
       await gateway.push('robot-1', [
         CaregiverMutation.recordDose(
-          scheduleId: 'schedule-1',
-          scheduledForIso: '2026-07-29T12:00:00.000Z',
+          occurrence: CaregiverOccurrence(
+            occurrenceId: 'schedule-1:7:2026-07-29T09:00:00.000Z',
+            scheduleId: 'schedule-1',
+            scheduleRevision: 7,
+            scheduledFor: DateTime.utc(2026, 7, 29, 9),
+            timezoneId: 'UTC',
+            localDate: '2026-07-29',
+          ),
           action: CaregiverDoseAction.helpRequested,
         ),
       ]);
@@ -380,10 +413,10 @@ void main() {
           'medicationId': 'medication-1',
           'occurrence': {
             'contractVersion': 1,
-            'occurrenceId': 'schedule-1:7:2026-07-29T12:00:00.000Z',
+            'occurrenceId': 'schedule-1:7:2026-07-29T09:00:00.000Z',
             'scheduleId': 'schedule-1',
             'scheduleRevision': 7,
-            'scheduledAt': '2026-07-29T12:00:00.000Z',
+            'scheduledAt': '2026-07-29T09:00:00.000Z',
             'localDate': '2026-07-29',
             'timezoneId': 'UTC',
           },
@@ -391,6 +424,182 @@ void main() {
           'occurredAt': '2026-07-29T12:05:00.000Z',
         },
       });
+    },
+  );
+
+  test(
+    'push fails closed when the cached schedule changed after projection',
+    () async {
+      final api = _FakeMedicationSyncFunctionsApi([
+        MedicationSyncFunctionResponse(
+          statusCode: 200,
+          body: jsonEncode(
+            _pullPage(
+              cursor: null,
+              checkpoint: '2',
+              nextCursor: '2',
+              hasMore: false,
+              changes: [_medicationChange(), _scheduleChange()],
+            ),
+          ),
+        ),
+      ]);
+      final gateway = _gateway(api);
+      await gateway.pull('robot-1');
+      final staleOccurrence = projectCaregiverDay(
+        snapshot: CaregiverSnapshot(
+          householdId: 'robot-1',
+          revision: '0',
+          generatedAt: DateTime.utc(2026, 7, 29),
+          medications: [
+            CaregiverMedication(
+              id: 'medication-1',
+              name: 'Aspirin',
+              instructions: '',
+              active: true,
+              version: 1,
+            ),
+          ],
+          schedules: [
+            CaregiverSchedule(
+              id: 'schedule-1',
+              medicationId: 'medication-1',
+              label: 'Morning',
+              hour: 9,
+              minute: 0,
+              enabled: true,
+              version: 6,
+            ),
+          ],
+          events: const [],
+        ),
+        now: DateTime.utc(2026, 7, 29, 8),
+      ).single.occurrence;
+
+      await expectLater(
+        gateway.push('robot-1', [
+          CaregiverMutation.recordDose(
+            occurrence: staleOccurrence,
+            action: CaregiverDoseAction.taken,
+          ),
+        ]),
+        throwsA(isA<CaregiverSyncException>()),
+      );
+
+      expect(api.calls, hasLength(1));
+    },
+  );
+
+  test(
+    'successful pull rejects an account change before parsing or caching',
+    () async {
+      final api = _FakeMedicationSyncFunctionsApi(
+        [
+          MedicationSyncFunctionResponse(
+            statusCode: 200,
+            body: jsonEncode(
+              _pullPage(
+                cursor: null,
+                checkpoint: '1',
+                nextCursor: '1',
+                hasMore: false,
+                changes: [_medicationChange()],
+              ),
+            ),
+          ),
+        ],
+        accountResults: ['account-a', 'account-b'],
+      );
+
+      await expectLater(
+        _gateway(api).pull('robot-1'),
+        throwsA(isA<CaregiverSyncException>()),
+      );
+      expect(api.calls, hasLength(1));
+    },
+  );
+
+  test(
+    'account-changed successful pull leaves the initiating cache untouched',
+    () async {
+      final api = _FakeMedicationSyncFunctionsApi(
+        [
+          MedicationSyncFunctionResponse(
+            statusCode: 200,
+            body: jsonEncode(
+              _pullPage(
+                cursor: null,
+                checkpoint: '1',
+                nextCursor: '1',
+                hasMore: false,
+                changes: [_medicationChange()],
+              ),
+            ),
+          ),
+          MedicationSyncFunctionResponse(
+            statusCode: 200,
+            body: jsonEncode(
+              _pullPage(
+                cursor: '1',
+                checkpoint: '1',
+                nextCursor: '1',
+                hasMore: false,
+                changes: const [],
+              ),
+            ),
+          ),
+        ],
+        accountResults: ['account-a', 'account-b'],
+      );
+      final gateway = _gateway(api);
+
+      await expectLater(
+        gateway.pull('robot-1'),
+        throwsA(isA<CaregiverSyncException>()),
+      );
+      api.accountId = 'account-a';
+      final result = await gateway.pull(
+        'robot-1',
+        cursor: '1',
+        checkpoint: '1',
+      );
+
+      expect(result.snapshot.medications, isEmpty);
+    },
+  );
+
+  test(
+    'successful push rejects an account change before acknowledging',
+    () async {
+      final api = _FakeMedicationSyncFunctionsApi(
+        [
+          MedicationSyncFunctionResponse(
+            statusCode: 200,
+            body: jsonEncode({
+              'contractVersion': 1,
+              'robotId': 'robot-1',
+              'acknowledgements': [_pushAcknowledgement('mutation-1')],
+            }),
+          ),
+        ],
+        accountResults: ['account-a', 'account-b'],
+      );
+
+      await expectLater(
+        _gateway(api).push('robot-1', [
+          CaregiverMutation.upsertMedication(
+            CaregiverMedication(
+              id: 'med-1',
+              name: 'Morning tablet',
+              instructions: '',
+              active: true,
+              version: 0,
+            ),
+          ),
+        ]),
+        throwsA(isA<CaregiverSyncException>()),
+      );
+      expect(api.calls, hasLength(1));
     },
   );
 
@@ -490,7 +699,7 @@ void main() {
 
       await _gateway(api).pull('robot-1');
 
-      expect(api.accountLookups, 2);
+      expect(api.accountLookups, 3);
       expect(api.calls, hasLength(2));
       expect(api.calls.first.body, api.calls.last.body);
     },
@@ -525,7 +734,7 @@ void main() {
           ),
         ),
       ],
-      accountResults: ['account-a', 'account-a', 'account-b', 'account-b'],
+      accountResults: ['account-a', 'account-a', 'account-a', 'account-b'],
     );
     final gateway = _gateway(api);
     final accountA = await gateway.pull('robot-1');
@@ -712,6 +921,31 @@ Map<String, Object?> _scheduleChange() => {
   },
 };
 
+Map<String, Object?> _doseEventChange() => {
+  'cursor': '1',
+  'entityType': 'dose_event',
+  'entityId': 'event-1',
+  'operation': 'append',
+  'record': {
+    'contractVersion': 1,
+    'id': 'event-1',
+    'householdId': 'robot-1',
+    'medicationId': 'medication-1',
+    'occurrence': {
+      'contractVersion': 1,
+      'occurrenceId': 'schedule-1:7:2026-07-29T09:00:00.000Z',
+      'scheduleId': 'schedule-1',
+      'scheduleRevision': 7,
+      'scheduledAt': '2026-07-29T09:00:00.000Z',
+      'localDate': '2026-07-29',
+      'timezoneId': 'UTC',
+    },
+    'kind': 'taken_confirmed',
+    'occurredAt': '2026-07-29T09:05:00.000Z',
+    'actorAccountId': 'account-1',
+  },
+};
+
 Map<String, Object?> _pushFailure(String outcome) => {
   'contractVersion': 1,
   'robotId': 'robot-1',
@@ -745,6 +979,16 @@ Map<String, Object?> _pushFailure(String outcome) => {
           : null,
     },
   ],
+};
+
+Map<String, Object?> _pushAcknowledgement(String mutationId) => {
+  'contractVersion': 1,
+  'mutationId': mutationId,
+  'outcome': 'applied',
+  'revision': 1,
+  'cursor': '1',
+  'errorCode': null,
+  'conflict': null,
 };
 
 class _FunctionCall {

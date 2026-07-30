@@ -117,6 +117,10 @@ class _CaregiverShellState extends State<CaregiverShell> {
       value: value,
       now: widget.dependencies.now(),
       push: _snapshot.push,
+      recordTerminal: _snapshot.recordTerminalDose,
+      terminalActionsAvailable:
+          _snapshot.state is CaregiverFresh &&
+          !_snapshot.isTerminalMutationPending,
     ),
   };
 }
@@ -148,19 +152,36 @@ class _CareNavigation extends StatelessWidget {
   );
 }
 
-class _TodayPage extends StatelessWidget {
+class _TodayPage extends StatefulWidget {
   const _TodayPage({
     required this.value,
     required this.now,
     required this.push,
+    required this.recordTerminal,
+    required this.terminalActionsAvailable,
   });
   final CaregiverSnapshot value;
   final DateTime now;
   final Future<void> Function(CaregiverMutation) push;
+  final Future<void> Function({
+    required CaregiverOccurrence occurrence,
+    required CaregiverDoseAction action,
+  })
+  recordTerminal;
+  final bool terminalActionsAvailable;
+
+  @override
+  State<_TodayPage> createState() => _TodayPageState();
+}
+
+class _TodayPageState extends State<_TodayPage> {
+  bool _dialogOpen = false;
 
   @override
   Widget build(BuildContext context) {
-    final doses = projectCaregiverDay(snapshot: value, now: now);
+    final doses = projectCaregiverDay(snapshot: widget.value, now: widget.now);
+    final terminalActionsAvailable =
+        widget.terminalActionsAvailable && !_dialogOpen;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -187,24 +208,26 @@ class _TodayPage extends StatelessWidget {
                   Wrap(
                     spacing: 8,
                     children: [
-                      FilledButton(
-                        onPressed: () => _confirm(
-                          context,
-                          dose,
-                          CaregiverDoseAction.taken,
-                          'Confirm this dose was taken?',
+                      if (!dose.hasTerminalOutcome && terminalActionsAvailable)
+                        FilledButton(
+                          onPressed: () => _confirm(
+                            context,
+                            dose,
+                            CaregiverDoseAction.taken,
+                            'Confirm this dose was taken?',
+                          ),
+                          child: const Text('Confirm taken'),
                         ),
-                        child: const Text('Confirm taken'),
-                      ),
-                      OutlinedButton(
-                        onPressed: () => _confirm(
-                          context,
-                          dose,
-                          CaregiverDoseAction.skipped,
-                          'Confirm this dose should be skipped?',
+                      if (!dose.hasTerminalOutcome && terminalActionsAvailable)
+                        OutlinedButton(
+                          onPressed: () => _confirm(
+                            context,
+                            dose,
+                            CaregiverDoseAction.skipped,
+                            'Confirm this dose should be skipped?',
+                          ),
+                          child: const Text('Skip dose'),
                         ),
-                        child: const Text('Skip dose'),
-                      ),
                       TextButton(
                         onPressed: () => _confirm(
                           context,
@@ -222,8 +245,8 @@ class _TodayPage extends StatelessWidget {
           ),
         const SizedBox(height: 24),
         Text('Recent activity', style: Theme.of(context).textTheme.titleLarge),
-        if (value.events.isEmpty) const Text('No dose activity yet.'),
-        for (final event in value.events.reversed)
+        if (widget.value.events.isEmpty) const Text('No dose activity yet.'),
+        for (final event in widget.value.events.reversed)
           ListTile(
             title: Text(_action(event.action)),
             subtitle: Text('${_clock(event.scheduledFor)} scheduled dose'),
@@ -238,6 +261,8 @@ class _TodayPage extends StatelessWidget {
     CaregiverDoseAction action,
     String prompt,
   ) async {
+    if (_dialogOpen) return;
+    setState(() => _dialogOpen = true);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -255,13 +280,15 @@ class _TodayPage extends StatelessWidget {
         ],
       ),
     );
+    if (mounted) setState(() => _dialogOpen = false);
     if (confirmed != true) return;
-    await push(
-      CaregiverMutation.recordDose(
-        scheduleId: dose.schedule.id,
-        scheduledForIso: dose.scheduledFor.toIso8601String(),
-        action: action,
-      ),
+    if (action == CaregiverDoseAction.taken ||
+        action == CaregiverDoseAction.skipped) {
+      await widget.recordTerminal(occurrence: dose.occurrence, action: action);
+      return;
+    }
+    await widget.push(
+      CaregiverMutation.recordDose(occurrence: dose.occurrence, action: action),
     );
   }
 }

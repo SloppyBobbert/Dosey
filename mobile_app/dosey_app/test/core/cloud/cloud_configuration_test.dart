@@ -56,19 +56,38 @@ void main() {
     expect(configuration.isHouseholdManagementEnabled, isFalse);
   });
 
-  test('medication sync requires both push and pull Functions', () {
-    final complete = CloudConfiguration.fromValues(
+  test('caregiver sync defaults to disabled', () {
+    final configuration = CloudConfiguration.fromValues(
+      endpoint: 'https://nyc.cloud.appwrite.io/v1',
+      projectId: 'dosey-development',
+    );
+
+    expect(configuration.caregiverSyncEnabled, isFalse);
+    expect(configuration.isMedicationSyncEnabled, isFalse);
+  });
+
+  test('caregiver sync requires its flag and both Function IDs', () {
+    final idsOnly = CloudConfiguration.fromValues(
       endpoint: 'https://nyc.cloud.appwrite.io/v1',
       projectId: 'dosey-development',
       medicationSyncPushFunctionId: 'medication-push',
       medicationSyncPullFunctionId: 'medication-pull',
     );
+    final complete = CloudConfiguration.fromValues(
+      endpoint: 'https://nyc.cloud.appwrite.io/v1',
+      projectId: 'dosey-development',
+      medicationSyncPushFunctionId: 'medication-push',
+      medicationSyncPullFunctionId: 'medication-pull',
+      caregiverSyncEnabled: true,
+    );
     final partial = CloudConfiguration.fromValues(
       endpoint: 'https://nyc.cloud.appwrite.io/v1',
       projectId: 'dosey-development',
       medicationSyncPushFunctionId: 'medication-push',
+      caregiverSyncEnabled: true,
     );
 
+    expect(idsOnly.isMedicationSyncEnabled, isFalse);
     expect(complete.isMedicationSyncEnabled, isTrue);
     expect(complete.medicationSyncPullFunctionId, 'medication-pull');
     expect(partial.isMedicationSyncEnabled, isFalse);

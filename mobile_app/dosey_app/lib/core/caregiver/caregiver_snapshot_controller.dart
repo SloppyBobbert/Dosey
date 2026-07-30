@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'caregiver_snapshot.dart';
+import 'caregiver_status_projection.dart';
 
 class CaregiverSyncException implements Exception {
   const CaregiverSyncException(this.message);
@@ -105,6 +106,9 @@ class CaregiverSnapshotController extends ChangeNotifier {
   final DateTime Function() _now;
   CaregiverSnapshotState state = const CaregiverLoading();
   int _request = 0;
+  bool _isTerminalMutationPending = false;
+
+  bool get isTerminalMutationPending => _isTerminalMutationPending;
 
   Future<void> load() => _pull(showRefresh: false);
   Future<void> refresh() => _pull(showRefresh: true);
@@ -135,6 +139,51 @@ class CaregiverSnapshotController extends ChangeNotifier {
   }
 
   Future<void> push(CaregiverMutation mutation) async {
+    if (_isTerminalDoseMutation(mutation)) {
+      return;
+    }
+    await _push(mutation);
+  }
+
+  Future<void> recordTerminalDose({
+    required CaregiverOccurrence occurrence,
+    required CaregiverDoseAction action,
+  }) async {
+    if (action != CaregiverDoseAction.taken &&
+        action != CaregiverDoseAction.skipped) {
+      return;
+    }
+    if (_isTerminalMutationPending || state is! CaregiverFresh) return;
+
+    _isTerminalMutationPending = true;
+    notifyListeners();
+    try {
+      await refresh();
+      final current = _current;
+      if (state is! CaregiverFresh || current == null) return;
+      final projection = projectCaregiverDay(snapshot: current.$1, now: _now())
+          .where((dose) => _sameOccurrence(dose.occurrence, occurrence))
+          .firstOrNull;
+      if (projection == null || projection.hasTerminalOutcome) {
+        state = CaregiverStale(
+          snapshot: current.$1,
+          lastUpdatedAt: current.$2,
+          message: 'Dose changed. Refresh before trying again.',
+          isConflict: true,
+        );
+        notifyListeners();
+        return;
+      }
+      await _push(
+        CaregiverMutation.recordDose(occurrence: occurrence, action: action),
+      );
+    } finally {
+      _isTerminalMutationPending = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _push(CaregiverMutation mutation) async {
     final previous = _current;
     if (previous == null) return;
     try {
@@ -150,6 +199,19 @@ class CaregiverSnapshotController extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  bool _sameOccurrence(CaregiverOccurrence left, CaregiverOccurrence right) =>
+      left.occurrenceId == right.occurrenceId &&
+      left.scheduleId == right.scheduleId &&
+      left.scheduleRevision == right.scheduleRevision &&
+      left.scheduledFor.toUtc().isAtSameMomentAs(right.scheduledFor.toUtc()) &&
+      left.timezoneId == right.timezoneId &&
+      left.localDate == right.localDate;
+
+  bool _isTerminalDoseMutation(CaregiverMutation mutation) =>
+      mutation.kind == CaregiverMutationKind.recordDose &&
+      (mutation.values['action'] == CaregiverDoseAction.taken.name ||
+          mutation.values['action'] == CaregiverDoseAction.skipped.name);
 
   (CaregiverSnapshot, DateTime)? get _current => switch (state) {
     CaregiverFresh(:final snapshot, :final lastUpdatedAt) => (

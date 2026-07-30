@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dosey_app/app/web/dosey_web_app.dart';
 import 'package:dosey_app/app/web/dosey_web_dependencies.dart';
 import 'package:dosey_app/app/web/web_auth_configuration.dart';
@@ -106,12 +108,142 @@ void main() {
 
     expect(caregiver.operations, hasLength(1));
     expect(caregiver.operations.single.kind, CaregiverMutationKind.recordDose);
-    expect(caregiver.operations.single.values, {
-      'scheduleId': 'schedule-1',
-      'scheduledFor': '2026-07-29T09:00:00.000Z',
-      'action': 'taken',
-    });
+    expect(
+      caregiver.operations.single.values['occurrence'],
+      isA<CaregiverOccurrence>(),
+    );
+    expect(caregiver.operations.single.values['action'], 'taken');
   });
+
+  testWidgets(
+    'pending terminal confirmation hides terminal controls but keeps help available',
+    (tester) async {
+      final refresh = Completer<CaregiverSnapshot>();
+      final caregiver = _CaregiverGateway(_snapshot());
+      await tester.pumpWidget(
+        _app(
+          WebRoutes.today,
+          household: _HouseholdGateway(_robot(HouseholdRole.member)),
+          management: _ManagementGateway(_robot(HouseholdRole.member)),
+          caregiver: caregiver,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      caregiver.pulls.add(refresh.future);
+
+      await tester.tap(find.text('Confirm taken'));
+      await tester.pump();
+
+      expect(find.text('Confirm this dose was taken?'), findsOneWidget);
+      expect(find.text('Confirm taken'), findsNothing);
+      expect(find.text('Skip dose'), findsNothing);
+      expect(find.text('Request help'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Confirm'));
+      await tester.pump();
+      expect(find.text('Confirm taken'), findsNothing);
+      expect(find.text('Skip dose'), findsNothing);
+      expect(find.text('Request help'), findsOneWidget);
+
+      refresh.complete(_snapshot());
+      await tester.pump();
+      await tester.pump();
+    },
+  );
+
+  testWidgets('terminal dose states retain help but hide terminal actions', (
+    tester,
+  ) async {
+    for (final action in [
+      CaregiverDoseAction.taken,
+      CaregiverDoseAction.skipped,
+    ]) {
+      await tester.pumpWidget(
+        _app(
+          WebRoutes.today,
+          household: _HouseholdGateway(_robot(HouseholdRole.member)),
+          management: _ManagementGateway(_robot(HouseholdRole.member)),
+          caregiver: _CaregiverGateway(_snapshot(events: [_doseEvent(action)])),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Confirm taken'), findsNothing);
+      expect(find.text('Skip dose'), findsNothing);
+      expect(find.text('Request help'), findsOneWidget);
+    }
+  });
+
+  testWidgets('a derived missed dose sends no mutation', (tester) async {
+    final caregiver = _CaregiverGateway(_snapshot());
+    await tester.pumpWidget(
+      _app(
+        WebRoutes.today,
+        household: _HouseholdGateway(_robot(HouseholdRole.member)),
+        management: _ManagementGateway(_robot(HouseholdRole.member)),
+        caregiver: caregiver,
+        now: () => DateTime(2026, 7, 29, 12),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Missed'), findsOneWidget);
+    expect(caregiver.operations, isEmpty);
+  });
+
+  testWidgets(
+    'stale dose view keeps help available but hides terminal actions',
+    (tester) async {
+      final caregiver = _CaregiverGateway(_snapshot());
+      await tester.pumpWidget(
+        _app(
+          WebRoutes.today,
+          household: _HouseholdGateway(_robot(HouseholdRole.member)),
+          management: _ManagementGateway(_robot(HouseholdRole.member)),
+          caregiver: caregiver,
+        ),
+      );
+      await tester.pumpAndSettle();
+      caregiver.pullError = const CaregiverSyncException('Offline');
+
+      await tester.tap(find.byTooltip('Refresh'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Confirm taken'), findsNothing);
+      expect(find.text('Skip dose'), findsNothing);
+      expect(find.text('Request help'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'refreshing dose view keeps help available but hides terminal actions',
+    (tester) async {
+      final refresh = Completer<CaregiverSnapshot>();
+      final caregiver = _CaregiverGateway(_snapshot());
+      await tester.pumpWidget(
+        _app(
+          WebRoutes.today,
+          household: _HouseholdGateway(_robot(HouseholdRole.member)),
+          management: _ManagementGateway(_robot(HouseholdRole.member)),
+          caregiver: caregiver,
+        ),
+      );
+      await tester.pumpAndSettle();
+      caregiver.pulls.add(refresh.future);
+
+      await tester.tap(find.byTooltip('Refresh'));
+      await tester.pump();
+
+      expect(find.text('Confirm taken'), findsNothing);
+      expect(find.text('Skip dose'), findsNothing);
+      expect(find.text('Request help'), findsOneWidget);
+      refresh.complete(_snapshot());
+      await tester.pumpAndSettle();
+    },
+  );
 
   testWidgets('owner can add a medication', (tester) async {
     final caregiver = _CaregiverGateway(_snapshot());
@@ -210,6 +342,7 @@ Widget _app(
   required HouseholdSyncGateway household,
   required HouseholdManagementGateway management,
   CaregiverSyncGateway? caregiver,
+  DateTime Function()? now,
 }) => DoseyWebApp(
   initialRoute: route,
   dependencies: DoseyWebDependencies(
@@ -223,7 +356,7 @@ Widget _app(
     household: household,
     householdManagement: management,
     caregiver: caregiver ?? _CaregiverGateway(_snapshot()),
-    now: () => DateTime(2026, 7, 29, 9),
+    now: now ?? () => DateTime(2026, 7, 29, 9),
   ),
 );
 
@@ -306,8 +439,10 @@ class _ManagementGateway implements HouseholdManagementGateway {
 
 class _CaregiverGateway implements CaregiverSyncGateway {
   _CaregiverGateway(this.snapshot);
-  final CaregiverSnapshot snapshot;
+  CaregiverSnapshot snapshot;
   final operations = <CaregiverMutation>[];
+  final pulls = <Future<CaregiverSnapshot>>[];
+  Object? pullError;
 
   @override
   Future<CaregiverPullResult> pull(
@@ -315,11 +450,21 @@ class _CaregiverGateway implements CaregiverSyncGateway {
     String? cursor,
     String? checkpoint,
     int limit = 100,
-  }) async => CaregiverPullResult(
-    snapshot: snapshot,
-    cursor: null,
-    checkpoint: 'checkpoint-1',
-  );
+  }) async {
+    if (pulls.isNotEmpty) {
+      return CaregiverPullResult(
+        snapshot: await pulls.removeAt(0),
+        cursor: null,
+        checkpoint: 'checkpoint-1',
+      );
+    }
+    if (pullError case final error?) throw error;
+    return CaregiverPullResult(
+      snapshot: snapshot,
+      cursor: null,
+      checkpoint: 'checkpoint-1',
+    );
+  }
 
   @override
   Future<void> push(String robotId, List<CaregiverMutation> operations) async =>
@@ -343,6 +488,7 @@ RobotInstallation _robot(HouseholdRole role) => RobotInstallation(
 
 CaregiverSnapshot _snapshot({
   CaregiverPillType pillType = CaregiverPillType.pill,
+  List<CaregiverDoseEvent> events = const [],
 }) => CaregiverSnapshot(
   householdId: 'household-1',
   revision: 'revision-1',
@@ -368,5 +514,17 @@ CaregiverSnapshot _snapshot({
       version: 1,
     ),
   ],
-  events: const [],
+  events: events,
+);
+
+CaregiverDoseEvent _doseEvent(CaregiverDoseAction action) => CaregiverDoseEvent(
+  id: 'event-${action.name}',
+  occurrenceId: 'schedule-1:1:2026-07-29T09:00:00.000Z',
+  scheduleId: 'schedule-1',
+  scheduleRevision: 1,
+  scheduledFor: DateTime.utc(2026, 7, 29, 9),
+  timezoneId: 'UTC',
+  localDate: '2026-07-29',
+  occurredAt: DateTime.utc(2026, 7, 29, 9, 5),
+  action: action,
 );

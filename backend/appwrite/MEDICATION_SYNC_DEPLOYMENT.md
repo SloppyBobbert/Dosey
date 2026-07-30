@@ -3,6 +3,22 @@
 This runbook applies only to an isolated Appwrite staging project. The checked-in
 template is additive and does not contain credentials. Do not target production.
 
+## Mandatory activation blockers
+
+**Keep this rollout inactive.** The existing staging gates below are necessary
+but insufficient. Never distribute or release medication-sync Function IDs until
+all of the following have passed:
+
+1. Product-boundary approval for medication sync.
+2. An atomic server guard that guarantees at most one terminal outcome per
+   occurrence across all competing mutations and clients.
+3. Isolated staging authorization.
+4. Real two-client concurrency validation.
+5. Secure mounted-rollout approval.
+
+Until then, do not add medication Function IDs to client, generated environment,
+or workflow configuration.
+
 ## Before deployment
 
 1. Run `npm ci`, `npm test`, `npm run typecheck`, and `npm run build` from

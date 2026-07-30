@@ -217,6 +217,7 @@ class AppwriteCaregiverSyncGateway implements CaregiverSyncGateway {
         throw CaregiverSyncException(_statusMessage(error.code ?? 500));
       }
       if (response.statusCode >= 200 && response.statusCode < 300) {
+        await _revalidateAuthentication(expectedAccountId);
         return response;
       }
       if (response.statusCode == 401 && !authenticationRevalidated) {
@@ -334,8 +335,12 @@ class AppwriteCaregiverSyncGateway implements CaregiverSyncGateway {
         case DoseEventContract record:
           cache.events[record.id] = CaregiverDoseEvent(
             id: record.id,
+            occurrenceId: record.occurrence.occurrenceId,
             scheduleId: record.occurrence.scheduleId,
+            scheduleRevision: record.occurrence.scheduleRevision,
             scheduledFor: DateTime.parse(record.occurrence.scheduledAt),
+            timezoneId: record.occurrence.timezoneId,
+            localDate: record.occurrence.localDate,
             occurredAt: DateTime.parse(record.occurredAt),
             action: _caregiverAction(record.kind),
           );
@@ -428,20 +433,27 @@ class AppwriteCaregiverSyncGateway implements CaregiverSyncGateway {
     ({String mutationId, String deviceId, String idempotencyKey}) identity,
     Map<String, Object?> values,
   ) {
-    final scheduleId = values['scheduleId']! as String;
+    final reference = values['occurrence']! as CaregiverOccurrence;
+    final scheduleId = reference.scheduleId;
     final schedule = _caches[(accountId: accountId, robotId: robotId)]
         ?.cache
         .schedules[scheduleId];
-    if (schedule == null) throw StateError('Schedule is not synchronized.');
-    final scheduledAt = _canonicalUtc(values['scheduledFor']! as String);
+    final scheduledAt = _canonicalUtc(reference.scheduledFor.toIso8601String());
+    if (schedule == null ||
+        schedule.id != reference.scheduleId ||
+        schedule.version != reference.scheduleRevision ||
+        schedule.timezoneId != reference.timezoneId ||
+        reference.localDate != _localDate(scheduledAt, schedule.timezoneId)) {
+      throw StateError('Dose occurrence is no longer current.');
+    }
     final occurredAt = _canonicalUtc(_now().toUtc().toIso8601String());
     final occurrence = OccurrenceRefContract(
-      occurrenceId: '$scheduleId:${schedule.version}:$scheduledAt',
-      scheduleId: scheduleId,
-      scheduleRevision: schedule.version,
+      occurrenceId: reference.occurrenceId,
+      scheduleId: reference.scheduleId,
+      scheduleRevision: reference.scheduleRevision,
       scheduledAt: scheduledAt,
-      localDate: _localDate(scheduledAt, schedule.timezoneId),
-      timezoneId: schedule.timezoneId,
+      localDate: reference.localDate,
+      timezoneId: reference.timezoneId,
     );
     return MutationContract(
       mutationId: identity.mutationId,

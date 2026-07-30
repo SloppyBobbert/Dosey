@@ -18,15 +18,19 @@ class CaregiverDoseProjection {
     required this.schedule,
     required this.medication,
     required this.scheduledFor,
+    required this.occurrence,
     required this.status,
     this.event,
+    this.hasTerminalOutcome = false,
   });
 
   final CaregiverSchedule schedule;
   final CaregiverMedication medication;
   final DateTime scheduledFor;
+  final CaregiverOccurrence occurrence;
   final CaregiverDoseStatus status;
   final CaregiverDoseEvent? event;
+  final bool hasTerminalOutcome;
 }
 
 List<CaregiverDoseProjection> projectCaregiverDay({
@@ -47,18 +51,22 @@ List<CaregiverDoseProjection> projectCaregiverDay({
       schedule.minute,
       schedule.timezoneId,
     );
-    final event = snapshot.events
-        .where(
-          (candidate) =>
-              candidate.scheduleId == schedule.id &&
-              _sameMinute(candidate.scheduledFor, scheduledFor),
-        )
-        .lastOrNull;
+    final occurrence = _occurrence(schedule, scheduledFor);
+    final events =
+        snapshot.events
+            .where((candidate) => _matchesOccurrence(candidate, occurrence))
+            .toList()
+          ..sort(_compareEvents);
+    final terminalEvents = events.where(_isTerminal).toList();
+    final event = terminalEvents.isNotEmpty
+        ? terminalEvents.last
+        : events.lastOrNull;
     result.add(
       CaregiverDoseProjection(
         schedule: schedule,
         medication: medication,
         scheduledFor: scheduledFor,
+        occurrence: occurrence,
         event: event,
         status: event == null
             ? _derivedStatus(now, scheduledFor, dueWindow)
@@ -69,10 +77,21 @@ List<CaregiverDoseProjection> projectCaregiverDay({
                 CaregiverDoseAction.helpRequested =>
                   CaregiverDoseStatus.helpRequested,
               },
+        hasTerminalOutcome: terminalEvents.isNotEmpty,
       ),
     );
   }
-  result.sort((left, right) => left.scheduledFor.compareTo(right.scheduledFor));
+  result.sort((left, right) {
+    final scheduledFor = left.scheduledFor.compareTo(right.scheduledFor);
+    if (scheduledFor != 0) return scheduledFor;
+    final scheduleId = left.occurrence.scheduleId.compareTo(
+      right.occurrence.scheduleId,
+    );
+    if (scheduleId != 0) return scheduleId;
+    return left.occurrence.occurrenceId.compareTo(
+      right.occurrence.occurrenceId,
+    );
+  });
   return List.unmodifiable(result);
 }
 
@@ -86,9 +105,60 @@ CaregiverDoseStatus _derivedStatus(
   return CaregiverDoseStatus.missed;
 }
 
-bool _sameMinute(DateTime left, DateTime right) =>
-    left.toUtc().millisecondsSinceEpoch ~/ Duration.millisecondsPerMinute ==
-    right.toUtc().millisecondsSinceEpoch ~/ Duration.millisecondsPerMinute;
+bool _isTerminal(CaregiverDoseEvent event) =>
+    event.action == CaregiverDoseAction.taken ||
+    event.action == CaregiverDoseAction.skipped;
+
+int _compareEvents(CaregiverDoseEvent left, CaregiverDoseEvent right) {
+  final occurredAt = left.occurredAt.compareTo(right.occurredAt);
+  return occurredAt != 0 ? occurredAt : left.id.compareTo(right.id);
+}
+
+CaregiverOccurrence _occurrence(
+  CaregiverSchedule schedule,
+  DateTime scheduledFor,
+) => CaregiverOccurrence(
+  occurrenceId:
+      '${schedule.id}:${schedule.version}:${_canonicalUtc(scheduledFor)}',
+  scheduleId: schedule.id,
+  scheduleRevision: schedule.version,
+  scheduledFor: scheduledFor,
+  timezoneId: schedule.timezoneId,
+  localDate: _localDate(scheduledFor, schedule.timezoneId),
+);
+
+bool _matchesOccurrence(
+  CaregiverDoseEvent event,
+  CaregiverOccurrence occurrence,
+) =>
+    event.occurrenceId == occurrence.occurrenceId &&
+    event.scheduleId == occurrence.scheduleId &&
+    event.scheduleRevision == occurrence.scheduleRevision &&
+    event.scheduledFor.toUtc() == occurrence.scheduledFor.toUtc() &&
+    event.timezoneId == occurrence.timezoneId &&
+    event.localDate == occurrence.localDate;
+
+String _canonicalUtc(DateTime instant) {
+  final value = instant.toUtc();
+  String digits(int number, int width) => number.toString().padLeft(width, '0');
+  return '${digits(value.year, 4)}-${digits(value.month, 2)}-'
+      '${digits(value.day, 2)}T${digits(value.hour, 2)}:'
+      '${digits(value.minute, 2)}:${digits(value.second, 2)}.'
+      '${digits(value.millisecond, 3)}Z';
+}
+
+String _localDate(DateTime scheduledFor, String timezoneId) {
+  if (!timezone.timeZoneDatabase.isInitialized) {
+    timezone_data.initializeTimeZones();
+  }
+  final location = timezoneId == 'UTC'
+      ? timezone.UTC
+      : timezone.getLocation(timezoneId);
+  final local = timezone.TZDateTime.from(scheduledFor, location);
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '${local.year.toString().padLeft(4, '0')}-${two(local.month)}-'
+      '${two(local.day)}';
+}
 
 DateTime _scheduledFor(DateTime now, int hour, int minute, String timezoneId) {
   if (!timezone.timeZoneDatabase.isInitialized) {

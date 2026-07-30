@@ -28,8 +28,6 @@ jobs:
       APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID }}
       APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID }}
       APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ${{ vars.APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID }}
-      APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID }}
-      APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID }}
       SOURCE_SHA: ${{ inputs.source_sha }}
     defaults:
       run:
@@ -92,14 +90,6 @@ jobs:
               exit 1
             fi
           done
-          test "${APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID:-}" = "medication-sync-push-v1" || {
-            printf 'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID must be medication-sync-push-v1\n' >&2
-            exit 1
-          }
-          test "${APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID:-}" = "medication-sync-pull-v1" || {
-            printf 'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID must be medication-sync-pull-v1\n' >&2
-            exit 1
-          }
 
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
@@ -116,15 +106,14 @@ jobs:
             --dart-define=DOSEY_BUILD_PROFILE=personal \
             --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted \
             --dart-define=WEB_AUTH_ENABLED=true \
+            --dart-define=CAREGIVER_SYNC_ENABLED=false \
             --dart-define=WEB_APP_ORIGIN=https://dosey.dev \
             --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
             --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID" \
             --dart-define=APPWRITE_CREATE_ROBOT_FUNCTION_ID="$APPWRITE_CREATE_ROBOT_FUNCTION_ID" \
             --dart-define=APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID" \
             --dart-define=APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID" \
-            --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID" \
-            --dart-define=APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" \
-            --dart-define=APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID"
+            --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID"
 
       - name: Verify web contents
         run: |
@@ -138,8 +127,8 @@ jobs:
             exit 1
           fi
 
-      - name: Verify caregiver production integration
-        run: bash ../../.github/scripts/check-caregiver-web-integration.sh "$PWD" require-complete
+      - name: Verify caregiver foundation remains inactive
+        run: bash ../../.github/scripts/check-caregiver-web-integration.sh "$PWD"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

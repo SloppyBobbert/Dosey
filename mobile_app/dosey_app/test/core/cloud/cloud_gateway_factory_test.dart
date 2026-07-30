@@ -88,58 +88,65 @@ void main() {
     },
   );
 
-  test('web gateway factory uses medication sync only when configured', () {
-    final configured = CloudConfiguration.fromValues(
-      endpoint: 'https://example.appwrite.io/v1',
-      projectId: 'dosey-development',
-      medicationSyncPushFunctionId: 'medication-sync-push',
-      medicationSyncPullFunctionId: 'medication-sync-pull',
-    );
-    const caregiver = _UnusedCaregiverGateway();
-    var calls = 0;
+  test(
+    'web gateway factory keeps caregiver sync disabled when IDs alone exist',
+    () {
+      final configured = CloudConfiguration.fromValues(
+        endpoint: 'https://example.appwrite.io/v1',
+        projectId: 'dosey-development',
+        medicationSyncPushFunctionId: 'medication-sync-push',
+        medicationSyncPullFunctionId: 'medication-sync-pull',
+      );
+      const caregiver = _UnusedCaregiverGateway();
+      var calls = 0;
 
-    final gateways = createWebCloudGateways(
-      configured,
-      accountApiFactory: (_) => _UnusedAccountApi(),
-      teamsApiFactory: (_) => _UnusedTeamsApi(),
-      caregiverGatewayFactory: (configuration) {
-        calls += 1;
-        expect(identical(configuration, configured), isTrue);
-        return caregiver;
-      },
-    );
+      final gateways = createWebCloudGateways(
+        configured,
+        accountApiFactory: (_) => _UnusedAccountApi(),
+        teamsApiFactory: (_) => _UnusedTeamsApi(),
+        caregiverGatewayFactory: (configuration) {
+          calls += 1;
+          expect(identical(configuration, configured), isTrue);
+          return caregiver;
+        },
+      );
 
-    expect(gateways.caregiver, same(caregiver));
-    expect(calls, 1);
-  });
+      expect(gateways.caregiver, isA<DisabledCaregiverSyncGateway>());
+      expect(calls, 0);
+    },
+  );
 
-  test('web gateway factory builds the Appwrite medication sync adapter', () {
-    final configured = CloudConfiguration.fromValues(
-      endpoint: 'https://example.appwrite.io/v1',
-      projectId: 'dosey-development',
-      medicationSyncPushFunctionId: 'medication-sync-push',
-      medicationSyncPullFunctionId: 'medication-sync-pull',
-    );
-    var apiFactoryCalls = 0;
+  test(
+    'web gateway factory builds medication sync only with its enabled flag',
+    () {
+      final configured = CloudConfiguration.fromValues(
+        endpoint: 'https://example.appwrite.io/v1',
+        projectId: 'dosey-development',
+        medicationSyncPushFunctionId: 'medication-sync-push',
+        medicationSyncPullFunctionId: 'medication-sync-pull',
+        caregiverSyncEnabled: true,
+      );
+      var apiFactoryCalls = 0;
 
-    final gateways = createWebCloudGateways(
-      configured,
-      accountApiFactory: (_) => _UnusedAccountApi(),
-      teamsApiFactory: (_) => _UnusedTeamsApi(),
-      medicationSyncFunctionsApiFactory: (_) {
-        apiFactoryCalls += 1;
-        return _UnusedMedicationSyncFunctionsApi();
-      },
-      webDeviceId: 'web-device',
-      newSyncId: () => 'generated-id',
-    );
+      final gateways = createWebCloudGateways(
+        configured,
+        accountApiFactory: (_) => _UnusedAccountApi(),
+        teamsApiFactory: (_) => _UnusedTeamsApi(),
+        medicationSyncFunctionsApiFactory: (_) {
+          apiFactoryCalls += 1;
+          return _UnusedMedicationSyncFunctionsApi();
+        },
+        webDeviceId: 'web-device',
+        newSyncId: () => 'generated-id',
+      );
 
-    final caregiver = gateways.caregiver as AppwriteCaregiverSyncGateway;
-    expect(caregiver.pushFunctionId, 'medication-sync-push');
-    expect(caregiver.pullFunctionId, 'medication-sync-pull');
-    expect(caregiver.deviceId, 'web-device');
-    expect(apiFactoryCalls, 1);
-  });
+      final caregiver = gateways.caregiver as AppwriteCaregiverSyncGateway;
+      expect(caregiver.pushFunctionId, 'medication-sync-push');
+      expect(caregiver.pullFunctionId, 'medication-sync-pull');
+      expect(caregiver.deviceId, 'web-device');
+      expect(apiFactoryCalls, 1);
+    },
+  );
 
   test('uses Appwrite adapter with complete cloud configuration', () {
     final configuration = CloudConfiguration.fromValues(

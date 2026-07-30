@@ -3,108 +3,69 @@ set -euo pipefail
 
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 CHECKER="$ROOT_DIR/.github/scripts/check-caregiver-web-integration.sh"
-EXPECTED_PUSH_ID=medication-sync-push-v1
-EXPECTED_PULL_ID=medication-sync-pull-v1
 TEMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
-run_checker() {
-  APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID=$EXPECTED_PUSH_ID \
-  APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID=$EXPECTED_PULL_ID \
-    bash "$CHECKER" "$1" "${2:-allow-absent}"
-}
-
-run_checker_without_ids() {
-  env -u APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID \
-    -u APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID \
-    bash "$CHECKER" "$1" "${2:-allow-absent}"
-}
-
-make_file() {
-  mkdir -p "$(dirname -- "$1")"
-  : > "$1"
-}
-
-make_consumer_set() {
-  local root=$1
-  local path
-  for path in \
-    lib/core/caregiver/appwrite_caregiver_sync_gateway.dart \
-    lib/core/caregiver/caregiver_snapshot.dart \
-    lib/core/caregiver/caregiver_snapshot_controller.dart \
-    lib/core/caregiver/caregiver_status_projection.dart \
-    lib/app/web/web_household_gate.dart \
-    lib/app/web/caregiver_shell.dart \
-    lib/app/web/web_routes.dart \
-    test/core/caregiver/appwrite_caregiver_sync_gateway_test.dart; do
-    make_file "$root/$path"
-  done
-  make_file "$root/lib/core/cloud/cloud_configuration.dart"
-  printf '%s\n' APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID > "$root/lib/core/cloud/cloud_configuration.dart"
-  make_file "$root/lib/core/cloud/cloud_gateway_factory.dart"
-  printf '%s\n' 'class WebCloudGateways' > "$root/lib/core/cloud/cloud_gateway_factory.dart"
-  make_file "$root/lib/app/web/dosey_web_dependencies.dart"
-  printf '%s\n' 'CaregiverSyncGateway caregiver' > "$root/lib/app/web/dosey_web_dependencies.dart"
-  make_file "$root/lib/main_web.dart"
-  printf '%s\n' 'caregiver: gateways.caregiver' > "$root/lib/main_web.dart"
-  make_file "$root/test/core/cloud/cloud_gateway_factory_test.dart"
-  printf '%s\n' 'web gateway factory builds the Appwrite medication sync adapter' > "$root/test/core/cloud/cloud_gateway_factory_test.dart"
-}
-
-make_complete_artifact() {
-  local root=$1
-  local path
-  for path in \
-    index.html auth.html flutter_bootstrap.js manifest.json \
-    sign-in/index.html household/index.html app/today/index.html \
-    app/medications/index.html app/schedules/index.html app/account/index.html; do
-    make_file "$root/build/web/$path"
-    printf '%s\n' artifact > "$root/build/web/$path"
-  done
-  printf '%s\n%s\n' "$EXPECTED_PUSH_ID" "$EXPECTED_PULL_ID" > "$root/build/web/main.dart.js"
-}
-
-prerequisite_only="$TEMP_DIR/prerequisite-only"
-make_file "$prerequisite_only/test/core/sync/domain_contracts_test.dart"
-output=$(run_checker_without_ids "$prerequisite_only")
-grep -Fq 'skipping this pre-consumer integration gate' <<< "$output"
-
-partial="$TEMP_DIR/partial"
-make_file "$partial/lib/core/caregiver/caregiver_snapshot.dart"
-if run_checker_without_ids "$partial" > "$TEMP_DIR/partial-without-ids.out" 2>&1; then
-  printf 'A started caregiver rollout must not skip medication sync ID validation.\n' >&2
-  exit 1
-fi
-grep -Fq 'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID must be' "$TEMP_DIR/partial-without-ids.out"
-if run_checker "$partial" > "$TEMP_DIR/partial.out" 2>&1; then
-  printf 'A partial caregiver consumer set must fail.\n' >&2
-  exit 1
-fi
-grep -Fq 'only partially present' "$TEMP_DIR/partial.out"
-
-missing_prerequisite="$TEMP_DIR/missing-prerequisite"
-make_consumer_set "$missing_prerequisite"
-make_complete_artifact "$missing_prerequisite"
-if run_checker "$missing_prerequisite" > "$TEMP_DIR/missing-prerequisite.out" 2>&1; then
-  printf 'A complete consumer set without the shared contract prerequisite must fail.\n' >&2
-  exit 1
-fi
-grep -Fq 'test/core/sync/domain_contracts_test.dart' "$TEMP_DIR/missing-prerequisite.out"
-
-complete="$TEMP_DIR/complete"
-make_consumer_set "$complete"
-make_file "$complete/test/core/sync/domain_contracts_test.dart"
-make_complete_artifact "$complete"
+for path in \
+  lib/core/cloud/cloud_configuration.dart \
+  lib/core/cloud/cloud_gateway_factory.dart \
+  test/core/cloud/cloud_configuration_test.dart \
+  test/core/cloud/cloud_gateway_factory_test.dart; do
+  mkdir -p "$TEMP_DIR/$(dirname -- "$path")"
+done
+printf '%s\n' CAREGIVER_SYNC_ENABLED > "$TEMP_DIR/lib/core/cloud/cloud_configuration.dart"
+printf '%s\n' DisabledCaregiverSyncGateway > "$TEMP_DIR/lib/core/cloud/cloud_gateway_factory.dart"
+printf '%s\n' 'caregiver sync defaults to disabled' > "$TEMP_DIR/test/core/cloud/cloud_configuration_test.dart"
+printf '%s\n' 'IDs alone exist' > "$TEMP_DIR/test/core/cloud/cloud_gateway_factory_test.dart"
 mkdir -p "$TEMP_DIR/bin"
-cat > "$TEMP_DIR/bin/flutter" <<'FAKE_FLUTTER'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >> "$FLUTTER_ARGUMENTS_FILE"
-FAKE_FLUTTER
+printf '%s\n' '#!/usr/bin/env bash' > "$TEMP_DIR/bin/flutter"
+printf '%s\n' 'printf "%s\\n" "$*" > "$FLUTTER_ARGUMENTS_FILE"' >> "$TEMP_DIR/bin/flutter"
 chmod +x "$TEMP_DIR/bin/flutter"
-arguments_file="$TEMP_DIR/flutter-arguments"
-PATH="$TEMP_DIR/bin:$PATH" FLUTTER_ARGUMENTS_FILE="$arguments_file" run_checker "$complete"
-expected='test test/core/sync/domain_contracts_test.dart test/core/caregiver test/core/cloud/cloud_configuration_test.dart test/core/cloud/cloud_gateway_factory_test.dart test/app/web'
-test "$(wc -l < "$arguments_file")" -eq 1
-test "$(cat "$arguments_file")" = "$expected"
+PATH="$TEMP_DIR/bin:$PATH" FLUTTER_ARGUMENTS_FILE="$TEMP_DIR/flutter-arguments" \
+  bash "$CHECKER" "$TEMP_DIR"
+test "$(cat "$TEMP_DIR/flutter-arguments")" = 'test test/core/caregiver test/core/cloud/cloud_configuration_test.dart test/core/cloud/cloud_gateway_factory_test.dart'
 
-printf 'Caregiver web integration phased checks passed.\n'
+for workflow in \
+  web-preview.yml \
+  web-staging.yml \
+  web-production.yml \
+  mobile-ci.yml \
+  android-release.yml; do
+  path="$ROOT_DIR/.github/workflows/$workflow"
+  if grep -Eq -- 'APPWRITE_MEDICATION_SYNC_|medication-sync-(push|pull)-' "$path"; then
+    printf '%s must not inject medication-sync Function IDs.\n' "$workflow" >&2
+    exit 1
+  fi
+
+  build_count=0
+  build_command=''
+  while IFS= read -r line || [ -n "$line" ]; do
+    if [ -z "$build_command" ] && [[ "$line" == *'flutter build '* ]]; then
+      build_command="$line"
+    elif [ -n "$build_command" ]; then
+      build_command+=" $line"
+    fi
+
+    if [ -n "$build_command" ] && [[ "$line" != *\\ ]]; then
+      build_count=$((build_count + 1))
+      if [[ "$build_command" != *'--dart-define=CAREGIVER_SYNC_ENABLED=false'* ]]; then
+        printf '%s Flutter build must explicitly disable caregiver sync.\n' "$workflow" >&2
+        exit 1
+      fi
+      build_command=''
+    fi
+  done < "$path"
+
+  if [ "$build_count" -eq 0 ]; then
+    printf '%s must contain a Flutter build command.\n' "$workflow" >&2
+    exit 1
+  fi
+done
+
+if grep -Eq -- 'APPWRITE_MEDICATION_SYNC_|medication-sync-(push|pull)-' \
+  "$ROOT_DIR/.github/actions/prepare-appwrite-env/action.yml"; then
+  printf 'Generated .env configuration must not include medication-sync Function IDs.\n' >&2
+  exit 1
+fi
+
+printf 'Caregiver sync foundation checks passed.\n'

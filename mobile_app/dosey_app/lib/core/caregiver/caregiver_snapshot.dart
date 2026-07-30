@@ -46,18 +46,44 @@ class CaregiverSchedule {
   final int version;
 }
 
+class CaregiverOccurrence {
+  const CaregiverOccurrence({
+    required this.occurrenceId,
+    required this.scheduleId,
+    required this.scheduleRevision,
+    required this.scheduledFor,
+    required this.timezoneId,
+    required this.localDate,
+  });
+
+  final String occurrenceId;
+  final String scheduleId;
+  final int scheduleRevision;
+  final DateTime scheduledFor;
+  final String timezoneId;
+  final String localDate;
+}
+
 class CaregiverDoseEvent {
   const CaregiverDoseEvent({
     required this.id,
+    required this.occurrenceId,
     required this.scheduleId,
+    required this.scheduleRevision,
     required this.scheduledFor,
+    this.timezoneId = 'UTC',
+    this.localDate = '',
     required this.occurredAt,
     required this.action,
   });
 
   final String id;
+  final String occurrenceId;
   final String scheduleId;
+  final int scheduleRevision;
   final DateTime scheduledFor;
+  final String timezoneId;
+  final String localDate;
   final DateTime occurredAt;
   final CaregiverDoseAction action;
 }
@@ -94,16 +120,11 @@ class CaregiverMutation {
   const CaregiverMutation._({required this.kind, required this.values});
 
   factory CaregiverMutation.recordDose({
-    required String scheduleId,
-    required String scheduledForIso,
+    required CaregiverOccurrence occurrence,
     required CaregiverDoseAction action,
   }) => CaregiverMutation._(
     kind: CaregiverMutationKind.recordDose,
-    values: {
-      'scheduleId': scheduleId,
-      'scheduledFor': scheduledForIso,
-      'action': action.name,
-    },
+    values: {'occurrence': occurrence, 'action': action.name},
   );
 
   factory CaregiverMutation.upsertMedication(CaregiverMedication medication) =>
