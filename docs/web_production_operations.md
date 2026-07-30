@@ -20,17 +20,34 @@ combine evidence from different commits.
 
 Web Preview CI builds both an auth-disabled preview and an auth-enabled preview.
 The auth-enabled build uses non-secret, non-production placeholders for the
-Appwrite project and public Function IDs; it does not need repository secrets or
-contact Appwrite. Both artifacts must contain the required static files and must
-not contain `.env` files. The auth-enabled build includes paired medication-sync
-push and pull placeholders and verifies that both values reached the compiled
-artifact. Staging and production require both live Function IDs before building;
-missing either ID is a gate failure. Mobile builds may omit both IDs to keep sync
-honestly disabled, but the shared environment action rejects a partial pair.
+Appwrite project and household management Function IDs, plus the exact public
+medication-sync IDs qualified for deployment. It does not need repository
+secrets or contact Appwrite. Both artifacts must contain the required static
+files and must not contain `.env` files. Before the caregiver consumer source set
+lands, Web Preview CI records an explicit pre-consumer skip only when every
+integration indicator is absent. Partial source/configuration presence fails.
+Once the set is complete, CI verifies both exact values reached the compiled
+artifact and runs focused tests proving the web factory creates and invokes the
+real Appwrite adapter. Staging and production require both live Function IDs
+before building; missing either ID is a gate failure. Mobile builds may omit both
+IDs to keep sync honestly disabled, but the shared environment action rejects a
+partial pair.
 Configure the pair as the GitHub Actions repository or protected-environment
 variables `APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID` and
 `APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID`; these are public Function IDs, not
-API keys or session credentials.
+API keys or session credentials. Staging and production must set them to the
+exact deployed IDs `medication-sync-push-v1` and `medication-sync-pull-v1`,
+respectively; an unsuffixed, missing, or mismatched value is a gate failure.
+The same staging and production builds require the public household management
+IDs for create-robot, create-household-invitation,
+accept-household-invitation, and remove-household-member. Pairing, claim, and
+get-mounted-robot IDs are outside the caregiver web build boundary.
+
+A staging deployment may be activated only by supplying both its deployment ID
+and the successful upload-mode workflow run ID that created it. The activation
+workflow requires a matching, unexpired gated-evidence artifact from the same
+workflow revision. If `main` advances, upload a fresh staging deployment rather
+than activating evidence from the older revision.
 
 Changes under `backend/appwrite/` require Appwrite Backend CI evidence for
 `npm ci`, `npm test`, `npm run typecheck`, and `npm run build`. Unit tests do not

@@ -24,6 +24,10 @@ jobs:
     env:
       APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
       APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
+      APPWRITE_CREATE_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_ROBOT_FUNCTION_ID }}
+      APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID }}
+      APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID }}
+      APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ${{ vars.APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID }}
       APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID }}
       APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: ${{ vars.APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID }}
       SOURCE_SHA: ${{ inputs.source_sha }}
@@ -82,12 +86,18 @@ jobs:
             printf 'APPWRITE_PROJECT_ID is required\n' >&2
             exit 1
           }
-          test -n "${APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID:-}" || {
-            printf 'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID is required\n' >&2
+          for name in APPWRITE_CREATE_ROBOT_FUNCTION_ID APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID; do
+            if [ -z "${!name:-}" ]; then
+              printf '%s is required\n' "$name" >&2
+              exit 1
+            fi
+          done
+          test "${APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID:-}" = "medication-sync-push-v1" || {
+            printf 'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID must be medication-sync-push-v1\n' >&2
             exit 1
           }
-          test -n "${APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID:-}" || {
-            printf 'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID is required\n' >&2
+          test "${APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID:-}" = "medication-sync-pull-v1" || {
+            printf 'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID must be medication-sync-pull-v1\n' >&2
             exit 1
           }
 
@@ -97,8 +107,8 @@ jobs:
       - name: Analyze Flutter code
         run: flutter analyze
 
-      - name: Test web and auth paths
-        run: flutter test test/app/web test/core/auth
+      - name: Test core auth paths
+        run: flutter test test/core/auth
 
       - name: Build auth-enabled production web release
         run: |
@@ -109,6 +119,10 @@ jobs:
             --dart-define=WEB_APP_ORIGIN=https://dosey.dev \
             --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
             --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID" \
+            --dart-define=APPWRITE_CREATE_ROBOT_FUNCTION_ID="$APPWRITE_CREATE_ROBOT_FUNCTION_ID" \
+            --dart-define=APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID" \
+            --dart-define=APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID" \
+            --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID" \
             --dart-define=APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" \
             --dart-define=APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID"
 
@@ -119,12 +133,13 @@ jobs:
           test -s build/web/auth.html
           test -s build/web/flutter_bootstrap.js
           test -s build/web/manifest.json
-          grep -R -Fq -- "$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" build/web
-          grep -R -Fq -- "$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID" build/web
           if find build/web \( -name '.env' -o -name '.env.*' \) -print -quit | grep -q .; then
             printf 'Unexpected environment file in web artifact\n' >&2
             exit 1
           fi
+
+      - name: Verify caregiver production integration
+        run: bash ../../.github/scripts/check-caregiver-web-integration.sh "$PWD" require-complete
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

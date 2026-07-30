@@ -79,15 +79,12 @@ jobs:
         env:
           APPWRITE_ENDPOINT: https://api.example.invalid/v1
           APPWRITE_PROJECT_ID: ci-project-placeholder
-          APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID: ci-create-pairing-code
-          APPWRITE_CLAIM_ROBOT_FUNCTION_ID: ci-claim-robot
           APPWRITE_CREATE_ROBOT_FUNCTION_ID: ci-create-robot
           APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ci-create-household-invitation
           APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ci-accept-household-invitation
           APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ci-remove-household-member
-          APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID: ci-get-mounted-robot
-          APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: ci-medication-sync-push
-          APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: ci-medication-sync-pull
+          APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: medication-sync-push-v1
+          APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: medication-sync-pull-v1
         run: |
           flutter build web --release --target=lib/main_web.dart \
             --dart-define=DOSEY_BUILD_PROFILE=personal \
@@ -96,28 +93,20 @@ jobs:
             --dart-define=WEB_APP_ORIGIN=https://preview.example.invalid \
             --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
             --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID" \
-            --dart-define=APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID="$APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID" \
-            --dart-define=APPWRITE_CLAIM_ROBOT_FUNCTION_ID="$APPWRITE_CLAIM_ROBOT_FUNCTION_ID" \
             --dart-define=APPWRITE_CREATE_ROBOT_FUNCTION_ID="$APPWRITE_CREATE_ROBOT_FUNCTION_ID" \
             --dart-define=APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID" \
             --dart-define=APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID" \
             --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID" \
-            --dart-define=APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID="$APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID" \
             --dart-define=APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" \
             --dart-define=APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID"
 
       - name: Verify auth-enabled web files and archive contents
-        env:
-          APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: ci-medication-sync-push
-          APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: ci-medication-sync-pull
         run: |
           set -euo pipefail
           test -s build/web/index.html
           test -s build/web/auth.html
           test -s build/web/flutter_bootstrap.js
           test -s build/web/manifest.json
-          grep -R -Fq -- "$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" build/web
-          grep -R -Fq -- "$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID" build/web
           if find build/web \( -name '.env' -o -name '.env.*' \) -print -quit | grep -q .; then
             printf 'Unexpected environment file in auth-enabled web artifact\n' >&2
             exit 1
@@ -125,6 +114,12 @@ jobs:
           tar -czf "$GITHUB_WORKSPACE/dosey-web-auth-preview.tar.gz" -C build/web .
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-auth-preview.tar.gz" | grep -Fx './index.html'
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-auth-preview.tar.gz" | grep -Fx './auth.html'
+
+      - name: Verify caregiver web integration when present
+        env:
+          APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: medication-sync-push-v1
+          APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: medication-sync-pull-v1
+        run: bash ../../.github/scripts/check-caregiver-web-integration.sh
 
       - name: Upload auth-enabled web preview artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
