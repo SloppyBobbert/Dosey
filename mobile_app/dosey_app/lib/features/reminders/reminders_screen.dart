@@ -264,8 +264,8 @@ class _NotificationPermissionBannerState
 
   Future<void> _checkPermission() async {
     try {
-      final permissions = DoseyAppScope.of(context).permissions;
-      final status = await permissions.check(AppPermission.notifications);
+      final permissions = DoseyAppScope.of(context).notificationPermissions;
+      final status = await permissions.check();
       if (!mounted) return;
       setState(() {
         _status = status;
@@ -288,7 +288,7 @@ class _NotificationPermissionBannerState
     try {
       final status = await DoseyAppScope.of(
         context,
-      ).permissions.request(AppPermission.notifications);
+      ).notificationPermissions.request();
       if (!mounted) return;
       setState(() {
         _status = status;

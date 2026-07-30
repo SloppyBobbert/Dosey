@@ -2,6 +2,8 @@ import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/settings/app_theme_preference.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
+import 'package:dosey_app/core/settings/personal_setup_step.dart';
+import 'package:dosey_app/core/settings/robot_onboarding_step.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -127,10 +129,12 @@ void main() {
     );
 
     expect(await repository.watchSafetyAcknowledged().first, isFalse);
+    expect(await repository.getSafetyAcknowledged(), isFalse);
 
     await repository.setSafetyAcknowledged(true);
 
     expect(await repository.watchSafetyAcknowledged().first, isTrue);
+    expect(await repository.getSafetyAcknowledged(), isTrue);
   });
 
   test('local app settings persist onboarding completion', () async {
@@ -148,6 +152,86 @@ void main() {
     expect(await repository.watchOnboardingCompleted().first, isTrue);
   });
 
+  test(
+    'missing personal setup step is incomplete without completed onboarding',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalAppSettingsRepository(
+        database,
+        defaultRole: AppDeviceRole.androidPersonal,
+      );
+
+      expect(
+        await repository.watchPersonalSetupStep().first,
+        PersonalSetupStep.chooseNextAction,
+      );
+    },
+  );
+
+  test(
+    'legacy completed installs migrate to complete personal setup',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalAppSettingsRepository(
+        database,
+        defaultRole: AppDeviceRole.androidPersonal,
+      );
+
+      await repository.setOnboardingCompleted(true);
+
+      expect(
+        await repository.watchPersonalSetupStep().first,
+        PersonalSetupStep.complete,
+      );
+    },
+  );
+
+  test('malformed personal setup step is incomplete', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    );
+
+    await database
+        .into(database.appSettings)
+        .insert(
+          AppSettingsCompanion.insert(
+            key: 'personal_setup_step_v1',
+            value: 'not-a-step',
+            updatedAt: DateTime.now().toUtc(),
+          ),
+        );
+
+    expect(
+      await repository.watchPersonalSetupStep().first,
+      PersonalSetupStep.chooseNextAction,
+    );
+  });
+
+  test(
+    'beginning personal setup persists resumable choice atomically',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final repository = LocalAppSettingsRepository(
+        database,
+        defaultRole: AppDeviceRole.androidPersonal,
+      );
+
+      await repository.beginPersonalSetup();
+
+      expect(
+        await repository.watchPersonalSetupStep().first,
+        PersonalSetupStep.chooseNextAction,
+      );
+      expect(await repository.watchOnboardingCompleted().first, isTrue);
+    },
+  );
+
   test('local app settings reset setup state together', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
@@ -158,11 +242,42 @@ void main() {
 
     await repository.setSafetyAcknowledged(true);
     await repository.setOnboardingCompleted(true);
+    await repository.setRobotOnboardingStep(
+      RobotOnboardingStep.notificationSetup,
+    );
+    await repository.setClaimedRobotId('robot-17');
 
     await repository.resetSetupState();
 
     expect(await repository.watchSafetyAcknowledged().first, isFalse);
     expect(await repository.watchOnboardingCompleted().first, isFalse);
+    expect(
+      await repository.getRobotOnboardingStep(),
+      RobotOnboardingStep.chooseMode,
+    );
+    expect(await repository.getClaimedRobotId(), isNull);
+  });
+
+  test('robot onboarding step and claimed robot survive restart', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final first = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    );
+
+    await first.setRobotOnboardingStep(RobotOnboardingStep.pairing);
+    await first.setClaimedRobotId(' robot-17 ');
+
+    final restarted = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    );
+    expect(
+      await restarted.getRobotOnboardingStep(),
+      RobotOnboardingStep.pairing,
+    );
+    expect(await restarted.getClaimedRobotId(), 'robot-17');
   });
 
   test('action PIN is disabled by default', () async {

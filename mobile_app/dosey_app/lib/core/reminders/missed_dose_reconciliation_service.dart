@@ -13,7 +13,11 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/today/today_next_dose_helper.dart';
 import 'package:drift/drift.dart';
 
-class MissedDoseReconciliationService {
+abstract interface class MissedDoseReconciler {
+  Future<void> reconcile();
+}
+
+class MissedDoseReconciliationService implements MissedDoseReconciler {
   MissedDoseReconciliationService({
     required this.reminders,
     required this.doseLog,
@@ -38,6 +42,7 @@ class MissedDoseReconciliationService {
     actorProviderLabel: 'system',
   );
 
+  @override
   Future<void> reconcile() async {
     final existingRun = _reconcileInFlight;
     if (existingRun != null) {

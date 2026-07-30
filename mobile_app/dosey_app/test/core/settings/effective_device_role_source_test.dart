@@ -19,7 +19,7 @@ void main() {
 
   tearDown(() => database.close());
 
-  test('stale Robot setting cannot enable Personal capabilities', () async {
+  test('selectable Android profile uses persisted Robot role', () async {
     await settings.setDeviceRole(AppDeviceRole.androidRobot);
     final source = EffectiveDeviceRoleSource(
       settings,
@@ -27,13 +27,12 @@ void main() {
       platform: AppDevicePlatform.android,
     );
 
-    expect(await source.getDeviceRole(), AppDeviceRole.androidPersonal);
-    expect(await source.watchDeviceRole().first, AppDeviceRole.androidPersonal);
+    expect(await source.getDeviceRole(), AppDeviceRole.androidRobot);
+    expect(await source.watchDeviceRole().first, AppDeviceRole.androidRobot);
     expect(
-      await source.getLegacyRoleForDiagnostics(),
-      AppDeviceRole.androidRobot,
+      source.capabilities.canHostRobotFor(AppDeviceRole.androidRobot),
+      true,
     );
-    expect(source.capabilities.canHostRobot, isFalse);
   });
 
   test('imported Personal setting cannot disable Robot capabilities', () async {
@@ -46,7 +45,10 @@ void main() {
 
     expect(await source.getDeviceRole(), AppDeviceRole.androidRobot);
     expect(await source.watchDeviceRole().first, AppDeviceRole.androidRobot);
-    expect(source.capabilities.canHostRobot, isTrue);
+    expect(
+      source.capabilities.canHostRobotFor(AppDeviceRole.androidRobot),
+      true,
+    );
   });
 
   test('iOS remains Personal when Robot profile is supplied', () async {
@@ -58,5 +60,17 @@ void main() {
 
     expect(await source.getDeviceRole(), AppDeviceRole.iosPersonal);
     expect(source.capabilities.showsRobotFace, isFalse);
+  });
+
+  test('malformed persisted role fails closed', () async {
+    await database.setAppSetting('device_role', 'unknown-role');
+    final source = EffectiveDeviceRoleSource(
+      settings,
+      profile: AppBuildProfile.personal,
+      platform: AppDevicePlatform.android,
+    );
+
+    await expectLater(source.watchDeviceRole(), emitsError(isFormatException));
+    await expectLater(source.getDeviceRole(), throwsFormatException);
   });
 }

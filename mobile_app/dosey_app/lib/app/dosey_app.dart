@@ -9,10 +9,13 @@ import 'package:dosey_app/core/demo/demo_mode_host.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
 import 'package:dosey_app/core/household/household_management_gateway.dart';
 import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
+import 'package:dosey_app/core/household/paired_robot_readiness_gateway.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
+import 'package:dosey_app/core/permissions/notification_permission_gateway.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
+import 'package:dosey_app/core/runtime/runtime_capability.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
@@ -24,6 +27,7 @@ class DoseyApp extends StatelessWidget {
     this.database,
     this.reminderScheduler,
     this.permissionGateway,
+    this.notificationPermissionGateway,
     this.notificationTapController,
     this.missedDoseReconciliationService,
     this.bleGateway,
@@ -35,13 +39,16 @@ class DoseyApp extends StatelessWidget {
     this.householdSyncGateway,
     this.householdManagementGateway,
     this.robotPairingGateway,
+    this.pairedRobotReadinessGateway,
     this.buildProfile,
     this.robotPhoneSetupGateway,
+    this.runtimeCapability,
   });
 
   final DoseyDatabase? database;
   final ReminderScheduler? reminderScheduler;
   final AppPermissionGateway? permissionGateway;
+  final NotificationPermissionGateway? notificationPermissionGateway;
   final ReminderNotificationTapController? notificationTapController;
   final MissedDoseReconciliationService? missedDoseReconciliationService;
   final BleGateway? bleGateway;
@@ -53,8 +60,10 @@ class DoseyApp extends StatelessWidget {
   final HouseholdSyncGateway? householdSyncGateway;
   final HouseholdManagementGateway? householdManagementGateway;
   final RobotPairingGateway? robotPairingGateway;
+  final PairedRobotReadinessGateway? pairedRobotReadinessGateway;
   final AppBuildProfile? buildProfile;
   final RobotPhoneSetupGateway? robotPhoneSetupGateway;
+  final RuntimeCapability? runtimeCapability;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +76,7 @@ class DoseyApp extends StatelessWidget {
         database: session.database,
         reminderScheduler: reminderScheduler,
         permissionGateway: permissionGateway,
+        notificationPermissionGateway: notificationPermissionGateway,
         notificationTapController: notificationTapController,
         missedDoseReconciliationService: session.isDemo
             ? null
@@ -79,8 +89,12 @@ class DoseyApp extends StatelessWidget {
             ? null
             : householdManagementGateway,
         robotPairingGateway: session.isDemo ? null : robotPairingGateway,
+        pairedRobotReadinessGateway: session.isDemo
+            ? null
+            : pairedRobotReadinessGateway,
         buildProfile: buildProfile,
         robotPhoneSetupGateway: robotPhoneSetupGateway,
+        runtimeCapability: runtimeCapability,
         appClock: session.clock,
         child: DoseyMaterialApp(
           home: OnboardingGate(

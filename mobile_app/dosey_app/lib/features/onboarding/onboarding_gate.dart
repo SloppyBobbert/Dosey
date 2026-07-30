@@ -5,6 +5,7 @@ import 'package:dosey_app/core/household/robot_installation.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/features/onboarding/onboarding_flow.dart';
 import 'package:dosey_app/features/onboarding/household_membership_gate.dart';
+import 'package:dosey_app/features/onboarding/personal_setup_gate.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:dosey_app/features/shell/dosey_shell.dart';
 import 'package:flutter/material.dart';
@@ -134,7 +135,19 @@ class _CompletedOnboardingGate extends StatelessWidget {
                     ),
                   );
                 },
-                child: DoseyShell(forceTodayTab: shellForceTodayTab),
+                child: PersonalSetupGate(
+                  steps: dependencies.settings.watchPersonalSetupStep(),
+                  saveStep: dependencies.settings.setPersonalSetupStep,
+                  today: DoseyShell(forceTodayTab: shellForceTodayTab),
+                  medications: (completeSetup) => DoseyShell(
+                    startDestination: DoseyShellStartDestination.medications,
+                    onPersonalMedicationCompleted: completeSetup,
+                  ),
+                  pairing: (completeSetup) => DoseyShell(
+                    startDestination: DoseyShellStartDestination.settings,
+                    onPersonalPairingCompleted: completeSetup,
+                  ),
+                ),
               );
             }
 

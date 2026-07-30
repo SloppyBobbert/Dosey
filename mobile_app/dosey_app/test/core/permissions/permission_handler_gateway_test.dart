@@ -1,4 +1,5 @@
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
+import 'package:dosey_app/core/permissions/notification_permission_gateway.dart';
 import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -76,6 +77,28 @@ void main() {
         PluginPermission.bluetoothConnect,
         PluginPermission.notification,
       ]);
+    },
+  );
+
+  test(
+    'notification-only gateway cannot request hardware permissions',
+    () async {
+      final plugin = _FakePermissionHandlerPlugin(
+        checkResponses: const {
+          PluginPermission.notification: PluginPermissionStatus.provisional,
+        },
+        requestResponses: const {
+          PluginPermission.notification: PluginPermissionStatus.granted,
+        },
+      );
+      final gateway = PermissionHandlerNotificationPermissionGateway(
+        plugin: plugin,
+      );
+
+      expect(await gateway.check(), AppPermissionState.granted);
+      expect(await gateway.request(), AppPermissionState.granted);
+      expect(plugin.checkedPermissions, [PluginPermission.notification]);
+      expect(plugin.requestedPermissions, [PluginPermission.notification]);
     },
   );
 }

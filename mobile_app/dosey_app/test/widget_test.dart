@@ -11,11 +11,14 @@ import 'package:dosey_app/core/carousel/local_guided_carousel_load_repository.da
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/controller/local_controller_command_repository.dart';
 import 'package:dosey_app/core/household/household_sync_gateway.dart';
+import 'package:dosey_app/core/household/paired_robot_readiness_gateway.dart';
 import 'package:dosey_app/core/household/robot_installation.dart';
+import 'package:dosey_app/core/household/robot_pairing_gateway.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/notifications/reminder_notification_tap_controller.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
+import 'package:dosey_app/core/permissions/notification_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
@@ -24,7 +27,10 @@ import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart'
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
+import 'package:dosey_app/core/settings/personal_setup_step.dart';
+import 'package:dosey_app/core/settings/robot_onboarding_step.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:dosey_app/core/runtime/runtime_capability.dart';
 import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -115,7 +121,7 @@ void main() {
     expect(find.text('How will you use this phone?'), findsNothing);
   });
 
-  testWidgets('Android Robot Mode completes onboarding without login', (
+  testWidgets('specialized Android Robot build completes local onboarding', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -127,6 +133,17 @@ void main() {
     await _pumpAppFrame(tester);
 
     await _acceptMedicalNotice(tester);
+    await _pumpAppFrame(tester);
+
+    await tester.tap(find.text('Robot'));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.text('Use local reminders'));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.text('Continue without notifications'));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Open Today'));
     await _pumpAppFrame(tester);
 
     expect(find.text('Today'), findsWidgets);
@@ -150,6 +167,12 @@ void main() {
     await _acceptMedicalNotice(tester);
     await _pumpAppFrame(tester);
 
+    expect(find.text('How will you use this phone?'), findsOneWidget);
+    await tester.tap(find.text('Personal'));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await _pumpAppFrame(tester);
+
     expect(find.text('Sign in to continue'), findsOneWidget);
     expect(
       find.text('Personal Mode requires Google sign-in for now.'),
@@ -159,7 +182,49 @@ void main() {
     expect(find.text('Controller'), findsNothing);
   });
 
-  testWidgets('Personal build ignores a stale persisted Robot role', (
+  testWidgets('selectable Android build persists Robot local onboarding', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.personal),
+    );
+    await _pumpAppFrame(tester);
+    await _acceptMedicalNotice(tester);
+
+    expect(find.text('How will you use this phone?'), findsOneWidget);
+    await tester.tap(find.text('Robot'));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Set up this Robot phone'), findsOneWidget);
+    expect(
+      await LocalAppSettingsRepository(
+        database,
+        defaultRole: AppDeviceRole.androidPersonal,
+      ).getDeviceRole(),
+      AppDeviceRole.androidRobot,
+    );
+
+    await tester.tap(find.text('Use local reminders'));
+    await _pumpAppFrame(tester);
+    expect(find.text('Allow reminder notifications'), findsOneWidget);
+    await tester.tap(find.text('Continue without notifications'));
+    await _pumpAppFrame(tester);
+    expect(find.text('Your Robot phone is ready'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Open Today'));
+    await _pumpAppFrame(tester);
+
+    expect(find.text('Today'), findsWidgets);
+    expect(
+      (await database.getAppSettings({'onboarding_completed'})).single.value,
+      'true',
+    );
+  });
+
+  testWidgets('selectable Android build resumes a persisted Robot role', (
     WidgetTester tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -177,10 +242,184 @@ void main() {
     await _acceptMedicalNotice(tester);
     await _pumpAppFrame(tester);
 
-    expect(find.text('Sign in to continue'), findsOneWidget);
-    expect(find.text('Continue with Google'), findsOneWidget);
+    expect(find.text('How will you use this phone?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Set up this Robot phone'), findsOneWidget);
+    expect(find.text('Continue with Google'), findsNothing);
     expect(find.text('Controller'), findsNothing);
     expect(find.text('Robot Mode'), findsNothing);
+  });
+
+  testWidgets(
+    'paired Robot onboarding waits for exact device identity and sync readiness',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final readiness = _TestPairedRobotReadinessGateway(
+        result: const PairedRobotReadiness.identityMismatch(
+          mountedDeviceId: 'another-phone',
+        ),
+      );
+
+      await tester.pumpWidget(
+        _TestDoseyApp(
+          database: database,
+          buildProfile: AppBuildProfile.robot,
+          runtimeCapability: RuntimeCapability.phoneOnly,
+          robotPairingGateway: const _TestRobotPairingGateway(),
+          pairedRobotReadinessGateway: readiness,
+        ),
+      );
+      await _pumpAppFrame(tester);
+      await _acceptMedicalNotice(tester);
+      await tester.tap(find.text('Robot'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Continue'));
+      await _pumpAppFrame(tester);
+      await tester.tap(find.text('Pair with Personal'));
+      await _pumpAppFrame(tester);
+      await tester.enterText(find.byType(TextField), 'ABCD12');
+      await tester.tap(find.text('Pair this phone'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(
+        find.text('This phone does not match the paired Robot.'),
+        findsOne,
+      );
+      expect(await _isOnboardingComplete(database), isFalse);
+
+      readiness.result = const PairedRobotReadiness.ready(
+        mountedDeviceId: 'local-phone',
+      );
+      await tester.tap(find.text('Check again'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(await _isOnboardingComplete(database), isTrue);
+      expect(find.text('Today'), findsWidgets);
+    },
+  );
+
+  testWidgets('Robot local onboarding resumes at the persisted step', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    );
+    await settings.setSafetyAcknowledged(true);
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
+    await settings.setRobotOnboardingStep(
+      RobotOnboardingStep.notificationSetup,
+    );
+
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
+    await _pumpAppFrame(tester);
+
+    expect(find.text('Allow reminder notifications'), findsOneWidget);
+    expect(find.text('Dosey is not a medical device'), findsNothing);
+    expect(find.text('Set up this Robot phone'), findsNothing);
+  });
+
+  testWidgets('paired Robot resumes readiness with its persisted claim', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    );
+    await settings.setSafetyAcknowledged(true);
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
+    await settings.setRobotOnboardingStep(RobotOnboardingStep.pairing);
+    await settings.setClaimedRobotId('robot-1');
+    final readiness = _TestPairedRobotReadinessGateway(
+      result: const PairedRobotReadiness.waitingForSync(
+        mountedDeviceId: 'waiting-phone',
+      ),
+    );
+
+    await tester.pumpWidget(
+      _TestDoseyApp(
+        database: database,
+        buildProfile: AppBuildProfile.robot,
+        robotPairingGateway: const _TestRobotPairingGateway(),
+        pairedRobotReadinessGateway: readiness,
+      ),
+    );
+    await _pumpAppFrame(tester);
+
+    expect(find.text('Check again'), findsOneWidget);
+    expect(find.text('Pair this phone'), findsNothing);
+    await tester.tap(find.text('Check again'));
+    await tester.pumpAndSettle();
+    expect(find.text('This phone matches. Waiting for sync.'), findsOneWidget);
+    expect(await _isOnboardingComplete(database), isFalse);
+  });
+
+  testWidgets('unavailable Robot pairing explains the block and offers local', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    );
+    await settings.setSafetyAcknowledged(true);
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
+    await settings.setRobotOnboardingStep(RobotOnboardingStep.pairing);
+
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
+    await _pumpAppFrame(tester);
+
+    expect(
+      find.text(
+        'Pairing verification is unavailable. This Robot cannot finish paired setup yet.',
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Use local reminders'), findsOneWidget);
+  });
+
+  testWidgets('Robot onboarding actions are at least 48 logical pixels high', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final settings = LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    );
+    await settings.setSafetyAcknowledged(true);
+    await settings.setDeviceRole(AppDeviceRole.androidRobot);
+
+    await tester.pumpWidget(
+      _TestDoseyApp(database: database, buildProfile: AppBuildProfile.robot),
+    );
+    await _pumpAppFrame(tester);
+
+    expect(
+      tester
+          .getSize(find.widgetWithText(FilledButton, 'Use local reminders'))
+          .height,
+      greaterThanOrEqualTo(48),
+    );
+    expect(
+      tester
+          .getSize(find.widgetWithText(OutlinedButton, 'Pair with Personal'))
+          .height,
+      greaterThanOrEqualTo(48),
+    );
   });
 
   testWidgets('onboarding sign-in failure stays on account gate', (
@@ -195,6 +434,10 @@ void main() {
     await _pumpAppFrame(tester);
 
     await _acceptMedicalNotice(tester);
+    await _pumpAppFrame(tester);
+    await tester.tap(find.text('Personal'));
+    await _pumpAppFrame(tester);
+    await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
     await _pumpAppFrame(tester);
     await tester.tap(find.text('Continue with Google'));
     await _pumpAppFrame(tester);
@@ -263,6 +506,52 @@ void main() {
     expect(find.text('Dosey is not a medical device'), findsOneWidget);
     expect(find.text('Controller'), findsNothing);
   });
+
+  testWidgets(
+    'household-ready Personal setup keeps medication branch pending on launch',
+    (WidgetTester tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(
+        database,
+        role: AppDeviceRole.androidPersonal,
+      );
+      await _saveSignedInUser(database, provider: AuthProvider.google);
+      final settings = LocalAppSettingsRepository(
+        database,
+        defaultRole: AppDeviceRole.androidPersonal,
+      );
+      await settings.setPersonalSetupStep(PersonalSetupStep.chooseNextAction);
+
+      await tester.pumpWidget(
+        _TestDoseyApp(
+          database: database,
+          buildProfile: AppBuildProfile.personal,
+        ),
+      );
+      await _pumpAppFrame(tester);
+
+      expect(find.text('What would you like to do first?'), findsOne);
+      await tester.tap(find.text('Add medication'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('A quick map of Dosey'), findsOne);
+      await tester.tap(find.text('Continue to medications'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Medications'), findsWidgets);
+      final storedStep =
+          await (database.select(database.appSettings)..where(
+                (setting) => setting.key.equals('personal_setup_step_v1'),
+              ))
+              .getSingle();
+      expect(
+        storedStep.value,
+        PersonalSetupStep.orientThenAddMedication.storageValue,
+      );
+    },
+  );
 
   testWidgets('settings shows personal profile and grouped safety sections', (
     WidgetTester tester,
@@ -4401,6 +4690,14 @@ Future<void> _runAsyncCallback(VoidCallback callback) async {
   }
 }
 
+Future<bool> _isOnboardingComplete(DoseyDatabase database) async {
+  final row =
+      await (database.select(database.appSettings)
+            ..where((setting) => setting.key.equals('onboarding_completed')))
+          .getSingleOrNull();
+  return row?.value == 'true';
+}
+
 class _TestDoseyApp extends StatelessWidget {
   const _TestDoseyApp({
     this.database,
@@ -4408,6 +4705,9 @@ class _TestDoseyApp extends StatelessWidget {
     this.reminderScheduler,
     this.notificationTapController,
     this.buildProfile = AppBuildProfile.robot,
+    this.runtimeCapability,
+    this.robotPairingGateway,
+    this.pairedRobotReadinessGateway,
   });
 
   final DoseyDatabase? database;
@@ -4415,6 +4715,9 @@ class _TestDoseyApp extends StatelessWidget {
   final ReminderScheduler? reminderScheduler;
   final ReminderNotificationTapController? notificationTapController;
   final AppBuildProfile? buildProfile;
+  final RuntimeCapability? runtimeCapability;
+  final RobotPairingGateway? robotPairingGateway;
+  final PairedRobotReadinessGateway? pairedRobotReadinessGateway;
 
   @override
   Widget build(BuildContext context) {
@@ -4422,8 +4725,14 @@ class _TestDoseyApp extends StatelessWidget {
       database: database,
       reminderScheduler: reminderScheduler ?? const _NoopReminderScheduler(),
       permissionGateway: permissionGateway,
+      notificationPermissionGateway: permissionGateway == null
+          ? null
+          : _TestNotificationPermissionGateway(permissionGateway!),
       notificationTapController: notificationTapController,
       buildProfile: buildProfile,
+      runtimeCapability: runtimeCapability,
+      robotPairingGateway: robotPairingGateway,
+      pairedRobotReadinessGateway: pairedRobotReadinessGateway,
       missedDoseReconciliationService: FakeMissedDoseReconciliationService(),
       bleGateway: FakeBleGateway(),
       connectivityGateway: FakeConnectivityGateway(),
@@ -4433,6 +4742,56 @@ class _TestDoseyApp extends StatelessWidget {
       shellForceTodayTab: true,
     );
   }
+}
+
+class _TestRobotPairingGateway implements RobotPairingGateway {
+  const _TestRobotPairingGateway();
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<String> claimRobot({required String code}) async => 'robot-1';
+
+  @override
+  Future<RobotPairingCredential> createPairingCode({required String robotId}) {
+    throw UnimplementedError();
+  }
+}
+
+class _TestPairedRobotReadinessGateway implements PairedRobotReadinessGateway {
+  _TestPairedRobotReadinessGateway({required this.result});
+
+  PairedRobotReadiness result;
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  Future<PairedRobotReadiness> verify({
+    required String robotId,
+    required String localDeviceId,
+  }) async {
+    if (result.mountedDeviceId == 'local-phone') {
+      return PairedRobotReadiness.ready(mountedDeviceId: localDeviceId);
+    }
+    return result;
+  }
+}
+
+class _TestNotificationPermissionGateway
+    implements NotificationPermissionGateway {
+  const _TestNotificationPermissionGateway(this._permissions);
+
+  final AppPermissionGateway _permissions;
+
+  @override
+  Future<AppPermissionState> check() =>
+      _permissions.check(AppPermission.notifications);
+
+  @override
+  Future<AppPermissionState> request() =>
+      _permissions.request(AppPermission.notifications);
 }
 
 class _LinkedTestHouseholdSyncGateway implements HouseholdSyncGateway {

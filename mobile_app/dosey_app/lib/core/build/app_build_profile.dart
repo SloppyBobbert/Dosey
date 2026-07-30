@@ -16,39 +16,54 @@ enum AppBuildProfile {
   }
 
   AppBuildCapabilities resolve(AppDevicePlatform platform) {
-    if (platform == AppDevicePlatform.ios || this == personal) {
+    if (platform != AppDevicePlatform.android) {
       return AppBuildCapabilities(
-        fixedRole: platform == AppDevicePlatform.ios
+        defaultRole: platform == AppDevicePlatform.ios
             ? AppDeviceRole.iosPersonal
-            : AppDeviceRole.androidPersonal,
-        requiresSignIn: true,
-        canHostRobot: false,
-        showsRobotFace: false,
-        showsRobotPhoneSetup: false,
+            : AppDeviceRole.webPersonal,
+        allowedRoles: [
+          platform == AppDevicePlatform.ios
+              ? AppDeviceRole.iosPersonal
+              : AppDeviceRole.webPersonal,
+        ],
+      );
+    }
+    if (this == personal) {
+      return const AppBuildCapabilities(
+        defaultRole: AppDeviceRole.androidPersonal,
+        allowedRoles: [
+          AppDeviceRole.androidPersonal,
+          AppDeviceRole.androidRobot,
+        ],
       );
     }
     return const AppBuildCapabilities(
-      fixedRole: AppDeviceRole.androidRobot,
-      requiresSignIn: false,
-      canHostRobot: true,
-      showsRobotFace: true,
-      showsRobotPhoneSetup: true,
+      defaultRole: AppDeviceRole.androidRobot,
+      allowedRoles: [AppDeviceRole.androidRobot],
     );
   }
 }
 
 class AppBuildCapabilities {
   const AppBuildCapabilities({
-    required this.fixedRole,
-    required this.requiresSignIn,
-    required this.canHostRobot,
-    required this.showsRobotFace,
-    required this.showsRobotPhoneSetup,
+    required this.defaultRole,
+    required this.allowedRoles,
   });
 
-  final AppDeviceRole fixedRole;
-  final bool requiresSignIn;
-  final bool canHostRobot;
-  final bool showsRobotFace;
-  final bool showsRobotPhoneSetup;
+  final AppDeviceRole defaultRole;
+  final List<AppDeviceRole> allowedRoles;
+
+  // Compatibility getters describe the profile default. Role-aware callers
+  // should use the `For` methods below.
+  AppDeviceRole get fixedRole => defaultRole;
+  bool get requiresSignIn => requiresSignInFor(defaultRole);
+  bool get canHostRobot => canHostRobotFor(defaultRole);
+  bool get showsRobotFace => showsRobotFaceFor(defaultRole);
+  bool get showsRobotPhoneSetup => showsRobotPhoneSetupFor(defaultRole);
+
+  bool allows(AppDeviceRole role) => allowedRoles.contains(role);
+  bool requiresSignInFor(AppDeviceRole role) => !role.canHostRobot;
+  bool canHostRobotFor(AppDeviceRole role) => allows(role) && role.canHostRobot;
+  bool showsRobotFaceFor(AppDeviceRole role) => canHostRobotFor(role);
+  bool showsRobotPhoneSetupFor(AppDeviceRole role) => canHostRobotFor(role);
 }

@@ -62,12 +62,14 @@ class SettingsScreen extends StatefulWidget {
     this.openMaintenanceRequest = 0,
     this.onMaintenanceRequestAcknowledged,
     this.previewVoicePlayer,
+    this.onPersonalPairingCompleted,
   });
 
   final SettingsSection? sectionTarget;
   final int openMaintenanceRequest;
   final ValueChanged<int>? onMaintenanceRequestAcknowledged;
   final DoseyVoicePlayer? previewVoicePlayer;
+  final Future<void> Function()? onPersonalPairingCompleted;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -165,8 +167,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           request == _appliedMaintenanceRequest) {
         return;
       }
+      final dependencies = DoseyAppScope.of(context);
       _appliedMaintenanceRequest = request;
       widget.onMaintenanceRequestAcknowledged?.call(request);
+      if (dependencies.hardware == null) return;
       unawaited(_openMaintenance());
     });
   }
@@ -353,12 +357,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       if (!role.canHostRobot) const SizedBox(height: 12),
                       _targeted(
                         SettingsSection.householdAccount,
-                        _HouseholdAccountCard(platform: platform),
+                        _HouseholdAccountCard(
+                          platform: platform,
+                          onPersonalPairingCompleted:
+                              widget.onPersonalPairingCompleted,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       _targeted(
                         SettingsSection.deviceMode,
-                        _DeviceModeCard(platform: platform),
+                        _DeviceModeCard(platform: platform, role: role),
                       ),
                       const SizedBox(height: 12),
                       _targeted(SettingsSection.actionPin, _ActionPinCard()),
@@ -368,7 +376,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (role.canHostRobot) ...[
+                if (role.canHostRobot && dependencies.hardware != null) ...[
                   _accordion(
                     group: _SettingsGroup.robotFace,
                     title: 'Robot Face',
@@ -418,31 +426,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        _targeted(
-                          SettingsSection.setup,
-                          _SettingsSectionCard(
-                            icon: Icons.restart_alt,
-                            title: 'Setup',
-                            children: [
-                              const Text(
-                                'Show the first-run safety notice and setup steps again.',
-                              ),
-                              const SizedBox(height: 12),
-                              OutlinedButton.icon(
-                                onPressed: _resetSetup,
-                                icon: const Icon(Icons.replay_outlined),
-                                label: const Text('Start over setup'),
-                              ),
-                            ],
-                          ),
-                        ),
                       ],
+                      _targeted(
+                        SettingsSection.setup,
+                        _SettingsSectionCard(
+                          icon: Icons.restart_alt,
+                          title: 'Setup',
+                          children: [
+                            const Text(
+                              'Show the first-run safety notice and setup steps again.',
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: _resetSetup,
+                              icon: const Icon(Icons.replay_outlined),
+                              label: const Text('Start over setup'),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                if (role.canHostRobot) ...[
+                if (role.canHostRobot && dependencies.hardware != null) ...[
                   const SizedBox(height: 16),
-                  _MaintenanceEntryCard(onOpen: _openMaintenance),
+                  _MaintenanceEntryCard(onOpen: () => _openMaintenance(role)),
                 ],
               ],
             );
@@ -504,11 +512,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _openMaintenance() async {
+  Future<void> _openMaintenance([AppDeviceRole? currentRole]) async {
     final dependencies = DoseyAppScope.of(context);
-    if (!dependencies.effectiveRole.capabilities.canHostRobot) return;
+    if (dependencies.hardware == null) return;
     final bool pinEnabled;
     try {
+      final role =
+          currentRole ?? await dependencies.effectiveRole.getDeviceRole();
+      if (!role.canHostRobot) return;
       pinEnabled = await dependencies.settings.isActionPinEnabled();
     } on Object catch (error) {
       if (mounted) {
@@ -745,15 +756,14 @@ class _ProfileSummaryCard extends StatelessWidget {
 }
 
 class _DeviceModeCard extends StatelessWidget {
-  const _DeviceModeCard({required this.platform});
+  const _DeviceModeCard({required this.platform, required this.role});
 
   final AppDevicePlatform platform;
+  final AppDeviceRole role;
 
   @override
   Widget build(BuildContext context) {
-    final dependencies = DoseyAppScope.of(context);
-    final capabilities = dependencies.effectiveRole.capabilities;
-    final isRobot = capabilities.canHostRobot;
+    final isRobot = role.canHostRobot;
     return _SettingsSectionCard(
       icon: Icons.phone_android_outlined,
       title: 'Phone type',
@@ -765,7 +775,7 @@ class _DeviceModeCard extends StatelessWidget {
         const SizedBox(height: 10),
         Text(
           isRobot
-              ? 'This phone is set up as the mounted robot phone and can control Dosey hardware.'
+              ? 'This phone runs Dosey’s Robot interface. Hardware controls are available only with hardware-assisted capability.'
               : 'This phone is set up as a personal phone for reminders, history, and management.',
         ),
         if (platform == AppDevicePlatform.ios) ...[
@@ -773,9 +783,7 @@ class _DeviceModeCard extends StatelessWidget {
           const Text('iOS always uses the Personal phone.'),
         ],
         const SizedBox(height: 8),
-        const Text(
-          'To use a different phone type, install the matching Dosey app.',
-        ),
+        const Text('To use a different phone type, start setup again below.'),
       ],
     );
   }
@@ -920,9 +928,13 @@ class _ReminderNotificationCard extends StatefulWidget {
 }
 
 class _HouseholdAccountCard extends StatefulWidget {
-  const _HouseholdAccountCard({required this.platform});
+  const _HouseholdAccountCard({
+    required this.platform,
+    this.onPersonalPairingCompleted,
+  });
 
   final AppDevicePlatform platform;
+  final Future<void> Function()? onPersonalPairingCompleted;
 
   @override
   State<_HouseholdAccountCard> createState() => _HouseholdAccountCardState();
@@ -1542,6 +1554,8 @@ class _HouseholdAccountCardState extends State<_HouseholdAccountCard> {
       final claimedRobotId = await DoseyAppScope.of(
         context,
       ).robotPairing.claimRobot(code: code);
+      if (!mounted) return;
+      await widget.onPersonalPairingCompleted?.call();
       if (!mounted) return;
       var refreshedClaim = false;
       try {
@@ -2699,8 +2713,8 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
 
   Future<void> _checkPermission() async {
     try {
-      final permissions = DoseyAppScope.of(context).permissions;
-      final status = await permissions.check(AppPermission.notifications);
+      final permissions = DoseyAppScope.of(context).notificationPermissions;
+      final status = await permissions.check();
       if (!mounted) return;
       setState(() {
         _status = status;
@@ -2720,9 +2734,9 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
 
   Future<void> _requestPermission() async {
     setState(() => _isChecking = true);
-    final permissions = DoseyAppScope.of(context).permissions;
+    final permissions = DoseyAppScope.of(context).notificationPermissions;
     try {
-      final status = await permissions.request(AppPermission.notifications);
+      final status = await permissions.request();
       if (!mounted) return;
       setState(() {
         _status = status;
@@ -2744,7 +2758,7 @@ class _ReminderNotificationCardState extends State<_ReminderNotificationCard>
       // the user's current system setting.
       final status = await DoseyAppScope.of(
         context,
-      ).permissions.request(AppPermission.notifications);
+      ).notificationPermissions.request();
       if (!mounted) return;
       setState(() => _status = status);
       if (status != AppPermissionState.granted) {

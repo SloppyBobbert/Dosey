@@ -40,6 +40,70 @@ void main() {
     expect(schedules.single.isEnabled, isTrue);
     expect(schedules.single.createdAt, createdAt);
     expect(schedules.single.updatedAt, createdAt);
+    expect(schedules.single.revision, 1);
+  });
+
+  test('schedule edits advance the persisted occurrence revision', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalReminderRepository(database);
+    final createdAt = DateTime.utc(2026, 6, 9, 8);
+    final schedule = ReminderSchedule(
+      id: 'morning',
+      label: 'Morning dose',
+      hour: 8,
+      minute: 30,
+      isEnabled: true,
+      createdAt: createdAt,
+      updatedAt: createdAt,
+    );
+
+    await repository.upsertSchedule(schedule);
+    await repository.upsertSchedule(
+      schedule.copyWith(
+        minute: 45,
+        updatedAt: createdAt.add(const Duration(minutes: 1)),
+      ),
+    );
+
+    final afterRestart = LocalReminderRepository(database);
+    final persisted = (await afterRestart.watchSchedules().first).single;
+    expect(persisted.revision, 2);
+    expect(persisted.minute, 45);
+  });
+
+  test('cosmetic and no-op saves preserve occurrence revision', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final repository = LocalReminderRepository(database);
+    final createdAt = DateTime.utc(2026, 6, 9, 8);
+    final schedule = ReminderSchedule(
+      id: 'morning',
+      label: 'Morning dose',
+      hour: 8,
+      minute: 30,
+      isEnabled: true,
+      createdAt: createdAt,
+      updatedAt: createdAt,
+    );
+
+    await repository.upsertSchedule(schedule);
+    await repository.upsertSchedule(
+      schedule.copyWith(
+        label: 'Morning medicine',
+        updatedAt: createdAt.add(const Duration(minutes: 1)),
+      ),
+    );
+    await repository.upsertSchedule(
+      schedule.copyWith(
+        label: 'Morning medicine',
+        updatedAt: createdAt.add(const Duration(minutes: 2)),
+      ),
+    );
+
+    final persisted = (await repository.watchSchedules().first).single;
+    expect(persisted.revision, 1);
+    expect(persisted.label, 'Morning medicine');
   });
 
   test('local reminder repository links schedules to prescriptions', () async {
@@ -302,6 +366,50 @@ void main() {
       expect(slots.single.prescriptionId, 'allergy-pill');
     },
   );
+
+  test('phone-only reminder edits do not mutate carousel state', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final hardwareRepository = LocalReminderRepository(database);
+    final phoneRepository = LocalReminderRepository(
+      database,
+      hardwareEffectsEnabled: false,
+    );
+    final now = DateTime.utc(2026, 6, 9, 8);
+    final schedule = ReminderSchedule(
+      id: 'morning',
+      label: 'Vitamin D',
+      prescriptionId: 'vitamin-d',
+      hour: 8,
+      minute: 30,
+      isEnabled: true,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await hardwareRepository.upsertSchedule(schedule);
+    await LocalCarouselSlotRepository(database).assignSlot(
+      CarouselSlot(
+        id: 'slot-1',
+        slotNumber: 1,
+        prescriptionId: 'vitamin-d',
+        scheduleId: 'morning',
+        profileId: ReminderSchedule.defaultProfileId,
+        status: CarouselSlotStatus.loaded,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+
+    await phoneRepository.upsertSchedule(
+      schedule.copyWith(
+        prescriptionId: 'allergy-pill',
+        updatedAt: now.add(const Duration(minutes: 1)),
+      ),
+    );
+
+    expect(await database.select(database.carouselSlots).get(), hasLength(1));
+    expect(await database.select(database.carouselLoadSessions).get(), isEmpty);
+  });
 
   test('local reminder repository rejects invalid reminder times', () async {
     final database = DoseyDatabase.inMemory();

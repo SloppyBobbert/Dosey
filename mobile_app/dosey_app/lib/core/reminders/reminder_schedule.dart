@@ -8,6 +8,7 @@ class ReminderSchedule {
     this.profileId = defaultProfileId,
     required this.hour,
     required this.minute,
+    this.revision = 1,
     required this.isEnabled,
     required this.createdAt,
     required this.updatedAt,
@@ -21,6 +22,7 @@ class ReminderSchedule {
   final String profileId;
   final int hour;
   final int minute;
+  final int revision;
   final bool isEnabled;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -37,6 +39,7 @@ class ReminderSchedule {
     String? profileId,
     int? hour,
     int? minute,
+    int? revision,
     bool? isEnabled,
     DateTime? updatedAt,
   }) {
@@ -47,6 +50,7 @@ class ReminderSchedule {
       profileId: profileId ?? this.profileId,
       hour: hour ?? this.hour,
       minute: minute ?? this.minute,
+      revision: revision ?? this.revision,
       isEnabled: isEnabled ?? this.isEnabled,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
