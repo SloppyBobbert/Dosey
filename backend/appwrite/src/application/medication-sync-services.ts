@@ -1,6 +1,9 @@
 import { createHash } from 'node:crypto';
 
-import type { AuthorizedHouseholdAccess } from './household-access.js';
+import type {
+  AuthorizedMedicationSyncAccess,
+  MedicationSyncActorType,
+} from './household-access.js';
 import type {
   MedicationSyncChangeRecord,
   MedicationSyncDocumentRecord,
@@ -12,8 +15,9 @@ import type {
 interface MedicationSyncAccessAuthorizer {
   authorize(input: {
     accountId: string;
+    actorType: MedicationSyncActorType;
     robotId: string;
-  }): Promise<AuthorizedHouseholdAccess | null>;
+  }): Promise<AuthorizedMedicationSyncAccess | null>;
 }
 
 type MutationActor = {
@@ -21,7 +25,7 @@ type MutationActor = {
   readonly idempotencyKey: string;
   readonly operationHash: string;
   readonly actorAccountId: string;
-  readonly actorRole: 'owner' | 'member';
+  readonly actorRole: 'owner' | 'member' | 'device';
   readonly now: Date;
 };
 
@@ -124,11 +128,13 @@ export class MedicationSyncPushService {
 
   async push(input: {
     readonly accountId: string;
+    readonly actorType: MedicationSyncActorType;
     readonly robotId: string;
     readonly operations: readonly MedicationSyncPushOperation[];
   }): Promise<{ readonly acknowledgements: readonly MedicationSyncAcknowledgement[] }> {
     const authorized = await this.access.authorize({
       accountId: input.accountId,
+      actorType: input.actorType,
       robotId: input.robotId,
     });
     if (authorized == null) throw new MedicationSyncAuthorizationError();
@@ -202,6 +208,7 @@ export class MedicationSyncPullService {
 
   async pull(input: {
     readonly accountId: string;
+    readonly actorType: MedicationSyncActorType;
     readonly robotId: string;
     readonly cursor: number;
     readonly checkpoint?: number;
@@ -209,6 +216,7 @@ export class MedicationSyncPullService {
   }) {
     const authorized = await this.access.authorize({
       accountId: input.accountId,
+      actorType: input.actorType,
       robotId: input.robotId,
     });
     if (authorized == null) throw new MedicationSyncAuthorizationError();

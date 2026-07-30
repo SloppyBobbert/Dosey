@@ -65,6 +65,11 @@ test('defines additive server-only sync tables and callable human function deplo
       'payload', 'actorAccountId', 'actorRole', 'changedAt', 'idempotencyKey', 'operationHash',
     ],
   );
+  assert.deepEqual(
+    config.tables.find((table) => table.$id === 'dosey_sync_changes_v1')?.columns
+      .find((column) => column.key === 'actorRole')?.elements,
+    ['owner', 'member', 'device'],
+  );
 
   assert.deepEqual(config.functions.map((definition) => ({
     id: definition.$id,
@@ -87,6 +92,8 @@ test('defines additive server-only sync tables and callable human function deplo
     const variables = new Map(definition.vars.map(({ key, value }) => [key, value]));
     assert.equal(variables.get('DOSEY_DATABASE_ID'), '<DOSEY_DATABASE_ID>');
     assert.equal(variables.get('DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID'), '<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>');
+    assert.equal(variables.get('DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID'), '<DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID>');
+    assert.equal(variables.get('DOSEY_ROBOT_INSTALLATIONS_TABLE_ID'), '<DOSEY_ROBOT_INSTALLATIONS_TABLE_ID>');
     assert.equal(
       variables.get('DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID'),
       'dosey_sync_changes_v1',
@@ -94,6 +101,8 @@ test('defines additive server-only sync tables and callable human function deplo
     assert.deepEqual([...variables.entries()], [
       ['DOSEY_DATABASE_ID', '<DOSEY_DATABASE_ID>'],
       ['DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID', '<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>'],
+      ['DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID', '<DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID>'],
+      ['DOSEY_ROBOT_INSTALLATIONS_TABLE_ID', '<DOSEY_ROBOT_INSTALLATIONS_TABLE_ID>'],
       ['DOSEY_MEDICATION_SYNC_DOCUMENTS_TABLE_ID', 'dosey_sync_documents_v1'],
       ['DOSEY_MEDICATION_SYNC_EVENTS_TABLE_ID', 'dosey_sync_events_v1'],
       ['DOSEY_MEDICATION_SYNC_HELP_REQUESTS_TABLE_ID', 'dosey_sync_help_requests_v1'],

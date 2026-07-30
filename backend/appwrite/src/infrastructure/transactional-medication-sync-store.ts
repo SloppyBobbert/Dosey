@@ -1,6 +1,5 @@
-import type { HouseholdRole } from '../domain/household.js';
-
 export type MedicationSyncResourceType = 'medication' | 'schedule';
+export type MedicationSyncActorRole = 'owner' | 'member' | 'device';
 export type MedicationSyncEventKind =
   | 'taken_confirmed'
   | 'skipped'
@@ -70,7 +69,7 @@ export interface MedicationSyncChangeRecord {
   readonly operation: 'upsert' | 'archive' | 'event';
   readonly payload: string;
   readonly actorAccountId: string;
-  readonly actorRole: HouseholdRole;
+  readonly actorRole: MedicationSyncActorRole;
   readonly changedAt: Date;
   readonly idempotencyKey: string;
   readonly operationHash: string;
@@ -108,7 +107,7 @@ type MutationContext = {
   readonly idempotencyKey: string;
   readonly operationHash: string;
   readonly actorAccountId: string;
-  readonly actorRole: HouseholdRole;
+  readonly actorRole: MedicationSyncActorRole;
   readonly now: Date;
 };
 

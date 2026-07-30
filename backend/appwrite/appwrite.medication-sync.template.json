@@ -112,7 +112,7 @@
         { "key": "operation", "type": "varchar", "size": 8, "required": true, "array": false, "elements": ["upsert", "archive", "event"], "format": "enum", "default": null },
         { "key": "payload", "type": "text", "required": true, "array": false, "default": null },
         { "key": "actorAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
-        { "key": "actorRole", "type": "varchar", "size": 8, "required": true, "array": false, "elements": ["owner", "member"], "format": "enum", "default": null },
+        { "key": "actorRole", "type": "varchar", "size": 8, "required": true, "array": false, "elements": ["owner", "member", "device"], "format": "enum", "default": null },
         { "key": "changedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
         { "key": "idempotencyKey", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
         { "key": "operationHash", "type": "varchar", "size": 64, "required": true, "array": false, "default": null }
@@ -140,6 +140,8 @@
       "vars": [
         { "key": "DOSEY_DATABASE_ID", "value": "<DOSEY_DATABASE_ID>" },
         { "key": "DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID", "value": "<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>" },
+        { "key": "DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID", "value": "<DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID>" },
+        { "key": "DOSEY_ROBOT_INSTALLATIONS_TABLE_ID", "value": "<DOSEY_ROBOT_INSTALLATIONS_TABLE_ID>" },
         { "key": "DOSEY_MEDICATION_SYNC_DOCUMENTS_TABLE_ID", "value": "dosey_sync_documents_v1" },
         { "key": "DOSEY_MEDICATION_SYNC_EVENTS_TABLE_ID", "value": "dosey_sync_events_v1" },
         { "key": "DOSEY_MEDICATION_SYNC_HELP_REQUESTS_TABLE_ID", "value": "dosey_sync_help_requests_v1" },
@@ -166,6 +168,8 @@
       "vars": [
         { "key": "DOSEY_DATABASE_ID", "value": "<DOSEY_DATABASE_ID>" },
         { "key": "DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID", "value": "<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>" },
+        { "key": "DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID", "value": "<DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID>" },
+        { "key": "DOSEY_ROBOT_INSTALLATIONS_TABLE_ID", "value": "<DOSEY_ROBOT_INSTALLATIONS_TABLE_ID>" },
         { "key": "DOSEY_MEDICATION_SYNC_DOCUMENTS_TABLE_ID", "value": "dosey_sync_documents_v1" },
         { "key": "DOSEY_MEDICATION_SYNC_EVENTS_TABLE_ID", "value": "dosey_sync_events_v1" },
         { "key": "DOSEY_MEDICATION_SYNC_HELP_REQUESTS_TABLE_ID", "value": "dosey_sync_help_requests_v1" },

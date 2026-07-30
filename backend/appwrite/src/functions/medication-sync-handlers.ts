@@ -5,7 +5,11 @@ import {
 } from '../application/medication-sync-services.js';
 import type { MedicationSyncChangeRecord } from '../infrastructure/transactional-medication-sync-store.js';
 import type { FunctionContext } from './claim-robot.js';
-import type { HumanFunctionIdentityVerifier } from './function-identity.js';
+import type {
+  AnonymousFunctionIdentityVerifier,
+  HumanFunctionIdentityVerifier,
+} from './function-identity.js';
+import type { MedicationSyncActorType } from '../application/household-access.js';
 import {
   serializeMedicationSyncPullPage,
   serializeMedicationSyncPushResponse,
@@ -32,6 +36,7 @@ export interface MedicationSyncRequestParser {
 interface MedicationSyncPushApplication {
   push(input: {
     readonly accountId: string;
+    readonly actorType: MedicationSyncActorType;
     readonly robotId: string;
     readonly operations: readonly MedicationSyncPushOperation[];
   }): Promise<{ readonly acknowledgements: readonly MedicationSyncAcknowledgement[] }>;
@@ -40,6 +45,7 @@ interface MedicationSyncPushApplication {
 interface MedicationSyncPullApplication {
   pull(input: {
     readonly accountId: string;
+    readonly actorType: MedicationSyncActorType;
     readonly robotId: string;
     readonly cursor: number;
     readonly checkpoint?: number;
@@ -52,16 +58,23 @@ interface MedicationSyncPullApplication {
   }>;
 }
 
+type MedicationSyncIdentityVerifier = HumanFunctionIdentityVerifier & AnonymousFunctionIdentityVerifier;
+type MedicationSyncPrincipal = {
+  readonly accountId: string;
+  readonly actorType: MedicationSyncActorType;
+};
+
 export function medicationSyncPushHandler(
   service: MedicationSyncPushApplication,
-  identity: HumanFunctionIdentityVerifier,
+  identity: MedicationSyncIdentityVerifier,
   parser: MedicationSyncRequestParser,
 ) {
-  return medicationSyncHandler(identity, async (context, accountId) => {
+  return medicationSyncHandler(identity, async (context, principal) => {
     const parsed = parser.parsePush(context.req.bodyJson);
     if (!parsed.ok) return context.res.json({ error: parsed.code }, 400);
     const result = await service.push({
-      accountId,
+      accountId: principal.accountId,
+      actorType: principal.actorType,
       robotId: parsed.value.robotId,
       operations: parsed.value.operations,
     });
@@ -71,14 +84,15 @@ export function medicationSyncPushHandler(
 
 export function medicationSyncPullHandler(
   service: MedicationSyncPullApplication,
-  identity: HumanFunctionIdentityVerifier,
+  identity: MedicationSyncIdentityVerifier,
   parser: MedicationSyncRequestParser,
 ) {
-  return medicationSyncHandler(identity, async (context, accountId) => {
+  return medicationSyncHandler(identity, async (context, principal) => {
     const parsed = parser.parsePull(context.req.bodyJson);
     if (!parsed.ok) return context.res.json({ error: parsed.code }, 400);
     const result = await service.pull({
-      accountId,
+      accountId: principal.accountId,
+      actorType: principal.actorType,
       robotId: parsed.value.robotId,
       cursor: parsed.value.cursor,
       limit: parsed.value.limit,
@@ -93,19 +107,27 @@ export function medicationSyncPullHandler(
 }
 
 function medicationSyncHandler(
-  identity: HumanFunctionIdentityVerifier,
-  operation: (context: FunctionContext, accountId: string) => Promise<unknown>,
+  identity: MedicationSyncIdentityVerifier,
+  operation: (context: FunctionContext, principal: MedicationSyncPrincipal) => Promise<unknown>,
 ) {
   return async (context: FunctionContext) => {
     if (context.req.method !== 'POST') {
       return context.res.json({ error: 'method_not_allowed' }, 405);
     }
     const human = await identity.verifyHuman(context.req.headers);
-    if (human == null) {
+    const anonymous = human == null
+      ? await identity.verifyAnonymous(context.req.headers)
+      : null;
+    const principal: MedicationSyncPrincipal | null = human != null
+      ? { accountId: human.accountId, actorType: 'human' }
+      : typeof anonymous === 'string'
+        ? { accountId: anonymous, actorType: 'device' }
+        : null;
+    if (principal == null) {
       return context.res.json({ error: 'authentication_required' }, 401);
     }
     try {
-      return await operation(context, human.accountId);
+      return await operation(context, principal);
     } catch (error) {
       if (error instanceof MedicationSyncAuthorizationError) {
         return context.res.json({ error: 'household_access_denied' }, 403);

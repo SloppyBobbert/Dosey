@@ -16,6 +16,25 @@ export interface AuthorizedHouseholdAccess {
   readonly role: HouseholdRole;
 }
 
+export type MedicationSyncActorType = 'human' | 'device';
+export type MedicationSyncActorRole = HouseholdRole | 'device';
+
+interface MountedDeviceAccessLookup {
+  findByDevice(accountId: string): Promise<readonly {
+    readonly robotId: string;
+    readonly mountedDeviceAccountId: string;
+  }[]>;
+  getRobotInstallation(robotId: string): Promise<{
+    readonly robotId: string;
+    readonly status: 'active' | 'provisioning';
+  } | null>;
+}
+
+export interface AuthorizedMedicationSyncAccess {
+  readonly robotId: string;
+  readonly role: MedicationSyncActorRole;
+}
+
 export class HouseholdAccessAuthorizer {
   constructor(private readonly links: HouseholdLinkLookup) {}
 
@@ -28,5 +47,40 @@ export class HouseholdAccessAuthorizer {
       return null;
     }
     return { robotId: link.robotId, role: link.role };
+  }
+}
+
+export class MedicationSyncAccessAuthorizer {
+  constructor(
+    private readonly humans: HouseholdAccessAuthorizer,
+    private readonly mountedDevices: MountedDeviceAccessLookup,
+  ) {}
+
+  async authorize(input: {
+    readonly accountId: string;
+    readonly actorType: MedicationSyncActorType;
+    readonly robotId: string;
+  }): Promise<AuthorizedMedicationSyncAccess | null> {
+    if (input.actorType === 'human') {
+      return this.humans.authorize(input);
+    }
+    try {
+      const records = await this.mountedDevices.findByDevice(input.accountId);
+      const record = records[0];
+      if (
+        records.length !== 1 ||
+        record?.robotId !== input.robotId ||
+        record.mountedDeviceAccountId !== input.accountId
+      ) return null;
+      const installation = await this.mountedDevices.getRobotInstallation(input.robotId);
+      if (
+        installation == null ||
+        installation.robotId !== input.robotId ||
+        installation.status !== 'active'
+      ) return null;
+      return { robotId: input.robotId, role: 'device' };
+    } catch {
+      return null;
+    }
   }
 }

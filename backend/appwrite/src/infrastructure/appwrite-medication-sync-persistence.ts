@@ -397,7 +397,7 @@ function changeFromRow(row: MedicationSyncRow): MedicationSyncChangeRecord {
     operation: requiredEnum(row, 'operation', ['upsert', 'archive', 'event']),
     payload: requiredString(row, 'payload'),
     actorAccountId: requiredString(row, 'actorAccountId'),
-    actorRole: requiredEnum(row, 'actorRole', ['owner', 'member']),
+    actorRole: requiredEnum(row, 'actorRole', ['owner', 'member', 'device']),
     changedAt: requiredDate(row, 'changedAt'),
     idempotencyKey: requiredString(row, 'idempotencyKey'),
     operationHash: requiredString(row, 'operationHash'),
