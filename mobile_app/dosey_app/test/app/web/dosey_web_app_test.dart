@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dosey_app/app/web/dosey_web_app.dart';
 import 'package:dosey_app/app/web/dosey_web_dependencies.dart';
 import 'package:dosey_app/app/web/web_auth_configuration.dart';
+import 'package:dosey_app/app/web/web_routes.dart';
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:dosey_app/main_web.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +29,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: track(_FakeIdentity()),
           config: WebAuthConfiguration.fromValues(enabled: false),
@@ -63,6 +65,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: track(_FakeIdentity()),
           config: WebAuthConfiguration.fromValues(
@@ -94,6 +97,7 @@ void main() {
     );
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: WebAuthConfiguration.fromValues(
@@ -122,6 +126,7 @@ void main() {
     );
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: _config('https://staging.dosey.dev'),
@@ -132,6 +137,7 @@ void main() {
     expect(find.textContaining('Staging environment'), findsOneWidget);
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: _config('https://app.dosey.dev'),
@@ -146,6 +152,7 @@ void main() {
     final identity = track(_FakeIdentity());
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: _config('https://app.dosey.dev'),
@@ -165,6 +172,7 @@ void main() {
     final identity = track(_FakeIdentity.withEmailUserId('user-secret'));
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: _config('http://localhost:8080'),
@@ -199,6 +207,7 @@ void main() {
     final identity = track(_FakeIdentity.withEmailUserId('user-secret'));
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: _config('http://localhost:8080'),
@@ -228,6 +237,7 @@ void main() {
       final identity = track(_FakeIdentity.deferInitial());
       await tester.pumpWidget(
         DoseyWebApp(
+          initialRoute: WebRoutes.signIn,
           dependencies: DoseyWebDependencies(
             identity: identity,
             config: _config('http://localhost:8080'),
@@ -249,6 +259,7 @@ void main() {
       ..completeFails = true;
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: _config('http://localhost:8080'),
@@ -276,6 +287,7 @@ void main() {
     final identity = track(_FakeIdentity())..requestFails = true;
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: _config('http://localhost:8080'),
@@ -304,6 +316,7 @@ void main() {
     )..signOutFails = true;
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: _config('http://localhost:8080'),
@@ -324,6 +337,7 @@ void main() {
     final identity = track(_FakeIdentity.error());
     await tester.pumpWidget(
       DoseyWebApp(
+        initialRoute: WebRoutes.signIn,
         dependencies: DoseyWebDependencies(
           identity: identity,
           config: WebAuthConfiguration.fromValues(
