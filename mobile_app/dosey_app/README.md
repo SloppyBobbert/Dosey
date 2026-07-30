@@ -2,6 +2,8 @@
 
 Flutter app for the Dosey medication-dispensing companion robot prototype.
 
+Android Personal and Robot Modes and web remain active. iOS Personal Mode development and distribution are paused. Existing iOS source, native integrations, project files, and implementation are intentionally retained for possible future revival, but Dosey does not currently provide iOS releases or active iOS feature support.
+
 ## Status badges
 
 ![Flutter](https://img.shields.io/badge/Flutter-3.44.6-02569B?logo=flutter&logoColor=white)
@@ -24,7 +26,7 @@ Flutter app for the Dosey medication-dispensing companion robot prototype.
 - Fixed WAV voice catalog for the mounted Robot Mode phone, with app-owned asset playback wiring, previews, category toggles, quiet hours, configurable repetition cooldowns, and reminder repeat policy controls for normal reminder speech.
 - Controller simulator plus a compile-tested D1 BLE transport and staged controller gateway; Android-to-bare-XIAO connection, safe-default HEARTBEAT, device/config/safety status, LED test, and disconnect indication were observed. That bench evidence does not qualify the identified APK or integrated carousel/hardware path. Integrated external-hardware lifecycle, reconnect, power-loss, movement cancellation/timeout, and movement/dispensing behavior remain unverified.
 - Guided Trial scenarios for simulator-backed happy-path dispensing, missed-dose recognition, and offline/reconnect behavior.
-- Appwrite-backed human identity and robot linking plus native iOS Apple sign-in, all behind app-owned interfaces. Human authentication, device pairing, and hardware authorization are independent capabilities: sign-in/sign-out does not change pairing, hardware authorization, settings, or local medication data, and pairing does not alter human authentication.
+- Appwrite-backed human identity and robot linking plus retained native iOS Apple sign-in implementation, all behind app-owned interfaces. Human authentication, device pairing, and hardware authorization are independent capabilities: sign-in/sign-out does not change pairing, hardware authorization, settings, or local medication data, and pairing does not alter human authentication.
 - App-owned interfaces for controller/BLE, connectivity, auth, robot pairing, reminders, permissions, notifications, and dose logging.
 - Drift/SQLite local database for device role settings, prescriptions, reminders, schedule profiles, carousel slots, cached auth state, refill records, dose log events, household/profile metadata, and admin audit events.
 
@@ -33,13 +35,13 @@ Selected background packages:
 - `flutter_blue_plus` for filtered Dosey discovery, GATT service discovery, notifications, and bounded D1 writes.
 - `connectivity_plus` for advisory connectivity/Wi-Fi status only, not provisioning.
 - `appwrite` for human identity, robot ownership, and current legacy mounted-phone pairing. The target secure path uses server-only `mounted_robot_access` and `get-mounted-robot`; anonymous Robot accounts must never join or enumerate Teams on that path, which remain for human household ownership and membership.
-- `google_sign_in` plus a native iOS Apple sign-in bridge for local/provider-specific auth paths.
+- `google_sign_in` plus a retained native iOS Apple sign-in bridge for local/provider-specific auth paths.
 - `flutter_local_notifications` for local reminder notifications and sounds.
 - `permission_handler` for runtime permission requests/checks. Android 12 and
   newer request nearby Bluetooth scan/connect access; Android 11 and older map
   the same scan gate to fine location, which Android requires for BLE scans.
 
-Notification channel IDs and sound IDs are intended to stay stable. Custom reminder sound assets may still need platform provisioning on Android/iOS.
+Notification channel IDs and sound IDs are intended to stay stable. Custom reminder sound assets may still need platform provisioning on Android; retained iOS notification provisioning remains for possible future revival.
 
 Appwrite Functions define the target account, human household, pairing, and
 mounted restoration contract. The backend source implements that contract, but
@@ -88,7 +90,7 @@ schema and deployment details.
 
 Dosey ships as two fixed Android distributions rather than a runtime mode choice:
 
-- **Dosey Personal:** package `com.sloppybobbert.dosey_app`. It updates the existing Android app in place, requires sign-in, and owns the only Android Appwrite OAuth callback. iOS always uses Personal behavior.
+- **Dosey Personal:** package `com.sloppybobbert.dosey_app`. It updates the existing Android app in place, requires sign-in, and owns the only Android Appwrite OAuth callback. The retained iOS implementation uses Personal behavior if revived.
 - **Dosey Robot:** package `com.sloppybobbert.dosey_app.robot`. It is Android-only, works locally without sign-in, and has no OAuth callback or account actions. It retains schedule, carousel, history, household, and other management features. It uses soft in-app navigation and screen-awake guardrails, not device-owner or lock-task kiosk provisioning.
 
 The phone is the brain. It handles schedules, medication data, refill logic, dose history, PIN, caregiver logic, UI, reminders, Bluetooth commands, and future cloud, voice-command, or local AI features. The XIAO should only execute hardware actions and report status.
@@ -124,7 +126,7 @@ for the automated evidence and pending physical-device evidence.
 - Return mounted Robot Mode to Robot Face after 1, 2, 5, 10, or 15 minutes of inactivity, with 2 minutes as the default; pause the timer in the background and defer it while a dialog or sheet is open.
 - Route local dose reminders to Robot Face in Robot Mode and Today in Personal Mode, route shortage alerts to Carousel, and run missed-dose reconciliation when the app resumes.
 - Sign in with Google through Appwrite for Personal use, generate an owner-authorized ten-minute pairing code, and claim a robot from the mounted Android phone with a dedicated anonymous device identity. Current clients use legacy Team-backed restoration; the pending secure follow-up will restore through `get-mounted-robot` without adding the mounted account to Teams.
-- Run Android debug APK and iOS no-codesign debug builds on this machine.
+- Run Android debug APK builds on this machine. The retained iOS no-codesign debug build remains a preservation and compile-regression check, not release qualification or production readiness.
 
 The app must not mark a dose taken because the servo moved. Dispense logging requires a controller success event, and the app separately tracks dose visible and dose taken confirmation.
 
@@ -152,6 +154,7 @@ flutter run --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_B
 flutter run --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
 flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
 flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
+# Retained iOS preservation and compile-regression check; not release qualification.
 flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
 git diff --check
 ```
@@ -174,12 +177,14 @@ flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-def
 ```
 
 The Ubuntu job uploads both debug APKs as short-lived artifacts. Its macOS job
-runs the no-codesign Personal-profile iOS debug build. Each job prepares the
-temporary public configuration it needs and removes it after the run.
+retains the no-codesign Personal-profile iOS debug build as a preservation and
+compile-regression check, not release qualification or evidence of production
+readiness. Each job prepares the temporary public configuration it needs and
+removes it after the run.
 
 ## Local toolchain notes
 
 - Android SDK: `/opt/homebrew/share/android-commandlinetools`.
 - JDK: Homebrew OpenJDK 17.
 - Android packages installed: platform-tools, Android SDK Platforms 35 and 36, Build-Tools 36.0.0, NDK 28.2.13676358, CMake 3.22.1.
-- Xcode 26.5 is selected at `/Applications/Xcode.app/Contents/Developer`; no-codesign iOS debug builds can also run locally.
+- Xcode 26.5 is selected at `/Applications/Xcode.app/Contents/Developer`; retained no-codesign iOS debug builds can run locally as preservation and compile-regression checks, not release qualification or evidence of production readiness.
