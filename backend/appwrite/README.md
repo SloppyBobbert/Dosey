@@ -1,17 +1,19 @@
 # Dosey Appwrite functions
 
 This package contains the server-authorized robot pairing, mounted-device
-restore, and human household lifecycle foundations. It does not schedule doses,
-command dispensing, or mark doses taken.
+restore, human household lifecycle, and medication synchronization foundations.
+It does not schedule doses or command dispensing.
 
-Appwrite Teams remain the authority for robot ownership and human household
-membership. TablesDB is the authority for pairing and mounted-device access.
+Appwrite Teams remain the household projection. Active `human_robot_links` rows
+are the medication-sync authorization authority. TablesDB is the authority for
+pairing, mounted-device access, and synchronized records.
 On the target secure path, mounted anonymous Robot accounts never become Team
 members. Flutter invokes Functions for every server operation and never reads
 the server-only tables.
 
-The source and target contract is seven server-authorized Functions and six
-server-only TablesDB tables. The live staging backend rollout remains pending
+The original household path has seven server-authorized Functions and six
+server-only TablesDB tables. Medication sync adds two human-only Functions and
+six additive server-only tables. The live staging backend rollout remains pending
 and incomplete until the approved cloud rollout is performed. Personal account
 and household use requires human authentication; the mounted Robot
 distribution remains fully usable as a guest.
@@ -21,8 +23,8 @@ capabilities. Sign-in/sign-out does not change pairing, hardware authorization,
 settings, or local medication data, and pairing does not alter human
 authentication. Appwrite/auth outages must not block the local Robot shell.
 Mounted credentials never save, swap, or restore a human session. Medication
-schedules, dose state/history, inventory, and related medication data remain in
-local Drift/SQLite; no medication sync or upload is introduced.
+and schedule records plus the four v1 dose-event kinds can sync for verified
+human household members. Hardware inventory and missed-dose derivation remain local.
 
 ## Functions
 
@@ -33,6 +35,8 @@ local Drift/SQLite; no medication sync or upload is introduced.
 - `src/entrypoints/accept-household-invitation.ts`: atomically reserves a human slot before creating the Team membership.
 - `src/entrypoints/remove-household-member.ts`: removes a member as the owner, or lets a non-owner member leave.
 - `src/entrypoints/get-mounted-robot.ts`: restores the robot identity for the authenticated anonymous mounted account.
+- `src/entrypoints/medication-sync-push.ts`: validates and applies a bounded v1 mutation batch for an authorized human.
+- `src/entrypoints/medication-sync-pull.ts`: returns a fixed-checkpoint page of immutable v1 changes for an authorized human.
 
 The target Android Robot configuration will include the active versioned secure
 claim Function ID and the public `get-mounted-robot` Function ID. A pending
@@ -52,6 +56,8 @@ dist/entrypoints/create-household-invitation.js
 dist/entrypoints/accept-household-invitation.js
 dist/entrypoints/remove-household-member.js
 dist/entrypoints/get-mounted-robot.js
+dist/entrypoints/medication-sync-push.js
+dist/entrypoints/medication-sync-pull.js
 ```
 
 Use Node.js 22 or newer. Do not expose any Function dynamic API key or HMAC secret to Flutter.
@@ -123,6 +129,13 @@ claim under a separate versioned Function ID and configure the public
 `get-mounted-robot` Function ID. Keep the existing Team-writing Function
 available only to installed clients that still depend on Team-backed
 restoration. Do not dual-write mounted accounts into Teams.
+
+## Medication sync deployment
+
+Use `appwrite.medication-sync.template.json` as the additive schema and Function
+manifest. It deliberately contains placeholders rather than environment-specific
+IDs or credentials. Follow `MEDICATION_SYNC_DEPLOYMENT.md`; never apply the
+template directly to production.
 
 Before retiring the legacy Function, inventory every mounted staging device and
 upgrade or reset any client that still uses Team-backed restoration. Verify

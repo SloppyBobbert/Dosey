@@ -137,6 +137,49 @@ describe('Appwrite function identity verification', () => {
     );
   });
 
+  test('accepts a verified human from an explicitly configured provider', async () => {
+    const verifier = new AppwriteFunctionIdentityVerifier(
+      {
+        getCurrentAccountId: async () => 'account-1',
+        getCurrentHumanAccount: async () => ({
+          id: 'account-1',
+          email: 'person@example.com',
+          emailVerified: true,
+          provider: 'email',
+        }),
+      },
+      ['google', 'email'],
+    );
+
+    assert.deepEqual(
+      await verifier.verifyHuman({
+        'x-appwrite-user-id': 'account-1',
+        'x-appwrite-user-jwt': 'jwt',
+      }),
+      { accountId: 'account-1', email: 'person@example.com' },
+    );
+  });
+
+  test('keeps non-Google human providers disabled by default', async () => {
+    const verifier = new AppwriteFunctionIdentityVerifier({
+      getCurrentAccountId: async () => 'account-1',
+      getCurrentHumanAccount: async () => ({
+        id: 'account-1',
+        email: 'person@example.com',
+        emailVerified: true,
+        provider: 'email',
+      }),
+    });
+
+    assert.equal(
+      await verifier.verifyHuman({
+        'x-appwrite-user-id': 'account-1',
+        'x-appwrite-user-jwt': 'jwt',
+      }),
+      null,
+    );
+  });
+
   test('rejects anonymous, unverified, non-Google, and mismatched humans', async () => {
     for (const account of [
       {
