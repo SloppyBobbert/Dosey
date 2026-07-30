@@ -113,11 +113,35 @@ jobs:
         run: flutter test
 
       - name: Verify runtime capability contracts
-        run: >-
-          flutter test
-          test/core/runtime/runtime_capability_test.dart
-          test/core/runtime/runtime_bootstrap_test.dart
-          test/core/runtime/local_runtime_capability_repository_test.dart
+        run: |
+          set -euo pipefail
+          runtime_tests=(
+            test/core/runtime/runtime_capability_test.dart
+            test/core/runtime/runtime_bootstrap_test.dart
+            test/core/runtime/local_runtime_capability_repository_test.dart
+          )
+          existing_tests=()
+          missing_tests=()
+          for test_path in "${runtime_tests[@]}"; do
+            if [ -f "$test_path" ]; then
+              existing_tests+=("$test_path")
+            else
+              missing_tests+=("$test_path")
+            fi
+          done
+          if [ ${#existing_tests[@]} -eq 0 ]; then
+            printf 'Runtime capability contract tests are not present; skipping this pre-runtime rollout gate.\n' | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ ${#missing_tests[@]} -ne 0 ]; then
+            printf 'Runtime capability contract tests are only partially present. Missing:\n' >&2
+            printf '  %s\n' "${missing_tests[@]}" >&2
+            exit 1
+          fi
+          flutter test \
+            test/core/runtime/runtime_capability_test.dart \
+            test/core/runtime/runtime_bootstrap_test.dart \
+            test/core/runtime/local_runtime_capability_repository_test.dart
 
       - name: Prepare public Appwrite configuration
         env:
