@@ -9,14 +9,17 @@ void main() {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     final config = WebAuthConfiguration.fromEnvironment;
-    final cloudConfiguration = CloudConfiguration.fromValues(
-      endpoint: config.endpoint,
-      projectId: config.projectId,
-    );
-    final identity = createWebCloudIdentityGateway(cloudConfiguration);
+    final cloudConfiguration = CloudConfiguration.fromEnvironment;
+    final gateways = createWebCloudGateways(cloudConfiguration);
     runApp(
       DoseyWebApp(
-        dependencies: DoseyWebDependencies(identity: identity, config: config),
+        dependencies: DoseyWebDependencies(
+          identity: gateways.identity,
+          config: config,
+          household: gateways.household,
+          householdManagement: gateways.householdManagement,
+          caregiver: gateways.caregiver,
+        ),
       ),
     );
   } catch (error) {

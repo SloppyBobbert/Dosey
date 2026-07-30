@@ -8,9 +8,15 @@ import 'dosey_web_app.dart';
 import 'web_auth_configuration.dart';
 
 class WebAuthGate extends StatefulWidget {
-  const WebAuthGate({super.key, required this.dependencies});
+  const WebAuthGate({
+    super.key,
+    required this.dependencies,
+    this.authenticatedBuilder,
+  });
 
   final DoseyWebDependencies dependencies;
+  final Widget Function(BuildContext context, CloudIdentity identity)?
+  authenticatedBuilder;
 
   @override
   State<WebAuthGate> createState() => _WebAuthGateState();
@@ -39,11 +45,12 @@ class _WebAuthGateState extends State<WebAuthGate> {
             config: dependencies.config,
           );
         }
-        return DoseyPersonalHome(
-          identity: snapshot.data!,
-          isStaging: dependencies.config.isStaging,
-          onSignOut: dependencies.identity.signOut,
-        );
+        return widget.authenticatedBuilder?.call(context, snapshot.data!) ??
+            DoseyPersonalHome(
+              identity: snapshot.data!,
+              isStaging: dependencies.config.isStaging,
+              onSignOut: dependencies.identity.signOut,
+            );
       },
     );
   }
@@ -207,20 +214,22 @@ class _SignedOutState extends State<_SignedOut> {
               icon: const Icon(Icons.login),
               label: const Text('Continue with Google'),
             ),
-            const SizedBox(height: 22),
-            const Divider(),
-            const SizedBox(height: 22),
-            TextField(
-              controller: _email,
-              keyboardType: TextInputType.emailAddress,
-              autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(labelText: 'Email address'),
-            ),
-            const SizedBox(height: 12),
-            FilledButton(
-              onPressed: _busy ? null : _requestCode,
-              child: const Text('Email me a code'),
-            ),
+            if (widget.config.allowsEmailOtp) ...[
+              const SizedBox(height: 22),
+              const Divider(),
+              const SizedBox(height: 22),
+              TextField(
+                controller: _email,
+                keyboardType: TextInputType.emailAddress,
+                autofillHints: const [AutofillHints.email],
+                decoration: const InputDecoration(labelText: 'Email address'),
+              ),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _busy ? null : _requestCode,
+                child: const Text('Email me a code'),
+              ),
+            ],
           ] else ...[
             Text('We sent a code to ${_email.text.trim()}.'),
             const SizedBox(height: 12),

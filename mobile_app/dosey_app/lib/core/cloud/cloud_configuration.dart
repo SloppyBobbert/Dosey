@@ -8,6 +8,9 @@ class CloudConfiguration {
     String? createHouseholdInvitationFunctionId,
     String? acceptHouseholdInvitationFunctionId,
     String? removeHouseholdMemberFunctionId,
+    String? medicationSyncPushFunctionId,
+    String? medicationSyncPullFunctionId,
+    bool caregiverSyncEnabled = false,
   }) {
     final normalizedEndpoint = _normalize(endpoint);
     final normalizedProjectId = _normalize(projectId);
@@ -31,6 +34,9 @@ class CloudConfiguration {
       removeHouseholdMemberFunctionId: _normalize(
         removeHouseholdMemberFunctionId,
       ),
+      medicationSyncPushFunctionId: _normalize(medicationSyncPushFunctionId),
+      medicationSyncPullFunctionId: _normalize(medicationSyncPullFunctionId),
+      caregiverSyncEnabled: caregiverSyncEnabled,
     );
   }
 
@@ -43,6 +49,9 @@ class CloudConfiguration {
     this.createHouseholdInvitationFunctionId,
     this.acceptHouseholdInvitationFunctionId,
     this.removeHouseholdMemberFunctionId,
+    this.medicationSyncPushFunctionId,
+    this.medicationSyncPullFunctionId,
+    this.caregiverSyncEnabled = false,
   });
 
   static final fromEnvironment = CloudConfiguration.fromValues(
@@ -66,6 +75,13 @@ class CloudConfiguration {
     removeHouseholdMemberFunctionId: const String.fromEnvironment(
       'APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID',
     ),
+    medicationSyncPushFunctionId: const String.fromEnvironment(
+      'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID',
+    ),
+    medicationSyncPullFunctionId: const String.fromEnvironment(
+      'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID',
+    ),
+    caregiverSyncEnabled: const bool.fromEnvironment('CAREGIVER_SYNC_ENABLED'),
   );
 
   final String? endpoint;
@@ -76,6 +92,9 @@ class CloudConfiguration {
   final String? createHouseholdInvitationFunctionId;
   final String? acceptHouseholdInvitationFunctionId;
   final String? removeHouseholdMemberFunctionId;
+  final String? medicationSyncPushFunctionId;
+  final String? medicationSyncPullFunctionId;
+  final bool caregiverSyncEnabled;
 
   bool get isEnabled => endpoint != null && projectId != null;
   bool get isPairingEnabled =>
@@ -88,6 +107,11 @@ class CloudConfiguration {
       createHouseholdInvitationFunctionId != null &&
       acceptHouseholdInvitationFunctionId != null &&
       removeHouseholdMemberFunctionId != null;
+  bool get isMedicationSyncEnabled =>
+      caregiverSyncEnabled &&
+      isEnabled &&
+      medicationSyncPushFunctionId != null &&
+      medicationSyncPullFunctionId != null;
 
   static String? _normalize(String? value) {
     final normalized = value?.trim();

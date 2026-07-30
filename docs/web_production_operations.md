@@ -20,24 +20,15 @@ combine evidence from different commits.
 
 Web Preview CI builds both an auth-disabled preview and an auth-enabled preview.
 The auth-enabled build uses non-secret, non-production placeholders for the
-Appwrite project and household management Function IDs, plus the exact public
-medication-sync IDs qualified for deployment. It does not need repository
-secrets or contact Appwrite. Both artifacts must contain the required static
-files and must not contain `.env` files. Before the caregiver consumer source set
-lands, Web Preview CI records an explicit pre-consumer skip only when every
-integration indicator is absent. Partial source/configuration presence fails.
-Once the set is complete, CI verifies both exact values reached the compiled
-artifact and runs focused tests proving the web factory creates and invokes the
-real Appwrite adapter. Staging and production require both live Function IDs
-before building; missing either ID is a gate failure. Mobile builds may omit both
-IDs to keep sync honestly disabled, but the shared environment action rejects a
-partial pair.
-Configure the pair as the GitHub Actions repository or protected-environment
-variables `APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID` and
-`APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID`; these are public Function IDs, not
-API keys or session credentials. Staging and production must set them to the
-exact deployed IDs `medication-sync-push-v1` and `medication-sync-pull-v1`,
-respectively; an unsuffixed, missing, or mismatched value is a gate failure.
+Appwrite project and household management Function IDs. All web builds compile
+`CAREGIVER_SYNC_ENABLED=false`; medication-sync Function IDs are not injected.
+The caregiver medication-sync code is an inactive source foundation only. No
+medication data upload or sync is active in preview, staging, or production.
+
+Activation requires an explicit product-boundary revision, an atomic backend
+occurrence-terminal guard, isolated staging and two-client concurrency
+validation, and secure rollout approval. Do not describe the caregiver web
+experience as production-ready before those gates are complete.
 The same staging and production builds require the public household management
 IDs for create-robot, create-household-invitation,
 accept-household-invitation, and remove-household-member. Pairing, claim, and

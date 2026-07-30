@@ -53,6 +53,11 @@ class WebAuthConfiguration {
   final String? endpoint;
   final String? projectId;
 
+  bool get allowsEmailOtp {
+    final host = Uri.parse(appOrigin!).host;
+    return host == 'localhost' || host == '127.0.0.1' || host == '::1';
+  }
+
   Uri get oauthSuccess => _callback('success');
   Uri get oauthFailure => _callback('failure');
 
