@@ -6,6 +6,10 @@ import {
 import type { MedicationSyncChangeRecord } from '../infrastructure/transactional-medication-sync-store.js';
 import type { FunctionContext } from './claim-robot.js';
 import type { HumanFunctionIdentityVerifier } from './function-identity.js';
+import {
+  serializeMedicationSyncPullPage,
+  serializeMedicationSyncPushResponse,
+} from './medication-sync-contract-adapter.js';
 
 type ParseResult<T> =
   | { readonly ok: true; readonly value: T }
@@ -61,7 +65,6 @@ export function medicationSyncPushHandler(
       robotId: parsed.value.robotId,
       operations: parsed.value.operations,
     });
-    const { serializeMedicationSyncPushResponse } = await import('./medication-sync-contract-adapter.js');
     return context.res.json(serializeMedicationSyncPushResponse(parsed.value.robotId, result.acknowledgements));
   });
 }
@@ -81,7 +84,6 @@ export function medicationSyncPullHandler(
       limit: parsed.value.limit,
       ...(parsed.value.checkpoint == null ? {} : { checkpoint: parsed.value.checkpoint }),
     });
-    const { serializeMedicationSyncPullPage } = await import('./medication-sync-contract-adapter.js');
     return context.res.json(serializeMedicationSyncPullPage({
       robotId: parsed.value.robotId,
       cursor: parsed.value.wireCursor ?? null,

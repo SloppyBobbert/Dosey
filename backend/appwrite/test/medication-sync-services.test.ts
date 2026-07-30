@@ -98,7 +98,7 @@ describe('Medication sync application services', () => {
     const operation = seen[0] as { operationHash: string };
     assert.match(operation.operationHash, /^[a-f0-9]{64}$/);
     assert.deepEqual(seen, [{
-      robotId: 'robot-1', operationId: 'key-1',
+      robotId: 'robot-1', idempotencyKey: 'key-1',
       operationHash: operation.operationHash,
       actorAccountId: 'owner-1', actorRole: 'owner', now,
       resourceType: 'schedule', resourceId: 'schedule-1', baseVersion: 1, payload: '{}',
@@ -106,13 +106,13 @@ describe('Medication sync application services', () => {
   });
 
   test('derives receipt and event hashes from normalized operation content', async () => {
-    const seen: Array<{ operationId: string; operationHash: string; eventHash: string }> = [];
+    const seen: Array<{ idempotencyKey: string; operationHash: string; eventHash: string }> = [];
     const service = new MedicationSyncPushService(
       { authorize: async () => ({ robotId: 'robot-1', role: 'member' }) },
       store({
         appendEvent: async (input) => {
           seen.push({
-            operationId: input.operationId,
+            idempotencyKey: input.idempotencyKey,
             operationHash: input.operationHash,
             eventHash: input.eventHash,
           });
@@ -140,7 +140,7 @@ describe('Medication sync application services', () => {
       ],
     });
 
-    assert.equal(seen[0]?.operationId, 'same-key');
+    assert.equal(seen[0]?.idempotencyKey, 'same-key');
     assert.notEqual(seen[0]?.operationHash, seen[1]?.operationHash);
     assert.notEqual(seen[0]?.eventHash, seen[1]?.eventHash);
   });
@@ -158,5 +158,32 @@ describe('Medication sync application services', () => {
     assert.deepEqual(await service.pull({
       accountId: 'member-1', robotId: 'robot-1', cursor: 5, checkpoint: 9, limit: 20,
     }), { changes: [], nextCursor: 5, checkpoint: 9, complete: false });
+  });
+
+  test('marks a transient failure retryable and continues processing later operations', async () => {
+    const service = new MedicationSyncPushService(
+      { authorize: async () => ({ robotId: 'robot-1', role: 'owner' }) },
+      store({
+        upsertDocument: async (input) => {
+          if (input.resourceId === 'medication-2') throw new Error('storage details');
+          return { status: 'applied', sequence: input.resourceId === 'medication-1' ? 1 : 2, resourceVersion: 1 };
+        },
+      }),
+      () => now,
+    );
+
+    const operations = ['medication-1', 'medication-2', 'medication-3'].map((resourceId, index) => ({
+      type: 'upsertDocument' as const, operationId: `mutation-${index + 1}`,
+      idempotencyKey: `key-${index + 1}`, deviceId: 'device-1', canonicalHashInput: resourceId,
+      resourceType: 'medication' as const, resourceId, baseVersion: 0, payload: '{}',
+    }));
+
+    assert.deepEqual(await service.push({ accountId: 'owner-1', robotId: 'robot-1', operations }), {
+      acknowledgements: [
+        { operationId: 'mutation-1', status: 'applied', sequence: 1, resourceVersion: 1 },
+        { operationId: 'mutation-2', status: 'rejected', code: 'retryable_internal_error' },
+        { operationId: 'mutation-3', status: 'applied', sequence: 2, resourceVersion: 1 },
+      ],
+    });
   });
 });

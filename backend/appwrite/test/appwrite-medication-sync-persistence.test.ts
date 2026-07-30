@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { describe, test } from 'node:test';
+import { AppwriteException } from 'node-appwrite';
 
 import {
   AppwriteMedicationSyncPersistence,
+  AppwriteMedicationSyncRowsApi,
   type MedicationSyncRow,
   type MedicationSyncRowsApi,
   type MedicationSyncTable,
@@ -13,6 +16,8 @@ class FakeRows implements MedicationSyncRowsApi {
   rows = new Map<string, MedicationSyncRow>();
   transactions = new Map<string, Map<string, MedicationSyncRow>>();
   commitFailures = 0;
+  conflictType: string = 'transaction_conflict';
+  rollbackFailures = 0;
 
   async beginTransaction() {
     const id = `transaction-${this.events.filter((event) => event === 'begin').length + 1}`;
@@ -22,13 +27,16 @@ class FakeRows implements MedicationSyncRowsApi {
   }
   async commitTransaction(id: string) {
     this.events.push(`commit:${id}`);
-    if (this.commitFailures-- > 0) throw { code: 409 };
+    if (this.commitFailures-- > 0) {
+      throw new AppwriteException('conflict', 409, this.conflictType);
+    }
     this.rows = new Map(this.transaction(id));
     this.transactions.delete(id);
   }
   async rollbackTransaction(id: string) {
     this.events.push(`rollback:${id}`);
     this.transactions.delete(id);
+    if (this.rollbackFailures-- > 0) throw new Error('rollback failed');
   }
   async getRow(table: MedicationSyncTable, id: string, transactionId: string) {
     return this.transaction(transactionId).get(`${table}:${id}`) ?? null;
@@ -89,7 +97,7 @@ describe('Appwrite medication sync persistence', () => {
       await transaction.createChange({
         robotId: 'robot-1', sequence: 1, resourceType: 'doseEvent', resourceId: 'event-1',
         resourceVersion: null, operation: 'event', payload: '{}', actorAccountId: 'member-1',
-        actorRole: 'member', changedAt: now, operationId: 'operation-1',
+        actorRole: 'member', changedAt: now, idempotencyKey: 'operation-1',
         operationHash: 'operation-hash',
       });
 
@@ -131,7 +139,7 @@ describe('Appwrite medication sync persistence', () => {
         robotId: 'robot-1', sequence: 1, resourceType: 'medication',
         resourceId: 'medication-1', resourceVersion: 1, operation: 'upsert',
         payload: '{"name":"Morning"}', actorAccountId: 'owner-1', actorRole: 'owner',
-        changedAt: now, operationId: 'key-1', operationHash: 'hash-1',
+        changedAt: now, idempotencyKey: 'key-1', operationHash: 'hash-1',
       });
       await transaction.saveReceipt({
         robotId: 'robot-1', idempotencyKey: 'key-1', operationHash: 'hash-1',
@@ -145,7 +153,109 @@ describe('Appwrite medication sync persistence', () => {
       'begin', 'commit:transaction-2',
     ]);
     assert.deepEqual(delays, [15]);
-    assert.equal(rows.rows.size, 4);
-    assert.equal([...rows.rows.keys()].filter((key) => key.startsWith('changes:')).length, 1);
+    assert.deepEqual([...rows.rows.keys()].sort(), [
+      `changes:${rowId('change', 'robot-1', '1')}`,
+      `documents:${rowId('document', 'robot-1', 'medication', 'medication-1')}`,
+      `receipts:${rowId('receipt', 'robot-1', 'key-1')}`,
+      `state:${rowId('state', 'robot-1')}`,
+    ].sort());
+  });
+
+  test('retries genuine conflicts through the configured maximum and reports rollback failures', async () => {
+    const rows = new FakeRows();
+    rows.commitFailures = 5;
+    rows.rollbackFailures = 1;
+    const delays: number[] = [];
+    const rollbackErrors: unknown[] = [];
+    const persistence = new AppwriteMedicationSyncPersistence(
+      rows, (error) => rollbackErrors.push(error), 5,
+      async (milliseconds) => void delays.push(milliseconds), () => 0,
+    );
+    let attempts = 0;
+
+    await assert.rejects(persistence.transaction(async () => {
+      attempts += 1;
+    }), AppwriteException);
+
+    assert.equal(attempts, 5);
+    assert.deepEqual(delays, [10, 20, 40, 80]);
+    assert.equal(rollbackErrors.length, 1);
+  });
+
+  test('retries row-update conflicts but not arbitrary structural or Appwrite 409 errors', async () => {
+    const rows = new FakeRows();
+    const delays: number[] = [];
+    const persistence = new AppwriteMedicationSyncPersistence(
+      rows, () => {}, 5, async (milliseconds) => void delays.push(milliseconds), () => 1,
+    );
+    rows.commitFailures = 1;
+    rows.conflictType = 'row_update_conflict';
+    let attempts = 0;
+
+    await persistence.transaction(async () => {
+      attempts += 1;
+    });
+
+    assert.equal(attempts, 2);
+    assert.deepEqual(delays, [21]);
+
+    for (const error of [
+      { code: 409 },
+      new AppwriteException('other conflict', 409, 'other_conflict'),
+    ]) {
+      let callbackAttempts = 0;
+      await assert.rejects(persistence.transaction(async () => {
+        callbackAttempts += 1;
+        throw error;
+      }));
+      assert.equal(callbackAttempts, 1);
+    }
+
+    assert.deepEqual(delays, [21]);
+  });
+
+  test('returns null only for Appwrite row-not-found errors', async () => {
+    const tables = {
+      getRow: async () => {
+        throw new AppwriteException('not found', 404, 'row_not_found');
+      },
+    };
+    const rows = new AppwriteMedicationSyncRowsApi(tables as never, {
+      databaseId: 'database', documentsTableId: 'documents', eventsTableId: 'events',
+      helpRequestsTableId: 'helpRequests', receiptsTableId: 'receipts', stateTableId: 'state',
+      changesTableId: 'changes',
+    });
+
+    assert.equal(await rows.getRow('documents', 'document-1', 'transaction-1'), null);
+
+    const nonRowNotFound = new AppwriteMedicationSyncRowsApi({
+      getRow: async () => {
+        throw new AppwriteException('other missing', 404, 'table_not_found');
+      },
+    } as never, {
+      databaseId: 'database', documentsTableId: 'documents', eventsTableId: 'events',
+      helpRequestsTableId: 'helpRequests', receiptsTableId: 'receipts', stateTableId: 'state',
+      changesTableId: 'changes',
+    });
+    await assert.rejects(
+      nonRowNotFound.getRow('documents', 'document-1', 'transaction-1'),
+      AppwriteException,
+    );
+  });
+
+  test('uses bounded exponential backoff jitter and rejects invalid retry limits', async () => {
+    const rows = new FakeRows();
+    rows.commitFailures = 1;
+    const delays: number[] = [];
+    const persistence = new AppwriteMedicationSyncPersistence(
+      rows, () => {}, 2, async (milliseconds) => void delays.push(milliseconds), () => 1,
+    );
+    await persistence.transaction(async () => {});
+    assert.deepEqual(delays, [21]);
+    assert.throws(() => new AppwriteMedicationSyncPersistence(rows, () => {}, 0), /maximumAttempts/);
   });
 });
+
+function rowId(...parts: readonly string[]): string {
+  return createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 36);
+}

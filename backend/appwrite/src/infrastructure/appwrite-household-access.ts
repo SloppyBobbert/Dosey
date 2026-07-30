@@ -29,7 +29,11 @@ export class AppwriteHouseholdAccessRowsApi implements HouseholdAccessRowsApi {
       });
       return fromAppwriteRow(row);
     } catch (error) {
-      if (error instanceof AppwriteException && error.code === 404) return null;
+      if (
+        error instanceof AppwriteException &&
+        error.code === 404 &&
+        error.type === 'row_not_found'
+      ) return null;
       throw error;
     }
   }
@@ -38,15 +42,16 @@ export class AppwriteHouseholdAccessRowsApi implements HouseholdAccessRowsApi {
 export class AppwriteHouseholdLinkLookup implements HouseholdLinkLookup {
   constructor(private readonly rows: HouseholdAccessRowsApi) {}
 
-  async getLink(accountId: string): Promise<HouseholdAccessLink | null> {
+  async getLink(accountId: string, robotId: string): Promise<HouseholdAccessLink | null> {
     const row = await this.rows.getHumanRobotLink(accountId);
     if (row == null) return null;
-    return {
+    const link = {
       accountId: row.$id,
       robotId: requiredString(row, 'robotId'),
       role: requiredEnum(row, 'role', ['owner', 'member']),
       status: requiredEnum(row, 'status', ['provisioning', 'active', 'revoking']),
     };
+    return link.status === 'active' && link.robotId === robotId ? link : null;
   }
 }
 

@@ -92,7 +92,11 @@ export class AppwriteMedicationSyncRowsApi implements MedicationSyncRowsApi {
         transactionId,
       }));
     } catch (error) {
-      if (error instanceof AppwriteException && error.code === 404) return null;
+      if (
+        error instanceof AppwriteException &&
+        error.code === 404 &&
+        error.type === 'row_not_found'
+      ) return null;
       throw error;
     }
   }
@@ -163,10 +167,14 @@ export class AppwriteMedicationSyncPersistence implements MedicationSyncPersiste
   constructor(
     private readonly rows: MedicationSyncRowsApi,
     private readonly reportRollbackFailure: (error: unknown) => void = () => {},
-    private readonly maximumAttempts = 3,
+    private readonly maximumAttempts = 5,
     private readonly delay: (milliseconds: number) => Promise<void> = defaultDelay,
     private readonly random: () => number = Math.random,
-  ) {}
+  ) {
+    if (!Number.isSafeInteger(maximumAttempts) || maximumAttempts < 1) {
+      throw new Error('maximumAttempts must be a positive safe integer.');
+    }
+  }
 
   async transaction<T>(operation: (transaction: MedicationSyncTransaction) => Promise<T>): Promise<T> {
     for (let attempt = 1; ; attempt += 1) {
@@ -183,7 +191,7 @@ export class AppwriteMedicationSyncPersistence implements MedicationSyncPersiste
           this.reportRollbackFailure(rollbackError);
         }
         if (isConflict(error) && attempt < this.maximumAttempts) {
-          await this.delay(10 + Math.floor(this.random() * 11));
+          await this.delay(retryDelay(attempt, this.random));
           continue;
         }
         throw error;
@@ -391,7 +399,7 @@ function changeFromRow(row: MedicationSyncRow): MedicationSyncChangeRecord {
     actorAccountId: requiredString(row, 'actorAccountId'),
     actorRole: requiredEnum(row, 'actorRole', ['owner', 'member']),
     changedAt: requiredDate(row, 'changedAt'),
-    operationId: requiredString(row, 'operationId'),
+    idempotencyKey: requiredString(row, 'idempotencyKey'),
     operationHash: requiredString(row, 'operationHash'),
   };
 }
@@ -458,7 +466,14 @@ function withoutId(row: MedicationSyncRow): Record<string, unknown> {
 }
 
 function isConflict(error: unknown): boolean {
-  return typeof error === 'object' && error != null && 'code' in error && error.code === 409;
+  return error instanceof AppwriteException &&
+    error.code === 409 &&
+    (error.type === 'transaction_conflict' || error.type === 'row_update_conflict');
+}
+
+function retryDelay(attempt: number, random: () => number): number {
+  const base = 10 * 2 ** (attempt - 1);
+  return base + Math.floor(Math.max(0, Math.min(1, random())) * (base + 1));
 }
 
 function defaultDelay(milliseconds: number): Promise<void> {

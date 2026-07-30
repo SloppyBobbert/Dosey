@@ -1009,7 +1009,7 @@ export function parseConflict(value: unknown, path = '$'): Conflict {
     fail('ENTITY_ID_MISMATCH', `${path}.authoritativeRecord.id`, 'Authoritative record ID does not match conflict entity ID.');
   }
   const actualRevision = integer(data.actualRevision, `${path}.actualRevision`, 1);
-  const expectedRevision = integer(data.expectedRevision, `${path}.expectedRevision`, 1);
+  const expectedRevision = integer(data.expectedRevision, `${path}.expectedRevision`, 0);
   if (expectedRevision === actualRevision) {
     fail('INVALID_CONFLICT_REVISIONS', path, 'Conflict revisions must differ.');
   }

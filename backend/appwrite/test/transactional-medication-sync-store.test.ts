@@ -48,8 +48,8 @@ class MemoryPersistence implements MedicationSyncPersistence {
         `${record.robotId}:${record.helpRequestId}`,
         record,
       ),
-      getReceipt: async (robotId, operationId) =>
-        this.receipts.get(`${robotId}:${operationId}`) ?? null,
+      getReceipt: async (robotId, idempotencyKey) =>
+        this.receipts.get(`${robotId}:${idempotencyKey}`) ?? null,
       saveReceipt: async (record) => void this.receipts.set(
         `${record.robotId}:${record.idempotencyKey}`,
         record,
@@ -82,7 +82,7 @@ class MemoryPersistence implements MedicationSyncPersistence {
 
 const mutation = {
   robotId: 'robot-1',
-  operationId: 'operation-1',
+  idempotencyKey: 'operation-1',
   operationHash: 'hash-1',
   actorAccountId: 'owner-1',
   actorRole: 'owner' as const,
@@ -134,7 +134,7 @@ describe('Transactional medication sync store', () => {
     assert.equal(persistence.changes.size, 1);
   });
 
-  test('rejects reused operation IDs and stale resource versions without mutation', async () => {
+  test('rejects reused idempotency keys and stale resource versions without mutation', async () => {
     const persistence = new MemoryPersistence();
     const store = new TransactionalMedicationSyncStore(persistence);
     await store.upsertDocument({
@@ -159,7 +159,7 @@ describe('Transactional medication sync store', () => {
     assert.deepEqual(
       await store.upsertDocument({
         ...mutation,
-        operationId: 'operation-2',
+        idempotencyKey: 'operation-2',
         operationHash: 'hash-2',
         resourceType: 'schedule',
         resourceId: 'schedule-1',
@@ -196,7 +196,7 @@ describe('Transactional medication sync store', () => {
     assert.deepEqual(
       await store.archiveDocument({
         ...mutation,
-        operationId: 'operation-2',
+        idempotencyKey: 'operation-2',
         operationHash: 'hash-2',
         resourceType: 'medication',
         resourceId: 'medication-1',
@@ -232,7 +232,7 @@ describe('Transactional medication sync store', () => {
     assert.deepEqual(
       await store.appendEvent({
         ...mutation,
-        operationId: 'operation-2',
+        idempotencyKey: 'operation-2',
         operationHash: 'hash-2',
         eventId: 'event-1',
         eventHash: 'event-hash',
@@ -247,7 +247,7 @@ describe('Transactional medication sync store', () => {
     assert.deepEqual(
       await store.appendEvent({
         ...mutation,
-        operationId: 'operation-3',
+        idempotencyKey: 'operation-3',
         operationHash: 'hash-3',
         eventId: 'event-1',
         eventHash: 'changed-event-hash',
@@ -311,13 +311,54 @@ describe('Transactional medication sync store', () => {
     assert.equal(persistence.receipts.size, 0);
   });
 
+  test('removes reserved fields from document and event payloads', async () => {
+    const persistence = new MemoryPersistence();
+    const store = new TransactionalMedicationSyncStore(persistence);
+    const reserved = {
+      contractVersion: 99, id: 'other', householdId: 'other', revision: 99,
+      deletedAt: 'other', updatedAt: 'other', actorAccountId: 'other', name: 'Morning',
+    };
+    await store.upsertDocument({
+      ...mutation, resourceType: 'medication', resourceId: 'medication-1', baseVersion: 0,
+      payload: JSON.stringify(reserved),
+    });
+    await store.appendEvent({
+      ...mutation, idempotencyKey: 'operation-2', operationHash: 'hash-2', eventId: 'event-1',
+      eventHash: 'event-hash', kind: 'snoozed', doseId: 'dose-1', scheduleId: 'schedule-1',
+      occurredAt: mutation.now, payload: JSON.stringify(reserved),
+    });
+
+    assert.deepEqual(JSON.parse(persistence.documents.values().next().value.payload), {
+      contractVersion: 1, id: 'medication-1', householdId: 'robot-1', name: 'Morning',
+      revision: 1, deletedAt: null, updatedAt: '2026-07-29T10:00:00.000Z',
+    });
+    assert.deepEqual(JSON.parse(persistence.events.values().next().value.payload), {
+      name: 'Morning', contractVersion: 1, id: 'event-1', householdId: 'robot-1',
+      actorAccountId: 'owner-1',
+    });
+  });
+
+  test('rejects null, arrays, and non-object payloads for documents and events', async () => {
+    for (const payload of ['null', '[]', '"text"']) {
+      const documentStore = new TransactionalMedicationSyncStore(new MemoryPersistence());
+      await assert.rejects(documentStore.upsertDocument({
+        ...mutation, resourceType: 'medication', resourceId: 'medication-1', baseVersion: 0, payload,
+      }), /Invalid medication sync payload/);
+      const eventStore = new TransactionalMedicationSyncStore(new MemoryPersistence());
+      await assert.rejects(eventStore.appendEvent({
+        ...mutation, eventId: 'event-1', eventHash: 'event-hash', kind: 'snoozed', doseId: 'dose-1',
+        scheduleId: 'schedule-1', occurredAt: mutation.now, payload,
+      }), /Invalid medication sync payload/);
+    }
+  });
+
   test('holds one high-water checkpoint across pull pages', async () => {
     const persistence = new MemoryPersistence();
     const store = new TransactionalMedicationSyncStore(persistence);
     for (let index = 1; index <= 3; index += 1) {
       await store.upsertDocument({
         ...mutation,
-        operationId: `operation-${index}`,
+        idempotencyKey: `operation-${index}`,
         operationHash: `hash-${index}`,
         resourceType: 'medication',
         resourceId: `medication-${index}`,
@@ -335,7 +376,7 @@ describe('Transactional medication sync store', () => {
 
     await store.upsertDocument({
       ...mutation,
-      operationId: 'operation-4',
+      idempotencyKey: 'operation-4',
       operationHash: 'hash-4',
       resourceType: 'medication',
       resourceId: 'medication-4',
@@ -362,6 +403,9 @@ describe('Transactional medication sync store', () => {
       { cursor: Number.POSITIVE_INFINITY, limit: 1 },
       { cursor: 0.5, limit: 1 },
       { cursor: Number.MAX_SAFE_INTEGER + 1, limit: 1 },
+      { cursor: -1, checkpoint: 0, limit: 1 },
+      { cursor: 0, checkpoint: -1, limit: 1 },
+      { cursor: 1, checkpoint: 0, limit: 1 },
       { cursor: 0, checkpoint: 0.5, limit: 1 },
       { cursor: 0, limit: 0 },
       { cursor: 0, limit: 101 },

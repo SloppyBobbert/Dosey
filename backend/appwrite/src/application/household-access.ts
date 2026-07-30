@@ -8,7 +8,7 @@ export interface HouseholdAccessLink {
 }
 
 export interface HouseholdLinkLookup {
-  getLink(accountId: string): Promise<HouseholdAccessLink | null>;
+  getLink(accountId: string, robotId: string): Promise<HouseholdAccessLink | null>;
 }
 
 export interface AuthorizedHouseholdAccess {
@@ -23,7 +23,7 @@ export class HouseholdAccessAuthorizer {
     accountId: string;
     robotId: string;
   }): Promise<AuthorizedHouseholdAccess | null> {
-    const link = await this.links.getLink(input.accountId);
+    const link = await this.links.getLink(input.accountId, input.robotId);
     if (link == null || link.status !== 'active' || link.robotId !== input.robotId) {
       return null;
     }
