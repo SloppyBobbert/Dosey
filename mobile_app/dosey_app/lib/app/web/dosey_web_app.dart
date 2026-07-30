@@ -2,16 +2,20 @@ import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:flutter/material.dart';
 
 import 'dosey_web_dependencies.dart';
-import 'web_auth_gate.dart';
+import 'web_routes.dart';
 
 class DoseyWebApp extends StatelessWidget {
-  const DoseyWebApp({super.key, required this.dependencies});
+  const DoseyWebApp({super.key, required this.dependencies, this.initialRoute});
 
   final DoseyWebDependencies dependencies;
+  final String? initialRoute;
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      key: ValueKey(
+        '${initialRoute ?? 'platform'}:${dependencies.config.appOrigin}',
+      ),
       debugShowCheckedModeBanner: false,
       title: 'Dosey',
       theme: ThemeData(
@@ -28,7 +32,8 @@ class DoseyWebApp extends StatelessWidget {
           border: OutlineInputBorder(),
         ),
       ),
-      home: WebAuthGate(dependencies: dependencies),
+      initialRoute: initialRoute,
+      onGenerateRoute: (settings) => buildWebRoute(settings, dependencies),
     );
   }
 }

@@ -8,6 +8,8 @@ class CloudConfiguration {
     String? createHouseholdInvitationFunctionId,
     String? acceptHouseholdInvitationFunctionId,
     String? removeHouseholdMemberFunctionId,
+    String? medicationSyncPushFunctionId,
+    String? medicationSyncPullFunctionId,
   }) {
     final normalizedEndpoint = _normalize(endpoint);
     final normalizedProjectId = _normalize(projectId);
@@ -31,6 +33,8 @@ class CloudConfiguration {
       removeHouseholdMemberFunctionId: _normalize(
         removeHouseholdMemberFunctionId,
       ),
+      medicationSyncPushFunctionId: _normalize(medicationSyncPushFunctionId),
+      medicationSyncPullFunctionId: _normalize(medicationSyncPullFunctionId),
     );
   }
 
@@ -43,6 +47,8 @@ class CloudConfiguration {
     this.createHouseholdInvitationFunctionId,
     this.acceptHouseholdInvitationFunctionId,
     this.removeHouseholdMemberFunctionId,
+    this.medicationSyncPushFunctionId,
+    this.medicationSyncPullFunctionId,
   });
 
   static final fromEnvironment = CloudConfiguration.fromValues(
@@ -66,6 +72,12 @@ class CloudConfiguration {
     removeHouseholdMemberFunctionId: const String.fromEnvironment(
       'APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID',
     ),
+    medicationSyncPushFunctionId: const String.fromEnvironment(
+      'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID',
+    ),
+    medicationSyncPullFunctionId: const String.fromEnvironment(
+      'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID',
+    ),
   );
 
   final String? endpoint;
@@ -76,6 +88,8 @@ class CloudConfiguration {
   final String? createHouseholdInvitationFunctionId;
   final String? acceptHouseholdInvitationFunctionId;
   final String? removeHouseholdMemberFunctionId;
+  final String? medicationSyncPushFunctionId;
+  final String? medicationSyncPullFunctionId;
 
   bool get isEnabled => endpoint != null && projectId != null;
   bool get isPairingEnabled =>
@@ -88,6 +102,10 @@ class CloudConfiguration {
       createHouseholdInvitationFunctionId != null &&
       acceptHouseholdInvitationFunctionId != null &&
       removeHouseholdMemberFunctionId != null;
+  bool get isMedicationSyncEnabled =>
+      isEnabled &&
+      medicationSyncPushFunctionId != null &&
+      medicationSyncPullFunctionId != null;
 
   static String? _normalize(String? value) {
     final normalized = value?.trim();

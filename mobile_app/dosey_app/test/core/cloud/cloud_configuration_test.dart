@@ -56,6 +56,24 @@ void main() {
     expect(configuration.isHouseholdManagementEnabled, isFalse);
   });
 
+  test('medication sync requires both push and pull Functions', () {
+    final complete = CloudConfiguration.fromValues(
+      endpoint: 'https://nyc.cloud.appwrite.io/v1',
+      projectId: 'dosey-development',
+      medicationSyncPushFunctionId: 'medication-push',
+      medicationSyncPullFunctionId: 'medication-pull',
+    );
+    final partial = CloudConfiguration.fromValues(
+      endpoint: 'https://nyc.cloud.appwrite.io/v1',
+      projectId: 'dosey-development',
+      medicationSyncPushFunctionId: 'medication-push',
+    );
+
+    expect(complete.isMedicationSyncEnabled, isTrue);
+    expect(complete.medicationSyncPullFunctionId, 'medication-pull');
+    expect(partial.isMedicationSyncEnabled, isFalse);
+  });
+
   test('cloud configuration rejects a partial Appwrite setup', () {
     expect(
       () => CloudConfiguration.fromValues(
