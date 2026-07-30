@@ -3,14 +3,103 @@ set -euo pipefail
 
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 WORKFLOW=${1:-"$ROOT_DIR/.github/workflows/android-release.yml"}
+MOBILE_WORKFLOW=${2:-"$ROOT_DIR/.github/workflows/mobile-ci.yml"}
 
-ruby - "$WORKFLOW" <<'RUBY'
+ruby - "$WORKFLOW" "$MOBILE_WORKFLOW" <<'RUBY'
 require 'yaml'
+require 'shellwords'
 
 workflow = YAML.load_file(ARGV.fetch(0))
+mobile_workflow = YAML.load_file(ARGV.fetch(1))
 jobs = workflow.fetch('jobs')
 build = jobs.fetch('release-android')
 publish = jobs.fetch('publish-release')
+
+def find_step(job, name)
+  job.fetch('steps').find { |step| step['name'] == name } ||
+    abort("required Android policy step is missing: #{name}")
+end
+
+def assert_android_build(job:, name:, mode:, flavor:, capability:)
+  step = find_step(job, name)
+  tokens = Shellwords.shellsplit(step.fetch('run'))
+  expected = [
+    'flutter', 'build', 'apk', mode,
+    '--flavor', flavor,
+    '--dart-define-from-file=.env',
+    "--dart-define=DOSEY_BUILD_PROFILE=#{flavor}",
+    "--dart-define=DOSEY_RUNTIME_CAPABILITY=#{capability}",
+  ]
+  abort("#{name} must use the exact #{flavor}/#{capability} build contract") unless tokens == expected
+end
+
+def assert_phased_runtime_gate(job)
+  script = find_step(job, 'Verify runtime capability contracts').fetch('run')
+  expected = <<~'SHELL'
+    set -euo pipefail
+    runtime_tests=(
+      test/core/runtime/runtime_capability_test.dart
+      test/core/runtime/runtime_bootstrap_test.dart
+      test/core/runtime/local_runtime_capability_repository_test.dart
+    )
+    existing_tests=()
+    missing_tests=()
+    for test_path in "${runtime_tests[@]}"; do
+      if [ -f "$test_path" ]; then
+        existing_tests+=("$test_path")
+      else
+        missing_tests+=("$test_path")
+      fi
+    done
+    if [ ${#existing_tests[@]} -eq 0 ]; then
+      printf 'Runtime capability contract tests are not present; skipping this pre-runtime rollout gate.\n' | tee -a "$GITHUB_STEP_SUMMARY"
+      exit 0
+    fi
+    if [ ${#missing_tests[@]} -ne 0 ]; then
+      printf 'Runtime capability contract tests are only partially present. Missing:\n' >&2
+      printf '  %s\n' "${missing_tests[@]}" >&2
+      exit 1
+    fi
+    flutter test \
+      test/core/runtime/runtime_capability_test.dart \
+      test/core/runtime/runtime_bootstrap_test.dart \
+      test/core/runtime/local_runtime_capability_repository_test.dart
+  SHELL
+  abort('runtime capability phased gate must match the fail-closed policy exactly') unless script.strip == expected.strip
+end
+
+assert_android_build(
+  job: build,
+  name: 'Build hardware-assisted Personal release APK',
+  mode: '--release',
+  flavor: 'personal',
+  capability: 'hardware-assisted',
+)
+assert_android_build(
+  job: build,
+  name: 'Build phone-only Robot release APK',
+  mode: '--release',
+  flavor: 'robot',
+  capability: 'phone-only',
+)
+assert_phased_runtime_gate(build)
+
+mobile = mobile_workflow.fetch('jobs').fetch('flutter-mobile')
+assert_android_build(
+  job: mobile,
+  name: 'Build hardware-assisted Personal debug APK',
+  mode: '--debug',
+  flavor: 'personal',
+  capability: 'hardware-assisted',
+)
+assert_android_build(
+  job: mobile,
+  name: 'Build phone-only Robot debug APK',
+  mode: '--debug',
+  flavor: 'robot',
+  capability: 'phone-only',
+)
+assert_phased_runtime_gate(mobile)
 
 expected_build_output = '${{ steps.release.outputs.source_sha }}'
 unless build.fetch('outputs').fetch('source_sha') == expected_build_output
@@ -26,17 +115,44 @@ abort 'release source validation must follow checkout' unless build_checkout_ind
 build_checkout = build_steps.fetch(build_checkout_index)
 abort 'build checkout must use the workflow dispatch or pushed-tag SHA' if build_checkout.fetch('with', {}).key?('ref')
 
-release_lines = release_step.fetch('run').lines.map(&:strip)
-[
-  'SOURCE_SHA=$(git rev-parse HEAD)',
-  'if [ "$SOURCE_SHA" != "$GITHUB_SHA" ]; then',
-  'echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"',
-].each do |required|
-  abort "release source validation is missing: #{required}" unless release_lines.include?(required)
-end
-
-if release_lines.any? { |line| line.match?(/origin\/main|refs\/remotes\/origin\/main|refs\/heads\/main/) }
-  abort 'manual Android release source must not follow or require moving main'
+expected_release_validation = <<~'SHELL'
+  set -euo pipefail
+  PUBSPEC_VERSION=$(awk '/^version: / { print $2; exit }' pubspec.yaml)
+  SOURCE_SHA=$(git rev-parse HEAD)
+  if [ "$SOURCE_SHA" != "$GITHUB_SHA" ]; then
+    echo "Checked-out source $SOURCE_SHA does not match workflow source $GITHUB_SHA." >&2
+    exit 1
+  fi
+  if [ "${{ github.event_name }}" = "push" ]; then
+    TAG="${GITHUB_REF_NAME}"
+    VERSION="${TAG#android-v}"
+    TAG_SHA=$(git rev-list -n 1 "$TAG")
+    if [ "$TAG_SHA" != "$SOURCE_SHA" ]; then
+      echo "Pushed tag $TAG resolves to $TAG_SHA instead of built source $SOURCE_SHA." >&2
+      exit 1
+    fi
+  else
+    VERSION="$REQUESTED_VERSION"
+    TAG="android-v$VERSION"
+    EXISTING=$(git ls-remote --tags origin "refs/tags/$TAG^{}" | cut -f1)
+    if [ -z "$EXISTING" ]; then
+      EXISTING=$(git ls-remote --tags origin "refs/tags/$TAG" | cut -f1)
+    fi
+    if [ -n "$EXISTING" ] && [ "$EXISTING" != "$SOURCE_SHA" ]; then
+      echo "Tag $TAG already points to another commit." >&2
+      exit 1
+    fi
+  fi
+  if [ "$VERSION" != "$PUBSPEC_VERSION" ]; then
+    echo "Requested version $VERSION does not match pubspec version $PUBSPEC_VERSION." >&2
+    exit 1
+  fi
+  echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+  echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+  echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+SHELL
+unless release_step.fetch('run').strip == expected_release_validation.strip
+  abort 'release source validation must match the immutable GITHUB_SHA policy exactly'
 end
 
 expected_publish_source = '${{ needs.release-android.outputs.source_sha }}'
@@ -76,8 +192,10 @@ create_lines = create_tag.fetch('run').lines.map(&:strip)
   abort "immutable tag creation is missing: #{required}" unless create_lines.include?(required)
 end
 
-# This complete, ordered data-flow assertion covers a dispatch from a
+# These complete, ordered data-flow assertions cover a dispatch from a
 # non-default ref even if main advances: checkout defaults to GITHUB_SHA,
 # validation exports that exact SHA, and checkout/tag creation/release all
-# consume only that output. Any dependency on moving main is rejected above.
+# consume only that output. They also fail closed if Personal and Robot builds
+# lose their explicit role/capability pairing. Any dependency on moving main is
+# rejected above.
 RUBY

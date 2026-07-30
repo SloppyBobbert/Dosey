@@ -116,7 +116,7 @@ jobs:
             test/core/runtime/runtime_bootstrap_test.dart \
             test/core/runtime/local_runtime_capability_repository_test.dart
 
-      - name: Build Personal debug APK
+      - name: Build hardware-assisted Personal debug APK
         run: flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted
 
       - name: Build phone-only Robot debug APK

@@ -20,7 +20,7 @@ if [ "${APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID:-}" != "$EXPECTED_PULL_ID" ]; 
   exit 1
 fi
 
-required_files=(
+consumer_files=(
   lib/core/caregiver/appwrite_caregiver_sync_gateway.dart
   lib/core/caregiver/caregiver_snapshot.dart
   lib/core/caregiver/caregiver_snapshot_controller.dart
@@ -28,8 +28,10 @@ required_files=(
   lib/app/web/web_household_gate.dart
   lib/app/web/caregiver_shell.dart
   lib/app/web/web_routes.dart
-  test/core/sync/domain_contracts_test.dart
   test/core/caregiver/appwrite_caregiver_sync_gateway_test.dart
+)
+prerequisite_files=(
+  test/core/sync/domain_contracts_test.dart
 )
 required_markers=(
   'lib/core/cloud/cloud_configuration.dart|APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID'
@@ -39,25 +41,30 @@ required_markers=(
   "test/core/cloud/cloud_gateway_factory_test.dart|web gateway factory builds the Appwrite medication sync adapter"
 )
 
-present_indicators=()
+present_consumer_indicators=()
 missing_indicators=()
-for path in "${required_files[@]}"; do
+for path in "${consumer_files[@]}"; do
   if [ -f "$APP_ROOT/$path" ]; then
-    present_indicators+=("$path")
+    present_consumer_indicators+=("$path")
   else
+    missing_indicators+=("$path")
+  fi
+done
+for path in "${prerequisite_files[@]}"; do
+  if [ ! -f "$APP_ROOT/$path" ]; then
     missing_indicators+=("$path")
   fi
 done
 for specification in "${required_markers[@]}"; do
   IFS='|' read -r path marker <<< "$specification"
   if [ -f "$APP_ROOT/$path" ] && grep -Fq -- "$marker" "$APP_ROOT/$path"; then
-    present_indicators+=("$path contains: $marker")
+    present_consumer_indicators+=("$path contains: $marker")
   else
     missing_indicators+=("$path contains: $marker")
   fi
 done
 
-if [ ${#present_indicators[@]} -eq 0 ]; then
+if [ ${#present_consumer_indicators[@]} -eq 0 ]; then
   if [ "$MODE" = require-complete ]; then
     printf 'Caregiver web integration is required for staging and production builds.\n' >&2
     exit 1
