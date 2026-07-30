@@ -6,6 +6,7 @@ import type {
 } from './household-access.js';
 import type {
   MedicationSyncChangeRecord,
+  MedicationSyncDocumentRecord,
   MedicationSyncEventKind,
   MedicationSyncMutationResult,
   MedicationSyncResourceType,
@@ -21,7 +22,7 @@ interface MedicationSyncAccessAuthorizer {
 
 type MutationActor = {
   readonly robotId: string;
-  readonly operationId: string;
+  readonly idempotencyKey: string;
   readonly operationHash: string;
   readonly actorAccountId: string;
   readonly actorRole: 'owner' | 'member' | 'device';
@@ -104,7 +105,7 @@ export interface MedicationSyncAcknowledgement {
   readonly sequence?: number;
   readonly resourceVersion?: number;
   readonly currentVersion?: number;
-  readonly currentDocument?: import('../infrastructure/transactional-medication-sync-store.js').MedicationSyncDocumentRecord | null;
+  readonly currentDocument?: MedicationSyncDocumentRecord | null;
   readonly resourceType?: MedicationSyncResourceType;
   readonly resourceId?: string;
   readonly baseVersion?: number;
@@ -154,12 +155,13 @@ export class MedicationSyncPushService {
 
       const actor = {
         robotId: input.robotId,
-        operationId: operation.idempotencyKey,
+        idempotencyKey: operation.idempotencyKey,
         operationHash: digest(operation.canonicalHashInput),
         actorAccountId: input.accountId,
         actorRole: authorized.role,
         now: this.now(),
       };
+      try {
       const result = operation.type === 'upsertDocument'
         ? await this.store.upsertDocument({
             ...actor,
@@ -186,6 +188,13 @@ export class MedicationSyncPushService {
               payload: operation.payload,
             });
       acknowledgements.push(toAcknowledgement(operation.operationId, result, operation));
+      } catch {
+        acknowledgements.push({
+          operationId: operation.operationId,
+          status: 'rejected',
+          code: 'retryable_internal_error',
+        });
+      }
     }
     return { acknowledgements };
   }

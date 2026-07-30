@@ -112,9 +112,9 @@
         { "key": "operation", "type": "varchar", "size": 8, "required": true, "array": false, "elements": ["upsert", "archive", "event"], "format": "enum", "default": null },
         { "key": "payload", "type": "text", "required": true, "array": false, "default": null },
         { "key": "actorAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
-        { "key": "actorRole", "type": "varchar", "size": 8, "required": true, "array": false, "elements": ["owner", "member"], "format": "enum", "default": null },
+        { "key": "actorRole", "type": "varchar", "size": 8, "required": true, "array": false, "elements": ["owner", "member", "device"], "format": "enum", "default": null },
         { "key": "changedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
-        { "key": "operationId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "idempotencyKey", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
         { "key": "operationHash", "type": "varchar", "size": 64, "required": true, "array": false, "default": null }
       ],
       "indexes": [

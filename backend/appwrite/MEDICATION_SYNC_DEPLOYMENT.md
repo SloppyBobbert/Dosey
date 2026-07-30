@@ -80,8 +80,11 @@ Function status from `Execution.responseStatusCode` and JSON from
 - Unknown server failures remain Function 5xx responses.
 
 Retry transport failures, timeouts, 429, and 5xx with the identical body and
-idempotency keys. Refresh the current human or anonymous session and retry a 401 once. Do not blindly
-retry 400, 403, 405, mutation conflicts, or rejected acknowledgements.
+idempotency keys. Refresh the current human or anonymous session and retry a
+401 once. A
+`RETRYABLE_INTERNAL_ERROR` acknowledgement means only that mutation may be
+retried with its same idempotency key. Do not blindly retry 400, 403, 405,
+mutation conflicts, or other rejected acknowledgements.
 
 An initial pull sends null cursor and checkpoint. The first response captures a
 fixed checkpoint. While `hasMore` is true, send the returned `nextCursor` with that
@@ -90,8 +93,10 @@ page has `nextCursor == checkpoint`.
 
 ## Rollback
 
-Rollback is application-only: remove the new Function IDs from client staging
-configuration and redeploy the previous client/Functions. Leave all additive
-tables and their data intact for diagnosis. Do not delete tables, downgrade rows,
-or reuse the v1 Function IDs for an incompatible contract. A later cleanup needs
-an approved backup, retention decision, and separate destructive change review.
+Rollback is application-only: first disable both `medication-sync-push-v1` and
+`medication-sync-pull-v1`, or apply an equivalent server-side write gate. Then
+remove the new Function IDs from client staging configuration and restore the
+previous client/Functions. Leave all additive tables and their data intact for
+diagnosis. Do not delete tables, downgrade rows, or reuse the v1 Function IDs
+for an incompatible contract. A later cleanup needs an approved backup,
+retention decision, and separate destructive change review.

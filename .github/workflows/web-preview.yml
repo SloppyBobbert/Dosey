@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build:
-    name: Validate auth-disabled web build
+    name: Validate auth-disabled and auth-enabled web builds
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -20,6 +20,10 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Test caregiver integration policy
+        working-directory: .
+        run: bash .github/scripts/test-caregiver-web-integration.sh
 
       - name: Set up Flutter
         uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
@@ -30,6 +34,11 @@ jobs:
 
       - name: Install locked dependencies
         run: flutter pub get --enforce-lockfile
+
+      - name: Verify generated Drift code
+        run: |
+          dart run build_runner build
+          git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 
       - name: Check formatting
         run: dart format --set-exit-if-changed .
@@ -44,6 +53,7 @@ jobs:
         run: |
           flutter build web --release --target=lib/main_web.dart \
             --dart-define=DOSEY_BUILD_PROFILE=personal \
+            --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted \
             --dart-define=WEB_AUTH_ENABLED=false
 
       - name: Verify static web files and archive contents
@@ -53,7 +63,10 @@ jobs:
           test -s build/web/auth.html
           test -s build/web/flutter_bootstrap.js
           test -s build/web/manifest.json
-          test ! -e build/web/.env
+          if find build/web \( -name '.env' -o -name '.env.*' \) -print -quit | grep -q .; then
+            printf 'Unexpected environment file in auth-disabled web artifact\n' >&2
+            exit 1
+          fi
           tar -czf "$GITHUB_WORKSPACE/dosey-web-preview.tar.gz" -C build/web .
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-preview.tar.gz" | grep -Fx './index.html'
           tar -tzf "$GITHUB_WORKSPACE/dosey-web-preview.tar.gz" | grep -Fx './auth.html'
@@ -63,5 +76,59 @@ jobs:
         with:
           name: dosey-web-preview
           path: dosey-web-preview.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Build auth-enabled web release with public placeholders
+        env:
+          APPWRITE_ENDPOINT: https://api.example.invalid/v1
+          APPWRITE_PROJECT_ID: ci-project-placeholder
+          APPWRITE_CREATE_ROBOT_FUNCTION_ID: ci-create-robot
+          APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ci-create-household-invitation
+          APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ci-accept-household-invitation
+          APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ci-remove-household-member
+          APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: medication-sync-push-v1
+          APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: medication-sync-pull-v1
+        run: |
+          flutter build web --release --target=lib/main_web.dart \
+            --dart-define=DOSEY_BUILD_PROFILE=personal \
+            --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted \
+            --dart-define=WEB_AUTH_ENABLED=true \
+            --dart-define=WEB_APP_ORIGIN=https://preview.example.invalid \
+            --dart-define=APPWRITE_ENDPOINT="$APPWRITE_ENDPOINT" \
+            --dart-define=APPWRITE_PROJECT_ID="$APPWRITE_PROJECT_ID" \
+            --dart-define=APPWRITE_CREATE_ROBOT_FUNCTION_ID="$APPWRITE_CREATE_ROBOT_FUNCTION_ID" \
+            --dart-define=APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID" \
+            --dart-define=APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID="$APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID" \
+            --dart-define=APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID="$APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID" \
+            --dart-define=APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID" \
+            --dart-define=APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID="$APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID"
+
+      - name: Verify auth-enabled web files and archive contents
+        run: |
+          set -euo pipefail
+          test -s build/web/index.html
+          test -s build/web/auth.html
+          test -s build/web/flutter_bootstrap.js
+          test -s build/web/manifest.json
+          if find build/web \( -name '.env' -o -name '.env.*' \) -print -quit | grep -q .; then
+            printf 'Unexpected environment file in auth-enabled web artifact\n' >&2
+            exit 1
+          fi
+          tar -czf "$GITHUB_WORKSPACE/dosey-web-auth-preview.tar.gz" -C build/web .
+          tar -tzf "$GITHUB_WORKSPACE/dosey-web-auth-preview.tar.gz" | grep -Fx './index.html'
+          tar -tzf "$GITHUB_WORKSPACE/dosey-web-auth-preview.tar.gz" | grep -Fx './auth.html'
+
+      - name: Verify caregiver web integration when present
+        env:
+          APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID: medication-sync-push-v1
+          APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID: medication-sync-pull-v1
+        run: bash ../../.github/scripts/check-caregiver-web-integration.sh
+
+      - name: Upload auth-enabled web preview artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dosey-web-auth-preview
+          path: dosey-web-auth-preview.tar.gz
           if-no-files-found: error
           retention-days: 3

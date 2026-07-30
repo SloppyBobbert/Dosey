@@ -63,6 +63,16 @@ describe('Medication sync runtime', () => {
     );
   });
 
+  test('requires server-side robot installation configuration for anonymous devices', () => {
+    const { DOSEY_ROBOT_INSTALLATIONS_TABLE_ID: _, ...missing } = environment;
+    assert.throws(
+      () => createMedicationSyncRuntime(
+        { 'x-appwrite-key': 'dynamic-key' }, parser, missing,
+      ),
+      /DOSEY_ROBOT_INSTALLATIONS_TABLE_ID/,
+    );
+  });
+
   test('keeps Google as the default and rejects unsafe provider configuration', () => {
     assert.deepEqual(configuredHumanProviders(undefined), ['google']);
     assert.deepEqual(configuredHumanProviders(' google, email '), ['google', 'email']);

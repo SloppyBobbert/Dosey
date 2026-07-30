@@ -71,7 +71,7 @@ export interface MedicationSyncChangeRecord {
   readonly actorAccountId: string;
   readonly actorRole: MedicationSyncActorRole;
   readonly changedAt: Date;
-  readonly operationId: string;
+  readonly idempotencyKey: string;
   readonly operationHash: string;
 }
 
@@ -104,7 +104,7 @@ export interface MedicationSyncPersistence {
 
 type MutationContext = {
   readonly robotId: string;
-  readonly operationId: string;
+  readonly idempotencyKey: string;
   readonly operationHash: string;
   readonly actorAccountId: string;
   readonly actorRole: MedicationSyncActorRole;
@@ -189,7 +189,7 @@ export class TransactionalMedicationSyncStore {
         actorAccountId: input.actorAccountId,
         actorRole: input.actorRole,
         changedAt: input.now,
-        operationId: input.operationId,
+        idempotencyKey: input.idempotencyKey,
         operationHash: input.operationHash,
       });
       await transaction.saveReceipt(receipt(input, sequence, version));
@@ -250,7 +250,7 @@ export class TransactionalMedicationSyncStore {
         actorAccountId: input.actorAccountId,
         actorRole: input.actorRole,
         changedAt: input.now,
-        operationId: input.operationId,
+        idempotencyKey: input.idempotencyKey,
         operationHash: input.operationHash,
       });
       await transaction.saveReceipt(receipt(input, sequence, version));
@@ -319,7 +319,7 @@ export class TransactionalMedicationSyncStore {
         actorAccountId: input.actorAccountId,
         actorRole: input.actorRole,
         changedAt: input.now,
-        operationId: input.operationId,
+        idempotencyKey: input.idempotencyKey,
         operationHash: input.operationHash,
       });
       await transaction.saveReceipt(receipt(input, sequence, null));
@@ -380,14 +380,7 @@ function documentPayload(input: {
   updatedAt: Date;
   mutationPayload: string;
 }): string {
-  const parsed = JSON.parse(input.mutationPayload) as Record<string, unknown>;
-  const domainPayload = 'contractVersion' in parsed && 'householdId' in parsed
-    ? Object.fromEntries(
-        Object.entries(parsed).filter(([key]) => ![
-          'contractVersion', 'id', 'householdId', 'revision', 'deletedAt', 'updatedAt',
-        ].includes(key)),
-      )
-    : parsed;
+  const domainPayload = domainPayloadFromJson(input.mutationPayload);
   return JSON.stringify({
     contractVersion: 1,
     id: input.resourceId,
@@ -406,19 +399,38 @@ function eventPayload(input: {
   actorAccountId: string;
 }): string {
   return JSON.stringify({
+    ...domainPayloadFromJson(input.payload),
     contractVersion: 1,
     id: input.eventId,
     householdId: input.robotId,
-    ...(JSON.parse(input.payload) as Record<string, unknown>),
     actorAccountId: input.actorAccountId,
   });
+}
+
+const reservedPayloadKeys = new Set([
+  'contractVersion', 'id', 'householdId', 'revision', 'deletedAt', 'updatedAt', 'actorAccountId',
+]);
+
+function domainPayloadFromJson(payload: string): Record<string, unknown> {
+  const parsed: unknown = JSON.parse(payload);
+  if (
+    parsed == null ||
+    typeof parsed !== 'object' ||
+    Array.isArray(parsed) ||
+    (Object.getPrototypeOf(parsed) !== Object.prototype && Object.getPrototypeOf(parsed) !== null)
+  ) {
+    throw new Error('Invalid medication sync payload.');
+  }
+  return Object.fromEntries(
+    Object.entries(parsed).filter(([key]) => !reservedPayloadKeys.has(key)),
+  );
 }
 
 async function replayResult(
   transaction: MedicationSyncTransaction,
   input: MutationContext,
 ): Promise<MedicationSyncMutationResult | null> {
-  const existing = await transaction.getReceipt(input.robotId, input.operationId);
+  const existing = await transaction.getReceipt(input.robotId, input.idempotencyKey);
   if (existing == null) return null;
   if (existing.operationHash !== input.operationHash) {
     return { status: 'conflict', code: 'operation_id_reused' };
@@ -437,6 +449,7 @@ async function allocateSequence(
   robotId: string,
   now: Date,
 ): Promise<number> {
+  // Commit conflicts retry the whole transaction to refetch this high watermark.
   const sequence = ((await transaction.getState(robotId))?.highWatermark ?? 0) + 1;
   await transaction.saveState({ robotId, highWatermark: sequence, updatedAt: now });
   return sequence;
@@ -449,7 +462,7 @@ function receipt(
 ): MedicationSyncReceiptRecord {
   return {
     robotId: input.robotId,
-    idempotencyKey: input.operationId,
+    idempotencyKey: input.idempotencyKey,
     operationHash: input.operationHash,
     sequence,
     resourceVersion,

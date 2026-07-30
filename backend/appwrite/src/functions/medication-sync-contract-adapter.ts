@@ -127,7 +127,8 @@ function toWireAcknowledgement(ack: MedicationSyncAcknowledgement): MutationAck 
     ack.currentVersion != null &&
     ack.resourceType != null &&
     ack.resourceId != null &&
-    ack.baseVersion != null && ack.baseVersion > 0
+    ack.baseVersion != null && ack.baseVersion >= 0 &&
+    ack.currentVersion >= 1
   ) {
     return {
       contractVersion: 1,
@@ -163,6 +164,7 @@ function errorCode(code: string | undefined): string {
     case 'operation_id_reused': return 'IDEMPOTENCY_KEY_REUSED';
     case 'event_id_reused': return 'EVENT_ID_REUSED';
     case 'version_conflict': return 'VERSION_CONFLICT';
+    case 'retryable_internal_error': return 'RETRYABLE_INTERNAL_ERROR';
     default: return 'MUTATION_REJECTED';
   }
 }

@@ -153,7 +153,7 @@ describe('Medication sync function boundaries', () => {
             name: 'Morning', pillType: 'pill', instructions: null, revision: 2,
             deletedAt: null, updatedAt: '2026-07-29T10:00:00.000Z',
           }), actorAccountId: 'owner-1', actorRole: 'owner' as const,
-          changedAt: new Date('2026-07-29T10:00:00Z'), operationId: 'operation-1',
+          changedAt: new Date('2026-07-29T10:00:00Z'), idempotencyKey: 'operation-1',
           operationHash: 'server-only-hash',
         }],
         nextCursor: 3,

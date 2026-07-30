@@ -58,6 +58,18 @@ test('defines additive server-only sync tables and callable human function deplo
       orders: ['ASC', 'ASC'],
     }],
   );
+  assert.deepEqual(
+    tables.get('dosey_sync_changes_v1')?.columns.map(({ key }) => key),
+    [
+      'robotId', 'sequence', 'resourceType', 'resourceId', 'resourceVersion', 'operation',
+      'payload', 'actorAccountId', 'actorRole', 'changedAt', 'idempotencyKey', 'operationHash',
+    ],
+  );
+  assert.deepEqual(
+    config.tables.find((table) => table.$id === 'dosey_sync_changes_v1')?.columns
+      .find((column) => column.key === 'actorRole')?.elements,
+    ['owner', 'member', 'device'],
+  );
 
   assert.deepEqual(config.functions.map((definition) => ({
     id: definition.$id,
@@ -86,5 +98,18 @@ test('defines additive server-only sync tables and callable human function deplo
       variables.get('DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID'),
       'dosey_sync_changes_v1',
     );
+    assert.deepEqual([...variables.entries()], [
+      ['DOSEY_DATABASE_ID', '<DOSEY_DATABASE_ID>'],
+      ['DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID', '<DOSEY_HUMAN_ROBOT_LINKS_TABLE_ID>'],
+      ['DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID', '<DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID>'],
+      ['DOSEY_ROBOT_INSTALLATIONS_TABLE_ID', '<DOSEY_ROBOT_INSTALLATIONS_TABLE_ID>'],
+      ['DOSEY_MEDICATION_SYNC_DOCUMENTS_TABLE_ID', 'dosey_sync_documents_v1'],
+      ['DOSEY_MEDICATION_SYNC_EVENTS_TABLE_ID', 'dosey_sync_events_v1'],
+      ['DOSEY_MEDICATION_SYNC_HELP_REQUESTS_TABLE_ID', 'dosey_sync_help_requests_v1'],
+      ['DOSEY_MEDICATION_SYNC_RECEIPTS_TABLE_ID', 'dosey_sync_receipts_v1'],
+      ['DOSEY_MEDICATION_SYNC_STATE_TABLE_ID', 'dosey_sync_state_v1'],
+      ['DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID', 'dosey_sync_changes_v1'],
+      ['DOSEY_HUMAN_AUTH_PROVIDERS', 'google'],
+    ]);
   }
 });
