@@ -7302,6 +7302,7 @@ class $PhoneDoseActionEventsTable extends PhoneDoseActionEvents
     'schedule_revision',
     aliasedName,
     false,
+    check: () => const CustomExpression<bool>('schedule_revision > 0'),
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );

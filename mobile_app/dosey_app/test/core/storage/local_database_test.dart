@@ -1099,6 +1099,18 @@ void main() {
         terminalIndex.read<String>('sql'),
         "CREATE UNIQUE INDEX phone_dose_action_events_one_terminal ON phone_dose_action_events (device_id, occurrence_id) WHERE kind IN ('taken_confirmed', 'skipped')",
       );
+      for (final revision in [0, -1]) {
+        expect(
+          () => database.customStatement(
+            _insertPhoneDoseAction(
+              id: 'migration-revision-$revision',
+              idempotencyKey: 'migration-revision-key-$revision',
+              scheduleRevision: revision,
+            ),
+          ),
+          throwsA(isA<Exception>()),
+        );
+      }
 
       await database.customStatement(_insertOutboxMutation('migration-one'));
       expect(
@@ -1153,6 +1165,76 @@ void main() {
           "UPDATE reminder_schedules SET revision = 0 WHERE id = 'fresh-schedule'",
         ),
         throwsA(isA<Exception>()),
+      );
+    },
+  );
+
+  test(
+    'fresh schema seventeen rejects non-positive action schedule revisions',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+
+      for (final revision in [0, -1]) {
+        expect(
+          () => database.customStatement(
+            _insertPhoneDoseAction(
+              id: 'fresh-revision-$revision',
+              idempotencyKey: 'fresh-revision-key-$revision',
+              scheduleRevision: revision,
+            ),
+          ),
+          throwsA(isA<Exception>()),
+        );
+      }
+    },
+  );
+
+  test(
+    'terminal action index only restricts terminal device occurrences',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+
+      await database.customStatement(
+        _insertPhoneDoseAction(
+          id: 'taken-1',
+          idempotencyKey: 'taken-key-1',
+          kind: 'taken_confirmed',
+        ),
+      );
+      expect(
+        () => database.customStatement(
+          _insertPhoneDoseAction(
+            id: 'skipped-1',
+            idempotencyKey: 'skipped-key-1',
+            kind: 'skipped',
+          ),
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      await database.customStatement(
+        _insertPhoneDoseAction(
+          id: 'missed-1',
+          idempotencyKey: 'missed-key-1',
+          kind: 'missed',
+        ),
+      );
+      await database.customStatement(
+        _insertPhoneDoseAction(
+          id: 'snoozed-1',
+          idempotencyKey: 'snoozed-key-1',
+          kind: 'snoozed',
+        ),
+      );
+      await database.customStatement(
+        _insertPhoneDoseAction(
+          id: 'taken-device-2',
+          idempotencyKey: 'taken-key-device-2',
+          deviceId: 'device-2',
+          kind: 'taken_confirmed',
+        ),
       );
     },
   );
@@ -1617,6 +1699,28 @@ String _insertOutboxMutation(String mutationId) =>
     NULL, 0, 0
   );
 ''';
+
+String _insertPhoneDoseAction({
+  required String id,
+  required String idempotencyKey,
+  int scheduleRevision = 1,
+  String deviceId = 'device-1',
+  String occurrenceId = 'occurrence-1',
+  String kind = 'missed',
+}) {
+  final marksDoseTaken = kind == 'taken_confirmed' ? 1 : 0;
+  return '''
+    INSERT INTO phone_dose_action_events (
+      id, device_id, occurrence_id, schedule_id, schedule_revision,
+      scheduled_at, local_date, timezone_id, medication_id, kind, occurred_at,
+      marks_dose_taken, idempotency_key, created_at
+    ) VALUES (
+      '$id', '$deviceId', '$occurrenceId', 'schedule-1', $scheduleRevision,
+      0, '2026-01-01', 'UTC', 'rx-1', '$kind', 0, $marksDoseTaken,
+      '$idempotencyKey', 0
+    )
+  ''';
+}
 
 Future<List<String>> _changedTableSql(DoseyDatabase database) async {
   final rows = await database.customSelect('''

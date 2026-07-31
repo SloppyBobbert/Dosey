@@ -276,7 +276,8 @@ class PhoneDoseActionEvents extends Table {
   TextColumn get deviceId => text()();
   TextColumn get occurrenceId => text()();
   TextColumn get scheduleId => text()();
-  IntColumn get scheduleRevision => integer()();
+  IntColumn get scheduleRevision =>
+      integer().check(const CustomExpression<bool>('schedule_revision > 0'))();
   DateTimeColumn get scheduledAt => dateTime()();
   TextColumn get localDate => text()();
   TextColumn get timezoneId => text()();
