@@ -1,7 +1,7 @@
 ---
 name: Firmware or hardware issue
 about: Report a controller, sensor, servo, BLE, or physical prototype issue
-title: "[firmware] "
+title: "[firmware/hardware] "
 labels: ''
 assignees: ''
 ---
