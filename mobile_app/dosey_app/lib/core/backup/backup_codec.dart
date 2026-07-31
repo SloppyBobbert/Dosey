@@ -22,8 +22,8 @@ class BackupCodec {
     }
     final payload = <String, Object?>{
       'format': BackupDocument.formatName,
-      'formatVersion': document.formatVersion,
-      'sourceSchemaVersion': document.sourceSchemaVersion,
+      'formatVersion': BackupDocument.currentFormatVersion,
+      'sourceSchemaVersion': BackupDocument.currentSourceSchemaVersion,
       'data': canonicalData,
     };
     final bytes = Uint8List.fromList(utf8.encode('${jsonEncode(payload)}\n'));
@@ -65,7 +65,7 @@ class BackupCodec {
     if (version is! int) {
       throw const BackupFormatException('formatVersion must be an integer.');
     }
-    if (version != BackupDocument.currentFormatVersion) {
+    if (version != 1 && version != BackupDocument.currentFormatVersion) {
       throw const BackupFormatException(
         'This backup format version is not supported.',
         kind: BackupFormatErrorKind.unsupportedVersion,
@@ -77,7 +77,11 @@ class BackupCodec {
         'sourceSchemaVersion must be an integer.',
       );
     }
-    if (schema != BackupDocument.currentSourceSchemaVersion) {
+    final isV1 = version == 1;
+    final expectedSchema = isV1
+        ? BackupDocument.v1SourceSchemaVersion
+        : BackupDocument.currentSourceSchemaVersion;
+    if (schema != expectedSchema) {
       throw const BackupFormatException(
         'This backup database schema is not supported.',
         kind: BackupFormatErrorKind.unsupportedSchema,
@@ -87,14 +91,20 @@ class BackupCodec {
     if (rawData is! Map<String, Object?>) {
       throw const BackupFormatException('data must be an object.');
     }
-    _exactKeys(rawData, BackupDocument.sectionNames.toSet(), r'$.data');
+    _exactKeys(
+      rawData,
+      (isV1 ? BackupDocument.v1SectionNames : BackupDocument.sectionNames)
+          .toSet(),
+      r'$.data',
+    );
     final data = BackupDocument.emptyData();
-    for (final section in BackupDocument.sectionNames) {
+    for (final section
+        in isV1 ? BackupDocument.v1SectionNames : BackupDocument.sectionNames) {
       final rawRows = rawData[section];
       if (rawRows is! List) {
         throw BackupFormatException('data.$section must be an array.');
       }
-      data[section] = <Map<String, Object?>>[
+      final rows = <Map<String, Object?>>[
         for (var index = 0; index < rawRows.length; index++)
           if (rawRows[index] is Map<String, Object?>)
             Map<String, Object?>.from(rawRows[index] as Map<String, Object?>)
@@ -103,12 +113,15 @@ class BackupCodec {
               'data.$section[$index] must be an object.',
             ),
       ];
+      data[section] = rows;
     }
-    final document = BackupDocument(
-      data: data,
-      formatVersion: version,
-      sourceSchemaVersion: schema,
-    );
+    if (isV1) {
+      validator.validateV1OrThrow(data);
+      data['reminderSchedules'] = [
+        for (final row in data['reminderSchedules']!) {...row, 'revision': 1},
+      ];
+    }
+    final document = BackupDocument(data: data);
     validator.validateOrThrow(document);
     return document;
   }
@@ -132,6 +145,7 @@ class BackupCodec {
     final keys = switch (section) {
       'settings' => const ['key'],
       'carouselStates' => const ['profileId'],
+      'syncOutboxMutations' => const ['mutationId'],
       'controllerCommandEvents' => const ['sessionId', 'sequence', 'id'],
       _ => const ['id'],
     };

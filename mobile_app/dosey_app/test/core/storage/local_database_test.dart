@@ -1040,6 +1040,124 @@ void main() {
   );
 
   test(
+    'migration from schema sixteen preserves schedules and adds v17 tables',
+    () async {
+      final executor = NativeDatabase.memory(
+        setup: (database) {
+          database
+            ..execute('''
+            CREATE TABLE reminder_schedules (
+              id TEXT NOT NULL PRIMARY KEY,
+              label TEXT NOT NULL,
+              prescription_id TEXT,
+              profile_id TEXT NOT NULL,
+              hour INTEGER NOT NULL,
+              minute INTEGER NOT NULL,
+              is_enabled INTEGER NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+            ..execute('''
+            INSERT INTO reminder_schedules VALUES (
+              'schedule-1', 'Morning', NULL, 'profile-1', 8, 0, 1, 1, 1
+            );
+          ''')
+            ..execute('PRAGMA user_version = 16;');
+        },
+      );
+      final database = DoseyDatabase(executor);
+      addTearDown(database.close);
+
+      final schedule = await database
+          .select(database.reminderSchedules)
+          .getSingle();
+      final tables = await database
+          .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .get();
+      final terminalIndex = await database
+          .customSelect(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
+            variables: [
+              Variable<String>('phone_dose_action_events_one_terminal'),
+            ],
+          )
+          .getSingle();
+
+      expect(schedule.revision, 1);
+      expect(
+        () => database.customStatement(
+          "UPDATE reminder_schedules SET revision = 0 WHERE id = 'schedule-1'",
+        ),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        tables.map((row) => row.read<String>('name')),
+        containsAll(['phone_dose_action_events', 'sync_outbox_mutations']),
+      );
+      expect(
+        terminalIndex.read<String>('sql'),
+        "CREATE UNIQUE INDEX phone_dose_action_events_one_terminal ON phone_dose_action_events (device_id, occurrence_id) WHERE kind IN ('taken_confirmed', 'skipped')",
+      );
+
+      await database.customStatement(_insertOutboxMutation('migration-one'));
+      expect(
+        () => database.customStatement(_insertOutboxMutation('migration-two')),
+        throwsA(isA<Exception>()),
+      );
+
+      final upgradedSql = await _changedTableSql(database);
+      final upgradedRevisionContract = await _revisionContract(database);
+      await database.close();
+      final fresh = DoseyDatabase.inMemory();
+      addTearDown(fresh.close);
+      expect(upgradedSql, await _changedTableSql(fresh));
+      expect(upgradedRevisionContract, await _revisionContract(fresh));
+    },
+  );
+
+  test(
+    'fresh schema seventeen rejects duplicate outbox idempotency keys',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+
+      await database.customStatement(_insertOutboxMutation('fresh-one'));
+
+      expect(
+        () => database.customStatement(_insertOutboxMutation('fresh-two')),
+        throwsA(isA<Exception>()),
+      );
+    },
+  );
+
+  test(
+    'fresh schema seventeen rejects non-positive schedule revisions',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await database.customStatement('''
+      INSERT INTO reminder_schedules (
+        id, label, prescription_id, profile_id, hour, minute, is_enabled,
+        created_at, updated_at
+      ) VALUES ('fresh-schedule', 'Morning', NULL, 'schedule-1', 8, 0, 1, 1, 1)
+    ''');
+      expect(
+        (await database.select(database.reminderSchedules).getSingle())
+            .revision,
+        1,
+      );
+
+      expect(
+        () => database.customStatement(
+          "UPDATE reminder_schedules SET revision = 0 WHERE id = 'fresh-schedule'",
+        ),
+        throwsA(isA<Exception>()),
+      );
+    },
+  );
+
+  test(
     'fresh revised guided loading storage persists inventory buckets and explicit snapshot fields',
     () async {
       final database = DoseyDatabase.inMemory();
@@ -1484,6 +1602,55 @@ void main() {
       expect(alert.resolvedAt, equals(null));
     },
   );
+}
+
+String _insertOutboxMutation(String mutationId) =>
+    '''
+  INSERT INTO sync_outbox_mutations (
+    mutation_id, device_id, actor_account_id, robot_id, scope_state,
+    idempotency_key, entity_type, operation, entity_id, base_revision,
+    payload_json, state, attempt_count, next_attempt_at, last_attempt_at,
+    last_error_code, created_at, updated_at
+  ) VALUES (
+    '$mutationId', 'device-1', NULL, NULL, 'local_only', 'duplicate-key',
+    'action', 'upsert', 'action-1', NULL, '{}', 'pending', 0, NULL, NULL,
+    NULL, 0, 0
+  );
+''';
+
+Future<List<String>> _changedTableSql(DoseyDatabase database) async {
+  final rows = await database.customSelect('''
+        SELECT type, name, COALESCE(sql, '') AS sql
+        FROM sqlite_master
+        WHERE (type = 'table' AND name IN (
+          'phone_dose_action_events', 'sync_outbox_mutations'
+        )) OR name = 'phone_dose_action_events_one_terminal'
+        ORDER BY type, name
+      ''').get();
+  return [
+    for (final row in rows)
+      '${row.read<String>('type')}|${row.read<String>('name')}|${row.read<String>('sql')}',
+  ];
+}
+
+Future<String> _revisionContract(DoseyDatabase database) async {
+  final columns = await database
+      .customSelect('PRAGMA table_info(reminder_schedules)')
+      .get();
+  final revision = columns.singleWhere(
+    (row) => row.read<String>('name') == 'revision',
+  );
+  final table = await database
+      .customSelect(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'reminder_schedules'",
+      )
+      .getSingle();
+  expect(revision.read<String>('dflt_value'), '1');
+  expect(
+    table.read<String>('sql'),
+    contains(RegExp(r'CHECK\("?revision"? > 0\)')),
+  );
+  return '${revision.read<String>('type')}|${revision.read<int>('notnull')}|${revision.read<String>('dflt_value')}';
 }
 
 NativeDatabase _schemaEightExecutor({required String status}) {

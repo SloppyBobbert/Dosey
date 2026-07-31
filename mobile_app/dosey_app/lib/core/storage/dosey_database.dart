@@ -23,6 +23,9 @@ class ReminderSchedules extends Table {
       text().withDefault(const Constant('schedule-1'))();
   IntColumn get hour => integer()();
   IntColumn get minute => integer()();
+  IntColumn get revision => integer()
+      .check(const CustomExpression<bool>('revision > 0'))
+      .withDefault(const Constant(1))();
   BoolColumn get isEnabled => boolean()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -267,6 +270,66 @@ class DoseLogEvents extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('PhoneDoseActionEventRow')
+class PhoneDoseActionEvents extends Table {
+  TextColumn get id => text()();
+  TextColumn get deviceId => text()();
+  TextColumn get occurrenceId => text()();
+  TextColumn get scheduleId => text()();
+  IntColumn get scheduleRevision => integer()();
+  DateTimeColumn get scheduledAt => dateTime()();
+  TextColumn get localDate => text()();
+  TextColumn get timezoneId => text()();
+  TextColumn get medicationId => text()();
+  TextColumn get kind => text()();
+  DateTimeColumn get occurredAt => dateTime()();
+  BoolColumn get marksDoseTaken => boolean()();
+  TextColumn get idempotencyKey => text().unique()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<String> get customConstraints => const [
+    "CHECK (kind IN ('taken_confirmed', 'skipped', 'snoozed', 'help_requested', 'missed', 'missed_acknowledged'))",
+    "CHECK ((kind = 'taken_confirmed' AND marks_dose_taken = 1) OR (kind != 'taken_confirmed' AND marks_dose_taken = 0))",
+  ];
+}
+
+@DataClassName('SyncOutboxMutationRow')
+class SyncOutboxMutations extends Table {
+  TextColumn get mutationId => text()();
+  TextColumn get deviceId => text()();
+  TextColumn get actorAccountId => text().nullable()();
+  TextColumn get robotId => text().nullable()();
+  TextColumn get scopeState =>
+      text().withDefault(const Constant('local_only'))();
+  TextColumn get idempotencyKey => text().unique()();
+  TextColumn get entityType => text()();
+  TextColumn get operation => text()();
+  TextColumn get entityId => text()();
+  IntColumn get baseRevision => integer().nullable()();
+  TextColumn get payloadJson => text()();
+  TextColumn get state => text().withDefault(const Constant('pending'))();
+  IntColumn get attemptCount => integer().withDefault(const Constant(0))();
+  DateTimeColumn get nextAttemptAt => dateTime().nullable()();
+  DateTimeColumn get lastAttemptAt => dateTime().nullable()();
+  TextColumn get lastErrorCode => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {mutationId};
+
+  @override
+  List<String> get customConstraints => const [
+    "CHECK (state IN ('pending', 'in_flight', 'succeeded', 'permanent_failure'))",
+    'CHECK (attempt_count >= 0)',
+    "CHECK ((scope_state = 'local_only' AND actor_account_id IS NULL AND robot_id IS NULL) OR (scope_state = 'bound' AND actor_account_id IS NOT NULL AND length(trim(actor_account_id)) BETWEEN 1 AND 128 AND robot_id IS NOT NULL AND length(trim(robot_id)) BETWEEN 1 AND 128))",
+  ];
+}
+
 @DataClassName('ControllerCommandSessionRow')
 class ControllerCommandSessions extends Table {
   TextColumn get id => text()();
@@ -401,6 +464,8 @@ class CachedHouseholdMembers extends Table {
     MedicationShortageAlerts,
     AuthSessions,
     DoseLogEvents,
+    PhoneDoseActionEvents,
+    SyncOutboxMutations,
     ControllerCommandSessions,
     ControllerCommandEvents,
     ControllerHealthEvents,
@@ -430,12 +495,13 @@ class DoseyDatabase extends _$DoseyDatabase {
   final bool isDemo;
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) async {
       await migrator.createAll();
+      await _createPhoneDoseActionTerminalIndex();
       await _seedOnboardingCompleted(completed: false);
       await _seedDefaultScheduleProfile();
       await _seedCarouselStates();
@@ -516,8 +582,37 @@ class DoseyDatabase extends _$DoseyDatabase {
         await migrator.createTable(cachedRobotInstallations);
         await migrator.createTable(cachedHouseholdMembers);
       }
+      if (from < 17) {
+        await transaction(() async {
+          if (from >= 2) {
+            if (await _tableExists('reminder_schedules')) {
+              await migrator.addColumn(
+                reminderSchedules,
+                reminderSchedules.revision,
+              );
+            }
+          }
+          await migrator.createTable(phoneDoseActionEvents);
+          await migrator.createTable(syncOutboxMutations);
+          await _createPhoneDoseActionTerminalIndex();
+        });
+      }
     },
   );
+
+  Future<void> _createPhoneDoseActionTerminalIndex() {
+    return customStatement(
+      "CREATE UNIQUE INDEX phone_dose_action_events_one_terminal ON phone_dose_action_events (device_id, occurrence_id) WHERE kind IN ('taken_confirmed', 'skipped');",
+    );
+  }
+
+  Future<bool> _tableExists(String tableName) async {
+    final rows = await customSelect(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+      variables: [Variable<String>(tableName)],
+    ).get();
+    return rows.isNotEmpty;
+  }
 
   Future<void>
   _rebuildCarouselLoadSlotSnapshotsTableWithRetainedStatus() async {
