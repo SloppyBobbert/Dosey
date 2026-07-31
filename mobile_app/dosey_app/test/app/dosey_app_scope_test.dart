@@ -19,6 +19,7 @@ import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
+import 'package:dosey_app/core/runtime/runtime_capability.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
@@ -95,6 +96,40 @@ void main() {
     expect(dependencies.cloudIdentity, isA<DisabledCloudIdentityGateway>());
     expect(dependencies.householdSync, isA<DisabledHouseholdSyncGateway>());
     expect(dependencies.robotPairing, isA<DisabledRobotPairingGateway>());
+
+    await tester.pumpWidget(const SizedBox());
+  });
+
+  testWidgets('app scope forwards the runtime capability', (
+    WidgetTester tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    late DoseyAppDependencies dependencies;
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: DoseyAppScope(
+          database: database,
+          runtimeCapability: RuntimeCapability.phoneOnly,
+          bleGateway: _FakeBleGateway(),
+          connectivityGateway: _FakeConnectivityGateway(),
+          reminderScheduler: _FakeReminderScheduler(),
+          permissionGateway: _FakePermissionGateway(),
+          missedDoseReconciliationService:
+              _FakeMissedDoseReconciliationService(),
+          child: Builder(
+            builder: (context) {
+              dependencies = DoseyAppScope.of(context);
+              return const SizedBox();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(dependencies.runtimeCapability, RuntimeCapability.phoneOnly);
 
     await tester.pumpWidget(const SizedBox());
   });

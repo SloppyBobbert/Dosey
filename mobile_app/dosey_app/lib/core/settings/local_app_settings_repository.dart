@@ -57,28 +57,37 @@ class LocalAppSettingsRepository {
   }
 
   Stream<AppDeviceRole> watchDeviceRole() {
+    return watchPersistedDeviceRole().map((role) => role ?? defaultRole);
+  }
+
+  Stream<AppDeviceRole?> watchPersistedDeviceRole() {
     final query = _database.select(_database.appSettings)
       ..where((setting) => setting.key.equals(_deviceRoleKey));
 
     return query.watchSingleOrNull().map((setting) {
-      if (setting == null) {
-        // Fall back to the platform-specific default role until setup picks one.
-        return defaultRole;
+      if (setting == null) return null;
+      final role = AppDeviceRole.fromStorageValue(setting.value);
+      if (role == null) {
+        throw FormatException('Unsupported persisted device role.');
       }
-
-      return AppDeviceRole.fromStorageValue(setting.value) ?? defaultRole;
+      return role;
     });
   }
 
   Future<AppDeviceRole> getDeviceRole() async {
+    return await getPersistedDeviceRole() ?? defaultRole;
+  }
+
+  Future<AppDeviceRole?> getPersistedDeviceRole() async {
     final query = _database.select(_database.appSettings)
       ..where((setting) => setting.key.equals(_deviceRoleKey));
     final setting = await query.getSingleOrNull();
-    if (setting == null) {
-      return defaultRole;
+    if (setting == null) return null;
+    final role = AppDeviceRole.fromStorageValue(setting.value);
+    if (role == null) {
+      throw FormatException('Unsupported persisted device role.');
     }
-
-    return AppDeviceRole.fromStorageValue(setting.value) ?? defaultRole;
+    return role;
   }
 
   Future<void> setDeviceRole(AppDeviceRole role) {

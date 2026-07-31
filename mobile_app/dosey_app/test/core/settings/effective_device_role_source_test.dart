@@ -19,22 +19,27 @@ void main() {
 
   tearDown(() => database.close());
 
-  test('stale Robot setting cannot enable Personal capabilities', () async {
-    await settings.setDeviceRole(AppDeviceRole.androidRobot);
-    final source = EffectiveDeviceRoleSource(
-      settings,
-      profile: AppBuildProfile.personal,
-      platform: AppDevicePlatform.android,
-    );
+  test(
+    'Personal profile resolves a persisted Robot role to Personal',
+    () async {
+      await settings.setDeviceRole(AppDeviceRole.androidRobot);
+      final source = EffectiveDeviceRoleSource(
+        settings,
+        profile: AppBuildProfile.personal,
+        platform: AppDevicePlatform.android,
+      );
 
-    expect(await source.getDeviceRole(), AppDeviceRole.androidPersonal);
-    expect(await source.watchDeviceRole().first, AppDeviceRole.androidPersonal);
-    expect(
-      await source.getLegacyRoleForDiagnostics(),
-      AppDeviceRole.androidRobot,
-    );
-    expect(source.capabilities.canHostRobot, isFalse);
-  });
+      expect(await source.getDeviceRole(), AppDeviceRole.androidPersonal);
+      expect(
+        await source.watchDeviceRole().first,
+        AppDeviceRole.androidPersonal,
+      );
+      expect(
+        source.capabilities.canHostRobotFor(AppDeviceRole.androidRobot),
+        false,
+      );
+    },
+  );
 
   test('imported Personal setting cannot disable Robot capabilities', () async {
     await settings.setDeviceRole(AppDeviceRole.androidPersonal);
@@ -46,7 +51,10 @@ void main() {
 
     expect(await source.getDeviceRole(), AppDeviceRole.androidRobot);
     expect(await source.watchDeviceRole().first, AppDeviceRole.androidRobot);
-    expect(source.capabilities.canHostRobot, isTrue);
+    expect(
+      source.capabilities.canHostRobotFor(AppDeviceRole.androidRobot),
+      true,
+    );
   });
 
   test('iOS remains Personal when Robot profile is supplied', () async {
@@ -58,5 +66,39 @@ void main() {
 
     expect(await source.getDeviceRole(), AppDeviceRole.iosPersonal);
     expect(source.capabilities.showsRobotFace, isFalse);
+  });
+
+  test(
+    'malformed persisted role resolves to the Personal profile default',
+    () async {
+      await database.setAppSetting('device_role', 'unknown-role');
+      final source = EffectiveDeviceRoleSource(
+        settings,
+        profile: AppBuildProfile.personal,
+        platform: AppDevicePlatform.android,
+      );
+
+      expect(await source.getDeviceRole(), AppDeviceRole.androidPersonal);
+      expect(
+        await source.watchDeviceRole().first,
+        AppDeviceRole.androidPersonal,
+      );
+    },
+  );
+
+  test('web resolves missing and incompatible roles to Personal', () async {
+    final source = EffectiveDeviceRoleSource(
+      settings,
+      profile: AppBuildProfile.personal,
+      platform: AppDevicePlatform.web,
+    );
+
+    expect(await source.getDeviceRole(), AppDeviceRole.webPersonal);
+    expect(await source.watchDeviceRole().first, AppDeviceRole.webPersonal);
+
+    await settings.setDeviceRole(AppDeviceRole.androidPersonal);
+
+    expect(await source.getDeviceRole(), AppDeviceRole.webPersonal);
+    expect(await source.watchDeviceRole().first, AppDeviceRole.webPersonal);
   });
 }
