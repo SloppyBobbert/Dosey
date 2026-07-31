@@ -5,8 +5,10 @@ Dosey is an early prototype, not a medical-grade device. Start with the
 you are changing:
 
 - [Mobile app](mobile_app/dosey_app/README.md): run the Flutter checks listed
-  in the root README's [mobile section](README.md#mobile-app). Robot Mode is
-  Android-only; Personal Mode supports Android and iOS.
+  in the root README's [mobile section](README.md#mobile-app). Active
+  development supports Android Personal Mode. iOS Personal Mode source is
+  retained, but active development, distribution, releases, and feature support
+  are paused; iOS cannot host Robot Mode, which remains Android-only.
 - [Firmware](firmware/README.md): follow the pinned setup, host tests, build
   commands, and physical safety gates.
 - [Appwrite backend](backend/appwrite/README.md): run its tests, typecheck,
@@ -20,8 +22,13 @@ you are changing:
 - Test with candy, beads, dry beans, vitamins, or other fake pills only—never
   prescription medication.
 - Do not treat movement, a controller event, or a visible dose as proof that a
-  dose was taken. Stop testing on a jam, unexpected movement, reset,
-  disconnect, heat, or power fault.
+  dose was taken. Inventory changes only after explicit taken confirmation.
+  Ambiguous movement, jams, cup/lid faults, power interruption, and disconnects
+  must fail safe into needs-review or an equivalent state; stop testing on
+  faults.
+- Acknowledging a missed-dose warning is seen-only and must not change dose
+  state or inventory. Never advise double dosing: `This dose was missed. Follow
+  your prescription instructions or ask your caregiver, pharmacist, or doctor.`
 - The phone owns medication, schedule, dose, inventory, and caregiver data.
   Medication data stays local; the controller is hardware-only.
 - Do not claim physical movement, BLE, or integrated hardware validation unless
