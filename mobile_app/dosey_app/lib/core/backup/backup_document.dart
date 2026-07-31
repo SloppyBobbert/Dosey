@@ -43,9 +43,11 @@ class BackupSummary {
 class BackupDocument {
   BackupDocument({
     required Map<String, List<Map<String, Object?>>> data,
-    this.formatVersion = currentFormatVersion,
-    this.sourceSchemaVersion = BackupDocument.currentSourceSchemaVersion,
-  }) : data = UnmodifiableMapView(
+    int formatVersion = currentFormatVersion,
+    int sourceSchemaVersion = BackupDocument.currentSourceSchemaVersion,
+  }) : formatVersion = _currentFormatVersionOrThrow(formatVersion),
+       sourceSchemaVersion = _currentSchemaVersionOrThrow(sourceSchemaVersion),
+       data = UnmodifiableMapView(
          Map<String, List<Map<String, Object?>>>.fromEntries(
            sectionNames.map(
              (section) => MapEntry(
@@ -63,9 +65,29 @@ class BackupDocument {
   factory BackupDocument.empty() => BackupDocument(data: emptyData());
 
   static const formatName = 'dosey-local-backup';
-  static const currentFormatVersion = 1;
-  static const currentSourceSchemaVersion = 14;
+  static const currentFormatVersion = 2;
+  static const currentSourceSchemaVersion = 17;
+  static const v1SourceSchemaVersion = 14;
   static const sectionNames = <String>[
+    'settings',
+    'scheduleProfiles',
+    'prescriptions',
+    'prescriptionRefills',
+    'reminderSchedules',
+    'carouselSlots',
+    'carouselLoadSessions',
+    'carouselLoadSlotSnapshots',
+    'carouselStates',
+    'medicationShortageAlerts',
+    'doseLogEvents',
+    'controllerCommandSessions',
+    'controllerCommandEvents',
+    'adminAuditEvents',
+    'phoneDoseActionEvents',
+    'syncOutboxMutations',
+  ];
+
+  static const v1SectionNames = <String>[
     'settings',
     'scheduleProfiles',
     'prescriptions',
@@ -85,6 +107,26 @@ class BackupDocument {
   final int formatVersion;
   final int sourceSchemaVersion;
   final Map<String, List<Map<String, Object?>>> data;
+
+  static int _currentFormatVersionOrThrow(int version) {
+    if (version != currentFormatVersion) {
+      throw const BackupFormatException(
+        'Backup documents must use the current format version.',
+        kind: BackupFormatErrorKind.invalidData,
+      );
+    }
+    return version;
+  }
+
+  static int _currentSchemaVersionOrThrow(int version) {
+    if (version != currentSourceSchemaVersion) {
+      throw const BackupFormatException(
+        'Backup documents must use the current source schema version.',
+        kind: BackupFormatErrorKind.invalidData,
+      );
+    }
+    return version;
+  }
 
   BackupSummary get summary => BackupSummary({
     for (final section in sectionNames) section: data[section]!.length,

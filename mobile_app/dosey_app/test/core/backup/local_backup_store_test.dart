@@ -194,9 +194,41 @@ void main() {
       const BackupCodec().encode(source),
     );
     expect(restored.data['doseLogEvents']!.single['marksDoseTaken'], isFalse);
+    expect(restored.data['phoneDoseActionEvents'], hasLength(1));
+    expect(restored.data['syncOutboxMutations'], hasLength(1));
     expect(
       restored.data['medicationShortageAlerts']!.single['localDeliveryState'],
       'sent',
+    );
+  });
+
+  test('replacement deletes stale action and outbox rows', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final store = LocalBackupStore(database);
+    final source = _populatedDocument();
+
+    await database.transaction(() => store.replaceSnapshot(source));
+    await database.customStatement(
+      "INSERT INTO phone_dose_action_events VALUES ('stale-action', 'device-2', 'occurrence-2', 'schedule-1', 1, 1, '2026-01-02', 'UTC', 'rx-1', 'missed', 1, 0, 'stale-action-key', 1)",
+    );
+    await database.customStatement(
+      "INSERT INTO sync_outbox_mutations VALUES ('stale-mutation', 'device-2', NULL, NULL, 'local_only', 'stale-mutation-key', 'action', 'upsert', 'stale-action', NULL, '{}', 'pending', 0, NULL, NULL, NULL, 1, 1)",
+    );
+
+    await database.transaction(() => store.replaceSnapshot(source));
+
+    expect(
+      (await database.select(database.phoneDoseActionEvents).get()).map(
+        (row) => row.id,
+      ),
+      ['action-1'],
+    );
+    expect(
+      (await database.select(database.syncOutboxMutations).get()).map(
+        (row) => row.mutationId,
+      ),
+      ['mutation-1'],
     );
   });
 
@@ -277,6 +309,8 @@ void main() {
         'controller_command_sessions',
         'controller_command_events',
         'admin_audit_events',
+        'phone_dose_action_events',
+        'sync_outbox_mutations',
       }),
     );
   });
@@ -376,7 +410,48 @@ BackupDocument _populatedDocument() {
       'profileId': 'profile-1',
       'hour': 8,
       'minute': 15,
+      'revision': 1,
       'isEnabled': true,
+      'createdAt': time,
+      'updatedAt': time,
+    },
+  ];
+  data['phoneDoseActionEvents'] = [
+    {
+      'id': 'action-1',
+      'deviceId': 'device-1',
+      'occurrenceId': 'occurrence-1',
+      'scheduleId': 'schedule-1',
+      'scheduleRevision': 1,
+      'scheduledAt': time,
+      'localDate': '2026-01-01',
+      'timezoneId': 'America/Los_Angeles',
+      'medicationId': 'rx-1',
+      'kind': 'taken_confirmed',
+      'occurredAt': time,
+      'marksDoseTaken': true,
+      'idempotencyKey': 'action-key-1',
+      'createdAt': time,
+    },
+  ];
+  data['syncOutboxMutations'] = [
+    {
+      'mutationId': 'mutation-1',
+      'deviceId': 'device-1',
+      'actorAccountId': null,
+      'robotId': null,
+      'scopeState': 'local_only',
+      'idempotencyKey': 'mutation-key-1',
+      'entityType': 'phone_dose_action_event',
+      'operation': 'upsert',
+      'entityId': 'action-1',
+      'baseRevision': null,
+      'payloadJson': '{}',
+      'state': 'pending',
+      'attemptCount': 0,
+      'nextAttemptAt': null,
+      'lastAttemptAt': null,
+      'lastErrorCode': null,
       'createdAt': time,
       'updatedAt': time,
     },

@@ -224,7 +224,13 @@ void main() {
           occurred_at INTEGER NOT NULL
         );
       ''');
-      sqlite.execute('PRAGMA user_version = 13;');
+      sqlite
+        ..execute('''
+          INSERT INTO reminder_schedules VALUES (
+            'schedule-1', 'Morning', NULL, 'schedule-1', 8, 0, 1, 1, 1
+          );
+        ''')
+        ..execute('PRAGMA user_version = 13;');
 
       final database = DoseyDatabase(
         DatabaseConnection(NativeDatabase.opened(sqlite)),
@@ -260,6 +266,20 @@ void main() {
           .select(database.carouselLoadSlotSnapshots)
           .get();
       expect(rows.single.status, 'retained');
+      expect(
+        (await database.select(database.reminderSchedules).getSingle())
+            .revision,
+        1,
+      );
+      final healthIndex = await database
+          .customSelect(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
+            variables: [
+              Variable<String>('controller_health_events_occurred_at_idx'),
+            ],
+          )
+          .getSingle();
+      expect(healthIndex.read<String>('sql'), contains('occurred_at DESC'));
     },
   );
 
@@ -1016,26 +1036,231 @@ void main() {
   });
 
   test(
-    'migration from schema fourteen creates the health event index',
+    'incomplete schema fourteen migration fails without v17 artifacts',
+    () async {
+      final sqlite = sqlite3.openInMemory();
+      addTearDown(sqlite.close);
+      sqlite.execute('PRAGMA user_version = 14;');
+      final database = DoseyDatabase(
+        DatabaseConnection(NativeDatabase.opened(sqlite)),
+      );
+      addTearDown(database.close);
+
+      await expectLater(
+        database.customSelect('SELECT 1').get(),
+        throwsA(isA<Exception>()),
+      );
+
+      expect(sqlite.select('PRAGMA user_version').single['user_version'], 14);
+      final artifacts = sqlite.select('''
+      SELECT name FROM sqlite_master
+      WHERE name IN (
+        'phone_dose_action_events',
+        'sync_outbox_mutations',
+        'phone_dose_action_events_one_terminal'
+      )
+    ''');
+      expect(artifacts, isEmpty);
+    },
+  );
+
+  test(
+    'migration from schema sixteen preserves schedules and adds v17 tables',
     () async {
       final executor = NativeDatabase.memory(
         setup: (database) {
-          database.execute('PRAGMA user_version = 14;');
+          database
+            ..execute('''
+            CREATE TABLE reminder_schedules (
+              id TEXT NOT NULL PRIMARY KEY,
+              label TEXT NOT NULL,
+              prescription_id TEXT,
+              profile_id TEXT NOT NULL,
+              hour INTEGER NOT NULL,
+              minute INTEGER NOT NULL,
+              is_enabled INTEGER NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+          ''')
+            ..execute('''
+            INSERT INTO reminder_schedules VALUES (
+              'schedule-1', 'Morning', NULL, 'profile-1', 8, 0, 1, 1, 1
+            );
+          ''')
+            ..execute('PRAGMA user_version = 16;');
         },
       );
       final database = DoseyDatabase(executor);
       addTearDown(database.close);
 
-      final index = await database
+      final schedule = await database
+          .select(database.reminderSchedules)
+          .getSingle();
+      final tables = await database
+          .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+          .get();
+      final terminalIndex = await database
           .customSelect(
             "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
             variables: [
-              Variable<String>('controller_health_events_occurred_at_idx'),
+              Variable<String>('phone_dose_action_events_one_terminal'),
             ],
           )
           .getSingle();
 
-      expect(index.read<String>('sql'), contains('occurred_at DESC'));
+      expect(schedule.revision, 1);
+      expect(
+        () => database.customStatement(
+          "UPDATE reminder_schedules SET revision = 0 WHERE id = 'schedule-1'",
+        ),
+        throwsA(isA<Exception>()),
+      );
+      expect(
+        tables.map((row) => row.read<String>('name')),
+        containsAll(['phone_dose_action_events', 'sync_outbox_mutations']),
+      );
+      expect(
+        terminalIndex.read<String>('sql'),
+        "CREATE UNIQUE INDEX phone_dose_action_events_one_terminal ON phone_dose_action_events (device_id, occurrence_id) WHERE kind IN ('taken_confirmed', 'skipped')",
+      );
+      for (final revision in [0, -1]) {
+        expect(
+          () => database.customStatement(
+            _insertPhoneDoseAction(
+              id: 'migration-revision-$revision',
+              idempotencyKey: 'migration-revision-key-$revision',
+              scheduleRevision: revision,
+            ),
+          ),
+          throwsA(isA<Exception>()),
+        );
+      }
+
+      await database.customStatement(_insertOutboxMutation('migration-one'));
+      expect(
+        () => database.customStatement(_insertOutboxMutation('migration-two')),
+        throwsA(isA<Exception>()),
+      );
+
+      final upgradedSql = await _changedTableSql(database);
+      final upgradedRevisionContract = await _revisionContract(database);
+      await database.close();
+      final fresh = DoseyDatabase.inMemory();
+      addTearDown(fresh.close);
+      expect(upgradedSql, await _changedTableSql(fresh));
+      expect(upgradedRevisionContract, await _revisionContract(fresh));
+    },
+  );
+
+  test(
+    'fresh schema seventeen rejects duplicate outbox idempotency keys',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+
+      await database.customStatement(_insertOutboxMutation('fresh-one'));
+
+      expect(
+        () => database.customStatement(_insertOutboxMutation('fresh-two')),
+        throwsA(isA<Exception>()),
+      );
+    },
+  );
+
+  test(
+    'fresh schema seventeen rejects non-positive schedule revisions',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await database.customStatement('''
+      INSERT INTO reminder_schedules (
+        id, label, prescription_id, profile_id, hour, minute, is_enabled,
+        created_at, updated_at
+      ) VALUES ('fresh-schedule', 'Morning', NULL, 'schedule-1', 8, 0, 1, 1, 1)
+    ''');
+      expect(
+        (await database.select(database.reminderSchedules).getSingle())
+            .revision,
+        1,
+      );
+
+      expect(
+        () => database.customStatement(
+          "UPDATE reminder_schedules SET revision = 0 WHERE id = 'fresh-schedule'",
+        ),
+        throwsA(isA<Exception>()),
+      );
+    },
+  );
+
+  test(
+    'fresh schema seventeen rejects non-positive action schedule revisions',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+
+      for (final revision in [0, -1]) {
+        expect(
+          () => database.customStatement(
+            _insertPhoneDoseAction(
+              id: 'fresh-revision-$revision',
+              idempotencyKey: 'fresh-revision-key-$revision',
+              scheduleRevision: revision,
+            ),
+          ),
+          throwsA(isA<Exception>()),
+        );
+      }
+    },
+  );
+
+  test(
+    'terminal action index only restricts terminal device occurrences',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+
+      await database.customStatement(
+        _insertPhoneDoseAction(
+          id: 'taken-1',
+          idempotencyKey: 'taken-key-1',
+          kind: 'taken_confirmed',
+        ),
+      );
+      expect(
+        () => database.customStatement(
+          _insertPhoneDoseAction(
+            id: 'skipped-1',
+            idempotencyKey: 'skipped-key-1',
+            kind: 'skipped',
+          ),
+        ),
+        throwsA(isA<Exception>()),
+      );
+
+      await database.customStatement(
+        _insertPhoneDoseAction(
+          id: 'missed-1',
+          idempotencyKey: 'missed-key-1',
+          kind: 'missed',
+        ),
+      );
+      await database.customStatement(
+        _insertPhoneDoseAction(
+          id: 'snoozed-1',
+          idempotencyKey: 'snoozed-key-1',
+          kind: 'snoozed',
+        ),
+      );
+      await database.customStatement(
+        _insertPhoneDoseAction(
+          id: 'taken-device-2',
+          idempotencyKey: 'taken-key-device-2',
+          deviceId: 'device-2',
+          kind: 'taken_confirmed',
+        ),
+      );
     },
   );
 
@@ -1484,6 +1709,77 @@ void main() {
       expect(alert.resolvedAt, equals(null));
     },
   );
+}
+
+String _insertOutboxMutation(String mutationId) =>
+    '''
+  INSERT INTO sync_outbox_mutations (
+    mutation_id, device_id, actor_account_id, robot_id, scope_state,
+    idempotency_key, entity_type, operation, entity_id, base_revision,
+    payload_json, state, attempt_count, next_attempt_at, last_attempt_at,
+    last_error_code, created_at, updated_at
+  ) VALUES (
+    '$mutationId', 'device-1', NULL, NULL, 'local_only', 'duplicate-key',
+    'action', 'upsert', 'action-1', NULL, '{}', 'pending', 0, NULL, NULL,
+    NULL, 0, 0
+  );
+''';
+
+String _insertPhoneDoseAction({
+  required String id,
+  required String idempotencyKey,
+  int scheduleRevision = 1,
+  String deviceId = 'device-1',
+  String occurrenceId = 'occurrence-1',
+  String kind = 'missed',
+}) {
+  final marksDoseTaken = kind == 'taken_confirmed' ? 1 : 0;
+  return '''
+    INSERT INTO phone_dose_action_events (
+      id, device_id, occurrence_id, schedule_id, schedule_revision,
+      scheduled_at, local_date, timezone_id, medication_id, kind, occurred_at,
+      marks_dose_taken, idempotency_key, created_at
+    ) VALUES (
+      '$id', '$deviceId', '$occurrenceId', 'schedule-1', $scheduleRevision,
+      0, '2026-01-01', 'UTC', 'rx-1', '$kind', 0, $marksDoseTaken,
+      '$idempotencyKey', 0
+    )
+  ''';
+}
+
+Future<List<String>> _changedTableSql(DoseyDatabase database) async {
+  final rows = await database.customSelect('''
+        SELECT type, name, COALESCE(sql, '') AS sql
+        FROM sqlite_master
+        WHERE (type = 'table' AND name IN (
+          'phone_dose_action_events', 'sync_outbox_mutations'
+        )) OR name = 'phone_dose_action_events_one_terminal'
+        ORDER BY type, name
+      ''').get();
+  return [
+    for (final row in rows)
+      '${row.read<String>('type')}|${row.read<String>('name')}|${row.read<String>('sql')}',
+  ];
+}
+
+Future<String> _revisionContract(DoseyDatabase database) async {
+  final columns = await database
+      .customSelect('PRAGMA table_info(reminder_schedules)')
+      .get();
+  final revision = columns.singleWhere(
+    (row) => row.read<String>('name') == 'revision',
+  );
+  final table = await database
+      .customSelect(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'reminder_schedules'",
+      )
+      .getSingle();
+  expect(revision.read<String>('dflt_value'), '1');
+  expect(
+    table.read<String>('sql'),
+    contains(RegExp(r'CHECK\("?revision"? > 0\)')),
+  );
+  return '${revision.read<String>('type')}|${revision.read<int>('notnull')}|${revision.read<String>('dflt_value')}';
 }
 
 NativeDatabase _schemaEightExecutor({required String status}) {

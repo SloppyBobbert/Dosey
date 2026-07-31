@@ -228,7 +228,109 @@ void main() {
 
     expect(paths, contains(r'$.data.controllerCommandEvents'));
   });
+
+  test('rejects new-table uniqueness and scope invariants', () {
+    final data = validDocument().mutableData()
+      ..['phoneDoseActionEvents'] = [_action(), _action(id: 'action-2')]
+      ..['syncOutboxMutations'] = [
+        _outbox('mutation-1'),
+        _outbox('mutation-2'),
+      ];
+
+    final paths = validator
+        .validate(BackupDocument(data: data))
+        .map((issue) => issue.path);
+
+    expect(paths, contains(r'$.data.phoneDoseActionEvents[1].idempotencyKey'));
+    expect(paths, contains(r'$.data.phoneDoseActionEvents[1].occurrenceId'));
+    expect(paths, contains(r'$.data.syncOutboxMutations[1].idempotencyKey'));
+  });
+
+  test('accepts distinct terminal pairs containing delimiter characters', () {
+    final data = validDocument().mutableData()
+      ..['phoneDoseActionEvents'] = [
+        _action(
+          deviceId: 'a|b',
+          occurrenceId: 'c',
+          idempotencyKey: 'action-key-1',
+        ),
+        _action(
+          id: 'action-2',
+          deviceId: 'a',
+          occurrenceId: 'b|c',
+          idempotencyKey: 'action-key-2',
+        ),
+      ];
+
+    expect(validator.validate(BackupDocument(data: data)), isEmpty);
+  });
+
+  test('validates phone action local dates strictly', () {
+    for (final localDate in [
+      '2026-2-03',
+      '2026-02-30',
+      '2025-02-29',
+      '0000-01-01',
+    ]) {
+      final data = validDocument().mutableData()
+        ..['phoneDoseActionEvents'] = [_action(localDate: localDate)];
+
+      expect(
+        validator
+            .validate(BackupDocument(data: data))
+            .map((issue) => issue.path),
+        contains(r'$.data.phoneDoseActionEvents[0].localDate'),
+      );
+    }
+    final leapDay = validDocument().mutableData()
+      ..['phoneDoseActionEvents'] = [_action(localDate: '2024-02-29')];
+    expect(validator.validate(BackupDocument(data: leapDay)), isEmpty);
+  });
 }
+
+Map<String, Object?> _action({
+  String id = 'action-1',
+  String deviceId = 'device-1',
+  String occurrenceId = 'occurrence-1',
+  String idempotencyKey = 'action-key',
+  String localDate = '2026-01-01',
+}) => {
+  'id': id,
+  'deviceId': deviceId,
+  'occurrenceId': occurrenceId,
+  'scheduleId': 'schedule-1',
+  'scheduleRevision': 1,
+  'scheduledAt': 1000000,
+  'localDate': localDate,
+  'timezoneId': 'UTC',
+  'medicationId': 'rx-1',
+  'kind': 'taken_confirmed',
+  'occurredAt': 1000000,
+  'marksDoseTaken': true,
+  'idempotencyKey': idempotencyKey,
+  'createdAt': 1000000,
+};
+
+Map<String, Object?> _outbox(String mutationId) => {
+  'mutationId': mutationId,
+  'deviceId': 'device-1',
+  'actorAccountId': null,
+  'robotId': null,
+  'scopeState': 'local_only',
+  'idempotencyKey': 'outbox-key',
+  'entityType': 'action',
+  'operation': 'upsert',
+  'entityId': 'action-1',
+  'baseRevision': null,
+  'payloadJson': '{}',
+  'state': 'pending',
+  'attemptCount': 0,
+  'nextAttemptAt': null,
+  'lastAttemptAt': null,
+  'lastErrorCode': null,
+  'createdAt': 1000000,
+  'updatedAt': 1000000,
+};
 
 Map<String, Object?> _prescription() => {
   'id': 'rx-1',

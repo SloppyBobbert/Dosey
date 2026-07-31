@@ -36,6 +36,7 @@ enum _FieldType {
   string,
   nullableString,
   integer,
+  nullableInteger,
   boolean,
   timestamp,
   nullableTimestamp,
@@ -45,14 +46,34 @@ class BackupValidator {
   const BackupValidator();
 
   List<BackupValidationIssue> validate(BackupDocument document) {
+    return _validate(document, _specs, 'v2');
+  }
+
+  void validateV1OrThrow(Map<String, List<Map<String, Object?>>> data) {
+    final issues = _validate(BackupDocument(data: data), _v1Specs, 'v1');
+    if (issues.isNotEmpty) {
+      throw BackupFormatException(
+        issues.first.toString(),
+        kind: BackupFormatErrorKind.invalidData,
+      );
+    }
+  }
+
+  List<BackupValidationIssue> _validate(
+    BackupDocument document,
+    Map<String, Map<String, _FieldType>> specs,
+    String formatName,
+  ) {
     final issues = <BackupValidationIssue>[];
-    for (final section in BackupDocument.sectionNames) {
+    for (final section in specs.keys) {
       final rows = document.data[section]!;
-      final spec = _specs[section]!;
+      final spec = specs[section]!;
       final primary = section == 'settings'
           ? 'key'
           : section == 'carouselStates'
           ? 'profileId'
+          : section == 'syncOutboxMutations'
+          ? 'mutationId'
           : 'id';
       final ids = <Object?>{};
       for (var index = 0; index < rows.length; index++) {
@@ -65,7 +86,7 @@ class BackupValidator {
           issues.add(
             BackupValidationIssue(
               path,
-              'Fields do not exactly match the v1 format.',
+              'Fields do not exactly match the $formatName format.',
             ),
           );
           continue;
@@ -115,6 +136,7 @@ class BackupValidator {
       _FieldType.string => value is String,
       _FieldType.nullableString => value == null || value is String,
       _FieldType.integer => value is int,
+      _FieldType.nullableInteger => value == null || value is int,
       _FieldType.boolean => value is bool,
       _FieldType.timestamp => _validTimestamp(value),
       _FieldType.nullableTimestamp => value == null || _validTimestamp(value),
@@ -134,6 +156,18 @@ class BackupValidator {
     } on Object {
       return false;
     }
+  }
+
+  static bool _validActionLocalDate(Object? value) {
+    if (value is! String) return false;
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
+    if (match == null) return false;
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    if (year < 1 || year > 9999) return false;
+    final parsed = DateTime.utc(year, month, day);
+    return parsed.year == year && parsed.month == month && parsed.day == day;
   }
 
   static void _validateRow(
@@ -246,6 +280,63 @@ class BackupValidator {
       case 'reminderSchedules':
         range('hour', 0, 23);
         range('minute', 0, 59);
+        nonnegative('revision', positive: true);
+      case 'phoneDoseActionEvents':
+        nonnegative('scheduleRevision', positive: true);
+        if (!_validActionLocalDate(row['localDate'])) {
+          issues.add(
+            BackupValidationIssue('$path.localDate', 'Invalid local date.'),
+          );
+        }
+        oneOf('kind', {
+          'taken_confirmed',
+          'skipped',
+          'snoozed',
+          'help_requested',
+          'missed',
+          'missed_acknowledged',
+        });
+        if (row['kind'] is String && row['marksDoseTaken'] is bool) {
+          final marksTaken = row['marksDoseTaken'] as bool;
+          if (marksTaken != (row['kind'] == 'taken_confirmed')) {
+            issues.add(
+              BackupValidationIssue(
+                '$path.marksDoseTaken',
+                'Taken flag does not match the action kind.',
+              ),
+            );
+          }
+        }
+      case 'syncOutboxMutations':
+        nonnegative('attemptCount');
+        oneOf('state', {
+          'pending',
+          'in_flight',
+          'succeeded',
+          'permanent_failure',
+        });
+        oneOf('scopeState', {'local_only', 'bound'});
+        final scopeState = row['scopeState'];
+        final actorAccountId = row['actorAccountId'];
+        final robotId = row['robotId'];
+        if (scopeState == 'local_only' &&
+            (actorAccountId != null || robotId != null)) {
+          issues.add(
+            BackupValidationIssue(
+              path,
+              'Local-only mutations must not have account or robot IDs.',
+            ),
+          );
+        }
+        if (scopeState == 'bound' &&
+            (!_validBoundId(actorAccountId) || !_validBoundId(robotId))) {
+          issues.add(
+            BackupValidationIssue(
+              path,
+              'Bound mutations require trimmed account and robot IDs of 1 through 128 characters.',
+            ),
+          );
+        }
       case 'carouselSlots':
         range('slotNumber', 1, 14);
         oneOf('status', {'assigned', 'loaded', 'dispensed', 'needs_review'});
@@ -486,6 +577,12 @@ class BackupValidator {
     }
   }
 
+  static bool _validBoundId(Object? value) {
+    return value is String &&
+        value.trim().isNotEmpty &&
+        value.trim().length <= 128;
+  }
+
   static void _validateRelationships(
     BackupDocument document,
     List<BackupValidationIssue> issues,
@@ -717,6 +814,50 @@ class BackupValidator {
       }
     }
     // Historical controller schedule and slot references may outlive those rows.
+    final actionIdempotencyKeys = <String>{};
+    final terminalOccurrences = <(String, String)>{};
+    for (var i = 0; i < data['phoneDoseActionEvents']!.length; i++) {
+      final row = data['phoneDoseActionEvents']![i];
+      final path =
+          r'$.data.phoneDoseActionEvents['
+          '$i]';
+      final idempotencyKey = row['idempotencyKey'];
+      if (idempotencyKey is String &&
+          !actionIdempotencyKeys.add(idempotencyKey)) {
+        issues.add(
+          BackupValidationIssue('$path.idempotencyKey', 'ID must be unique.'),
+        );
+      }
+      if (row['kind'] == 'taken_confirmed' || row['kind'] == 'skipped') {
+        final deviceId = row['deviceId'];
+        final occurrenceId = row['occurrenceId'];
+        if (deviceId is String &&
+            occurrenceId is String &&
+            !terminalOccurrences.add((deviceId, occurrenceId))) {
+          issues.add(
+            BackupValidationIssue(
+              '$path.occurrenceId',
+              'Terminal action must be unique per device occurrence.',
+            ),
+          );
+        }
+      }
+    }
+    final outboxIdempotencyKeys = <String>{};
+    for (var i = 0; i < data['syncOutboxMutations']!.length; i++) {
+      final row = data['syncOutboxMutations']![i];
+      final idempotencyKey = row['idempotencyKey'];
+      if (idempotencyKey is String &&
+          !outboxIdempotencyKeys.add(idempotencyKey)) {
+        issues.add(
+          BackupValidationIssue(
+            r'$.data.syncOutboxMutations['
+                '$i].idempotencyKey',
+            'ID must be unique.',
+          ),
+        );
+      }
+    }
   }
 
   static const _specs = <String, Map<String, _FieldType>>{
@@ -764,7 +905,44 @@ class BackupValidator {
       'profileId': _FieldType.string,
       'hour': _FieldType.integer,
       'minute': _FieldType.integer,
+      'revision': _FieldType.integer,
       'isEnabled': _FieldType.boolean,
+      'createdAt': _FieldType.timestamp,
+      'updatedAt': _FieldType.timestamp,
+    },
+    'phoneDoseActionEvents': {
+      'id': _FieldType.string,
+      'deviceId': _FieldType.string,
+      'occurrenceId': _FieldType.string,
+      'scheduleId': _FieldType.string,
+      'scheduleRevision': _FieldType.integer,
+      'scheduledAt': _FieldType.timestamp,
+      'localDate': _FieldType.string,
+      'timezoneId': _FieldType.string,
+      'medicationId': _FieldType.string,
+      'kind': _FieldType.string,
+      'occurredAt': _FieldType.timestamp,
+      'marksDoseTaken': _FieldType.boolean,
+      'idempotencyKey': _FieldType.string,
+      'createdAt': _FieldType.timestamp,
+    },
+    'syncOutboxMutations': {
+      'mutationId': _FieldType.string,
+      'deviceId': _FieldType.string,
+      'actorAccountId': _FieldType.nullableString,
+      'robotId': _FieldType.nullableString,
+      'scopeState': _FieldType.string,
+      'idempotencyKey': _FieldType.string,
+      'entityType': _FieldType.string,
+      'operation': _FieldType.string,
+      'entityId': _FieldType.string,
+      'baseRevision': _FieldType.nullableInteger,
+      'payloadJson': _FieldType.string,
+      'state': _FieldType.string,
+      'attemptCount': _FieldType.integer,
+      'nextAttemptAt': _FieldType.nullableTimestamp,
+      'lastAttemptAt': _FieldType.nullableTimestamp,
+      'lastErrorCode': _FieldType.nullableString,
       'createdAt': _FieldType.timestamp,
       'updatedAt': _FieldType.timestamp,
     },
@@ -884,4 +1062,9 @@ class BackupValidator {
       'occurredAt': _FieldType.timestamp,
     },
   };
+
+  static final _v1Specs = {
+    for (final entry in _specs.entries)
+      entry.key: Map<String, _FieldType>.from(entry.value),
+  }..['reminderSchedules']!.remove('revision');
 }
