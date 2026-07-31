@@ -184,6 +184,11 @@ void main() {
       );
       await LocalReminderRepository(firstDatabase).upsertSchedule(original);
       final lock = _WriterIntentLock();
+      addTearDown(() {
+        if (!lock.releaseFirstWriter.isCompleted) {
+          lock.releaseFirstWriter.complete();
+        }
+      });
       final firstAudit = _auditEvent('first-audit', now);
       final secondAudit = _auditEvent('second-audit', now);
       final first = firstDatabase.runWithInterceptor(
