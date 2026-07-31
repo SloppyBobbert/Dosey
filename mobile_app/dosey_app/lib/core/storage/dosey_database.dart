@@ -496,13 +496,14 @@ class DoseyDatabase extends _$DoseyDatabase {
   final bool isDemo;
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) async {
       await migrator.createAll();
       await _createPhoneDoseActionTerminalIndex();
+      await _createPhoneDoseActionTakenIndex();
       await _seedOnboardingCompleted(completed: false);
       await _seedDefaultScheduleProfile();
       await _seedCarouselStates();
@@ -596,12 +597,21 @@ class DoseyDatabase extends _$DoseyDatabase {
           await _createPhoneDoseActionTerminalIndex();
         });
       }
+      if (from < 18) {
+        await transaction(_createPhoneDoseActionTakenIndex);
+      }
     },
   );
 
   Future<void> _createPhoneDoseActionTerminalIndex() {
     return customStatement(
       "CREATE UNIQUE INDEX phone_dose_action_events_one_terminal ON phone_dose_action_events (device_id, occurrence_id) WHERE kind IN ('taken_confirmed', 'skipped');",
+    );
+  }
+
+  Future<void> _createPhoneDoseActionTakenIndex() {
+    return customStatement(
+      'CREATE UNIQUE INDEX phone_dose_action_events_one_taken_per_occurrence ON phone_dose_action_events (occurrence_id) WHERE marks_dose_taken = 1;',
     );
   }
 

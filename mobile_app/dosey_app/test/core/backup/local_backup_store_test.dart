@@ -12,6 +12,7 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqlite3/common.dart' show SqlError, SqliteException;
 
 void main() {
   test('snapshot includes seeded state but excludes device settings', () async {
@@ -232,6 +233,48 @@ void main() {
     );
   });
 
+  test('duplicate taken replacement rolls back current action rows', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final store = LocalBackupStore(
+      database,
+      validator: const _TestOnlyPermissiveBackupValidator(),
+    );
+    final original = _populatedDocument();
+    await store.replaceSnapshot(original);
+    final before = const BackupCodec().encode(await store.readSnapshot());
+    final duplicateData = mutableData(original);
+    duplicateData['phoneDoseActionEvents']!.add({
+      'id': 'action-2',
+      'deviceId': 'device-2',
+      'occurrenceId': 'occurrence-1',
+      'scheduleId': 'schedule-1',
+      'scheduleRevision': 1,
+      'scheduledAt': 1767225600000000,
+      'localDate': '2026-01-01',
+      'timezoneId': 'America/Los_Angeles',
+      'medicationId': 'rx-1',
+      'kind': 'taken_confirmed',
+      'occurredAt': 1767225600000000,
+      'marksDoseTaken': true,
+      'idempotencyKey': 'action-key-2',
+      'createdAt': 1767225600000000,
+    });
+
+    await expectLater(
+      store.replaceSnapshot(BackupDocument(data: duplicateData)),
+      throwsA(
+        isA<SqliteException>().having(
+          (error) => error.resultCode,
+          'resultCode',
+          SqlError.SQLITE_CONSTRAINT,
+        ),
+      ),
+    );
+    final after = const BackupCodec().encode(await store.readSnapshot());
+    expect(after, before);
+  });
+
   test('on-disk current-format restore persists after reopening', () async {
     final directory = await Directory.systemTemp.createTemp(
       'dosey-backup-test-',
@@ -350,6 +393,14 @@ class _BatchCountingInterceptor extends QueryInterceptor {
     batchCalls++;
     return executor.runBatched(statements);
   }
+}
+
+/// Test-only bypass that lets SQLite enforce the malformed payload constraint.
+class _TestOnlyPermissiveBackupValidator extends BackupValidator {
+  const _TestOnlyPermissiveBackupValidator();
+
+  @override
+  void validateOrThrow(BackupDocument document) {}
 }
 
 Map<String, List<Map<String, Object?>>> mutableData(BackupDocument document) =>

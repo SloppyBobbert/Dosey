@@ -816,6 +816,7 @@ class BackupValidator {
     // Historical controller schedule and slot references may outlive those rows.
     final actionIdempotencyKeys = <String>{};
     final terminalOccurrences = <(String, String)>{};
+    final takenOccurrences = <String>{};
     for (var i = 0; i < data['phoneDoseActionEvents']!.length; i++) {
       final row = data['phoneDoseActionEvents']![i];
       final path =
@@ -838,6 +839,17 @@ class BackupValidator {
             BackupValidationIssue(
               '$path.occurrenceId',
               'Terminal action must be unique per device occurrence.',
+            ),
+          );
+        }
+      }
+      if (row['marksDoseTaken'] == true) {
+        final occurrenceId = row['occurrenceId'];
+        if (occurrenceId is String && !takenOccurrences.add(occurrenceId)) {
+          issues.add(
+            BackupValidationIssue(
+              '$path.occurrenceId',
+              'Taken action must be unique per occurrence.',
             ),
           );
         }

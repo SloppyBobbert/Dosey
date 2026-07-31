@@ -1153,6 +1153,81 @@ void main() {
     },
   );
 
+  test('schema seventeen migration adds the global taken index', () async {
+    final sqlite = sqlite3.openInMemory();
+    addTearDown(sqlite.close);
+    sqlite
+      ..execute(_phoneDoseActionEventsTableSql)
+      ..execute('PRAGMA user_version = 17;');
+    final database = DoseyDatabase(
+      DatabaseConnection(NativeDatabase.opened(sqlite)),
+    );
+    addTearDown(database.close);
+
+    final index = await database
+        .customSelect(
+          "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
+          variables: [
+            Variable<String>(
+              'phone_dose_action_events_one_taken_per_occurrence',
+            ),
+          ],
+        )
+        .getSingle();
+
+    expect(
+      index.read<String>('sql'),
+      'CREATE UNIQUE INDEX phone_dose_action_events_one_taken_per_occurrence ON phone_dose_action_events (occurrence_id) WHERE marks_dose_taken = 1',
+    );
+  });
+
+  test('schema seventeen duplicate taken migration fails closed', () async {
+    final sqlite = sqlite3.openInMemory();
+    addTearDown(sqlite.close);
+    sqlite
+      ..execute(_phoneDoseActionEventsTableSql)
+      ..execute(
+        _insertPhoneDoseAction(
+          id: 'taken-1',
+          idempotencyKey: 'taken-key-1',
+          kind: 'taken_confirmed',
+        ),
+      )
+      ..execute(
+        _insertPhoneDoseAction(
+          id: 'taken-2',
+          idempotencyKey: 'taken-key-2',
+          deviceId: 'device-2',
+          kind: 'taken_confirmed',
+        ),
+      )
+      ..execute('PRAGMA user_version = 17;');
+    final database = DoseyDatabase(
+      DatabaseConnection(NativeDatabase.opened(sqlite)),
+    );
+    addTearDown(database.close);
+
+    await expectLater(
+      database.customSelect('SELECT 1').get(),
+      throwsA(isA<Exception>()),
+    );
+
+    expect(sqlite.select('PRAGMA user_version').single['user_version'], 17);
+    expect(
+      sqlite.select('''
+        SELECT name FROM sqlite_master
+        WHERE name = 'phone_dose_action_events_one_taken_per_occurrence'
+      '''),
+      isEmpty,
+    );
+    expect(
+      sqlite
+          .select('SELECT id FROM phone_dose_action_events ORDER BY id')
+          .map((row) => row['id']),
+      ['taken-1', 'taken-2'],
+    );
+  });
+
   test(
     'fresh schema seventeen rejects duplicate outbox idempotency keys',
     () async {
@@ -1216,7 +1291,7 @@ void main() {
   );
 
   test(
-    'terminal action index only restricts terminal device occurrences',
+    'terminal action index allows nonterminal actions while global taken is unique',
     () async {
       final database = DoseyDatabase.inMemory();
       addTearDown(database.close);
@@ -1253,13 +1328,51 @@ void main() {
           kind: 'snoozed',
         ),
       );
+      expect(
+        () => database.customStatement(
+          _insertPhoneDoseAction(
+            id: 'taken-device-2',
+            idempotencyKey: 'taken-key-device-2',
+            deviceId: 'device-2',
+            kind: 'taken_confirmed',
+          ),
+        ),
+        throwsA(isA<Exception>()),
+      );
+    },
+  );
+
+  test(
+    'fresh schema globally restricts taken but not skipped actions',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+
       await database.customStatement(
         _insertPhoneDoseAction(
-          id: 'taken-device-2',
-          idempotencyKey: 'taken-key-device-2',
-          deviceId: 'device-2',
+          id: 'taken-1',
+          idempotencyKey: 'taken-key-1',
           kind: 'taken_confirmed',
         ),
+      );
+      await database.customStatement(
+        _insertPhoneDoseAction(
+          id: 'skipped-2',
+          idempotencyKey: 'skipped-key-2',
+          deviceId: 'device-2',
+          kind: 'skipped',
+        ),
+      );
+      expect(
+        () => database.customStatement(
+          _insertPhoneDoseAction(
+            id: 'taken-2',
+            idempotencyKey: 'taken-key-2',
+            deviceId: 'device-2',
+            kind: 'taken_confirmed',
+          ),
+        ),
+        throwsA(isA<Exception>()),
       );
     },
   );
@@ -1722,6 +1835,26 @@ String _insertOutboxMutation(String mutationId) =>
     '$mutationId', 'device-1', NULL, NULL, 'local_only', 'duplicate-key',
     'action', 'upsert', 'action-1', NULL, '{}', 'pending', 0, NULL, NULL,
     NULL, 0, 0
+  );
+''';
+
+const _phoneDoseActionEventsTableSql = '''
+  CREATE TABLE phone_dose_action_events (
+    id TEXT NOT NULL PRIMARY KEY,
+    device_id TEXT NOT NULL,
+    occurrence_id TEXT NOT NULL,
+    schedule_id TEXT NOT NULL,
+    schedule_revision INTEGER NOT NULL CHECK (schedule_revision > 0),
+    scheduled_at INTEGER NOT NULL,
+    local_date TEXT NOT NULL,
+    timezone_id TEXT NOT NULL,
+    medication_id TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('taken_confirmed', 'skipped', 'snoozed', 'help_requested', 'missed', 'missed_acknowledged')),
+    occurred_at INTEGER NOT NULL,
+    marks_dose_taken INTEGER NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    created_at INTEGER NOT NULL,
+    CHECK ((kind = 'taken_confirmed' AND marks_dose_taken = 1) OR (kind != 'taken_confirmed' AND marks_dose_taken = 0))
   );
 ''';
 

@@ -265,6 +265,45 @@ void main() {
     expect(validator.validate(BackupDocument(data: data)), isEmpty);
   });
 
+  test('rejects taken actions duplicated across devices', () {
+    final data = validDocument().mutableData()
+      ..['phoneDoseActionEvents'] = [
+        _action(deviceId: 'device-1', idempotencyKey: 'action-key-1'),
+        _action(
+          id: 'action-2',
+          deviceId: 'device-2',
+          idempotencyKey: 'action-key-2',
+        ),
+      ];
+
+    expect(
+      validator.validate(BackupDocument(data: data)).map((issue) => issue.path),
+      contains(r'$.data.phoneDoseActionEvents[1].occurrenceId'),
+    );
+  });
+
+  test('rejects skipped actions duplicated for one device occurrence', () {
+    final data = validDocument().mutableData()
+      ..['phoneDoseActionEvents'] = [
+        _action(
+          kind: 'skipped',
+          marksDoseTaken: false,
+          idempotencyKey: 'action-key-1',
+        ),
+        _action(
+          id: 'action-2',
+          kind: 'skipped',
+          marksDoseTaken: false,
+          idempotencyKey: 'action-key-2',
+        ),
+      ];
+
+    expect(
+      validator.validate(BackupDocument(data: data)).map((issue) => issue.path),
+      contains(r'$.data.phoneDoseActionEvents[1].occurrenceId'),
+    );
+  });
+
   test('validates phone action local dates strictly', () {
     for (final localDate in [
       '2026-2-03',
@@ -294,6 +333,8 @@ Map<String, Object?> _action({
   String occurrenceId = 'occurrence-1',
   String idempotencyKey = 'action-key',
   String localDate = '2026-01-01',
+  String kind = 'taken_confirmed',
+  bool? marksDoseTaken,
 }) => {
   'id': id,
   'deviceId': deviceId,
@@ -304,9 +345,9 @@ Map<String, Object?> _action({
   'localDate': localDate,
   'timezoneId': 'UTC',
   'medicationId': 'rx-1',
-  'kind': 'taken_confirmed',
+  'kind': kind,
   'occurredAt': 1000000,
-  'marksDoseTaken': true,
+  'marksDoseTaken': marksDoseTaken ?? kind == 'taken_confirmed',
   'idempotencyKey': idempotencyKey,
   'createdAt': 1000000,
 };
