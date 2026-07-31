@@ -224,7 +224,13 @@ void main() {
           occurred_at INTEGER NOT NULL
         );
       ''');
-      sqlite.execute('PRAGMA user_version = 13;');
+      sqlite
+        ..execute('''
+          INSERT INTO reminder_schedules VALUES (
+            'schedule-1', 'Morning', NULL, 'schedule-1', 8, 0, 1, 1, 1
+          );
+        ''')
+        ..execute('PRAGMA user_version = 13;');
 
       final database = DoseyDatabase(
         DatabaseConnection(NativeDatabase.opened(sqlite)),
@@ -260,6 +266,20 @@ void main() {
           .select(database.carouselLoadSlotSnapshots)
           .get();
       expect(rows.single.status, 'retained');
+      expect(
+        (await database.select(database.reminderSchedules).getSingle())
+            .revision,
+        1,
+      );
+      final healthIndex = await database
+          .customSelect(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
+            variables: [
+              Variable<String>('controller_health_events_occurred_at_idx'),
+            ],
+          )
+          .getSingle();
+      expect(healthIndex.read<String>('sql'), contains('occurred_at DESC'));
     },
   );
 
@@ -1016,26 +1036,31 @@ void main() {
   });
 
   test(
-    'migration from schema fourteen creates the health event index',
+    'incomplete schema fourteen migration fails without v17 artifacts',
     () async {
-      final executor = NativeDatabase.memory(
-        setup: (database) {
-          database.execute('PRAGMA user_version = 14;');
-        },
+      final sqlite = sqlite3.openInMemory();
+      addTearDown(sqlite.close);
+      sqlite.execute('PRAGMA user_version = 14;');
+      final database = DoseyDatabase(
+        DatabaseConnection(NativeDatabase.opened(sqlite)),
       );
-      final database = DoseyDatabase(executor);
       addTearDown(database.close);
 
-      final index = await database
-          .customSelect(
-            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?",
-            variables: [
-              Variable<String>('controller_health_events_occurred_at_idx'),
-            ],
-          )
-          .getSingle();
+      await expectLater(
+        database.customSelect('SELECT 1').get(),
+        throwsA(isA<Exception>()),
+      );
 
-      expect(index.read<String>('sql'), contains('occurred_at DESC'));
+      expect(sqlite.select('PRAGMA user_version').single['user_version'], 14);
+      final artifacts = sqlite.select('''
+      SELECT name FROM sqlite_master
+      WHERE name IN (
+        'phone_dose_action_events',
+        'sync_outbox_mutations',
+        'phone_dose_action_events_one_terminal'
+      )
+    ''');
+      expect(artifacts, isEmpty);
     },
   );
 

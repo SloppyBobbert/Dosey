@@ -158,6 +158,18 @@ class BackupValidator {
     }
   }
 
+  static bool _validActionLocalDate(Object? value) {
+    if (value is! String) return false;
+    final match = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$').firstMatch(value);
+    if (match == null) return false;
+    final year = int.parse(match.group(1)!);
+    final month = int.parse(match.group(2)!);
+    final day = int.parse(match.group(3)!);
+    if (year < 1 || year > 9999) return false;
+    final parsed = DateTime.utc(year, month, day);
+    return parsed.year == year && parsed.month == month && parsed.day == day;
+  }
+
   static void _validateRow(
     String section,
     Map<String, Object?> row,
@@ -271,6 +283,11 @@ class BackupValidator {
         nonnegative('revision', positive: true);
       case 'phoneDoseActionEvents':
         nonnegative('scheduleRevision', positive: true);
+        if (!_validActionLocalDate(row['localDate'])) {
+          issues.add(
+            BackupValidationIssue('$path.localDate', 'Invalid local date.'),
+          );
+        }
         oneOf('kind', {
           'taken_confirmed',
           'skipped',

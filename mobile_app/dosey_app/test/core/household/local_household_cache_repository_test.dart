@@ -133,7 +133,23 @@ void main() {
   test('schema fifteen migration creates household cache tables', () async {
     final database = DoseyDatabase(
       NativeDatabase.memory(
-        setup: (sqlite) => sqlite.execute('PRAGMA user_version = 15;'),
+        setup: (sqlite) {
+          sqlite
+            ..execute('''
+              CREATE TABLE reminder_schedules (
+                id TEXT NOT NULL PRIMARY KEY,
+                label TEXT NOT NULL,
+                prescription_id TEXT,
+                profile_id TEXT NOT NULL DEFAULT 'schedule-1',
+                hour INTEGER NOT NULL CHECK (hour >= 0 AND hour <= 23),
+                minute INTEGER NOT NULL CHECK (minute >= 0 AND minute <= 59),
+                is_enabled INTEGER NOT NULL CHECK (is_enabled IN (0, 1)),
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+              );
+            ''')
+            ..execute('PRAGMA user_version = 15;');
+        },
       ),
     );
     addTearDown(database.close);

@@ -586,12 +586,10 @@ class DoseyDatabase extends _$DoseyDatabase {
       if (from < 17) {
         await transaction(() async {
           if (from >= 2) {
-            if (await _tableExists('reminder_schedules')) {
-              await migrator.addColumn(
-                reminderSchedules,
-                reminderSchedules.revision,
-              );
-            }
+            await migrator.addColumn(
+              reminderSchedules,
+              reminderSchedules.revision,
+            );
           }
           await migrator.createTable(phoneDoseActionEvents);
           await migrator.createTable(syncOutboxMutations);
@@ -605,14 +603,6 @@ class DoseyDatabase extends _$DoseyDatabase {
     return customStatement(
       "CREATE UNIQUE INDEX phone_dose_action_events_one_terminal ON phone_dose_action_events (device_id, occurrence_id) WHERE kind IN ('taken_confirmed', 'skipped');",
     );
-  }
-
-  Future<bool> _tableExists(String tableName) async {
-    final rows = await customSelect(
-      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-      variables: [Variable<String>(tableName)],
-    ).get();
-    return rows.isNotEmpty;
   }
 
   Future<void>

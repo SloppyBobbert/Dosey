@@ -264,6 +264,28 @@ void main() {
 
     expect(validator.validate(BackupDocument(data: data)), isEmpty);
   });
+
+  test('validates phone action local dates strictly', () {
+    for (final localDate in [
+      '2026-2-03',
+      '2026-02-30',
+      '2025-02-29',
+      '0000-01-01',
+    ]) {
+      final data = validDocument().mutableData()
+        ..['phoneDoseActionEvents'] = [_action(localDate: localDate)];
+
+      expect(
+        validator
+            .validate(BackupDocument(data: data))
+            .map((issue) => issue.path),
+        contains(r'$.data.phoneDoseActionEvents[0].localDate'),
+      );
+    }
+    final leapDay = validDocument().mutableData()
+      ..['phoneDoseActionEvents'] = [_action(localDate: '2024-02-29')];
+    expect(validator.validate(BackupDocument(data: leapDay)), isEmpty);
+  });
 }
 
 Map<String, Object?> _action({
@@ -271,6 +293,7 @@ Map<String, Object?> _action({
   String deviceId = 'device-1',
   String occurrenceId = 'occurrence-1',
   String idempotencyKey = 'action-key',
+  String localDate = '2026-01-01',
 }) => {
   'id': id,
   'deviceId': deviceId,
@@ -278,7 +301,7 @@ Map<String, Object?> _action({
   'scheduleId': 'schedule-1',
   'scheduleRevision': 1,
   'scheduledAt': 1000000,
-  'localDate': '2026-01-01',
+  'localDate': localDate,
   'timezoneId': 'UTC',
   'medicationId': 'rx-1',
   'kind': 'taken_confirmed',
