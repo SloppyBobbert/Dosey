@@ -5,6 +5,7 @@ import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart'
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
+import 'package:sqlite3/common.dart' show SqlError, SqliteException;
 
 abstract interface class ReminderRepository {
   Stream<List<ReminderSchedule>> watchSchedules({String? profileId});
@@ -44,114 +45,120 @@ class LocalReminderRepository implements ReminderRepository {
     AdminAuditEvent? auditEvent,
   }) async {
     _validateSchedule(schedule);
-    final prescriptionId = schedule.prescriptionId;
-    if (prescriptionId != null) {
-      final isDeferredDeleted =
-          await LocalPrescriptionRepository.isDeferredDeletedPrescriptionInDatabase(
-            _database,
-            prescriptionId,
-          );
-      if (isDeferredDeleted) {
-        throw StateError(
-          'Prescription "$prescriptionId" is pending guided-load cleanup and cannot be linked to a schedule.',
-        );
-      }
-    }
-    await _rejectDuplicatePrescriptionTime(schedule);
-
-    final existing = await (_database.select(
-      _database.reminderSchedules,
-    )..where((row) => row.id.equals(schedule.id))).getSingleOrNull();
-    // If the schedule no longer maps to the same enabled dose, clear its slot
-    // so the carousel cannot dispense stale loading instructions.
-    final clearsLoadedSlot =
-        existing != null &&
-        (!schedule.isEnabled ||
-            existing.prescriptionId != schedule.prescriptionId ||
-            existing.profileId != schedule.profileId);
-
-    await _database.transaction(() async {
-      if (clearsLoadedSlot) {
-        await (_database.delete(
-          _database.carouselSlots,
-        )..where((slot) => slot.scheduleId.equals(schedule.id))).go();
-      }
-      await _database
-          .into(_database.reminderSchedules)
-          .insertOnConflictUpdate(
-            ReminderSchedulesCompanion.insert(
-              id: schedule.id,
-              label: schedule.label,
-              prescriptionId: Value(schedule.prescriptionId),
-              profileId: Value(schedule.profileId),
-              hour: schedule.hour,
-              minute: schedule.minute,
-              isEnabled: schedule.isEnabled,
-              createdAt: schedule.createdAt.toUtc(),
-              updatedAt: schedule.updatedAt.toUtc(),
-            ),
-          );
-      if (existing != null) {
-        final affectedProfiles = <String>{};
-        final loadAffectingChange =
-            existing.isEnabled != schedule.isEnabled ||
-            existing.prescriptionId != schedule.prescriptionId ||
-            existing.profileId != schedule.profileId ||
-            ((existing.hour != schedule.hour ||
-                    existing.minute != schedule.minute) &&
-                (existing.isEnabled || schedule.isEnabled));
-        if (loadAffectingChange) {
-          affectedProfiles.add(existing.profileId);
-          affectedProfiles.add(schedule.profileId);
+    await _retryBusy(
+      () => _database.transaction(() async {
+        await _acquireWriterIntent(schedule.id);
+        final prescriptionId = schedule.prescriptionId;
+        if (prescriptionId != null) {
+          final isDeferredDeleted =
+              await LocalPrescriptionRepository.isDeferredDeletedPrescriptionInDatabase(
+                _database,
+                prescriptionId,
+              );
+          if (isDeferredDeleted) {
+            throw StateError(
+              'Prescription "$prescriptionId" is pending guided-load cleanup and cannot be linked to a schedule.',
+            );
+          }
         }
-        for (final profileId in affectedProfiles) {
-          await LocalGuidedCarouselLoadRepository.markActiveLoadStaleInDatabase(
+        await _rejectDuplicatePrescriptionTime(schedule);
+        final existing = await (_database.select(
+          _database.reminderSchedules,
+        )..where((row) => row.id.equals(schedule.id))).getSingleOrNull();
+        final revision = _revisionFor(existing, schedule);
+        // If the schedule no longer maps to the same enabled dose, clear its slot
+        // so the carousel cannot dispense stale loading instructions.
+        final clearsLoadedSlot =
+            existing != null &&
+            (!schedule.isEnabled ||
+                existing.prescriptionId != schedule.prescriptionId ||
+                existing.profileId != schedule.profileId);
+        if (clearsLoadedSlot) {
+          await (_database.delete(
+            _database.carouselSlots,
+          )..where((slot) => slot.scheduleId.equals(schedule.id))).go();
+        }
+        await _database
+            .into(_database.reminderSchedules)
+            .insertOnConflictUpdate(
+              ReminderSchedulesCompanion.insert(
+                id: schedule.id,
+                label: schedule.label,
+                prescriptionId: Value(schedule.prescriptionId),
+                profileId: Value(schedule.profileId),
+                hour: schedule.hour,
+                minute: schedule.minute,
+                revision: Value(revision),
+                isEnabled: schedule.isEnabled,
+                createdAt: schedule.createdAt.toUtc(),
+                updatedAt: schedule.updatedAt.toUtc(),
+              ),
+            );
+        if (existing != null) {
+          final affectedProfiles = <String>{};
+          final loadAffectingChange =
+              existing.isEnabled != schedule.isEnabled ||
+              existing.prescriptionId != schedule.prescriptionId ||
+              existing.profileId != schedule.profileId ||
+              ((existing.hour != schedule.hour ||
+                      existing.minute != schedule.minute) &&
+                  (existing.isEnabled || schedule.isEnabled));
+          if (loadAffectingChange) {
+            affectedProfiles.add(existing.profileId);
+            affectedProfiles.add(schedule.profileId);
+          }
+          for (final profileId in affectedProfiles) {
+            await LocalGuidedCarouselLoadRepository.markActiveLoadStaleInDatabase(
+              _database,
+              profileId: profileId,
+              reason: 'schedule_changed',
+              occurredAt: schedule.updatedAt,
+              details: {'scheduleId': schedule.id},
+            );
+          }
+        }
+        if (auditEvent != null) {
+          await LocalAdminAuditRepository.insertEventIntoDatabase(
             _database,
-            profileId: profileId,
-            reason: 'schedule_changed',
-            occurredAt: schedule.updatedAt,
-            details: {'scheduleId': schedule.id},
+            auditEvent,
           );
         }
-      }
-      if (auditEvent != null) {
-        await LocalAdminAuditRepository.insertEventIntoDatabase(
-          _database,
-          auditEvent,
-        );
-      }
-    });
+      }),
+    );
   }
 
   @override
   Future<int> deleteSchedule(String id, {AdminAuditEvent? auditEvent}) {
-    return _database.transaction(() async {
-      final existing = await (_database.select(
-        _database.reminderSchedules,
-      )..where((schedule) => schedule.id.equals(id))).getSingleOrNull();
-      await (_database.delete(
-        _database.carouselSlots,
-      )..where((slot) => slot.scheduleId.equals(id))).go();
-      final deleted = await (_database.delete(
-        _database.reminderSchedules,
-      )..where((schedule) => schedule.id.equals(id))).go();
-      if (deleted > 0 && existing != null && existing.isEnabled) {
-        await LocalGuidedCarouselLoadRepository.markActiveLoadStaleInDatabase(
-          _database,
-          profileId: existing.profileId,
-          reason: 'schedule_deleted',
-          occurredAt: DateTime.now().toUtc(),
-          details: {'scheduleId': id},
-        );
-      }
-      if (deleted > 0 && auditEvent != null) {
-        await LocalAdminAuditRepository.insertEventIntoDatabase(
-          _database,
-          auditEvent,
-        );
-      }
-      return deleted;
-    });
+    return _retryBusy(
+      () => _database.transaction(() async {
+        await _acquireWriterIntent(id);
+        final existing = await (_database.select(
+          _database.reminderSchedules,
+        )..where((schedule) => schedule.id.equals(id))).getSingleOrNull();
+        await (_database.delete(
+          _database.carouselSlots,
+        )..where((slot) => slot.scheduleId.equals(id))).go();
+        final deleted = await (_database.delete(
+          _database.reminderSchedules,
+        )..where((schedule) => schedule.id.equals(id))).go();
+        if (deleted > 0 && existing != null && existing.isEnabled) {
+          await LocalGuidedCarouselLoadRepository.markActiveLoadStaleInDatabase(
+            _database,
+            profileId: existing.profileId,
+            reason: 'schedule_deleted',
+            occurredAt: DateTime.now().toUtc(),
+            details: {'scheduleId': id},
+          );
+        }
+        if (deleted > 0 && auditEvent != null) {
+          await LocalAdminAuditRepository.insertEventIntoDatabase(
+            _database,
+            auditEvent,
+          );
+        }
+        return deleted;
+      }),
+    );
   }
 
   static ReminderSchedule _fromRow(ReminderScheduleRow row) {
@@ -179,6 +186,39 @@ class LocalReminderRepository implements ReminderRepository {
         'Must be 0 through 59.',
       );
     }
+  }
+
+  static int _revisionFor(
+    ReminderScheduleRow? existing,
+    ReminderSchedule schedule,
+  ) {
+    if (existing == null) return 1;
+    final occurrenceChange =
+        existing.hour != schedule.hour ||
+        existing.minute != schedule.minute ||
+        existing.prescriptionId != schedule.prescriptionId ||
+        existing.profileId != schedule.profileId ||
+        existing.isEnabled != schedule.isEnabled;
+    return occurrenceChange ? existing.revision + 1 : existing.revision;
+  }
+
+  Future<void> _acquireWriterIntent(String scheduleId) {
+    return _database.customUpdate(
+      'UPDATE reminder_schedules SET revision = revision WHERE id = ?',
+      variables: [Variable<String>(scheduleId)],
+    );
+  }
+
+  static Future<T> _retryBusy<T>(Future<T> Function() action) async {
+    for (var attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        return await action();
+      } on SqliteException catch (error) {
+        if (error.resultCode != SqlError.SQLITE_BUSY || attempt == 3) rethrow;
+        await Future<void>.delayed(Duration(milliseconds: 10 * (attempt + 1)));
+      }
+    }
+    throw StateError('Unreachable retry state.');
   }
 
   /// Prevents accidental duplicate schedule rows for the same medication time.
