@@ -49,6 +49,7 @@ import 'package:dosey_app/core/permissions/permission_handler_gateway.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
+import 'package:dosey_app/core/runtime/runtime_capability.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/settings/current_device_platform.dart';
@@ -92,6 +93,7 @@ class DoseyAppScope extends StatefulWidget {
     this.robotPairingGateway,
     this.buildProfile,
     this.robotPhoneSetupGateway,
+    this.runtimeCapability,
     this.enableDemoFaceLab = false,
   });
 
@@ -116,6 +118,7 @@ class DoseyAppScope extends StatefulWidget {
   final RobotPairingGateway? robotPairingGateway;
   final AppBuildProfile? buildProfile;
   final RobotPhoneSetupGateway? robotPhoneSetupGateway;
+  final RuntimeCapability? runtimeCapability;
   final bool enableDemoFaceLab;
 
   static DoseyAppDependencies of(BuildContext context) {
@@ -226,6 +229,8 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       defaultRole: AppDeviceRole.defaultFor(currentAppDevicePlatform()),
     );
     final buildProfile = widget.buildProfile ?? AppBuildProfile.current;
+    final runtimeCapability =
+        widget.runtimeCapability ?? RuntimeCapability.hardwareAssisted;
     final effectiveRole = EffectiveDeviceRoleSource(
       settings,
       profile: buildProfile,
@@ -374,6 +379,7 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       appClock: _appClock,
       settings: settings,
       buildProfile: buildProfile,
+      runtimeCapability: runtimeCapability,
       effectiveRole: effectiveRole,
       actionPinGate: actionPinGate,
       prescriptions: prescriptions,
@@ -610,6 +616,7 @@ class DoseyAppDependencies {
     required this.appClock,
     required this.settings,
     required this.buildProfile,
+    required this.runtimeCapability,
     required this.effectiveRole,
     required this.actionPinGate,
     required this.prescriptions,
@@ -658,6 +665,7 @@ class DoseyAppDependencies {
   final AppClock appClock;
   final LocalAppSettingsRepository settings;
   final AppBuildProfile buildProfile;
+  final RuntimeCapability runtimeCapability;
   final EffectiveDeviceRoleSource effectiveRole;
   final ActionPinGate actionPinGate;
   final LocalPrescriptionRepository prescriptions;

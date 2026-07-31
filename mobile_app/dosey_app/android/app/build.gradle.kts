@@ -34,6 +34,7 @@ val dartDefines = providers.gradleProperty("dart-defines").orNull
     ?.associate { define -> define.substringBefore('=') to define.substringAfter('=', "") }
     .orEmpty()
 val configuredProfile = dartDefines["DOSEY_BUILD_PROFILE"]
+val configuredRuntimeCapability = dartDefines["DOSEY_RUNTIME_CAPABILITY"]
 
 val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
 val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
@@ -44,11 +45,16 @@ val signingValues = listOf(keystorePath, keystorePassword, keyAliasValue, keyPas
 gradle.taskGraph.whenReady(Action<TaskExecutionGraph> {
     val resolvedTasks = allTasks.map { it.path.lowercase() }
     val variantTasks = resolvedTasks.map { it.substringAfterLast(':') }
+    fun producesVariant(flavor: String) = variantTasks.any { task ->
+        listOf("assemble", "bundle", "package").any { prefix ->
+            task.startsWith("$prefix$flavor")
+        }
+    }
     val requestedFlavors = buildSet {
-        if (variantTasks.any { it.startsWith("assemblepersonal") || it.startsWith("bundlepersonal") }) {
+        if (producesVariant("personal")) {
             add("personal")
         }
-        if (variantTasks.any { it.startsWith("assemblerobot") || it.startsWith("bundlerobot") }) {
+        if (producesVariant("robot")) {
             add("robot")
         }
     }
@@ -70,7 +76,20 @@ gradle.taskGraph.whenReady(Action<TaskExecutionGraph> {
                     "DOSEY_BUILD_PROFILE='$configuredProfile'.",
             )
         }
-        if (variantTasks.any { (it.startsWith("assemble") || it.startsWith("bundle")) && "release" in it } &&
+        if (configuredProfile == "robot" && configuredRuntimeCapability != "phone-only") {
+            throw GradleException(
+                "Android Robot builds require DOSEY_RUNTIME_CAPABILITY=phone-only.",
+            )
+        }
+        if (configuredProfile == "personal" && configuredRuntimeCapability != "hardware-assisted") {
+            throw GradleException(
+                "Android Personal builds require DOSEY_RUNTIME_CAPABILITY=hardware-assisted.",
+            )
+        }
+        if (variantTasks.any {
+                (it.startsWith("assemble") || it.startsWith("bundle") || it.startsWith("package")) &&
+                    "release" in it
+            } &&
             signingValues.any { it == null }
         ) {
             throw GradleException(

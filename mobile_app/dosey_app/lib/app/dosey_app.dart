@@ -13,6 +13,7 @@ import 'package:dosey_app/core/notifications/reminder_notification_tap_controlle
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/reminders/missed_dose_reconciliation_service.dart';
+import 'package:dosey_app/core/runtime/runtime_capability.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/core/time/app_clock.dart';
 import 'package:dosey_app/features/onboarding/onboarding_gate.dart';
@@ -37,6 +38,7 @@ class DoseyApp extends StatelessWidget {
     this.robotPairingGateway,
     this.buildProfile,
     this.robotPhoneSetupGateway,
+    this.runtimeCapability,
   });
 
   final DoseyDatabase? database;
@@ -55,6 +57,7 @@ class DoseyApp extends StatelessWidget {
   final RobotPairingGateway? robotPairingGateway;
   final AppBuildProfile? buildProfile;
   final RobotPhoneSetupGateway? robotPhoneSetupGateway;
+  final RuntimeCapability? runtimeCapability;
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +84,7 @@ class DoseyApp extends StatelessWidget {
         robotPairingGateway: session.isDemo ? null : robotPairingGateway,
         buildProfile: buildProfile,
         robotPhoneSetupGateway: robotPhoneSetupGateway,
+        runtimeCapability: runtimeCapability,
         appClock: session.clock,
         child: DoseyMaterialApp(
           home: OnboardingGate(
