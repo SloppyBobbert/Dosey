@@ -6,6 +6,9 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
 import 'package:sqlite3/common.dart' show SqlError, SqliteException;
 
+const phoneDoseWriterIntentSql =
+    'UPDATE app_settings SET updated_at = updated_at WHERE key = ?';
+
 enum PhoneDoseActionKind {
   takenConfirmed('taken_confirmed'),
   skipped('skipped'),
@@ -52,13 +55,7 @@ class PhoneDoseActionService {
   final DoseyDatabase _database;
 
   Future<PhoneDoseActionResult> record(PhoneDoseActionRequest request) async {
-    if (request.deviceId.trim().isEmpty) {
-      throw ArgumentError.value(request.deviceId, 'deviceId');
-    }
-    if (!request.occurredAt.isUtc) {
-      throw ArgumentError.value(request.occurredAt, 'occurredAt');
-    }
-    _canonicalIntentToken(request);
+    _validateRequest(request);
     for (var attempt = 0; attempt < 4; attempt++) {
       try {
         return await _database.transaction(() => _record(request));
@@ -70,10 +67,58 @@ class PhoneDoseActionService {
     throw StateError('Unreachable');
   }
 
+  /// Records a derived missed action while the caller holds writer intent.
+  /// Keep it through the action, log, and reconciliation checkpoint commit.
+  Future<PhoneDoseActionResult?> recordMissedIfNoTerminalInCurrentTransaction(
+    PhoneDoseActionRequest request,
+  ) async {
+    if (request.kind != PhoneDoseActionKind.missed) {
+      throw ArgumentError.value(request.kind, 'request.kind');
+    }
+    _validateRequest(request);
+    final occurrence = request.occurrence;
+    final token = _canonicalIntentToken(request);
+    final key = _idempotencyKey(
+      request.deviceId,
+      occurrence,
+      request.kind,
+      token,
+    );
+    final existing = await (_database.select(
+      _database.phoneDoseActionEvents,
+    )..where((row) => row.idempotencyKey.equals(key))).getSingleOrNull();
+    if (existing != null) {
+      _verify(existing, request);
+      return PhoneDoseActionResult(
+        eventId: existing.id,
+        inserted: false,
+        occurredAt: existing.occurredAt.toUtc(),
+      );
+    }
+    final taken =
+        await (_database.select(_database.phoneDoseActionEvents)..where(
+              (row) =>
+                  row.occurrenceId.equals(occurrence.id) &
+                  row.marksDoseTaken.equals(true),
+            ))
+            .getSingleOrNull();
+    if (taken != null) return null;
+    final skipped =
+        await (_database.select(_database.phoneDoseActionEvents)..where(
+              (row) =>
+                  row.deviceId.equals(request.deviceId) &
+                  row.occurrenceId.equals(occurrence.id) &
+                  row.kind.equals(PhoneDoseActionKind.skipped.storageValue),
+            ))
+            .getSingleOrNull();
+    if (skipped != null) return null;
+    return _insertActionAndLog(request, token, enqueueOutbox: false);
+  }
+
   Future<PhoneDoseActionResult> _record(PhoneDoseActionRequest request) async {
     // Acquire writer intent before reading action or inventory state.
     await _database.customUpdate(
-      'UPDATE app_settings SET updated_at = updated_at WHERE key = ?',
+      phoneDoseWriterIntentSql,
       variables: [Variable<String>('_phone_dose_writer_intent')],
     );
     final occurrence = request.occurrence;
@@ -146,6 +191,21 @@ class PhoneDoseActionService {
         );
       }
     }
+    return _insertActionAndLog(request, token);
+  }
+
+  Future<PhoneDoseActionResult> _insertActionAndLog(
+    PhoneDoseActionRequest request,
+    String? token, {
+    bool enqueueOutbox = true,
+  }) async {
+    final occurrence = request.occurrence;
+    final key = _idempotencyKey(
+      request.deviceId,
+      occurrence,
+      request.kind,
+      token,
+    );
     final id = _eventId(request.deviceId, occurrence, request.kind, token);
     final occurredAt = _normalizeOccurredAt(request.occurredAt);
     await _database
@@ -179,7 +239,7 @@ class PhoneDoseActionService {
             marksDoseTaken: request.kind.marksTaken,
           ),
         );
-    if (request.kind.outboxEligible) {
+    if (enqueueOutbox && request.kind.outboxEligible) {
       await _database
           .into(_database.syncOutboxMutations)
           .insert(
@@ -214,6 +274,16 @@ class PhoneDoseActionService {
       inserted: true,
       occurredAt: occurredAt,
     );
+  }
+
+  static void _validateRequest(PhoneDoseActionRequest request) {
+    if (request.deviceId.trim().isEmpty) {
+      throw ArgumentError.value(request.deviceId, 'deviceId');
+    }
+    if (!request.occurredAt.isUtc) {
+      throw ArgumentError.value(request.occurredAt, 'occurredAt');
+    }
+    _canonicalIntentToken(request);
   }
 
   static void _verify(
