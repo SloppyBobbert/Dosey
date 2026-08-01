@@ -563,6 +563,38 @@ void main() {
     expect(await _checkpointObservedAt(database), DateTime.utc(2026, 1, 2, 10));
   });
 
+  test(
+    'Dart schedule ordering trusts a checkpoint across SQLite collation',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      const highBmp = '\uE000';
+      const supplementary = '\u{10000}';
+      expect(highBmp.compareTo(supplementary), greaterThan(0));
+      await _schedule(database, id: highBmp, prescriptionId: 'medication-1');
+      await _schedule(
+        database,
+        id: supplementary,
+        prescriptionId: 'medication-1',
+      );
+      await _seedUntouchedState(database, DateTime.utc(2026, 1, 2, 9));
+      await _service(database, DateTime.utc(2026, 1, 2, 9)).reconcile();
+
+      await _service(database, DateTime.utc(2026, 1, 2, 11)).reconcile();
+
+      expect(
+        await database.select(database.phoneDoseActionEvents).get(),
+        hasLength(2),
+      );
+      expect(await database.select(database.doseLogEvents).get(), hasLength(2));
+      expect(
+        await database.select(database.syncOutboxMutations).get(),
+        isEmpty,
+      );
+      await _expectUntouchedState(database);
+    },
+  );
+
   test('seven-day trusted window excludes its lower boundary', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
@@ -1142,6 +1174,4 @@ class _WriterIntentRaceInterceptor extends QueryInterceptor {
   }
 }
 
-bool _isWriterIntent(String statement) =>
-    statement ==
-    'UPDATE app_settings SET updated_at = updated_at WHERE key = ?';
+bool _isWriterIntent(String statement) => statement == phoneDoseWriterIntentSql;

@@ -6,6 +6,9 @@ import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
 import 'package:sqlite3/common.dart' show SqlError, SqliteException;
 
+const phoneDoseWriterIntentSql =
+    'UPDATE app_settings SET updated_at = updated_at WHERE key = ?';
+
 enum PhoneDoseActionKind {
   takenConfirmed('taken_confirmed'),
   skipped('skipped'),
@@ -52,13 +55,7 @@ class PhoneDoseActionService {
   final DoseyDatabase _database;
 
   Future<PhoneDoseActionResult> record(PhoneDoseActionRequest request) async {
-    if (request.deviceId.trim().isEmpty) {
-      throw ArgumentError.value(request.deviceId, 'deviceId');
-    }
-    if (!request.occurredAt.isUtc) {
-      throw ArgumentError.value(request.occurredAt, 'occurredAt');
-    }
-    _canonicalIntentToken(request);
+    _validateRequest(request);
     for (var attempt = 0; attempt < 4; attempt++) {
       try {
         return await _database.transaction(() => _record(request));
@@ -70,7 +67,8 @@ class PhoneDoseActionService {
     throw StateError('Unreachable');
   }
 
-  /// Records a derived missed action while the caller owns the transaction.
+  /// Records a derived missed action while the caller holds writer intent.
+  /// Keep it through the action, log, and reconciliation checkpoint commit.
   Future<PhoneDoseActionResult?> recordMissedIfNoTerminalInCurrentTransaction(
     PhoneDoseActionRequest request,
   ) async {
@@ -120,7 +118,7 @@ class PhoneDoseActionService {
   Future<PhoneDoseActionResult> _record(PhoneDoseActionRequest request) async {
     // Acquire writer intent before reading action or inventory state.
     await _database.customUpdate(
-      'UPDATE app_settings SET updated_at = updated_at WHERE key = ?',
+      phoneDoseWriterIntentSql,
       variables: [Variable<String>('_phone_dose_writer_intent')],
     );
     final occurrence = request.occurrence;

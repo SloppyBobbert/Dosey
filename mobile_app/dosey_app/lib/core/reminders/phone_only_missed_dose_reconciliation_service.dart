@@ -79,16 +79,15 @@ class PhoneOnlyMissedDoseReconciliationService {
     String timezoneId,
   ) async {
     await _database.customUpdate(
-      'UPDATE app_settings SET updated_at = updated_at WHERE key = ?',
+      phoneDoseWriterIntentSql,
       variables: [Variable<String>('_phone_dose_writer_intent')],
     );
     final observedAt = _requireUtc(_now());
     final checkpointRow = await (_database.select(
       _database.appSettings,
     )..where((row) => row.key.equals(checkpointKey))).getSingleOrNull();
-    final schedules = await (_database.select(
-      _database.reminderSchedules,
-    )..orderBy([(row) => OrderingTerm.asc(row.id)])).get();
+    final schedules = await _database.select(_database.reminderSchedules).get();
+    schedules.sort((left, right) => left.id.compareTo(right.id));
     final current = _currentSchedules(schedules);
     final checkpoint = _Checkpoint.tryDecode(checkpointRow?.value);
     final trusted =
