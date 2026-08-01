@@ -46,6 +46,7 @@ dependencies:
   package_info_plus: ^9.0.1
   appwrite: ^25.3.0
   sqlite3: ^3.3.2
+  battery_plus: 7.1.1
 
 dev_dependencies:
   flutter_test:
