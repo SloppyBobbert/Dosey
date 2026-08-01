@@ -27,11 +27,13 @@ class PhoneDoseActionRequest {
     required this.kind,
     required this.deviceId,
     required this.occurredAt,
+    this.intentToken,
   });
   final ReminderOccurrence occurrence;
   final PhoneDoseActionKind kind;
   final String deviceId;
   final DateTime occurredAt;
+  final String? intentToken;
 }
 
 class PhoneDoseActionResult {
@@ -56,6 +58,7 @@ class PhoneDoseActionService {
     if (!request.occurredAt.isUtc) {
       throw ArgumentError.value(request.occurredAt, 'occurredAt');
     }
+    _canonicalIntentToken(request);
     for (var attempt = 0; attempt < 4; attempt++) {
       try {
         return await _database.transaction(() => _record(request));
@@ -74,7 +77,13 @@ class PhoneDoseActionService {
       variables: [Variable<String>('_phone_dose_writer_intent')],
     );
     final occurrence = request.occurrence;
-    final key = _idempotencyKey(request.deviceId, occurrence, request.kind);
+    final token = _canonicalIntentToken(request);
+    final key = _idempotencyKey(
+      request.deviceId,
+      occurrence,
+      request.kind,
+      token,
+    );
     final existing = await (_database.select(
       _database.phoneDoseActionEvents,
     )..where((row) => row.idempotencyKey.equals(key))).getSingleOrNull();
@@ -137,7 +146,7 @@ class PhoneDoseActionService {
         );
       }
     }
-    final id = _eventId(request.deviceId, occurrence, request.kind);
+    final id = _eventId(request.deviceId, occurrence, request.kind, token);
     final occurredAt = _normalizeOccurredAt(request.occurredAt);
     await _database
         .into(_database.phoneDoseActionEvents)
@@ -213,8 +222,9 @@ class PhoneDoseActionService {
     bool allowDeviceDifference = false,
   }) {
     final o = request.occurrence;
-    final expectedKey = _idempotencyKey(row.deviceId, o, request.kind);
-    final expectedId = _eventId(row.deviceId, o, request.kind);
+    final token = _canonicalIntentToken(request);
+    final expectedKey = _idempotencyKey(row.deviceId, o, request.kind, token);
+    final expectedId = _eventId(row.deviceId, o, request.kind, token);
     if (row.id != expectedId ||
         row.idempotencyKey != expectedKey ||
         (!allowDeviceDifference && row.deviceId != request.deviceId) ||
@@ -243,15 +253,21 @@ class PhoneDoseActionService {
     String deviceId,
     ReminderOccurrence occurrence,
     PhoneDoseActionKind kind,
+    String? token,
   ) => _id(
     'dose-action',
-    jsonEncode([deviceId, occurrence.id, kind.storageValue]),
+    jsonEncode(
+      token == null
+          ? [deviceId, occurrence.id, kind.storageValue]
+          : [deviceId, token],
+    ),
   );
 
   static String _eventId(
     String deviceId,
     ReminderOccurrence occurrence,
     PhoneDoseActionKind kind,
+    String? token,
   ) => _id(
     'event',
     jsonEncode([
@@ -265,8 +281,26 @@ class PhoneDoseActionService {
       occurrence.medicationId,
       occurrence.profileId,
       kind.storageValue,
+      ...?(token == null ? null : [token]),
     ]),
   );
+
+  static String? _canonicalIntentToken(PhoneDoseActionRequest request) {
+    final requiresToken =
+        request.kind == PhoneDoseActionKind.snoozed ||
+        request.kind == PhoneDoseActionKind.helpRequested;
+    final token = request.intentToken?.trim();
+    if (requiresToken) {
+      if (token == null || token.isEmpty || token.length > 128) {
+        throw ArgumentError.value(request.intentToken, 'intentToken');
+      }
+      return token;
+    }
+    if (token != null) {
+      throw ArgumentError.value(request.intentToken, 'intentToken');
+    }
+    return null;
+  }
 
   static String _id(String prefix, String input) {
     const seeds = [0x811c9dc5, 0x9e3779b9, 0x85ebca6b, 0xc2b2ae35];

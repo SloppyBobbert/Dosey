@@ -158,15 +158,17 @@ void main() {
       final first = await service.record(
         _request(
           _occurrence(1, scheduleId: 'schedule'),
-          PhoneDoseActionKind.helpRequested,
+          PhoneDoseActionKind.snoozed,
           deviceId: 'device:a',
+          intentToken: 'intent',
         ),
       );
       final second = await service.record(
         _request(
           _occurrence(1, scheduleId: 'a:schedule'),
-          PhoneDoseActionKind.helpRequested,
+          PhoneDoseActionKind.snoozed,
           deviceId: 'device',
+          intentToken: 'a:intent',
         ),
       );
 
@@ -297,6 +299,166 @@ void main() {
       );
     },
   );
+
+  test(
+    'intent token validation rejects invalid and forbidden tokens',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _seedPrescription(database, available: 1, remaining: 1);
+      final service = PhoneDoseActionService(database);
+      for (final kind in [
+        PhoneDoseActionKind.snoozed,
+        PhoneDoseActionKind.helpRequested,
+      ]) {
+        for (final token in <String?>[null, '', ' ', 'x' * 129]) {
+          await expectLater(
+            service.record(_request(_occurrence(1), kind, intentToken: token)),
+            throwsArgumentError,
+          );
+        }
+      }
+      for (final kind in [
+        PhoneDoseActionKind.takenConfirmed,
+        PhoneDoseActionKind.skipped,
+        PhoneDoseActionKind.missed,
+        PhoneDoseActionKind.missedAcknowledged,
+      ]) {
+        await expectLater(
+          service.record(_request(_occurrence(1), kind, intentToken: 'intent')),
+          throwsArgumentError,
+        );
+      }
+      final prescription = await database
+          .select(database.prescriptions)
+          .getSingle();
+      expect(prescription.availableDoses, 1);
+      expect(prescription.remainingDoses, 1);
+      expect(
+        await database.select(database.phoneDoseActionEvents).get(),
+        isEmpty,
+      );
+      expect(await database.select(database.doseLogEvents).get(), isEmpty);
+      expect(
+        await database.select(database.syncOutboxMutations).get(),
+        isEmpty,
+      );
+    },
+  );
+
+  test('canonical intent replay trims token and reuses effects', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final service = PhoneDoseActionService(database);
+    final occurrence = _occurrence(1);
+    final first = await service.record(
+      _request(
+        occurrence,
+        PhoneDoseActionKind.snoozed,
+        intentToken: ' intent-1 ',
+      ),
+    );
+    final replay = await service.record(
+      _request(
+        occurrence,
+        PhoneDoseActionKind.snoozed,
+        intentToken: 'intent-1',
+        occurredAt: _time(2),
+      ),
+    );
+    expect(replay.inserted, isFalse);
+    expect(replay.eventId, first.eventId);
+    expect(replay.occurredAt, first.occurredAt);
+    expect(
+      await database.select(database.phoneDoseActionEvents).get(),
+      hasLength(1),
+    );
+    expect(await database.select(database.doseLogEvents).get(), hasLength(1));
+    expect(
+      await database.select(database.syncOutboxMutations).get(),
+      hasLength(1),
+    );
+  });
+
+  test('different Snooze tokens create independent effects', () async {
+    await _expectDistinctTokenEffects(PhoneDoseActionKind.snoozed);
+  });
+
+  test('different Help tokens create independent effects', () async {
+    await _expectDistinctTokenEffects(PhoneDoseActionKind.helpRequested);
+  });
+
+  test('reusing a token for Snooze then Help fails closed', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final service = PhoneDoseActionService(database);
+    final occurrence = _occurrence(1);
+    await service.record(
+      _request(occurrence, PhoneDoseActionKind.snoozed, intentToken: 'intent'),
+    );
+    await expectLater(
+      service.record(
+        _request(
+          occurrence,
+          PhoneDoseActionKind.helpRequested,
+          intentToken: 'intent',
+        ),
+      ),
+      throwsStateError,
+    );
+    await _expectOneTokenEffect(database);
+  });
+
+  test('reusing a token for another occurrence fails closed', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final service = PhoneDoseActionService(database);
+    await service.record(
+      _request(
+        _occurrence(1),
+        PhoneDoseActionKind.snoozed,
+        intentToken: 'intent',
+      ),
+    );
+    await expectLater(
+      service.record(
+        _request(
+          _occurrence(2),
+          PhoneDoseActionKind.snoozed,
+          intentToken: 'intent',
+        ),
+      ),
+      throwsStateError,
+    );
+    await _expectOneTokenEffect(database);
+  });
+
+  test('device-scoped token namespaces allow independent effects', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    final service = PhoneDoseActionService(database);
+    final occurrence = _occurrence(1);
+    await service.record(
+      _request(occurrence, PhoneDoseActionKind.snoozed, intentToken: 'intent'),
+    );
+    await service.record(
+      _request(
+        occurrence,
+        PhoneDoseActionKind.snoozed,
+        intentToken: 'intent',
+        deviceId: 'device-2',
+      ),
+    );
+    expect(
+      await database.select(database.phoneDoseActionEvents).get(),
+      hasLength(2),
+    );
+    expect(await database.select(database.doseLogEvents).get(), hasLength(2));
+    expect(
+      await database.select(database.syncOutboxMutations).get(),
+      hasLength(2),
+    );
+  });
 
   test(
     'opposite terminals conflict while nonterminal actions coexist',
@@ -561,12 +723,21 @@ PhoneDoseActionRequest _request(
   PhoneDoseActionKind kind, {
   String deviceId = 'device-1',
   DateTime? occurredAt,
+  Object? intentToken = _intentTokenUnspecified,
 }) => PhoneDoseActionRequest(
   occurrence: occurrence,
   kind: kind,
   deviceId: deviceId,
   occurredAt: occurredAt ?? _time(1),
+  intentToken: intentToken == _intentTokenUnspecified
+      ? (kind == PhoneDoseActionKind.snoozed ||
+                kind == PhoneDoseActionKind.helpRequested
+            ? 'intent:${kind.storageValue}'
+            : null)
+      : intentToken as String?,
 );
+
+const _intentTokenUnspecified = Object();
 
 DateTime _time(int minute) => DateTime.utc(2026, 1, 1, 16, minute);
 
@@ -591,6 +762,34 @@ Future<void> _seedPrescription(
         updatedAt: DateTime.utc(2026),
       ),
     );
+
+Future<void> _expectDistinctTokenEffects(PhoneDoseActionKind kind) async {
+  final database = DoseyDatabase.inMemory();
+  addTearDown(database.close);
+  final service = PhoneDoseActionService(database);
+  await service.record(_request(_occurrence(1), kind, intentToken: 'intent-1'));
+  await service.record(_request(_occurrence(1), kind, intentToken: 'intent-2'));
+  final events = await database.select(database.phoneDoseActionEvents).get();
+  final outbox = await database.select(database.syncOutboxMutations).get();
+  expect(events, hasLength(2));
+  expect(await database.select(database.doseLogEvents).get(), hasLength(2));
+  expect(outbox, hasLength(2));
+  expect(events.map((row) => row.id).toSet(), hasLength(2));
+  expect(events.map((row) => row.idempotencyKey).toSet(), hasLength(2));
+  expect(outbox.map((row) => row.mutationId).toSet(), hasLength(2));
+}
+
+Future<void> _expectOneTokenEffect(DoseyDatabase database) async {
+  expect(
+    await database.select(database.phoneDoseActionEvents).get(),
+    hasLength(1),
+  );
+  expect(await database.select(database.doseLogEvents).get(), hasLength(1));
+  expect(
+    await database.select(database.syncOutboxMutations).get(),
+    hasLength(1),
+  );
+}
 
 SqliteException _sqliteError(int code) => SqliteException(
   extendedResultCode: code,
