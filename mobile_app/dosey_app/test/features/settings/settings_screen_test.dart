@@ -37,6 +37,117 @@ import '../../support/fake_cloud_identity_gateway.dart';
 import '../../support/settings_accordion_test_helper.dart';
 
 void main() {
+  testWidgets(
+    'Help & About opens GitHub only after an explicit report confirmation',
+    (tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      await _markOnboardingComplete(
+        database,
+        role: AppDeviceRole.androidPersonal,
+      );
+      final openedUrls = <Uri>[];
+
+      await tester.pumpWidget(
+        _TestSettingsApp(
+          database: database,
+          buildProfile: AppBuildProfile.personal,
+          sectionTarget: SettingsSection.helpAbout,
+          externalUrlOpener: (url) async {
+            openedUrls.add(url);
+            return true;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final githubRow = tester.widget<ListTile>(
+        find.widgetWithText(ListTile, 'View Dosey on GitHub'),
+      );
+      final reportRow = tester.widget<ListTile>(
+        find.widgetWithText(ListTile, 'Report a problem'),
+      );
+      expect(githubRow.onTap, isNotNull);
+      expect(reportRow.onTap, isNotNull);
+
+      await tester.tap(find.text('View Dosey on GitHub'));
+      await tester.pumpAndSettle();
+      expect(
+        openedUrls.single.toString(),
+        'https://github.com/SloppyBobbert/Dosey',
+      );
+
+      await tester.tap(find.text('Report a problem'));
+      await tester.pumpAndSettle();
+      expect(find.text('GitHub issues are public'), findsOneWidget);
+      expect(
+        find.textContaining('medication names or details'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Nothing is auto-submitted.'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(openedUrls, hasLength(1));
+
+      await tester.tap(find.text('Report a problem'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Continue to GitHub'));
+      await tester.pumpAndSettle();
+      expect(
+        openedUrls.last.toString(),
+        'https://github.com/SloppyBobbert/Dosey/issues/new/choose',
+      );
+    },
+  );
+
+  testWidgets('Help & About reports a false GitHub launch result', (
+    tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.personal,
+        sectionTarget: SettingsSection.helpAbout,
+        externalUrlOpener: (_) async => false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View Dosey on GitHub'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not open GitHub.'), findsOneWidget);
+  });
+
+  testWidgets('Help & About reports a thrown GitHub launch failure', (
+    tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await _markOnboardingComplete(
+      database,
+      role: AppDeviceRole.androidPersonal,
+    );
+
+    await tester.pumpWidget(
+      _TestSettingsApp(
+        database: database,
+        buildProfile: AppBuildProfile.personal,
+        sectionTarget: SettingsSection.helpAbout,
+        externalUrlOpener: (_) async => throw StateError('unavailable'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('View Dosey on GitHub'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not open GitHub.'), findsOneWidget);
+  });
+
   testWidgets('personal settings show compact collapsed daily groups', (
     WidgetTester tester,
   ) async {
@@ -2204,6 +2315,7 @@ class _TestSettingsApp extends StatelessWidget {
     this.gateAccountId,
     this.buildProfile,
     this.robotPhoneSetupGateway,
+    this.externalUrlOpener,
   });
 
   final DoseyDatabase database;
@@ -2221,6 +2333,7 @@ class _TestSettingsApp extends StatelessWidget {
   final String? gateAccountId;
   final AppBuildProfile? buildProfile;
   final RobotPhoneSetupGateway? robotPhoneSetupGateway;
+  final ExternalUrlOpener? externalUrlOpener;
 
   @override
   Widget build(BuildContext context) {
@@ -2249,6 +2362,7 @@ class _TestSettingsApp extends StatelessWidget {
               onMaintenanceRequestAcknowledged:
                   onMaintenanceRequestAcknowledged,
               previewVoicePlayer: previewVoicePlayer,
+              externalUrlOpener: externalUrlOpener,
             ),
           );
           final accountId = gateAccountId;

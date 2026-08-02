@@ -29,9 +29,16 @@ import 'package:dosey_app/features/settings/robot_phone_setup_screen.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 part 'settings_backup_card.dart';
 part 'maintenance_screen.dart';
+
+typedef ExternalUrlOpener = Future<bool> Function(Uri url);
+
+Future<bool> openExternalUrl(Uri url) {
+  return launchUrl(url, mode: LaunchMode.externalApplication);
+}
 
 enum SettingsSection {
   account,
@@ -62,12 +69,14 @@ class SettingsScreen extends StatefulWidget {
     this.openMaintenanceRequest = 0,
     this.onMaintenanceRequestAcknowledged,
     this.previewVoicePlayer,
+    this.externalUrlOpener,
   });
 
   final SettingsSection? sectionTarget;
   final int openMaintenanceRequest;
   final ValueChanged<int>? onMaintenanceRequestAcknowledged;
   final DoseyVoicePlayer? previewVoicePlayer;
+  final ExternalUrlOpener? externalUrlOpener;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -402,7 +411,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _targeted(SettingsSection.helpAbout, _HelpAboutCard()),
+                      _targeted(
+                        SettingsSection.helpAbout,
+                        _HelpAboutCard(
+                          externalUrlOpener: widget.externalUrlOpener,
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       _targeted(SettingsSection.safety, _SafetyCard()),
                       const SizedBox(height: 12),
@@ -2839,37 +2853,88 @@ class _SafetyCard extends StatelessWidget {
 }
 
 class _HelpAboutCard extends StatelessWidget {
-  const _HelpAboutCard();
+  const _HelpAboutCard({this.externalUrlOpener});
 
   static const _appVersion = String.fromEnvironment(
     'DOSEY_APP_VERSION',
     defaultValue: '1.0.0+1',
   );
   static const _githubUrl = 'https://github.com/SloppyBobbert/Dosey';
+  static final _githubUri = Uri.parse(_githubUrl);
+  static final _issueChooserUri = Uri.parse('$_githubUrl/issues/new/choose');
+  final ExternalUrlOpener? externalUrlOpener;
 
   @override
   Widget build(BuildContext context) {
-    return const _SettingsSectionCard(
+    return _SettingsSectionCard(
       icon: Icons.help_outline,
       title: 'Help & About',
       children: [
-        Text('Dosey $_appVersion'),
-        SizedBox(height: 8),
-        Text(
+        const Text('Dosey $_appVersion'),
+        const SizedBox(height: 8),
+        const Text(
           'This prototype is not a medical-grade device. Test only with fake pills, candy, beads, dry beans, or vitamins.',
         ),
-        SizedBox(height: 8),
-        Text(
+        const SizedBox(height: 8),
+        const Text(
           'If a dose was missed, follow your prescription instructions or ask your caregiver, pharmacist, or doctor. Do not double dose unless your prescription instructions say to.',
         ),
-        SizedBox(height: 8),
-        Text('Caregiver sharing and cloud sync are not active yet.'),
-        SizedBox(height: 8),
-        Text('GitHub: $_githubUrl'),
-        SizedBox(height: 4),
-        SelectableText(_githubUrl),
+        const SizedBox(height: 8),
+        const Text('Caregiver sharing and cloud sync are not active yet.'),
+        const Divider(),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.open_in_new),
+          title: const Text('View Dosey on GitHub'),
+          subtitle: const Text(_githubUrl),
+          onTap: () => _open(context, _githubUri),
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.report_problem_outlined),
+          title: const Text('Report a problem'),
+          subtitle: const Text('Review public issue privacy guidance first.'),
+          onTap: () => _confirmReportProblem(context),
+        ),
       ],
     );
+  }
+
+  Future<void> _confirmReportProblem(BuildContext context) async {
+    final continueToGitHub = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('GitHub issues are public'),
+        content: const Text(
+          'GitHub issues are public; do not include medication names or details, health information, contact details, pairing codes, or private screenshots. Nothing is auto-submitted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Continue to GitHub'),
+          ),
+        ],
+      ),
+    );
+    if (continueToGitHub == true && context.mounted) {
+      await _open(context, _issueChooserUri);
+    }
+  }
+
+  Future<void> _open(BuildContext context, Uri url) async {
+    try {
+      final opened = await (externalUrlOpener ?? openExternalUrl)(url);
+      if (!opened) throw StateError('External URL was not opened.');
+    } on Object {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Could not open GitHub.')));
+    }
   }
 }
 

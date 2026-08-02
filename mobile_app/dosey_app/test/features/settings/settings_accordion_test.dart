@@ -30,6 +30,10 @@ void main() {
     );
 
     expect(find.text('Dose history'), findsNothing);
+    expect(
+      tester.getSize(find.byType(InkWell)).height,
+      greaterThanOrEqualTo(48),
+    );
     final collapsed = tester.getSemantics(find.text('History & data'));
     expect(collapsed.label, 'History & data');
     expect(collapsed.flagsCollection.isButton, isTrue);
@@ -46,7 +50,42 @@ void main() {
           .isExpanded,
       Tristate.isTrue,
     );
+    await tester.tap(find.text('History & data'));
+    await tester.pumpAndSettle();
+    expect(find.text('Dose history'), findsNothing);
     disposeSemantics();
+  });
+
+  testWidgets('wraps a long title at 200 percent without losing the chevron', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            child: MediaQuery(
+              data: MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: SettingsAccordion(
+                title:
+                    'Medication reminders, notification preferences, and history',
+                child: Text('Expanded content'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.expand_more), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.tap(
+      find.text('Medication reminders, notification preferences, and history'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.expand_less), findsOneWidget);
+    expect(find.text('Expanded content'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('accordions expand independently', (tester) async {
