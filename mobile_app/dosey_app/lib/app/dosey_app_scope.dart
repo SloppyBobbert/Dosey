@@ -243,7 +243,9 @@ class _DoseyAppScopeState extends State<DoseyAppScope>
       gateway: _database.isDemo
           ? const DemoBackupFileGateway()
           : widget.backupFileGateway ?? const PluginBackupFileGateway(),
-      syncNotifications: reminderSchedules.syncScheduledNotifications,
+      syncNotifications: () async {
+        await reminderSchedules.syncScheduledNotifications();
+      },
     );
     final robotFaceSettings = RobotFaceSettingsRepository(_database);
     final scheduleProfiles = LocalScheduleProfileRepository(_database);

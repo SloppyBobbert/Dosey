@@ -257,7 +257,7 @@ void main() {
         ),
       ]);
 
-      await service.syncScheduledNotifications();
+      final result = await service.syncScheduledNotifications();
 
       expect(scheduler.permissionRequests, 0);
       expect(scheduler.scheduledReminders, [
@@ -276,6 +276,9 @@ void main() {
       ]);
       expect(scheduler.cancelledDoseIds, ['paused-dose']);
       expect(repository.operations, isEmpty);
+      expect(result.attemptedCount, 3);
+      expect(result.succeededCount, 3);
+      expect(result.hasFailures, isFalse);
     },
   );
 
@@ -297,20 +300,22 @@ void main() {
       ),
     );
 
-    await service.syncScheduledNotifications();
+    final result = await service.syncScheduledNotifications();
 
     expect(scheduler.permissionRequests, 0);
     expect(scheduler.scheduledReminders, isEmpty);
     expect(scheduler.cancelledDoseIds, ['paused-dose']);
+    expect(result.attemptedCount, 1);
+    expect(result.succeededCount, 1);
   });
 
   test('startup sync continues after individual scheduler failures', () async {
     final repository = _FakeReminderRepository();
+    final cancelError = Exception('cancel failed');
+    final scheduleError = Exception('schedule failed');
     final scheduler = _FakeReminderScheduler()
-      ..cancelErrorsByDoseId['paused-dose'] = Exception('cancel failed')
-      ..scheduleErrorsByDoseId['morning-vitamin'] = Exception(
-        'schedule failed',
-      );
+      ..cancelErrorsByDoseId['paused-dose'] = cancelError
+      ..scheduleErrorsByDoseId['morning-vitamin'] = scheduleError;
     final service = ReminderScheduleService(
       repository: repository,
       scheduler: scheduler,
@@ -347,7 +352,7 @@ void main() {
       ),
     ]);
 
-    await service.syncScheduledNotifications();
+    final result = await service.syncScheduledNotifications();
 
     expect(scheduler.cancelledDoseIds, ['disabled-dose']);
     expect(scheduler.scheduledReminders, [
@@ -358,6 +363,76 @@ void main() {
         repeatsDaily: true,
       ),
     ]);
+    expect(result.attemptedCount, 4);
+    expect(result.succeededCount, 2);
+    expect(result.failures.map((failure) => failure.scheduleId), [
+      'paused-dose',
+      'morning-vitamin',
+    ]);
+    expect(result.failures.map((failure) => failure.operation), [
+      NotificationRepairOperation.cancel,
+      NotificationRepairOperation.schedule,
+    ]);
+    expect(result.failures[0].error, same(cancelError));
+    expect(result.failures[1].error, same(scheduleError));
+    expect(
+      result.failures.every(
+        (failure) => failure.stackTrace.toString().isNotEmpty,
+      ),
+      isTrue,
+    );
+  });
+
+  test('startup sync lets repository read failures escape', () async {
+    final repository = _FakeReminderRepository()
+      ..watchError = StateError('database unavailable');
+    final service = ReminderScheduleService(
+      repository: repository,
+      scheduler: _FakeReminderScheduler(),
+    );
+    await expectLater(service.syncScheduledNotifications(), throwsStateError);
+  });
+
+  test('startup sync lets scheduler StateErrors escape', () async {
+    final repository = _FakeReminderRepository()
+      ..savedSchedules.add(
+        _schedule(
+          id: 'morning-dose',
+          label: 'Morning dose',
+          hour: 8,
+          minute: 0,
+          isEnabled: true,
+        ),
+      );
+    final scheduler = _FakeReminderScheduler()
+      ..scheduleErrorsByDoseId['morning-dose'] = StateError('programming bug');
+    final service = ReminderScheduleService(
+      repository: repository,
+      scheduler: scheduler,
+    );
+    await expectLater(service.syncScheduledNotifications(), throwsStateError);
+  });
+
+  test('notification repair exception retains its result', () {
+    final result = NotificationRepairResult(
+      attemptedCount: 1,
+      succeededCount: 0,
+      failures: [
+        NotificationRepairFailure(
+          scheduleId: 'dose',
+          operation: NotificationRepairOperation.schedule,
+          error: StateError('failed'),
+          stackTrace: StackTrace.current,
+        ),
+      ],
+    );
+    final exception = NotificationRepairException(result);
+    expect(exception.result, same(result));
+    expect(exception.toString(), contains('1 schedule'));
+    expect(
+      () => result.failures.add(result.failures.single),
+      throwsUnsupportedError,
+    );
   });
 
   test('delete keeps schedule when notification cancel fails', () async {
@@ -464,9 +539,12 @@ class _FakeReminderRepository implements ReminderRepository {
   final deletedScheduleIds = <String>[];
   final operations = <String>[];
   List<String>? sharedOperations;
+  Object? watchError;
 
   @override
   Stream<List<ReminderSchedule>> watchSchedules({String? profileId}) {
+    final error = watchError;
+    if (error != null) return Stream<List<ReminderSchedule>>.error(error);
     return Stream<List<ReminderSchedule>>.value(savedSchedules);
   }
 

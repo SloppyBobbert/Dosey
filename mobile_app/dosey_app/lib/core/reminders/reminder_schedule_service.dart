@@ -34,22 +34,48 @@ class ReminderScheduleService {
     }
   }
 
-  Future<void> syncScheduledNotifications() async {
+  Future<NotificationRepairResult> syncScheduledNotifications() async {
     final schedules = await repository.watchSchedules().first;
+    var attemptedCount = 0;
+    var succeededCount = 0;
+    final failures = <NotificationRepairFailure>[];
     for (final schedule in schedules.where((schedule) => !schedule.isEnabled)) {
+      attemptedCount += 1;
       try {
         await scheduler.cancelDoseReminder(schedule.id);
-      } on Exception {
-        // Startup reconciliation is best-effort; keep processing other schedules.
+        succeededCount += 1;
+      } on Exception catch (error, stackTrace) {
+        failures.add(
+          NotificationRepairFailure(
+            scheduleId: schedule.id,
+            operation: NotificationRepairOperation.cancel,
+            error: error,
+            stackTrace: stackTrace,
+          ),
+        );
       }
     }
     for (final schedule in schedules.where((schedule) => schedule.isEnabled)) {
+      attemptedCount += 1;
       try {
         await _scheduleNotification(schedule);
-      } on Exception {
-        // Startup reconciliation is best-effort; keep processing other schedules.
+        succeededCount += 1;
+      } on Exception catch (error, stackTrace) {
+        failures.add(
+          NotificationRepairFailure(
+            scheduleId: schedule.id,
+            operation: NotificationRepairOperation.schedule,
+            error: error,
+            stackTrace: stackTrace,
+          ),
+        );
       }
     }
+    return NotificationRepairResult(
+      attemptedCount: attemptedCount,
+      succeededCount: succeededCount,
+      failures: failures,
+    );
   }
 
   Future<ReminderScheduleSaveResult> sendTestNotification() async {
@@ -110,6 +136,43 @@ class ReminderScheduleService {
     // immediately on save/startup.
     return today.add(const Duration(days: 1));
   }
+}
+
+enum NotificationRepairOperation { cancel, schedule }
+
+class NotificationRepairFailure {
+  const NotificationRepairFailure({
+    required this.scheduleId,
+    required this.operation,
+    required this.error,
+    required this.stackTrace,
+  });
+
+  final String scheduleId;
+  final NotificationRepairOperation operation;
+  final Object error;
+  final StackTrace stackTrace;
+}
+
+class NotificationRepairResult {
+  NotificationRepairResult({
+    required this.attemptedCount,
+    required this.succeededCount,
+    required List<NotificationRepairFailure> failures,
+  }) : failures = List.unmodifiable(failures);
+
+  final int attemptedCount;
+  final int succeededCount;
+  final List<NotificationRepairFailure> failures;
+  bool get hasFailures => failures.isNotEmpty;
+}
+
+class NotificationRepairException implements Exception {
+  const NotificationRepairException(this.result);
+  final NotificationRepairResult result;
+  @override
+  String toString() =>
+      'Notification repair failed for ${result.failures.length} schedule(s).';
 }
 
 class ReminderScheduleSaveResult {
