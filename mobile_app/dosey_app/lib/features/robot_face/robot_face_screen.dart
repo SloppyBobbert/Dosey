@@ -1577,10 +1577,39 @@ class _RobotFaceActionPanel extends StatefulWidget {
 
 class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
   bool _isSubmitting = false;
+  String? _latestNonNullActionDoseId;
+  int _nonNullActionDoseGeneration = 0;
   // Widget-lifetime local lockout for actions already completed on the
   // currently rendered dose state.
   final Map<String, Set<RobotFaceActionKind>> _completedActionsByDoseId =
       <String, Set<RobotFaceActionKind>>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _observeNonNullActionDoseId(widget.state.actionDoseId);
+  }
+
+  @override
+  void didUpdateWidget(covariant _RobotFaceActionPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final actionDoseId = widget.state.actionDoseId;
+    _observeNonNullActionDoseId(actionDoseId);
+    if (actionDoseId == null || oldWidget.state.actionDoseId == actionDoseId) {
+      return;
+    }
+    _completedActionsByDoseId.removeWhere(
+      (doseId, _) => doseId != actionDoseId,
+    );
+  }
+
+  void _observeNonNullActionDoseId(String? actionDoseId) {
+    if (actionDoseId == null || actionDoseId == _latestNonNullActionDoseId) {
+      return;
+    }
+    _latestNonNullActionDoseId = actionDoseId;
+    _nonNullActionDoseGeneration += 1;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1795,17 +1824,18 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     if (actionDoseId == null) {
       return;
     }
+    final submissionGeneration = _nonNullActionDoseGeneration;
     final submissionActions = Set<RobotFaceActionKind>.of(
       widget.state.availableActions,
     );
-
     if (_isTerminalAction(actionKind) && !await authorizeActionPin(context)) {
       return;
     }
     if (!context.mounted) {
       return;
     }
-    if (widget.state.actionDoseId != actionDoseId ||
+    if (_nonNullActionDoseGeneration != submissionGeneration ||
+        widget.state.actionDoseId != actionDoseId ||
         !widget.state.availableActions.contains(actionKind)) {
       return;
     }
@@ -1829,6 +1859,9 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
       }
       if (mounted) {
         setState(() {
+          if (_nonNullActionDoseGeneration != submissionGeneration) {
+            return;
+          }
           final completedActions = _completedActionsForDose(actionDoseId);
           if (_isTerminalAction(actionKind)) {
             // A terminal outcome resolves the dose; suppress every local action
@@ -1862,12 +1895,14 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     if (_isSubmitting) return;
     final actionDoseId = widget.state.actionDoseId;
     if (actionDoseId == null) return;
+    final submissionGeneration = _nonNullActionDoseGeneration;
     final submissionActions = Set<RobotFaceActionKind>.of(
       widget.state.availableActions,
     );
     if (!await authorizeActionPin(context)) return;
     if (!context.mounted) return;
-    if (widget.state.actionDoseId != actionDoseId ||
+    if (_nonNullActionDoseGeneration != submissionGeneration ||
+        widget.state.actionDoseId != actionDoseId ||
         !widget.state.availableActions.contains(
           RobotFaceActionKind.confirmTaken,
         )) {
@@ -1887,6 +1922,9 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           );
       if (!logged || !context.mounted) return;
       setState(() {
+        if (_nonNullActionDoseGeneration != submissionGeneration) {
+          return;
+        }
         _completedActionsForDose(actionDoseId).addAll(submissionActions);
       });
     } on Object catch (error) {

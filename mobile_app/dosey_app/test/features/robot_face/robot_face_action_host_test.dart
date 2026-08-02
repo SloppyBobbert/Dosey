@@ -29,6 +29,26 @@ void main() {
     actionDoseId: 'dose-1',
     availableActions: {RobotFaceActionKind.confirmTaken},
   );
+  const helpState = RobotFaceState(
+    mode: RobotFaceMode.waitingForConfirmation,
+    nextEventLabel: 'Taken? · Morning meds',
+    isFlipped: false,
+    isLandscapeOnly: true,
+    rampProgress: 1,
+    isInAwakeWindow: true,
+    actionDoseId: 'dose-1',
+    availableActions: {RobotFaceActionKind.askForHelp},
+  );
+  const skipState = RobotFaceState(
+    mode: RobotFaceMode.waitingForConfirmation,
+    nextEventLabel: 'Taken? · Morning meds',
+    isFlipped: false,
+    isLandscapeOnly: true,
+    rampProgress: 1,
+    isInAwakeWindow: true,
+    actionDoseId: 'dose-1',
+    availableActions: {RobotFaceActionKind.skipDose},
+  );
 
   testWidgets(
     'keeps the action panel State mounted while actions hide and show',
@@ -54,7 +74,6 @@ void main() {
           find.byKey(RobotFaceScreen.confirmTakenButtonKey),
           findsOneWidget,
         );
-
         states.add(readyState.copyWith(availableActions: const {}));
         await tester.pump();
 
@@ -68,7 +87,6 @@ void main() {
           findsNothing,
         );
         expect(find.bySemanticsLabel('I can see it and took it'), findsNothing);
-
         states.add(readyState);
         await tester.pump();
 
@@ -80,6 +98,66 @@ void main() {
       } finally {
         semantics.dispose();
       }
+    },
+  );
+
+  testWidgets('hidden retained Confirm cannot retain or receive focus', (
+    tester,
+  ) async {
+    final states = StreamController<RobotFaceState>.broadcast();
+    addTearDown(states.close);
+
+    await tester.pumpWidget(_ActionHostTestApp(stateStream: states.stream));
+    states.add(readyState);
+    await tester.pump();
+
+    final confirmFocus = Focus.of(
+      tester.element(find.text('I can see it and took it')),
+      scopeOk: false,
+    );
+    expect(confirmFocus.canRequestFocus, isTrue);
+    confirmFocus.requestFocus();
+    await tester.pump();
+    expect(confirmFocus.hasFocus, isTrue);
+
+    states.add(
+      readyState.copyWith(actionDoseId: null, availableActions: const {}),
+    );
+    await tester.pump();
+
+    expect(confirmFocus.hasFocus, isFalse);
+    expect(confirmFocus.canRequestFocus, isFalse);
+    confirmFocus.requestFocus();
+    await tester.pump();
+    expect(confirmFocus.hasFocus, isFalse);
+    expect(FocusManager.instance.primaryFocus, isNot(same(confirmFocus)));
+  });
+
+  testWidgets(
+    'does not duplicate a nonterminal help submission before rebuild',
+    (tester) async {
+      final states = StreamController<RobotFaceState>.broadcast();
+      final logger = _DelayedDoseActionLogger();
+      addTearDown(states.close);
+
+      await tester.pumpWidget(
+        _ActionHostTestApp(
+          stateStream: states.stream,
+          doseActionLogger: logger.call,
+        ),
+      );
+      states.add(helpState);
+      await tester.pump();
+
+      final help = find.byKey(RobotFaceScreen.needHelpButtonKey);
+      final onPressed = tester.widget<FilledButton>(help).onPressed!;
+      onPressed();
+      onPressed();
+      await tester.pump();
+
+      expect(logger.calls, 1);
+      logger.complete();
+      await tester.pump();
     },
   );
 
@@ -101,7 +179,9 @@ void main() {
 
     await tester.tap(find.byKey(RobotFaceScreen.confirmTakenButtonKey));
     await tester.pump();
-    states.add(readyState.copyWith(availableActions: const {}));
+    states.add(
+      readyState.copyWith(actionDoseId: null, availableActions: const {}),
+    );
     await tester.pump();
 
     logger.complete();
@@ -181,7 +261,9 @@ void main() {
       await tester.pump();
       expect(find.text('Enter Action PIN'), findsOneWidget);
 
-      states.add(readyState.copyWith(availableActions: const {}));
+      states.add(
+        readyState.copyWith(actionDoseId: null, availableActions: const {}),
+      );
       await tester.pump();
       states.add(readyState);
       await tester.pump();
@@ -196,7 +278,7 @@ void main() {
     },
   );
 
-  testWidgets('does not continue a PIN-authorized confirm for a new dose', (
+  testWidgets('does not continue a PIN-authorized confirm after A-B-A', (
     tester,
   ) async {
     final database = DoseyDatabase.inMemory();
@@ -222,6 +304,45 @@ void main() {
     await tester.tap(find.byKey(RobotFaceScreen.confirmTakenButtonKey));
     await tester.pump();
     states.add(readyState.copyWith(actionDoseId: 'dose-2'));
+    await tester.pump();
+    states.add(readyState);
+    await tester.pump();
+
+    await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
+    await tester.tap(find.text('Continue'));
+    await tester.pump();
+
+    expect(logger.calls, 0);
+  });
+
+  testWidgets('does not continue a PIN-authorized skip after A-B-A', (
+    tester,
+  ) async {
+    final database = DoseyDatabase.inMemory();
+    final states = StreamController<RobotFaceState>.broadcast();
+    final logger = _DelayedDoseActionLogger();
+    addTearDown(database.close);
+    addTearDown(states.close);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidPersonal,
+    ).setActionPin('1234');
+
+    await tester.pumpWidget(
+      _ActionHostTestApp(
+        database: database,
+        stateStream: states.stream,
+        doseActionLogger: logger.call,
+      ),
+    );
+    states.add(skipState);
+    await tester.pump();
+
+    await tester.tap(find.byKey(RobotFaceScreen.skipDoseButtonKey));
+    await tester.pump();
+    states.add(skipState.copyWith(actionDoseId: 'dose-2'));
+    await tester.pump();
+    states.add(skipState);
     await tester.pump();
 
     await tester.enterText(find.byKey(const Key('action-pin-field')), '1234');
@@ -313,17 +434,130 @@ void main() {
       );
     },
   );
+
+  testWidgets('prunes completed lockouts after a different dose is current', (
+    tester,
+  ) async {
+    final states = StreamController<RobotFaceState>.broadcast();
+    final logger = _ImmediateVisibleAndTakenLogger();
+    addTearDown(states.close);
+
+    await tester.pumpWidget(
+      _ActionHostTestApp(
+        stateStream: states.stream,
+        visibleAndTakenLogger: logger.call,
+      ),
+    );
+    states.add(readyState);
+    await tester.pump();
+    await tester.tap(find.byKey(RobotFaceScreen.confirmTakenButtonKey));
+    await tester.pump();
+
+    states.add(readyState.copyWith(actionDoseId: 'dose-2'));
+    await tester.pump();
+    states.add(readyState);
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.byKey(RobotFaceScreen.confirmTakenButtonKey),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets(
+    'does not retain an old async completion after a newer transient dose',
+    (tester) async {
+      final states = StreamController<RobotFaceState>.broadcast();
+      final logger = _DelayedVisibleAndTakenLogger();
+      addTearDown(states.close);
+
+      await tester.pumpWidget(
+        _ActionHostTestApp(
+          stateStream: states.stream,
+          visibleAndTakenLogger: logger.call,
+        ),
+      );
+      states.add(readyState);
+      await tester.pump();
+      await tester.tap(find.byKey(RobotFaceScreen.confirmTakenButtonKey));
+      await tester.pump();
+
+      states.add(readyState.copyWith(actionDoseId: 'dose-2'));
+      await tester.pump();
+      states.add(
+        readyState.copyWith(actionDoseId: null, availableActions: const {}),
+      );
+      await tester.pump();
+      logger.complete();
+      await tester.pump();
+      states.add(readyState);
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(RobotFaceScreen.confirmTakenButtonKey),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+
+  testWidgets(
+    'does not retain old Help completion after a newer transient dose',
+    (tester) async {
+      final states = StreamController<RobotFaceState>.broadcast();
+      final logger = _DelayedDoseActionLogger();
+      addTearDown(states.close);
+
+      await tester.pumpWidget(
+        _ActionHostTestApp(
+          stateStream: states.stream,
+          doseActionLogger: logger.call,
+        ),
+      );
+      states.add(helpState);
+      await tester.pump();
+      await tester.tap(find.byKey(RobotFaceScreen.needHelpButtonKey));
+      await tester.pump();
+
+      states.add(helpState.copyWith(actionDoseId: 'dose-2'));
+      await tester.pump();
+      states.add(
+        helpState.copyWith(actionDoseId: null, availableActions: const {}),
+      );
+      await tester.pump();
+      logger.complete();
+      await tester.pump();
+      states.add(helpState);
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<FilledButton>(find.byKey(RobotFaceScreen.needHelpButtonKey))
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
 }
 
 class _ActionHostTestApp extends StatefulWidget {
   const _ActionHostTestApp({
     required this.stateStream,
     this.database,
+    this.doseActionLogger,
     this.visibleAndTakenLogger,
   });
 
   final Stream<RobotFaceState> stateStream;
   final DoseyDatabase? database;
+  final RobotFaceDoseActionLogger? doseActionLogger;
   final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
 
   @override
@@ -352,6 +586,7 @@ class _ActionHostTestAppState extends State<_ActionHostTestApp> {
       child: MaterialApp(
         home: RobotFaceScreen(
           stateStream: widget.stateStream,
+          doseActionLogger: widget.doseActionLogger,
           visibleAndTakenLogger: widget.visibleAndTakenLogger,
         ),
       ),
@@ -369,6 +604,22 @@ class _DelayedVisibleAndTakenLogger {
     required DateTime occurredAt,
     required String successMessage,
   }) {
+    calls += 1;
+    return _completion.future;
+  }
+
+  void complete() => _completion.complete(true);
+}
+
+class _DelayedDoseActionLogger {
+  final Completer<bool> _completion = Completer<bool>();
+  int calls = 0;
+
+  Future<bool> call(
+    BuildContext context,
+    DoseLogEvent event,
+    String successMessage,
+  ) {
     calls += 1;
     return _completion.future;
   }
