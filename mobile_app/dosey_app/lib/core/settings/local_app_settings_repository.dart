@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/audit/local_admin_audit_repository.dart';
+import 'package:dosey_app/core/guided_tour/guided_tour_progress.dart';
 import 'package:dosey_app/core/settings/app_theme_preference.dart';
 import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -37,9 +38,13 @@ class LocalAppSettingsRepository {
   static const _guidedTrialCompletedKey = 'guided_trial_completed';
   static const _guidedTrialCompletedAtKey = 'guided_trial_completed_at';
   static const _guidedTrialAppVersionKey = 'guided_trial_app_version';
+  static const _guidedTourVersionKey = 'guided_tour_version';
+  static const _guidedTourStateKey = 'guided_tour_state';
+  static const _guidedTourStepKey = 'guided_tour_step';
 
   final DoseyDatabase _database;
   final AppDeviceRole defaultRole;
+  Future<void> _guidedTourWriteTail = Future.value();
 
   Stream<AppThemePreference> watchThemePreference() {
     final query = _database.select(_database.appSettings)
@@ -168,6 +173,55 @@ class LocalAppSettingsRepository {
     });
   }
 
+  Future<GuidedTourProgress> readGuidedTourProgress() async {
+    await _guidedTourWriteTail;
+    final settings = await _database.getAppSettings({
+      _guidedTourVersionKey,
+      _guidedTourStateKey,
+      _guidedTourStepKey,
+    });
+    final valuesByKey = {
+      for (final setting in settings) setting.key: setting.value,
+    };
+    return GuidedTourProgress.fromStorageValues(
+      version: valuesByKey[_guidedTourVersionKey],
+      state: valuesByKey[_guidedTourStateKey],
+      step: valuesByKey[_guidedTourStepKey],
+    );
+  }
+
+  Future<void> writeGuidedTourProgress(GuidedTourProgress progress) {
+    final operation = _guidedTourWriteTail.then(
+      (_) => _writeGuidedTourProgress(progress),
+    );
+    _guidedTourWriteTail = operation.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
+    );
+    return operation;
+  }
+
+  Future<void> _writeGuidedTourProgress(GuidedTourProgress progress) {
+    final updatedAt = DateTime.now().toUtc();
+    return _database.transaction(() async {
+      await _setValueAt(
+        _guidedTourVersionKey,
+        progress.version.toString(),
+        updatedAt,
+      );
+      await _setValueAt(
+        _guidedTourStateKey,
+        progress.state.storageValue,
+        updatedAt,
+      );
+      await _setValueAt(
+        _guidedTourStepKey,
+        progress.step.toString(),
+        updatedAt,
+      );
+    });
+  }
+
   Stream<bool> watchActionPinEnabled() {
     return _database
         .watchAppSettings({_actionPinHashKey, _actionPinSaltKey})
@@ -235,13 +289,17 @@ class LocalAppSettingsRepository {
   }
 
   Future<void> _setValue(String key, String value) {
+    return _setValueAt(key, value, DateTime.now().toUtc());
+  }
+
+  Future<void> _setValueAt(String key, String value, DateTime updatedAt) {
     return _database
         .into(_database.appSettings)
         .insertOnConflictUpdate(
           AppSettingsCompanion.insert(
             key: key,
             value: value,
-            updatedAt: DateTime.now().toUtc(),
+            updatedAt: updatedAt,
           ),
         );
   }
