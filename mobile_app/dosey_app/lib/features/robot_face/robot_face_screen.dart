@@ -87,6 +87,7 @@ class RobotFaceScreen extends StatefulWidget {
   static const faceLabTourNextKey = ValueKey<String>(
     'robot-face-lab-tour-next',
   );
+  static const actionHostKey = ValueKey<String>('robot-face-action-host');
   static const actionPanelKey = ValueKey<String>('robot-face-action-panel');
   static const confirmTakenButtonKey = ValueKey<String>(
     'robot-face-confirm-taken-button',
@@ -1306,14 +1307,13 @@ class _RobotFaceStatusCard extends StatelessWidget {
               const SizedBox(height: 12),
               _RobotFaceShortageCard(state: state),
             ],
-            if (showActionPanel) ...<Widget>[
-              const SizedBox(height: 10),
-              _RobotFaceActionPanel(
-                state: state,
-                doseActionLogger: doseActionLogger,
-                visibleAndTakenLogger: visibleAndTakenLogger,
-              ),
-            ],
+            _RobotFaceActionHost(
+              key: RobotFaceScreen.actionHostKey,
+              state: state,
+              isVisible: showActionPanel,
+              doseActionLogger: doseActionLogger,
+              visibleAndTakenLogger: visibleAndTakenLogger,
+            ),
           ],
         ),
       ),
@@ -1373,6 +1373,49 @@ class _RobotFaceStatusCard extends StatelessWidget {
       RobotFaceMode.idle when state.isInAwakeWindow => 0.24,
       _ => 0,
     };
+  }
+}
+
+class _RobotFaceActionHost extends StatelessWidget {
+  const _RobotFaceActionHost({
+    super.key,
+    required this.state,
+    required this.isVisible,
+    this.doseActionLogger,
+    this.visibleAndTakenLogger,
+  });
+
+  final RobotFaceState state;
+  final bool isVisible;
+  final RobotFaceDoseActionLogger? doseActionLogger;
+  final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
+
+  @override
+  Widget build(BuildContext context) {
+    return Offstage(
+      offstage: !isVisible,
+      child: TickerMode(
+        enabled: isVisible,
+        child: ExcludeSemantics(
+          excluding: !isVisible,
+          child: ExcludeFocus(
+            excluding: !isVisible,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                const SizedBox(height: 10),
+                _RobotFaceActionPanel(
+                  key: RobotFaceScreen.actionPanelKey,
+                  state: state,
+                  doseActionLogger: doseActionLogger,
+                  visibleAndTakenLogger: visibleAndTakenLogger,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -1518,6 +1561,7 @@ class _RobotFaceShortageCard extends StatelessWidget {
 
 class _RobotFaceActionPanel extends StatefulWidget {
   const _RobotFaceActionPanel({
+    super.key,
     required this.state,
     this.doseActionLogger,
     this.visibleAndTakenLogger,
@@ -1533,17 +1577,45 @@ class _RobotFaceActionPanel extends StatefulWidget {
 
 class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
   bool _isSubmitting = false;
+  String? _latestNonNullActionDoseId;
+  int _nonNullActionDoseGeneration = 0;
   // Widget-lifetime local lockout for actions already completed on the
   // currently rendered dose state.
   final Map<String, Set<RobotFaceActionKind>> _completedActionsByDoseId =
       <String, Set<RobotFaceActionKind>>{};
 
   @override
+  void initState() {
+    super.initState();
+    _observeNonNullActionDoseId(widget.state.actionDoseId);
+  }
+
+  @override
+  void didUpdateWidget(covariant _RobotFaceActionPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final actionDoseId = widget.state.actionDoseId;
+    _observeNonNullActionDoseId(actionDoseId);
+    if (actionDoseId == null || oldWidget.state.actionDoseId == actionDoseId) {
+      return;
+    }
+    _completedActionsByDoseId.removeWhere(
+      (doseId, _) => doseId != actionDoseId,
+    );
+  }
+
+  void _observeNonNullActionDoseId(String? actionDoseId) {
+    if (actionDoseId == null || actionDoseId == _latestNonNullActionDoseId) {
+      return;
+    }
+    _latestNonNullActionDoseId = actionDoseId;
+    _nonNullActionDoseGeneration += 1;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isMissedState = widget.state.mode == RobotFaceMode.missed;
 
     return DecoratedBox(
-      key: RobotFaceScreen.actionPanelKey,
       decoration: BoxDecoration(
         color: isMissedState
             ? const Color(0x26FF728C)
@@ -1752,11 +1824,19 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     if (actionDoseId == null) {
       return;
     }
-
+    final submissionGeneration = _nonNullActionDoseGeneration;
+    final submissionActions = Set<RobotFaceActionKind>.of(
+      widget.state.availableActions,
+    );
     if (_isTerminalAction(actionKind) && !await authorizeActionPin(context)) {
       return;
     }
     if (!context.mounted) {
+      return;
+    }
+    if (_nonNullActionDoseGeneration != submissionGeneration ||
+        widget.state.actionDoseId != actionDoseId ||
+        !widget.state.availableActions.contains(actionKind)) {
       return;
     }
 
@@ -1779,13 +1859,16 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
       }
       if (mounted) {
         setState(() {
+          if (_nonNullActionDoseGeneration != submissionGeneration) {
+            return;
+          }
           final completedActions = _completedActionsForDose(actionDoseId);
           if (_isTerminalAction(actionKind)) {
             // A terminal outcome resolves the dose; suppress every local action
             // until controller state rebuilds without the panel. This avoids a
             // brief second tap window while async streams catch up to the new
             // dose-log state.
-            completedActions.addAll(widget.state.availableActions);
+            completedActions.addAll(submissionActions);
           } else {
             completedActions.add(actionKind);
           }
@@ -1811,8 +1894,20 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
   }) async {
     if (_isSubmitting) return;
     final actionDoseId = widget.state.actionDoseId;
-    if (actionDoseId == null || !await authorizeActionPin(context)) return;
+    if (actionDoseId == null) return;
+    final submissionGeneration = _nonNullActionDoseGeneration;
+    final submissionActions = Set<RobotFaceActionKind>.of(
+      widget.state.availableActions,
+    );
+    if (!await authorizeActionPin(context)) return;
     if (!context.mounted) return;
+    if (_nonNullActionDoseGeneration != submissionGeneration ||
+        widget.state.actionDoseId != actionDoseId ||
+        !widget.state.availableActions.contains(
+          RobotFaceActionKind.confirmTaken,
+        )) {
+      return;
+    }
 
     setState(() => _isSubmitting = true);
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
@@ -1827,9 +1922,10 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           );
       if (!logged || !context.mounted) return;
       setState(() {
-        _completedActionsForDose(
-          actionDoseId,
-        ).addAll(widget.state.availableActions);
+        if (_nonNullActionDoseGeneration != submissionGeneration) {
+          return;
+        }
+        _completedActionsForDose(actionDoseId).addAll(submissionActions);
       });
     } on Object catch (error) {
       if (!context.mounted) {
