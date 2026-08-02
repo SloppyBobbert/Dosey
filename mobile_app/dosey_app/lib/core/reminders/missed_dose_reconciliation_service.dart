@@ -8,12 +8,13 @@ import 'package:dosey_app/core/carousel/carousel_slot.dart';
 import 'package:dosey_app/core/carousel/local_carousel_slot_repository.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/missed_dose_reconciler.dart';
 import 'package:dosey_app/core/reminders/missed_dose_policy.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:dosey_app/features/today/today_next_dose_helper.dart';
 import 'package:drift/drift.dart';
 
-class MissedDoseReconciliationService {
+class MissedDoseReconciliationService implements MissedDoseReconciler {
   MissedDoseReconciliationService({
     required this.reminders,
     required this.doseLog,
@@ -38,6 +39,7 @@ class MissedDoseReconciliationService {
     actorProviderLabel: 'system',
   );
 
+  @override
   Future<void> reconcile() async {
     final existingRun = _reconcileInFlight;
     if (existingRun != null) {

@@ -1,6 +1,6 @@
 import 'package:dosey_app/core/notifications/local_notification_models.dart';
 import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
-import 'package:flutter/services.dart';
+import 'package:dosey_app/core/time/phone_timezone_source.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest.dart' as timezone_data;
 import 'package:timezone/timezone.dart';
@@ -376,28 +376,5 @@ class NotificationTimezoneInitializer {
   static void resetForTest() {
     _timezonesInitialized = false;
     _initializing = null;
-  }
-}
-
-abstract interface class LocalTimezoneGateway {
-  Future<String> localTimezoneName();
-}
-
-class PlatformChannelLocalTimezoneGateway implements LocalTimezoneGateway {
-  const PlatformChannelLocalTimezoneGateway({
-    this.channel = const MethodChannel(_channelName),
-  });
-
-  static const _channelName = 'com.sloppybobbert.dosey_app/timezone';
-
-  final MethodChannel channel;
-
-  @override
-  Future<String> localTimezoneName() async {
-    final timezoneName = await channel.invokeMethod<String>('getLocalTimezone');
-    if (timezoneName == null || timezoneName.isEmpty) {
-      throw StateError('Native timezone channel returned no timezone name.');
-    }
-    return timezoneName;
   }
 }

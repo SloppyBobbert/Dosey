@@ -3,12 +3,13 @@ import 'dart:convert';
 
 import 'package:dosey_app/core/logging/phone_dose_action_service.dart';
 import 'package:dosey_app/core/reminders/reminder_occurrence.dart';
+import 'package:dosey_app/core/reminders/missed_dose_reconciler.dart';
 import 'package:dosey_app/core/reminders/reminder_occurrence_resolver.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
 import 'package:drift/drift.dart';
 import 'package:sqlite3/common.dart' show SqlError, SqliteException;
 
-class PhoneOnlyMissedDoseReconciliationService {
+class PhoneOnlyMissedDoseReconciliationService implements MissedDoseReconciler {
   PhoneOnlyMissedDoseReconciliationService(
     this._database, {
     required this._deviceId,
@@ -39,6 +40,7 @@ class PhoneOnlyMissedDoseReconciliationService {
   final ReminderOccurrenceResolver _resolver;
   Future<void>? _inFlight;
 
+  @override
   Future<void> reconcile() {
     final active = _inFlight;
     if (active != null) return active;
