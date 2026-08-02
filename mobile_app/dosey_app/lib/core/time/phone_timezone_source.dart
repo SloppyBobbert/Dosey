@@ -25,10 +25,12 @@ class PlatformChannelLocalTimezoneGateway implements LocalTimezoneGateway {
 }
 
 class PhoneTimezoneSource {
-  PhoneTimezoneSource({
-    this.gateway = const PlatformChannelLocalTimezoneGateway(),
+  factory PhoneTimezoneSource({
+    LocalTimezoneGateway gateway = const PlatformChannelLocalTimezoneGateway(),
     ReminderOccurrenceResolver resolver = const ReminderOccurrenceResolver(),
-  }) : _resolver = resolver;
+  }) => PhoneTimezoneSource._(gateway, resolver);
+
+  PhoneTimezoneSource._(this.gateway, this._resolver);
 
   final LocalTimezoneGateway gateway;
   final ReminderOccurrenceResolver _resolver;

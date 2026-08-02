@@ -23,17 +23,27 @@ typedef StartupMaintenanceFailureReporter =
     void Function(StartupMaintenanceFailure failure);
 
 class StartupResumeMaintenanceCoordinator {
-  StartupResumeMaintenanceCoordinator({
+  factory StartupResumeMaintenanceCoordinator({
     required Future<void> Function() initializeIdentity,
     required Future<void> Function() refreshTimezone,
     required Future<void> Function() syncNotifications,
     required Future<void> Function() reconcile,
     StartupMaintenanceFailureReporter? reportFailure,
-  }) : _initializeIdentity = initializeIdentity,
-       _refreshTimezone = refreshTimezone,
-       _syncNotifications = syncNotifications,
-       _reconcile = reconcile,
-       _reportFailure = reportFailure;
+  }) => StartupResumeMaintenanceCoordinator._(
+    initializeIdentity,
+    refreshTimezone,
+    syncNotifications,
+    reconcile,
+    reportFailure,
+  );
+
+  StartupResumeMaintenanceCoordinator._(
+    this._initializeIdentity,
+    this._refreshTimezone,
+    this._syncNotifications,
+    this._reconcile,
+    this._reportFailure,
+  );
 
   final Future<void> Function() _initializeIdentity;
   final Future<void> Function() _refreshTimezone;
