@@ -346,4 +346,22 @@ void main() {
     expect((await update).batteryLevel, 51);
     await source.dispose();
   });
+
+  test('fake source deduplicates identical emissions', () async {
+    final source = FakeDevicePowerSource();
+    final events = <DevicePowerSnapshot>[];
+    final subscription = source.snapshots.listen(events.add);
+    const snapshot = DevicePowerSnapshot(
+      batteryLevel: 42,
+      externalPower: ExternalPowerState.present,
+    );
+
+    source.emit(snapshot);
+    source.emit(snapshot);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(events, [snapshot]);
+    await subscription.cancel();
+    await source.dispose();
+  });
 }
