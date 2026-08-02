@@ -49,18 +49,22 @@ class _SettingsAccordionState extends State<SettingsAccordion> {
             child: InkWell(
               onTap: _toggle,
               child: ExcludeSemantics(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          widget.title,
-                          style: Theme.of(context).textTheme.titleMedium,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.title,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
                         ),
-                      ),
-                      Icon(_expanded ? Icons.expand_less : Icons.expand_more),
-                    ],
+                        Icon(_expanded ? Icons.expand_less : Icons.expand_more),
+                      ],
+                    ),
                   ),
                 ),
               ),
