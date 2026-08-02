@@ -323,6 +323,83 @@ void main() {
       expect(source.currentSnapshot.externalPower, ExternalPowerState.absent);
       await states.close();
     });
+
+    test(
+      'coalesces concurrent disposal until cancellation and close finish',
+      () async {
+        final cancellationStarted = Completer<void>();
+        final cancellationRelease = Completer<void>();
+        final states = StreamController<BatteryState>(
+          onCancel: () {
+            cancellationStarted.complete();
+            return cancellationRelease.future;
+          },
+        );
+        final source = BatteryPlusDevicePowerSource.withOperations(
+          batteryLevel: () async => 64,
+          batteryState: () async => BatteryState.discharging,
+          batteryStateChanges: states.stream,
+        );
+        final snapshotsClosed = Completer<void>();
+        source.snapshots.listen(null, onDone: snapshotsClosed.complete);
+        await source.initialize();
+
+        var firstCompleted = false;
+        var secondCompleted = false;
+        final firstDisposal = source.dispose();
+        final secondDisposal = source.dispose();
+        expect(identical(firstDisposal, secondDisposal), isTrue);
+        final first = firstDisposal.whenComplete(() => firstCompleted = true);
+        final second = secondDisposal.whenComplete(
+          () => secondCompleted = true,
+        );
+        await cancellationStarted.future;
+        await Future<void>.value();
+
+        expect(firstCompleted, isFalse);
+        expect(secondCompleted, isFalse);
+        expect(snapshotsClosed.isCompleted, isFalse);
+
+        cancellationRelease.complete();
+        await Future.wait([first, second, snapshotsClosed.future]);
+        await states.close();
+      },
+    );
+
+    test('closes snapshots when battery-state cancellation fails', () async {
+      final cancellationFailure = StateError('cancellation failed');
+      final states = StreamController<BatteryState>(
+        onCancel: () => Future<void>.error(cancellationFailure),
+      );
+      final source = BatteryPlusDevicePowerSource.withOperations(
+        batteryLevel: () async => 64,
+        batteryState: () async => BatteryState.discharging,
+        batteryStateChanges: states.stream,
+      );
+      final snapshotsClosed = Completer<void>();
+      source.snapshots.listen(null, onDone: snapshotsClosed.complete);
+      await source.initialize();
+
+      final first = source.dispose();
+      final second = source.dispose();
+      expect(identical(first, second), isTrue);
+      final firstFailure = expectLater(
+        first,
+        throwsA(same(cancellationFailure)),
+      );
+      final secondFailure = expectLater(
+        second,
+        throwsA(same(cancellationFailure)),
+      );
+      states.add(BatteryState.charging);
+
+      await Future.wait([firstFailure, secondFailure]);
+      await Future<void>.value();
+
+      expect(snapshotsClosed.isCompleted, isTrue);
+      expect(source.currentSnapshot.externalPower, ExternalPowerState.absent);
+      await states.close();
+    });
   });
 
   test('fake source provides deterministic snapshots for tests', () async {
@@ -364,4 +441,33 @@ void main() {
     await subscription.cancel();
     await source.dispose();
   });
+
+  test(
+    'fake source coalesces concurrent disposal until snapshots close',
+    () async {
+      final source = FakeDevicePowerSource();
+      final snapshotsClosed = Completer<void>();
+      final subscription = source.snapshots.listen(
+        null,
+        onDone: snapshotsClosed.complete,
+      );
+      subscription.pause();
+
+      var firstCompleted = false;
+      var secondCompleted = false;
+      final firstDisposal = source.dispose();
+      final secondDisposal = source.dispose();
+      expect(identical(firstDisposal, secondDisposal), isTrue);
+      final first = firstDisposal.whenComplete(() => firstCompleted = true);
+      final second = secondDisposal.whenComplete(() => secondCompleted = true);
+      await Future<void>.value();
+
+      expect(firstCompleted, isFalse);
+      expect(secondCompleted, isFalse);
+      expect(snapshotsClosed.isCompleted, isFalse);
+
+      subscription.resume();
+      await Future.wait([first, second, snapshotsClosed.future]);
+    },
+  );
 }

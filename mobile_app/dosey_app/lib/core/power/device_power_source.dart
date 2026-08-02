@@ -77,6 +77,7 @@ class BatteryPlusDevicePowerSource implements DevicePowerSource {
   StreamSubscription<BatteryState>? _batteryStateSubscription;
   Future<DevicePowerSnapshot>? _initialization;
   Future<DevicePowerSnapshot>? _refreshInFlight;
+  Future<void>? _disposal;
   bool _isDisposed = false;
   int _batteryLevelRevision = 0;
   int _externalPowerRevision = 0;
@@ -179,13 +180,17 @@ class BatteryPlusDevicePowerSource implements DevicePowerSource {
   }
 
   @override
-  Future<void> dispose() async {
-    if (_isDisposed) return;
+  Future<void> dispose() => _disposal ??= _dispose();
+
+  Future<void> _dispose() async {
     _isDisposed = true;
     _batteryLevelRevision++;
     _externalPowerRevision++;
-    await _batteryStateSubscription?.cancel();
-    await _snapshots.close();
+    try {
+      await _batteryStateSubscription?.cancel();
+    } finally {
+      await _snapshots.close();
+    }
   }
 
   static ExternalPowerState externalPowerFor(BatteryState batteryState) {
@@ -211,6 +216,7 @@ class FakeDevicePowerSource implements DevicePowerSource {
   final StreamController<DevicePowerSnapshot> _snapshots =
       StreamController<DevicePowerSnapshot>.broadcast();
   DevicePowerSnapshot _currentSnapshot;
+  Future<void>? _disposal;
   bool _isDisposed = false;
 
   @override
@@ -236,8 +242,9 @@ class FakeDevicePowerSource implements DevicePowerSource {
   }
 
   @override
-  Future<void> dispose() async {
-    if (_isDisposed) return;
+  Future<void> dispose() => _disposal ??= _dispose();
+
+  Future<void> _dispose() async {
     _isDisposed = true;
     await _snapshots.close();
   }
