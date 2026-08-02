@@ -43,12 +43,14 @@ abstract interface class DevicePowerSource {
 }
 
 class BatteryPlusDevicePowerSource implements DevicePowerSource {
-  BatteryPlusDevicePowerSource()
-    : this.withOperations(
-        batteryLevel: () => Battery().batteryLevel,
-        batteryState: () => Battery().batteryState,
-        batteryStateChanges: Battery().onBatteryStateChanged,
-      );
+  factory BatteryPlusDevicePowerSource() {
+    final battery = Battery();
+    return BatteryPlusDevicePowerSource.withOperations(
+      batteryLevel: () => battery.batteryLevel,
+      batteryState: () => battery.batteryState,
+      batteryStateChanges: battery.onBatteryStateChanged,
+    );
+  }
 
   BatteryPlusDevicePowerSource.withOperations({
     required Future<int> Function() batteryLevel,
