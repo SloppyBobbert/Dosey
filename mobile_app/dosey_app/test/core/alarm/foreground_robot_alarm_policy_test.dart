@@ -176,6 +176,12 @@ void main() {
   });
 
   group('ForegroundRobotAlarmSound', () {
+    test('round-trips every approved persisted sound ID', () {
+      for (final sound in ForegroundRobotAlarmSound.values) {
+        expect(ForegroundRobotAlarmSound.parsePersistedId(sound.id), sound);
+      }
+    });
+
     test('parses the approved persisted sound ID', () {
       final sound = ForegroundRobotAlarmSound.parsePersistedId('bell_ding2');
 

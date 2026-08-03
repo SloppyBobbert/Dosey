@@ -23,14 +23,18 @@ enum ForegroundRobotAlarmSound {
   final String sourceUrl;
 
   /// Converts a persisted sound ID to its approved sound contract.
-  static ForegroundRobotAlarmSound parsePersistedId(String id) => switch (id) {
-    'bell_ding2' => ForegroundRobotAlarmSound.bellDing2,
-    _ => throw ArgumentError.value(
+  static ForegroundRobotAlarmSound parsePersistedId(String id) {
+    for (final sound in values) {
+      if (sound.id == id) {
+        return sound;
+      }
+    }
+    throw ArgumentError.value(
       id,
       'id',
       'Unknown foreground robot alarm sound ID.',
-    ),
-  };
+    );
+  }
 }
 
 /// Immutable foreground robot alarm preferences.
