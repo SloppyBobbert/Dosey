@@ -286,37 +286,51 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                     : _interactionRevision;
                 Widget content = Stack(
                   children: [
-                    ColoredBox(
-                      color: const Color(0xFF04070D),
-                      child: SafeArea(
-                        child: LayoutBuilder(
-                          builder: (context, constraints) {
-                            final isPortraitFrame =
-                                constraints.maxHeight > constraints.maxWidth;
-                            Widget frame = _RobotFaceFrame(
-                              state: state,
-                              isActive: widget.isActive,
-                              voicePhase: effectiveVoicePhase,
-                              animationCue: animationCue,
-                              animationRevision: animationRevision,
-                              onAnimationCompleted: labControlsAnimation
-                                  ? faceLab?.completeAnimation
-                                  : _completeInteractionAnimation,
-                              onInteraction: _handleInteraction,
-                              onLongPress: widget.onLongPress,
-                              doseActionLogger: widget.doseActionLogger,
-                              visibleAndTakenLogger:
-                                  widget.visibleAndTakenLogger,
-                            );
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isPortraitFrame =
+                            constraints.maxHeight > constraints.maxWidth;
+                        final physicalSafePadding = MediaQuery.paddingOf(
+                          context,
+                        );
+                        final rotatedStatusSafePadding = isPortraitFrame
+                            ? EdgeInsets.fromLTRB(
+                                physicalSafePadding.top,
+                                physicalSafePadding.right,
+                                physicalSafePadding.bottom,
+                                physicalSafePadding.left,
+                              )
+                            : physicalSafePadding;
+                        final statusSafePadding = state.isFlipped
+                            ? EdgeInsets.fromLTRB(
+                                rotatedStatusSafePadding.right,
+                                rotatedStatusSafePadding.bottom,
+                                rotatedStatusSafePadding.left,
+                                rotatedStatusSafePadding.top,
+                              )
+                            : rotatedStatusSafePadding;
+                        Widget frame = _RobotFaceFrame(
+                          state: state,
+                          isActive: widget.isActive,
+                          voicePhase: effectiveVoicePhase,
+                          animationCue: animationCue,
+                          animationRevision: animationRevision,
+                          onAnimationCompleted: labControlsAnimation
+                              ? faceLab?.completeAnimation
+                              : _completeInteractionAnimation,
+                          onInteraction: _handleInteraction,
+                          onLongPress: widget.onLongPress,
+                          doseActionLogger: widget.doseActionLogger,
+                          visibleAndTakenLogger: widget.visibleAndTakenLogger,
+                          statusSafePadding: statusSafePadding,
+                        );
 
-                            if (isPortraitFrame) {
-                              frame = RotatedBox(quarterTurns: 1, child: frame);
-                            }
+                        if (isPortraitFrame) {
+                          frame = RotatedBox(quarterTurns: 1, child: frame);
+                        }
 
-                            return Center(child: frame);
-                          },
-                        ),
-                      ),
+                        return frame;
+                      },
                     ),
                     if (scenarios != null)
                       _DemoPresenterControls(scenarios: scenarios),
@@ -945,6 +959,7 @@ class _RobotFaceFrame extends StatelessWidget {
     required this.animationRevision,
     required this.onAnimationCompleted,
     required this.onInteraction,
+    required this.statusSafePadding,
     this.onLongPress,
     this.doseActionLogger,
     this.visibleAndTakenLogger,
@@ -958,14 +973,13 @@ class _RobotFaceFrame extends StatelessWidget {
   final void Function(RobotFaceAnimationCue cue, int revision)?
   onAnimationCompleted;
   final VoidCallback onInteraction;
+  final EdgeInsets statusSafePadding;
   final VoidCallback? onLongPress;
   final RobotFaceDoseActionLogger? doseActionLogger;
   final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
 
   @override
   Widget build(BuildContext context) {
-    final isMissedState = state.mode == RobotFaceMode.missed;
-    final displayAccent = _displayAccentFor(state);
     final showActionPanel =
         state.actionDoseId != null && state.availableActions.isNotEmpty;
     final actionHost = _RobotFaceActionHost(
@@ -976,133 +990,92 @@ class _RobotFaceFrame extends StatelessWidget {
       visibleAndTakenLogger: visibleAndTakenLogger,
     );
 
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Transform(
-          key: RobotFaceScreen.flipTransformKey,
-          alignment: Alignment.center,
-          transform: state.isFlipped
-              ? Matrix4.rotationZ(math.pi)
-              : Matrix4.identity(),
-          child: Column(
-            children: <Widget>[
-              Expanded(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTapDown: (_) => onInteraction(),
-                  onLongPress: onLongPress,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: <Widget>[
-                      AnimatedContainer(
-                        key: RobotFaceScreen.displayFrameKey,
-                        duration: const Duration(milliseconds: 260),
-                        curve: Curves.easeOutCubic,
+    return SizedBox.expand(
+      child: Transform(
+        key: RobotFaceScreen.flipTransformKey,
+        alignment: Alignment.center,
+        transform: state.isFlipped
+            ? Matrix4.rotationZ(math.pi)
+            : Matrix4.identity(),
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (_) => onInteraction(),
+              onLongPress: onLongPress,
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  AnimatedContainer(
+                    key: RobotFaceScreen.displayFrameKey,
+                    duration: const Duration(milliseconds: 260),
+                    curve: Curves.easeOutCubic,
+                    color: const Color(0xFF02050A),
+                    child: SizedBox.expand(
+                      key: RobotFaceScreen.canvasKey,
+                      child: RobotFaceCanvas(
+                        state: state,
+                        isActive: isActive,
+                        isPreparing: voicePhase == VoicePlaybackPhase.preparing,
+                        isSpeaking: voicePhase == VoicePlaybackPhase.speaking,
+                        animationCue: animationCue,
+                        animationRevision: animationRevision,
+                        onAnimationCompleted: onAnimationCompleted,
+                      ),
+                    ),
+                  ),
+                  IgnorePointer(
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 260),
+                      curve: Curves.easeOut,
+                      opacity: _displayGlassOpacityFor(state),
+                      child: DecoratedBox(
                         decoration: BoxDecoration(
-                          color: const Color(0xFF02050A),
-                          borderRadius: BorderRadius.circular(36),
-                          border: Border.all(
-                            color: displayAccent.withValues(
-                              alpha: isMissedState ? 0.42 : 0.16,
-                            ),
-                            width: isMissedState ? 1.6 : 1.2,
-                          ),
-                          boxShadow: <BoxShadow>[
-                            BoxShadow(
-                              color: displayAccent.withValues(
-                                alpha: isMissedState ? 0.22 : 0.12,
-                              ),
-                              blurRadius: isMissedState ? 56 : 44,
-                              spreadRadius: isMissedState ? 8 : 4,
-                            ),
-                            const BoxShadow(
-                              color: Color(0xCC010203),
-                              blurRadius: 18,
-                              spreadRadius: -4,
-                              offset: Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(30),
-                            child: SizedBox.expand(
-                              key: RobotFaceScreen.canvasKey,
-                              child: RobotFaceCanvas(
-                                state: state,
-                                isActive: isActive,
-                                isPreparing:
-                                    voicePhase == VoicePlaybackPhase.preparing,
-                                isSpeaking:
-                                    voicePhase == VoicePlaybackPhase.speaking,
-                                animationCue: animationCue,
-                                animationRevision: animationRevision,
-                                onAnimationCompleted: onAnimationCompleted,
-                              ),
-                            ),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: <Color>[
+                              Colors.white.withValues(alpha: 0.08),
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.08),
+                            ],
+                            stops: const <double>[0, 0.26, 1],
                           ),
                         ),
                       ),
-                      IgnorePointer(
-                        child: AnimatedOpacity(
-                          duration: const Duration(milliseconds: 260),
-                          curve: Curves.easeOut,
-                          opacity: _displayGlassOpacityFor(state),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(36),
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: <Color>[
-                                  Colors.white.withValues(alpha: 0.08),
-                                  Colors.transparent,
-                                  Colors.black.withValues(alpha: 0.08),
-                                ],
-                                stops: const <double>[0, 0.26, 1],
-                              ),
-                            ),
-                          ),
-                        ),
+                    ),
+                  ),
+                  _UrgentPromptOverlay(state: state),
+                ],
+              ),
+            ),
+            Positioned.fill(
+              child: Padding(
+                padding: statusSafePadding.add(const EdgeInsets.all(20)),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: SingleChildScrollView(
+                    primary: false,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      excludeFromSemantics: true,
+                      onTap: () {},
+                      onLongPress: () {},
+                      child: _RobotFaceStatusCard(
+                        key: RobotFaceScreen.bottomCardKey,
+                        state: state,
+                        actionHost: actionHost,
                       ),
-                      _UrgentPromptOverlay(state: state),
-                    ],
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
-              _RobotFaceStatusCard(
-                key: RobotFaceScreen.bottomCardKey,
-                state: state,
-                actionHost: actionHost,
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
-  }
-
-  Color _displayAccentFor(RobotFaceState state) {
-    if (state.mode == RobotFaceMode.missed) {
-      return const Color(0xFFFF728C);
-    }
-    if (state.mode == RobotFaceMode.sleepy) {
-      return const Color(0xFF7288B5);
-    }
-    if (state.mode == RobotFaceMode.idle && state.isInAwakeWindow) {
-      return const Color(0xFF67E8FF);
-    }
-
-    return switch (state.mode.tone) {
-      RobotFaceTone.ready => const Color(0xFF56EBC6),
-      RobotFaceTone.attention || RobotFaceTone.calm => const Color(0xFF43E7FF),
-      RobotFaceTone.warning => const Color(0xFFFF728C),
-      RobotFaceTone.offline => const Color(0xFF98A5BC),
-    };
   }
 
   double _displayGlassOpacityFor(RobotFaceState state) {

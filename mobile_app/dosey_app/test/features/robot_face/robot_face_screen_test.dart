@@ -1837,58 +1837,94 @@ void main() {
     expect(border.top.color.a, greaterThan(0.08));
   });
 
-  testWidgets('gives awake idle frame brighter treatment than sleepy mode', (
-    WidgetTester tester,
-  ) async {
-    final states = StreamController<RobotFaceState>.broadcast();
-    addTearDown(states.close);
+  testWidgets(
+    'keeps the full-screen canvas while awake idle brightens from sleepy',
+    (WidgetTester tester) async {
+      final states = StreamController<RobotFaceState>.broadcast();
+      addTearDown(states.close);
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(800, 400);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(
-      _RobotFaceTestApp(
-        stateStream: states.stream,
-        initialState: const RobotFaceState(
-          mode: RobotFaceMode.sleepy,
-          nextEventLabel: 'No reminders scheduled',
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          stateStream: states.stream,
+          initialState: const RobotFaceState(
+            mode: RobotFaceMode.sleepy,
+            nextEventLabel: 'No reminders scheduled',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 0,
+            isInAwakeWindow: false,
+            statusLabel: 'Sleep mode',
+          ),
+        ),
+      );
+
+      await tester.pump();
+      final sleepyCanvasRect = tester.getRect(
+        find.byKey(RobotFaceScreen.canvasKey),
+      );
+      final sleepyDisplayRect = tester.getRect(
+        find.byKey(RobotFaceScreen.displayFrameKey),
+      );
+      final sleepyPaint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(RobotFaceCanvas),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      final dynamic sleepyPainter = sleepyPaint.painter;
+      final sleepyPalette = sleepyPainter.debugPaletteColors as List<Color>;
+      expect(sleepyCanvasRect, const Rect.fromLTWH(0, 0, 800, 400));
+      expect(sleepyDisplayRect, const Rect.fromLTWH(0, 0, 800, 400));
+      expect(sleepyPalette, const <Color>[
+        Color(0xFF11172A),
+        Color(0xFF04070D),
+        Color(0xFFB8C8EE),
+        Color(0xFF3B4E73),
+      ]);
+
+      states.add(
+        const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: '8:00 PM · Evening meds',
           isFlipped: false,
           isLandscapeOnly: true,
           rampProgress: 0,
-          isInAwakeWindow: false,
-          statusLabel: 'Sleep mode',
+          isInAwakeWindow: true,
+          statusLabel: 'Controller connected',
         ),
-      ),
-    );
+      );
 
-    await tester.pump();
-
-    BoxDecoration frameDecoration() =>
-        tester
-                .widget<AnimatedContainer>(
-                  find.byKey(RobotFaceScreen.displayFrameKey),
-                )
-                .decoration!
-            as BoxDecoration;
-
-    final sleepyBorder = frameDecoration().border! as Border;
-
-    states.add(
-      const RobotFaceState(
-        mode: RobotFaceMode.idle,
-        nextEventLabel: '8:00 PM · Evening meds',
-        isFlipped: false,
-        isLandscapeOnly: true,
-        rampProgress: 0,
-        isInAwakeWindow: true,
-        statusLabel: 'Controller connected',
-      ),
-    );
-
-    await tester.pump();
-
-    final awakeBorder = frameDecoration().border! as Border;
-
-    expect(awakeBorder.top.color.g, greaterThan(sleepyBorder.top.color.g));
-    expect(awakeBorder.top.color.b, greaterThan(sleepyBorder.top.color.b));
-  });
+      await tester.pump();
+      final awakeCanvasRect = tester.getRect(
+        find.byKey(RobotFaceScreen.canvasKey),
+      );
+      final awakeDisplayRect = tester.getRect(
+        find.byKey(RobotFaceScreen.displayFrameKey),
+      );
+      final awakePaint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(RobotFaceCanvas),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      final dynamic awakePainter = awakePaint.painter;
+      final awakePalette = awakePainter.debugPaletteColors as List<Color>;
+      expect(awakeCanvasRect, const Rect.fromLTWH(0, 0, 800, 400));
+      expect(awakeDisplayRect, const Rect.fromLTWH(0, 0, 800, 400));
+      expect(awakePalette, const <Color>[
+        Color(0xFF071A2D),
+        Color(0xFF0B2940),
+        Color(0xFF8BFFF3),
+        Color(0xFF36D9EA),
+      ]);
+      expect(awakePalette[2].g, greaterThan(sleepyPalette[2].g));
+      expect(awakePalette[2].b, greaterThan(sleepyPalette[2].b));
+    },
+  );
 
   testWidgets('shows red missed-dose treatment and safe copy', (
     WidgetTester tester,
@@ -1924,13 +1960,17 @@ void main() {
       find.byKey(RobotFaceScreen.statusBadgeKey),
     );
     final border = (badge.decoration as BoxDecoration).border! as Border;
-    final displayFrame = tester.widget<AnimatedContainer>(
-      find.byKey(RobotFaceScreen.displayFrameKey),
+    final customPaint = tester.widget<CustomPaint>(
+      find.descendant(
+        of: find.byType(RobotFaceCanvas),
+        matching: find.byType(CustomPaint),
+      ),
     );
-    final displayBorder =
-        (displayFrame.decoration! as BoxDecoration).border! as Border;
+    final dynamic painter = customPaint.painter;
+    final palette = painter.debugPaletteColors as List<Color>;
     expect(border.top.color.r, greaterThan(border.top.color.g));
-    expect(displayBorder.top.color.r, greaterThan(displayBorder.top.color.b));
+    expect(palette[2].r, greaterThan(palette[2].g));
+    expect(palette[3].r, greaterThan(palette[3].b));
   });
 
   testWidgets(
