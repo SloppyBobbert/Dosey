@@ -1,7 +1,6 @@
 import 'package:drift/drift.dart';
-import 'package:drift/native.dart';
-import 'package:drift_flutter/drift_flutter.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
+import 'package:dosey_app/core/storage/dosey_database_executor.dart';
 
 part 'dosey_database.g.dart';
 
@@ -477,20 +476,14 @@ class CachedHouseholdMembers extends Table {
 )
 class DoseyDatabase extends _$DoseyDatabase {
   DoseyDatabase([QueryExecutor? executor, this.isDemo = false])
-    : super(executor ?? _openConnection(name: 'dosey'));
+    : super(executor ?? openDoseyPersistentExecutor(name: 'dosey'));
 
   factory DoseyDatabase.demo() {
-    return DoseyDatabase(_openConnection(name: 'dosey_demo'), true);
+    return DoseyDatabase(openDoseyPersistentExecutor(name: 'dosey_demo'), true);
   }
 
   factory DoseyDatabase.inMemory({bool isDemo = false}) {
-    return DoseyDatabase(
-      DatabaseConnection(
-        NativeDatabase.memory(),
-        closeStreamsSynchronously: true,
-      ),
-      isDemo,
-    );
+    return DoseyDatabase(openDoseyInMemoryExecutor(), isDemo);
   }
 
   final bool isDemo;
@@ -874,8 +867,4 @@ class DoseyDatabase extends _$DoseyDatabase {
       appSettings,
     )..where((setting) => setting.key.isIn(keys))).go();
   }
-}
-
-QueryExecutor _openConnection({required String name}) {
-  return driftDatabase(name: name);
 }
