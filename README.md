@@ -10,8 +10,6 @@
 
 Dosey is an open-source medication-dispensing companion robot prototype that helps organize scheduled doses and reminders. It is not a medical device.
 
-<!-- Future three-device hero: Android landscape Robot Mode, iPhone Home Screen web app, and desktop web app in their original minimal frames. Add only qualified, current captures; browser-local Personal Mode is not available today. -->
-
 ## Safety first
 
 Use fake pills, candy, beads, dry beans, or vitamins only while testing this prototype. Follow prescription instructions; Dosey does not provide medical advice and must not be used to decide whether to take an extra dose.
@@ -41,29 +39,25 @@ The merged software foundation supports local use without cloud medication sync:
 - Use in-app Help and visit the [repository](https://github.com/SloppyBobbert/Dosey) or [issues](https://github.com/SloppyBobbert/Dosey/issues).
 - Keep medication, schedules, dose history, and supply data on the device in Drift/SQLite.
 
-<!-- Future supporting screenshots: add qualified, current captures of the supported app surfaces here. Do not use obsolete Robot Face screenshots. -->
-
 ## Modes and platforms
 
 | Experience | Platform | Current note |
 | --- | --- | --- |
 | Personal Mode | Android and iOS mobile | The iOS implementation is retained but is not currently released or actively developed. iOS cannot be the phone mounted in the robot. |
 | Robot Mode | Android only | Intended for the phone mounted in Dosey; it provides Robot Face and app-owned, soft navigation guardrails. |
-| Browser-local Personal app | Browser | In active development; it is not available today. |
-| Appwrite pairing and caregiver features | Backend foundation | The rollout is inactive. Medication data is not cloud-synced. |
+| Appwrite pairing and caregiver features | Backend foundation | Legacy create/claim staging deployments remain active. The secure mounted-access and caregiver rollout is inactive; medication data is not cloud-synced. |
 
 ## Project status
 
 Dosey has working software foundations for local medication and schedule management, Today actions, Robot Face, Guided Trial, local backup and restore, a controller simulator, and local-first storage.
 
-The physical dispenser remains pending. The ESP32-C6 controller, Bluetooth lifecycle, servo power path, repeatable one-slot carousel movement, and integrated phone-to-hardware behavior require direct physical testing. Browser work is also pending. Until that evidence exists, this repository should be treated as an experimental software and hardware prototype, not a public distribution or a reliable background reminder service.
+The physical dispenser remains pending. The ESP32-C6 controller, Bluetooth lifecycle, servo power path, repeatable one-slot carousel movement, and integrated phone-to-hardware behavior require direct physical testing. Until that evidence exists, this repository should be treated as an experimental software and hardware prototype, not a public distribution or a reliable background reminder service.
 
 ### Roadmap
 
 1. Qualify the local Android software experience on a real phone.
 2. Test the controller and Daviky carousel with fake media, including faults and repeated one-slot movement.
-3. Complete browser-local Personal Mode work.
-4. Revisit pairing and caregiver rollout only after its secure mounted-phone path is validated.
+3. Revisit the secure mounted-access and caregiver rollout only after mounted mobile compatibility, legacy-device inventory, a controlled staging rollout, and two-device validation.
 
 ## Explore or contribute
 
@@ -98,7 +92,7 @@ The hardware plan uses a premade Daviky carousel, a Grove Base for XIAO, and a s
 
 ### Appwrite boundary
 
-Appwrite supports identity, ownership or membership, and server-authorized pairing foundations. Flutter calls pairing functions and does not read pairing tables directly. The secure mounted-phone rollout is inactive, and Appwrite outages must not block the local Robot shell.
+Appwrite supports identity, ownership or membership, and server-authorized pairing foundations. Flutter calls pairing functions and does not read pairing tables directly. Legacy create/claim staging deployments remain active. The secure mounted-access and caregiver rollout is inactive and must not be activated until mounted mobile compatibility, legacy-device inventory, a controlled staging rollout, and two-device validation are complete. Appwrite outages must not block the local Robot shell.
 
 Medication schedules, dose state and history, supply, and related medication data remain local. There is no medication-data upload or cloud sync.
 
@@ -126,7 +120,7 @@ The retained iOS build is a preservation and compile-regression check, not relea
 flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
 ```
 
-For firmware, run the safe-default controller build from `firmware/`:
+For firmware, run the safe-default controller build from `firmware/`. The command below uses a machine-specific PlatformIO path; see [`firmware/README.md`](firmware/README.md) for setup and the command for your environment:
 
 ```sh
 /tmp/dosey-platformio/bin/pio run -e controller_baseline
