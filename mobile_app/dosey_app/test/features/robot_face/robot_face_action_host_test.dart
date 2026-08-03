@@ -51,6 +51,79 @@ void main() {
   );
 
   testWidgets(
+    'retains one action host and panel through actionable follow-up and hidden idle states',
+    (tester) async {
+      final states = StreamController<RobotFaceState>.broadcast();
+      final semantics = tester.ensureSemantics();
+      addTearDown(states.close);
+
+      try {
+        await tester.pumpWidget(_ActionHostTestApp(stateStream: states.stream));
+        final hostFinder = find.byKey(
+          RobotFaceScreen.actionHostKey,
+          skipOffstage: false,
+        );
+        final panelFinder = find.byKey(
+          RobotFaceScreen.actionPanelKey,
+          skipOffstage: false,
+        );
+        final confirmFinder = find.byKey(
+          RobotFaceScreen.confirmTakenButtonKey,
+          skipOffstage: false,
+        );
+
+        states.add(readyState);
+        await tester.pump();
+        final panelState = tester.state(panelFinder);
+        expect(hostFinder, findsOneWidget);
+        expect(panelFinder, findsOneWidget);
+        expect(tester.getSize(hostFinder).height, greaterThan(0));
+
+        states.add(
+          readyState.copyWith(
+            mode: RobotFaceMode.missed,
+            availableActions: const {RobotFaceActionKind.recognizeMissedDose},
+          ),
+        );
+        await tester.pump();
+        expect(hostFinder, findsOneWidget);
+        expect(panelFinder, findsOneWidget);
+        expect(tester.state(panelFinder), same(panelState));
+        expect(tester.getSize(hostFinder).height, greaterThan(0));
+
+        states.add(
+          readyState.copyWith(mode: RobotFaceMode.idle, actionDoseId: null),
+        );
+        await tester.pump();
+        final confirmFocus = Focus.of(
+          tester.element(confirmFinder),
+          scopeOk: false,
+        );
+        expect(hostFinder, findsOneWidget);
+        expect(panelFinder, findsOneWidget);
+        expect(tester.state(panelFinder), same(panelState));
+        expect(tester.getSize(hostFinder), Size.zero);
+        expect(confirmFinder, findsOneWidget);
+        expect(confirmFinder.hitTestable(), findsNothing);
+        expect(find.bySemanticsLabel('I can see it and took it'), findsNothing);
+        expect(confirmFocus.canRequestFocus, isFalse);
+        confirmFocus.requestFocus();
+        await tester.pump();
+        expect(confirmFocus.hasFocus, isFalse);
+
+        states.add(readyState);
+        await tester.pump();
+        expect(hostFinder, findsOneWidget);
+        expect(panelFinder, findsOneWidget);
+        expect(tester.state(panelFinder), same(panelState));
+        expect(tester.getSize(hostFinder).height, greaterThan(0));
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
+
+  testWidgets(
     'keeps the action panel State mounted while actions hide and show',
     (tester) async {
       final states = StreamController<RobotFaceState>.broadcast();

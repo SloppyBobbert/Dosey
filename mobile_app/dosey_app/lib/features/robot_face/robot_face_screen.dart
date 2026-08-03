@@ -966,6 +966,15 @@ class _RobotFaceFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMissedState = state.mode == RobotFaceMode.missed;
     final displayAccent = _displayAccentFor(state);
+    final showActionPanel =
+        state.actionDoseId != null && state.availableActions.isNotEmpty;
+    final actionHost = _RobotFaceActionHost(
+      key: RobotFaceScreen.actionHostKey,
+      state: state,
+      isVisible: showActionPanel,
+      doseActionLogger: doseActionLogger,
+      visibleAndTakenLogger: visibleAndTakenLogger,
+    );
 
     return AspectRatio(
       aspectRatio: 16 / 9,
@@ -1068,8 +1077,7 @@ class _RobotFaceFrame extends StatelessWidget {
               _RobotFaceStatusCard(
                 key: RobotFaceScreen.bottomCardKey,
                 state: state,
-                doseActionLogger: doseActionLogger,
-                visibleAndTakenLogger: visibleAndTakenLogger,
+                actionHost: actionHost,
               ),
             ],
           ),
@@ -1114,19 +1122,15 @@ class _RobotFaceStatusCard extends StatelessWidget {
   const _RobotFaceStatusCard({
     super.key,
     required this.state,
-    this.doseActionLogger,
-    this.visibleAndTakenLogger,
+    required this.actionHost,
   });
 
   final RobotFaceState state;
-  final RobotFaceDoseActionLogger? doseActionLogger;
-  final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
+  final Widget actionHost;
 
   @override
   Widget build(BuildContext context) {
     final badgeEmphasis = _badgeEmphasisFor(state);
-    final showActionPanel =
-        state.actionDoseId != null && state.availableActions.isNotEmpty;
     final isMissedState = state.mode == RobotFaceMode.missed;
     final isSleepyState = state.mode == RobotFaceMode.sleepy;
     // The controller owns action availability, including offline/error
@@ -1307,13 +1311,7 @@ class _RobotFaceStatusCard extends StatelessWidget {
               const SizedBox(height: 12),
               _RobotFaceShortageCard(state: state),
             ],
-            _RobotFaceActionHost(
-              key: RobotFaceScreen.actionHostKey,
-              state: state,
-              isVisible: showActionPanel,
-              doseActionLogger: doseActionLogger,
-              visibleAndTakenLogger: visibleAndTakenLogger,
-            ),
+            actionHost,
           ],
         ),
       ),
