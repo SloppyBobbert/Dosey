@@ -11,6 +11,7 @@ enum WebStorageImplementation {
 enum WebStorageLocation { opfs, indexedDb }
 
 enum WebStorageSelectionFailure {
+  probeIncomplete,
   multipleExistingLocations,
   existingLocationUnavailable,
 }
@@ -171,7 +172,30 @@ sealed class WebStorageBootstrapResult {
 }
 
 final class WebStorageReady extends WebStorageBootstrapResult {
-  WebStorageReady({
+  factory WebStorageReady({
+    required DoseyDatabase database,
+    required WebStorageClassification classification,
+    required Set<WebMissingBrowserFeature> missingFeatures,
+  }) {
+    final canonicalClassification = classifyWebStorage(
+      classification.implementation,
+    );
+    if (!canonicalClassification.permitsRealData ||
+        classification != canonicalClassification) {
+      throw ArgumentError.value(
+        classification,
+        'classification',
+        'WebStorageReady requires a canonical real-data classification.',
+      );
+    }
+    return WebStorageReady._(
+      database: database,
+      classification: classification,
+      missingFeatures: missingFeatures,
+    );
+  }
+
+  WebStorageReady._({
     required this.database,
     required this.classification,
     required super.missingFeatures,

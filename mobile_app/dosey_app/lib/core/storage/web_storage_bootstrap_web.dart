@@ -6,13 +6,30 @@ import 'package:drift/wasm.dart';
 export 'web_storage_types.dart';
 
 Future<WebStorageBootstrapResult> bootstrapWebDoseyDatabase() async {
-  try {
-    final probe = await WasmDatabase.probe(
+  return bootstrapWebDoseyDatabaseWithProbe(
+    () => WasmDatabase.probe(
       databaseName: 'dosey',
       sqlite3Uri: Uri.parse('sqlite3.wasm'),
       driftWorkerUri: Uri.parse('drift_worker.js'),
-    );
+    ),
+  );
+}
+
+Future<WebStorageBootstrapResult> bootstrapWebDoseyDatabaseWithProbe(
+  Future<WasmProbeResult> Function() loadProbe,
+) async {
+  try {
+    final probe = await loadProbe();
     final missingFeatures = _mapMissingFeatures(probe.missingFeatures);
+    if (missingFeatures.contains(WebMissingBrowserFeature.workerError)) {
+      const failure = WebStorageSelectionFailure.probeIncomplete;
+      return WebStorageStartupRecovery(
+        error: const WebStorageSelectionException(failure),
+        stackTrace: StackTrace.current,
+        selectionFailure: failure,
+        missingFeatures: missingFeatures,
+      );
+    }
     final decision = selectWebStorage(
       available: probe.availableStorages.map(_mapImplementation).toSet(),
       existingLocations: {

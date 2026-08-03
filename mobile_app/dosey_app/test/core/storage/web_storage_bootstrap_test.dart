@@ -1,4 +1,6 @@
 import 'package:dosey_app/core/storage/web_storage_bootstrap.dart';
+import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -175,6 +177,40 @@ void main() {
 
     expect(first, second);
     expect(first.hashCode, second.hashCode);
+  });
+
+  test('ready rejects a demo-only classification', () async {
+    final database = DoseyDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    expect(
+      () => WebStorageReady(
+        database: database,
+        classification: classifyWebStorage(
+          WebStorageImplementation.unsafeIndexedDb,
+        ),
+        missingFeatures: const {},
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('ready rejects a forged unsafe real-data classification', () async {
+    final database = DoseyDatabase(NativeDatabase.memory());
+    addTearDown(database.close);
+
+    expect(
+      () => WebStorageReady(
+        database: database,
+        classification: const WebStorageClassification(
+          implementation: WebStorageImplementation.unsafeIndexedDb,
+          dataSafety: WebStorageDataSafety.realDataAllowed,
+          isDurable: true,
+        ),
+        missingFeatures: const {},
+      ),
+      throwsArgumentError,
+    );
   });
 
   test('recovery result never exposes a database', () {
