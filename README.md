@@ -39,6 +39,10 @@ The merged software foundation supports local use without cloud medication sync:
 - Use in-app Help and visit the [repository](https://github.com/SloppyBobbert/Dosey) or [issues](https://github.com/SloppyBobbert/Dosey/issues).
 - Keep medication, schedules, dose history, and supply data on the device in Drift/SQLite.
 
+![Dosey Today shown in Android, iPhone, and computer frames](media/readme/device-showcase.png)
+
+The computer view is a responsive presentation preview, not a shipped or qualified Personal Today app. Android is the current mounted Robot target; iPhone Personal is retained but not release-qualified.
+
 ## Modes and platforms
 
 | Experience | Platform | Current note |
