@@ -210,11 +210,12 @@ void main() {
     expect(_canvas(tester).animationRevision, -1);
     await tester.longPressAt(const Offset(400, 100));
     expect(longPresses, 1);
+    final revisionAfterLongPress = _canvas(tester).animationRevision;
     await tester.tapAt(
       _rect(tester, RobotFaceScreen.bottomCardKey).topLeft + const Offset(4, 4),
     );
     await tester.pump();
-    expect(_canvas(tester).animationRevision, -2);
+    expect(_canvas(tester).animationRevision, revisionAfterLongPress);
   });
 
   testWidgets(
@@ -307,6 +308,7 @@ void main() {
         ),
         same(panel),
       );
+      await tester.pumpWidget(const _FaceTestApp(withExit: true));
       final unflippedCard = _rect(tester, RobotFaceScreen.bottomCardKey);
       await tester.pumpWidget(
         const _FaceTestApp(
