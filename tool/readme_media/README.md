@@ -7,7 +7,7 @@ cd mobile_app/dosey_app
 TZ=UTC flutter test ../../tool/readme_media/today_screen_capture_test.dart
 ```
 
-When an intentional Today UI change needs new reviewed captures, add `--update-goldens` to that command. Then return to the repository root and render the device composition:
+When an intentional Today UI change needs new reviewed captures, add `--update-goldens` to that command. The composition renderer requires macOS because it uses Apple CoreGraphics, CoreText, and ImageIO frameworks. Return to the repository root and render the device composition:
 
 ```sh
 cd ../..
