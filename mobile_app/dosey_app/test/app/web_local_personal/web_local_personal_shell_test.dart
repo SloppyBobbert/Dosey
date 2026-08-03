@@ -197,6 +197,19 @@ void main() {
     expect(tester.getSize(find.byType(NavigationRail)).width, 232);
   });
 
+  testWidgets('desktop rail uses clear high-contrast navigation states', (
+    tester,
+  ) async {
+    await _pump(tester, width: 1024);
+    final rail = tester.widget<NavigationRail>(find.byType(NavigationRail));
+    expect(rail.useIndicator, isTrue);
+    expect(rail.indicatorColor, const Color(0xFFBFEAF0));
+    expect(rail.selectedIconTheme!.color, const Color(0xFF103E46));
+    expect(rail.unselectedIconTheme!.color, const Color(0xFFFFFCF6));
+    expect(rail.selectedLabelTextStyle!.color, const Color(0xFF103E46));
+    expect(rail.unselectedLabelTextStyle!.color, const Color(0xFFFFFCF6));
+  });
+
   testWidgets('mobile navigation follows focus order and has 44px targets', (
     tester,
   ) async {
@@ -228,10 +241,27 @@ void main() {
     );
   });
 
-  testWidgets('320px at 200% text does not overflow', (tester) async {
+  testWidgets('320px at 200% uses fully visible vertical navigation', (
+    tester,
+  ) async {
     await _pump(tester, width: 320, textScale: 2);
     expect(tester.takeException(), isNull);
-    expect(find.byType(FittedBox), findsNothing);
+    final navigation = find.byKey(
+      const ValueKey('web-local-personal-bottom-navigation'),
+    );
+    expect(
+      find.descendant(
+        of: navigation,
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsNothing,
+    );
+    for (final destination in WebLocalPersonalDestination.values) {
+      expect(
+        find.descendant(of: navigation, matching: find.text(destination.label)),
+        findsOneWidget,
+      );
+    }
     expect(
       find.text('Local schedule details will appear here.'),
       findsOneWidget,
@@ -264,6 +294,14 @@ void main() {
     expect(
       find.text('Local schedule details will appear here.'),
       findsOneWidget,
+    );
+    expect(
+      Focus.of(
+        tester.element(
+          find.byKey(const ValueKey('web-local-personal-page-focus')),
+        ),
+      ).hasFocus,
+      isTrue,
     );
     semantics.dispose();
   });

@@ -110,7 +110,7 @@ ThemeData _theme() {
   );
 }
 
-class _PersonalShell extends StatelessWidget {
+class _PersonalShell extends StatefulWidget {
   const _PersonalShell({
     required this.storage,
     required this.controller,
@@ -126,24 +126,61 @@ class _PersonalShell extends StatelessWidget {
   final VoidCallback? onAddSchedule;
 
   @override
+  State<_PersonalShell> createState() => _PersonalShellState();
+}
+
+class _PersonalShellState extends State<_PersonalShell> {
+  final FocusNode _pageFocusNode = FocusNode(debugLabel: 'Local Personal page');
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_moveFocusToPage);
+  }
+
+  @override
+  void didUpdateWidget(covariant _PersonalShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_moveFocusToPage);
+    widget.controller.addListener(_moveFocusToPage);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_moveFocusToPage);
+    _pageFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _moveFocusToPage() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _pageFocusNode.requestFocus();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final compactRail = width >= 700 && width < 1024;
     final desktopRail = width >= 1024;
-    final allowsDataActions = storage is WebStorageReady;
-    final page = pageBuilder(
+    final allowsDataActions = widget.storage is WebStorageReady;
+    final page = widget.pageBuilder(
       context,
-      controller.current,
-      storage,
-      onAddPrescription: allowsDataActions ? onAddPrescription : null,
-      onAddSchedule: allowsDataActions ? onAddSchedule : null,
+      widget.controller.current,
+      widget.storage,
+      onAddPrescription: allowsDataActions ? widget.onAddPrescription : null,
+      onAddSchedule: allowsDataActions ? widget.onAddSchedule : null,
     );
     return Scaffold(
       body: SafeArea(
         child: Row(
           children: [
             if (desktopRail || compactRail)
-              _NavigationRail(controller: controller, expanded: desktopRail),
+              _NavigationRail(
+                controller: widget.controller,
+                expanded: desktopRail,
+              ),
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
@@ -153,7 +190,11 @@ class _PersonalShell extends StatelessWidget {
                       padding: EdgeInsets.symmetric(
                         horizontal: width < 700 ? 20 : 48,
                       ),
-                      child: page,
+                      child: Focus(
+                        key: const ValueKey('web-local-personal-page-focus'),
+                        focusNode: _pageFocusNode,
+                        child: page,
+                      ),
                     ),
                   ),
                 ),
@@ -163,7 +204,7 @@ class _PersonalShell extends StatelessWidget {
         ),
       ),
       bottomNavigationBar: width < 700
-          ? _BottomNavigation(controller: controller)
+          ? _BottomNavigation(controller: widget.controller)
           : null,
     );
   }
@@ -185,6 +226,18 @@ class _NavigationRail extends StatelessWidget {
         backgroundColor: Colors.transparent,
         extended: expanded,
         minExtendedWidth: 232,
+        useIndicator: true,
+        indicatorColor: const Color(0xFFBFEAF0),
+        selectedIconTheme: const IconThemeData(color: Color(0xFF103E46)),
+        unselectedIconTheme: const IconThemeData(color: Color(0xFFFFFCF6)),
+        selectedLabelTextStyle: const TextStyle(
+          color: Color(0xFF103E46),
+          fontWeight: FontWeight.w700,
+        ),
+        unselectedLabelTextStyle: const TextStyle(
+          color: Color(0xFFFFFCF6),
+          fontWeight: FontWeight.w600,
+        ),
         selectedIndex: controller.current.index,
         labelType: expanded
             ? NavigationRailLabelType.none
@@ -231,30 +284,53 @@ class _BottomNavigation extends StatelessWidget {
         key: const ValueKey('web-local-personal-bottom-navigation'),
         padding: EdgeInsets.only(bottom: bottom),
         color: const Color(0xFF103E46),
-        child: SizedBox(
-          height: roomyLabels ? 104 : 72,
-          child: FocusTraversalGroup(
-            policy: OrderedTraversalPolicy(),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final destination in WebLocalPersonalDestination.values)
-                    FocusTraversalOrder(
-                      order: NumericFocusOrder(destination.index.toDouble()),
-                      child: SizedBox(
-                        width: roomyLabels ? 116 : 64,
-                        child: _BottomDestination(
-                          destination: destination,
-                          selected: destination == controller.current,
-                          onSelect: () => controller.goTo(destination),
+        child: FocusTraversalGroup(
+          policy: OrderedTraversalPolicy(),
+          child: roomyLabels
+              ? Column(
+                  children: [
+                    for (final destination
+                        in WebLocalPersonalDestination.values)
+                      FocusTraversalOrder(
+                        order: NumericFocusOrder(destination.index.toDouble()),
+                        child: SizedBox(
+                          height: 52,
+                          width: double.infinity,
+                          child: _BottomDestination(
+                            destination: destination,
+                            selected: destination == controller.current,
+                            expanded: true,
+                            onSelect: () => controller.goTo(destination),
+                          ),
                         ),
                       ),
+                  ],
+                )
+              : SizedBox(
+                  height: 72,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final destination
+                            in WebLocalPersonalDestination.values)
+                          FocusTraversalOrder(
+                            order: NumericFocusOrder(
+                              destination.index.toDouble(),
+                            ),
+                            child: SizedBox(
+                              width: 64,
+                              child: _BottomDestination(
+                                destination: destination,
+                                selected: destination == controller.current,
+                                onSelect: () => controller.goTo(destination),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                ],
-              ),
-            ),
-          ),
+                  ),
+                ),
         ),
       ),
     );
@@ -266,11 +342,13 @@ class _BottomDestination extends StatelessWidget {
     required this.destination,
     required this.selected,
     required this.onSelect,
+    this.expanded = false,
   });
 
   final WebLocalPersonalDestination destination;
   final bool selected;
   final VoidCallback onSelect;
+  final bool expanded;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -288,21 +366,37 @@ class _BottomDestination extends StatelessWidget {
             ? const Color(0xFF7DDAE5)
             : const Color(0xFFFFFCF6),
       ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(destination.icon, size: 22),
-          const SizedBox(height: 3),
-          Expanded(
-            child: Text(
-              destination.label,
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.visible,
+      child: expanded
+          ? Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(destination.icon, size: 22),
+                const SizedBox(width: 12),
+                Text(
+                  destination.label,
+                  maxLines: 2,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(destination.icon, size: 22),
+                const SizedBox(height: 3),
+                Expanded(
+                  child: Text(
+                    destination.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.visible,
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     ),
   );
 }

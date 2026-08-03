@@ -68,6 +68,7 @@ Widget buildWebLocalPersonalFoundationPage(
             children: [
               Semantics(
                 header: true,
+                liveRegion: true,
                 child: Text(
                   copy.title,
                   style: Theme.of(context).textTheme.displaySmall,
