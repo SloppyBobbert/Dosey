@@ -68,6 +68,7 @@ The physical dispenser remains pending. The ESP32-C6 controller, Bluetooth lifec
 Start with the app, its documentation, or an open issue. Contributions that improve clarity, local safety behavior, testing, and reproducible hardware evidence are especially useful.
 
 - Read the [app guide](mobile_app/dosey_app/README.md) for local setup and current app scope.
+- See [README media](tool/readme_media/README.md) to verify or intentionally refresh the Today captures and device showcase.
 - Read the [protocol](docs/protocol.md), [controller bench runbook](docs/controller_bench_runbook.md), and [hardware validation record](firmware/HARDWARE_VALIDATION.md) before working with hardware.
 - Review [open issues](https://github.com/SloppyBobbert/Dosey/issues) or browse the [repository](https://github.com/SloppyBobbert/Dosey).
 - See the [local backup format](docs/local_backup_format.md) and [Robot software demo qualification record](mobile_app/dosey_app/ROBOT_SOFTWARE_DEMO_QUALIFICATION.md) for current evidence and limits.
@@ -81,7 +82,7 @@ Dosey/
 ├── mobile_app/dosey_app/   # Flutter application
 ├── mechanical/             # Daviky carousel, servo, LEGO shell, and assembly notes
 ├── docs/                   # Protocols, test runbooks, and backup documentation
-└── media/                  # Hardware photos and videos
+└── media/                  # Hardware media and rendered README showcase assets
 ```
 
 ## Technical details

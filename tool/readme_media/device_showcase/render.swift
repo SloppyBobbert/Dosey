@@ -63,6 +63,10 @@ func drawScreen(_ context: CGContext, image: CGImage, in rect: CGRect, radius: C
 
 func label(_ context: CGContext, _ text: String, centerX: CGFloat, baseline: CGFloat) {
   let font = CTFontCreateWithName("HelveticaNeue-Medium" as CFString, 22, nil)
+  let postScriptName = CTFontCopyPostScriptName(font) as String
+  guard postScriptName == "HelveticaNeue-Medium" else {
+    fatalError("HelveticaNeue-Medium resolved as \(postScriptName)")
+  }
   let attributes: [NSAttributedString.Key: Any] = [
     NSAttributedString.Key(kCTFontAttributeName as String): font,
     NSAttributedString.Key(kCTForegroundColorAttributeName as String): color(0x27313a),
@@ -109,14 +113,14 @@ drawScreen(context, image: android, in: androidScreen, radius: 29)
 fill(context, CGRect(x: 178, y: 101, width: 138, height: 5), color(0x87919a), radius: 3)
 
 // iPhone: a slightly smaller frame provides a distinct physical silhouette.
-let iphoneOuter = CGRect(x: 465, y: 100, width: 278, height: 660)
-let iphoneScreen = CGRect(x: 480, y: 124, width: 248, height: 537)
+let iphoneOuter = CGRect(x: 451, y: 100, width: 304, height: 660)
+let iphoneScreen = CGRect(x: 462, y: 126, width: 282, height: 610.656)
 context.setShadow(offset: CGSize(width: 0, height: 10), blur: 18, color: shadow)
 fill(context, iphoneOuter, graphite, radius: 45)
 context.setShadow(offset: .zero, blur: 0, color: nil)
 stroke(context, iphoneOuter.insetBy(dx: 1, dy: 1), rim, radius: 44)
 drawScreen(context, image: iphone, in: iphoneScreen, radius: 33)
-fill(context, CGRect(x: 563, y: 111, width: 82, height: 18), color(0x080b0e), radius: 10)
+fill(context, CGRect(x: 562, y: 111, width: 82, height: 18), color(0x080b0e), radius: 10)
 
 // Desktop: screen retains 1366:768 aspect ratio; monitor, neck, and base make it unmistakably physical.
 let monitorOuter = CGRect(x: 812, y: 132, width: 698, height: 414)
@@ -126,8 +130,8 @@ fill(context, monitorOuter, graphite, radius: 20)
 context.setShadow(offset: .zero, blur: 0, color: nil)
 stroke(context, monitorOuter.insetBy(dx: 1, dy: 1), rim, radius: 19)
 drawScreen(context, image: desktop, in: monitorScreen, radius: 8)
-fill(context, CGRect(x: 1125, y: 546, width: 72, height: 136), graphite, radius: 8)
-stroke(context, CGRect(x: 1125, y: 546, width: 72, height: 136), rim, radius: 8)
+fill(context, CGRect(x: 1125, y: 546, width: 72, height: 172), graphite, radius: 8)
+stroke(context, CGRect(x: 1125, y: 546, width: 72, height: 172), rim, radius: 8)
 fill(context, CGRect(x: 1018, y: 718, width: 286, height: 42), graphite, radius: 20)
 stroke(context, CGRect(x: 1018, y: 718, width: 286, height: 42), rim, radius: 20)
 

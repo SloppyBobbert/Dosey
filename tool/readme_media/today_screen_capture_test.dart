@@ -24,6 +24,7 @@ import '../../mobile_app/dosey_app/test/support/fake_app_scope_dependencies.dart
 final _captureDate = DateTime.utc(2040, 1, 2, 9);
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(_loadFlutterFonts);
 
   test('Confirmed taken uses Roboto w800 metrics', () {
@@ -119,7 +120,12 @@ void main() {
         expect(markTakenStyle.fontFamily, 'Roboto');
         expect(markTakenStyle.fontWeight, FontWeight.w800);
         expect(tester.getSize(markTaken).width, lessThan(180));
-        expect(find.text('DEBUG'), findsNothing);
+        expect(
+          tester
+              .widget<MaterialApp>(find.byType(MaterialApp))
+              .debugShowCheckedModeBanner,
+          isFalse,
+        );
         expect(
           Theme.of(tester.element(find.byType(DoseyShell))).useMaterial3,
           isTrue,
