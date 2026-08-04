@@ -8,14 +8,16 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   const codec = BackupCodec();
 
-  test('empty backup encoding is deterministic and has current sections', () {
-    final document = BackupDocument.empty();
+  test('v2 encoding and decoding use source schema 18', () {
+    final document = BackupDocument(data: _validV2Data());
 
     final first = codec.encode(document);
     final second = codec.encode(document);
     final json = jsonDecode(utf8.decode(first)) as Map<String, Object?>;
 
     expect(first, second);
+    expect(json['formatVersion'], 2);
+    expect(json['sourceSchemaVersion'], 18);
     expect(json.keys, <String>[
       'format',
       'formatVersion',
@@ -26,6 +28,7 @@ void main() {
       (json['data']! as Map<String, Object?>).keys,
       BackupDocument.sectionNames,
     );
+    expect(codec.decode(first).sourceSchemaVersion, 18);
   });
 
   test('rows use canonical section-specific ordering', () {

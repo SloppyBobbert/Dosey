@@ -66,7 +66,7 @@ class BackupDocument {
 
   static const formatName = 'dosey-local-backup';
   static const currentFormatVersion = 2;
-  static const currentSourceSchemaVersion = 17;
+  static const currentSourceSchemaVersion = 18;
   static const v1SourceSchemaVersion = 14;
   static const sectionNames = <String>[
     'settings',
