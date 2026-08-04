@@ -120,6 +120,61 @@
       "indexes": [
         { "key": "robot_sequence", "type": "unique", "columns": ["robotId", "sequence"], "orders": ["ASC", "ASC"] }
       ]
+    },
+    {
+      "$id": "dosey_sync_terminal_occurrences_v1",
+      "$permissions": [],
+      "databaseId": "<DOSEY_DATABASE_ID>",
+      "name": "Dosey sync terminal occurrences v1",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "occurrenceId", "type": "varchar", "size": 256, "required": true, "array": false, "default": null },
+        { "key": "acceptedKind", "type": "varchar", "size": 16, "required": true, "array": false, "elements": ["taken_confirmed", "skipped", "missed"], "format": "enum", "default": null },
+        { "key": "acceptedEventId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "acceptedOperationHash", "type": "varchar", "size": 64, "required": true, "array": false, "default": null },
+        { "key": "acceptedIdempotencyKey", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "acceptedDeviceId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "acceptedActorAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "acceptedSequence", "type": "bigint", "required": true, "array": false, "min": 1, "max": 9007199254740991, "default": null },
+        { "key": "occurredAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
+        { "key": "acceptedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null }
+      ],
+      "indexes": [
+        { "key": "robot_occurrence", "type": "unique", "columns": ["robotId", "occurrenceId"], "orders": ["ASC", "ASC"] },
+        { "key": "robot_accepted_sequence", "type": "key", "columns": ["robotId", "acceptedSequence"], "orders": ["ASC", "ASC"] }
+      ]
+    },
+    {
+      "$id": "dosey_sync_terminal_conflicts_v1",
+      "$permissions": [],
+      "databaseId": "<DOSEY_DATABASE_ID>",
+      "name": "Dosey sync terminal conflicts v1",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "occurrenceId", "type": "varchar", "size": 256, "required": true, "array": false, "default": null },
+        { "key": "conflictCode", "type": "varchar", "size": 40, "required": true, "array": false, "elements": ["TERMINAL_OUTCOME_REPLAY_MISMATCH", "TERMINAL_OUTCOME_CONFLICT"], "format": "enum", "default": null },
+        { "key": "acceptedEventId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "acceptedOperationHash", "type": "varchar", "size": 64, "required": true, "array": false, "default": null },
+        { "key": "acceptedKind", "type": "varchar", "size": 16, "required": true, "array": false, "elements": ["taken_confirmed", "skipped", "missed"], "format": "enum", "default": null },
+        { "key": "acceptedSequence", "type": "bigint", "required": true, "array": false, "min": 1, "max": 9007199254740991, "default": null },
+        { "key": "incomingEventId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "incomingOperationHash", "type": "varchar", "size": 64, "required": true, "array": false, "default": null },
+        { "key": "incomingKind", "type": "varchar", "size": 16, "required": true, "array": false, "elements": ["taken_confirmed", "skipped", "missed"], "format": "enum", "default": null },
+        { "key": "incomingIdempotencyKey", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "incomingDeviceId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "incomingActorAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "incomingPayload", "type": "text", "required": true, "array": false, "default": null },
+        { "key": "incomingOccurredAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null },
+        { "key": "recordedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null }
+      ],
+      "indexes": [
+        { "key": "robot_incoming_hash", "type": "unique", "columns": ["robotId", "incomingOperationHash"], "orders": ["ASC", "ASC"] },
+        { "key": "robot_occurrence", "type": "key", "columns": ["robotId", "occurrenceId"], "orders": ["ASC", "ASC"] }
+      ]
     }
   ],
   "functions": [
