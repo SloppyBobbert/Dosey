@@ -530,6 +530,9 @@ CaregiverDoseAction _caregiverAction(DoseEventKindContract kind) =>
     switch (kind) {
       DoseEventKindContract.takenConfirmed => CaregiverDoseAction.taken,
       DoseEventKindContract.skipped => CaregiverDoseAction.skipped,
+      DoseEventKindContract.missed => throw const CaregiverSyncException(
+        'This app cannot display missed dose outcomes yet.',
+      ),
       DoseEventKindContract.snoozed => CaregiverDoseAction.snoozed,
       DoseEventKindContract.helpRequested => CaregiverDoseAction.helpRequested,
     };

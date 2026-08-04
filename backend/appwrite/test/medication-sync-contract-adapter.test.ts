@@ -96,6 +96,39 @@ describe('Medication sync contract adapter', () => {
     });
   });
 
+  test('fails closed for a contract-valid missed outcome before append conversion', () => {
+    const parsed = medicationSyncContractParser.parsePush({
+      contractVersion: 1,
+      robotId: 'robot-1',
+      operations: [{
+        contractVersion: 1,
+        mutationId: 'mutation-missed-1',
+        deviceId: 'patient-device-1',
+        idempotencyKey: 'patient-device-1:mutation-missed-1',
+        entityType: 'dose_event',
+        operation: 'append',
+        entityId: 'event-missed-1',
+        baseRevision: null,
+        payload: {
+          medicationId: 'medication-1',
+          occurrence: {
+            contractVersion: 1,
+            occurrenceId: 'schedule-1:2:2026-07-29T15:30:00.000Z',
+            scheduleId: 'schedule-1',
+            scheduleRevision: 2,
+            scheduledAt: '2026-07-29T15:30:00Z',
+            localDate: '2026-07-29',
+            timezoneId: 'America/Los_Angeles',
+          },
+          kind: 'missed',
+          occurredAt: '2026-07-29T15:34:12Z',
+        },
+      }],
+    });
+
+    assert.deepEqual(parsed, {ok: false, code: 'MISSED_EVENT_NOT_IMPLEMENTED'});
+  });
+
   test('serializes parser-valid push acknowledgements', () => {
     const response = serializeMedicationSyncPushResponse('robot-1', [{
       operationId: 'mutation-1',

@@ -14,6 +14,9 @@ import {
   parseMutation,
   parseOccurrenceRef,
   parseSchedule,
+  resolveTerminalOutcome,
+  evaluateTerminalOutcomeAuthority,
+  isTerminalDoseEventMutation,
 } from '../src/domain/medication-sync-contract.js';
 
 interface FixtureCase {
@@ -576,4 +579,50 @@ describe('medication sync contract v1', () => {
       }),
     );
   });
+
+  test('classifies exactly the three terminal dose event kinds', () => {
+    for (const kind of ['taken_confirmed', 'skipped', 'missed']) {
+      assert.equal(isTerminalDoseEventMutation(terminalMutation(kind)), true);
+    }
+    assert.equal(isTerminalDoseEventMutation(terminalMutation('snoozed')), false);
+    assert.equal(isTerminalDoseEventMutation(terminalMutation('help_requested')), false);
+  });
+
+  test('requires terminal mutations for authority decisions', () => {
+    const humanOwner = {accountId: 'owner-1', authority: 'human' as const, registeredDeviceId: null, role: 'owner' as const};
+    const humanCaregiver = {...humanOwner, accountId: 'caregiver-1', role: 'member' as const};
+    const matchingDevice = {accountId: 'device-1', authority: 'patient_device' as const, registeredDeviceId: 'patient-device-1', role: null};
+    const mismatchedDevice = {...matchingDevice, registeredDeviceId: 'patient-device-2'};
+    const missingDevice = {...matchingDevice, registeredDeviceId: null};
+    const terminal = terminalMutation('missed');
+    assert.deepEqual(evaluateTerminalOutcomeAuthority(humanOwner, terminal), {outcome: 'rejected', errorCode: 'HUMAN_TERMINAL_OUTCOME_FORBIDDEN'});
+    assert.deepEqual(evaluateTerminalOutcomeAuthority(humanCaregiver, terminal), {outcome: 'rejected', errorCode: 'HUMAN_TERMINAL_OUTCOME_FORBIDDEN'});
+    assert.deepEqual(evaluateTerminalOutcomeAuthority(matchingDevice, terminal), {outcome: 'allowed'});
+    assert.deepEqual(evaluateTerminalOutcomeAuthority(mismatchedDevice, terminal), {outcome: 'rejected', errorCode: 'DEVICE_IDENTITY_MISMATCH'});
+    assert.deepEqual(evaluateTerminalOutcomeAuthority(missingDevice, terminal), {outcome: 'rejected', errorCode: 'PATIENT_DEVICE_AUTHORITY_REQUIRED'});
+    assertContractCode(() => evaluateTerminalOutcomeAuthority(humanOwner, terminalMutation('snoozed')), 'TERMINAL_OUTCOME_REQUIRED');
+  });
+
+  test('resolves terminal outcomes deterministically per occurrence', () => {
+    const taken = terminalMutation('taken_confirmed');
+    assert.deepEqual(resolveTerminalOutcome(taken, taken), {outcome: 'duplicate'});
+    assert.deepEqual(resolveTerminalOutcome(taken, terminalMutation('taken_confirmed', {entityId: 'event-2'})), {outcome: 'needs_review', errorCode: 'TERMINAL_OUTCOME_REPLAY_MISMATCH'});
+    assert.deepEqual(resolveTerminalOutcome(taken, terminalMutation('taken_confirmed', {occurredAt: '2026-07-29T15:35:12Z'})), {outcome: 'needs_review', errorCode: 'TERMINAL_OUTCOME_REPLAY_MISMATCH'});
+    for (const [left, right] of [['taken_confirmed', 'skipped'], ['taken_confirmed', 'missed'], ['skipped', 'missed']] as const) {
+      assert.deepEqual(resolveTerminalOutcome(terminalMutation(left), terminalMutation(right)), {outcome: 'needs_review', errorCode: 'TERMINAL_OUTCOME_CONFLICT'});
+    }
+    assertContractCode(() => resolveTerminalOutcome(taken, terminalMutation('missed', {occurrenceId: 'schedule-2:2:2026-07-29T15:30:00.000Z'})), 'TERMINAL_OUTCOME_OCCURRENCE_MISMATCH');
+    assertContractCode(() => resolveTerminalOutcome(taken, terminalMutation('snoozed')), 'TERMINAL_OUTCOME_REQUIRED');
+    assertContractCode(() => resolveTerminalOutcome(terminalMutation('help_requested'), terminalMutation('help_requested')), 'TERMINAL_OUTCOME_REQUIRED');
+  });
 });
+
+function terminalMutation(kind: 'taken_confirmed' | 'skipped' | 'missed' | 'snoozed' | 'help_requested', overrides: {entityId?: string; occurredAt?: string; occurrenceId?: string} = {}) {
+  const occurrenceId = overrides.occurrenceId ?? 'schedule-1:2:2026-07-29T15:30:00.000Z';
+  const scheduleId = occurrenceId.startsWith('schedule-2:') ? 'schedule-2' : 'schedule-1';
+  return parseMutation({contractVersion: 1, mutationId: 'terminal-1', deviceId: 'patient-device-1', idempotencyKey: 'patient-device-1:terminal-1', entityType: 'dose_event', operation: 'append', entityId: overrides.entityId ?? 'event-1', baseRevision: null, payload: {medicationId: 'medication-1', kind, occurredAt: overrides.occurredAt ?? '2026-07-29T15:34:12Z', occurrence: {contractVersion: 1, occurrenceId, scheduleId, scheduleRevision: 2, scheduledAt: '2026-07-29T15:30:00Z', localDate: '2026-07-29', timezoneId: 'America/Los_Angeles'}}});
+}
+
+function assertContractCode(action: () => void, code: string): void {
+  assert.throws(action, (error: unknown) => error instanceof MedicationSyncContractError && error.code === code);
+}

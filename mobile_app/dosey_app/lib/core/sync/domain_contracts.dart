@@ -354,6 +354,8 @@ final Set<String> medicationSyncCanonicalTimezones = Set.unmodifiable(<String>{
 
 enum HouseholdRoleContract {
   owner('owner'),
+
+  /// `member` remains the wire value for caregiver compatibility.
   member('member');
 
   const HouseholdRoleContract(this.wireValue);
@@ -372,6 +374,7 @@ enum PillTypeContract {
 enum DoseEventKindContract {
   takenConfirmed('taken_confirmed'),
   skipped('skipped'),
+  missed('missed'),
   snoozed('snoozed'),
   helpRequested('help_requested');
 
@@ -405,6 +408,77 @@ enum MutationOutcomeContract {
 
   const MutationOutcomeContract(this.wireValue);
   final String wireValue;
+}
+
+enum MedicationSyncActorAuthority { human, patientDevice }
+
+enum MutationAuthorityOutcome { allowed, rejected }
+
+class MedicationSyncActorContract {
+  const MedicationSyncActorContract({
+    required this.accountId,
+    required this.authority,
+    required this.registeredDeviceId,
+    required this.role,
+  });
+
+  final String accountId;
+  final MedicationSyncActorAuthority authority;
+  final String? registeredDeviceId;
+  final HouseholdRoleContract? role;
+}
+
+class MutationAuthorityDecision {
+  const MutationAuthorityDecision._(this.outcome, this.errorCode);
+  const MutationAuthorityDecision.allowed()
+    : this._(MutationAuthorityOutcome.allowed, null);
+  const MutationAuthorityDecision.rejected(String code)
+    : this._(MutationAuthorityOutcome.rejected, code);
+
+  final MutationAuthorityOutcome outcome;
+  final String? errorCode;
+}
+
+class TerminalOutcomeResolution {
+  const TerminalOutcomeResolution._(this.outcome, this.errorCode);
+  const TerminalOutcomeResolution.duplicate() : this._('duplicate', null);
+  const TerminalOutcomeResolution.needsReview(String code)
+    : this._('needs_review', code);
+
+  final String outcome;
+  final String? errorCode;
+}
+
+/// Storage is deferred; this freezes the immutable inventory-ledger fields.
+class InventoryAdjustmentContract {
+  const InventoryAdjustmentContract({
+    required this.ledgerId,
+    required this.medicationId,
+    required this.delta,
+    required this.actorId,
+    required this.reason,
+    required this.idempotencyKey,
+  });
+
+  final String ledgerId;
+  final String medicationId;
+  final int delta;
+  final String actorId;
+  final String reason;
+  final String idempotencyKey;
+
+  factory InventoryAdjustmentContract.fromJson(Map<String, Object?> json) =>
+      _parseInventoryAdjustment(json, r'$');
+
+  Map<String, Object?> toJson() => _validatedJson({
+    'contractVersion': medicationSyncContractVersion,
+    'ledgerId': ledgerId,
+    'medicationId': medicationId,
+    'delta': delta,
+    'actorId': actorId,
+    'reason': reason,
+    'idempotencyKey': idempotencyKey,
+  }, _parseInventoryAdjustment);
 }
 
 class MedicationSyncContractException implements FormatException {
@@ -1423,6 +1497,104 @@ MutationContract _parseMutation(Object? value, String path) {
   );
 }
 
+bool isTerminalDoseEventMutation(MutationContract mutation) =>
+    mutation.entityType == EntityTypeContract.doseEvent &&
+    mutation.payload is DoseEventMutationPayloadContract &&
+    const <DoseEventKindContract>[
+      DoseEventKindContract.takenConfirmed,
+      DoseEventKindContract.skipped,
+      DoseEventKindContract.missed,
+    ].contains((mutation.payload! as DoseEventMutationPayloadContract).kind);
+
+MutationAuthorityDecision evaluateTerminalOutcomeAuthority(
+  MedicationSyncActorContract actor,
+  MutationContract mutation,
+) {
+  if (!isTerminalDoseEventMutation(mutation)) {
+    _fail(
+      'TERMINAL_OUTCOME_REQUIRED',
+      r'$.mutation',
+      'Terminal outcome authority requires a taken_confirmed, skipped, or missed dose event mutation.',
+    );
+  }
+  if (actor.authority == MedicationSyncActorAuthority.human) {
+    return const MutationAuthorityDecision.rejected(
+      'HUMAN_TERMINAL_OUTCOME_FORBIDDEN',
+    );
+  }
+  if (actor.registeredDeviceId == null) {
+    return const MutationAuthorityDecision.rejected(
+      'PATIENT_DEVICE_AUTHORITY_REQUIRED',
+    );
+  }
+  return actor.registeredDeviceId == mutation.deviceId
+      ? const MutationAuthorityDecision.allowed()
+      : const MutationAuthorityDecision.rejected('DEVICE_IDENTITY_MISMATCH');
+}
+
+TerminalOutcomeResolution resolveTerminalOutcome(
+  MutationContract recorded,
+  MutationContract incoming,
+) {
+  if (!isTerminalDoseEventMutation(recorded) ||
+      !isTerminalDoseEventMutation(incoming)) {
+    _fail(
+      'TERMINAL_OUTCOME_REQUIRED',
+      r'$.mutation',
+      'Terminal outcome resolution requires taken_confirmed, skipped, or missed dose event mutations.',
+    );
+  }
+  final recordedPayload = recorded.payload! as DoseEventMutationPayloadContract;
+  final incomingPayload = incoming.payload! as DoseEventMutationPayloadContract;
+  if (recordedPayload.occurrence.occurrenceId !=
+      incomingPayload.occurrence.occurrenceId) {
+    _fail(
+      'TERMINAL_OUTCOME_OCCURRENCE_MISMATCH',
+      r'$.occurrenceId',
+      'Terminal outcomes must be compared for one occurrence.',
+    );
+  }
+  if (canonicalMedicationSyncJson(recorded.toJson()) ==
+      canonicalMedicationSyncJson(incoming.toJson())) {
+    return const TerminalOutcomeResolution.duplicate();
+  }
+  return TerminalOutcomeResolution.needsReview(
+    recordedPayload.kind == incomingPayload.kind
+        ? 'TERMINAL_OUTCOME_REPLAY_MISMATCH'
+        : 'TERMINAL_OUTCOME_CONFLICT',
+  );
+}
+
+InventoryAdjustmentContract _parseInventoryAdjustment(
+  Object? value,
+  String path,
+) {
+  final data = _object(value, path);
+  _exactKeys(data, [
+    'contractVersion',
+    'ledgerId',
+    'medicationId',
+    'delta',
+    'actorId',
+    'reason',
+    'idempotencyKey',
+  ], path);
+  _version(data['contractVersion'], '$path.contractVersion');
+  return InventoryAdjustmentContract(
+    ledgerId: _id(data['ledgerId'], '$path.ledgerId'),
+    medicationId: _id(data['medicationId'], '$path.medicationId'),
+    delta: _integer(
+      data['delta'],
+      '$path.delta',
+      minimum: -9007199254740991,
+      maximum: 9007199254740991,
+    ),
+    actorId: _id(data['actorId'], '$path.actorId'),
+    reason: _string(data['reason'], '$path.reason', maximum: 200),
+    idempotencyKey: _id(data['idempotencyKey'], '$path.idempotencyKey'),
+  );
+}
+
 Map<String, Object?> _validatedMutationJson(Map<String, Object?> json) {
   _parseMutation(json, r'$');
   return json;
@@ -1473,7 +1645,7 @@ ConflictContract _parseConflict(Object? value, String path) {
   final expectedRevision = _integer(
     data['expectedRevision'],
     '$path.expectedRevision',
-    minimum: 1,
+    minimum: 0,
   );
   if (expectedRevision == actualRevision) {
     _fail(
@@ -1875,6 +2047,7 @@ Object parseMedicationSyncValue(String type, Object? value) => switch (type) {
   'pushRequest' => _parsePushRequest(value, r'$'),
   'pushResponse' => _parsePushResponse(value, r'$'),
   'pullRequest' => _parsePullRequest(value, r'$'),
+  'inventoryAdjustment' => _parseInventoryAdjustment(value, r'$'),
   _ => _fail('UNKNOWN_FIXTURE_TYPE', r'$.type', 'Unknown fixture type: $type.'),
 };
 

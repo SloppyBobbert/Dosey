@@ -11,11 +11,18 @@ case in `fixtures/valid.json` and reject every case in
 - `contractVersion` is the integer `1` on every resource, envelope, mutation,
   acknowledgement, conflict, and nested `OccurrenceRef`. Mutation payloads do
   not add another version field around their writeable fields.
-- Appwrite authentication plus the active `human_robot_links` row for the exact
-  `robotId` are authoritative. Roles remain `owner` and `member`; clients never
-  send a role in a mutation. The server derives account, role, and scope.
-- Owners may mutate medications and schedules. Owners and members may append
-  dose events. The server resolves and enforces the current role.
+- Authentication plus the active principal-to-robot authorization record for the
+  exact `robotId` are authoritative. Roles remain `owner` and `member`; clients
+  never send a role in a mutation. The server derives account, role, and scope.
+- `member` is the existing wire value for a caregiver. It is retained for
+  compatibility; no wire rename or migration is implied. Owners and caregivers
+  may create, edit, tombstone, and observe medication and schedule plans.
+- Human actors, including owners and caregivers, may not append terminal dose
+  outcomes. Only an authenticated registered patient-side device authority may
+  upload `taken_confirmed`, `skipped`, or `missed`; its server-derived registered
+  device ID must exactly match the mutation `deviceId`.
+- These are normative contract decisions. Service/store enforcement is deferred
+  to #116; production medication sync remains disabled in this slice.
 - IDs are opaque, non-empty strings of at most 128 characters, except the
   deterministic `OccurrenceRef.occurrenceId`, which may be at most 256
   characters. They must not have leading or trailing whitespace.
@@ -98,12 +105,29 @@ v1.
 
 `DoseEvent` is immutable and contains `id`, `householdId`, `medicationId`, an
 `OccurrenceRef`, `kind`, `occurredAt`, and `actorAccountId`. Allowed kinds are
-`taken_confirmed`, `skipped`, `snoozed`, and `help_requested`.
+`taken_confirmed`, `skipped`, `missed`, `snoozed`, and `help_requested`.
 Only `taken_confirmed` means taken. There is no `marksDoseTaken` field, and
 controller movement or visibility is never a dose event.
 
 The server derives the authenticated actor. Mutation payloads containing a
 client-supplied `actorAccountId` are rejected as unknown fields.
+
+`taken_confirmed`, `skipped`, and `missed` are mutually exclusive terminal
+outcomes for a canonical occurrence ID. An exact terminal mutation replay is a
+duplicate. A changed replay with the same terminal outcome is
+`TERMINAL_OUTCOME_REPLAY_MISMATCH`; a different terminal outcome is
+`TERMINAL_OUTCOME_CONFLICT`; both require review. These are contract decisions,
+not a storage or transaction implementation. Occurrence-level atomic exclusion
+and Taken/Skipped authority are not enforced in this slice. `missed` has no
+inventory mutation semantics. A missed acknowledgement, if represented later,
+remains separate from the terminal outcome and never changes inventory.
+
+### Deferred inventory adjustment ledger
+
+The storage-neutral `InventoryAdjustment` shape reserves `ledgerId` (immutable
+ledger identity), `medicationId`, signed `delta`, `actorId`, `reason`, and
+`idempotencyKey`. Persistence and inventory services are deferred. In
+particular, `missed` never creates an inventory adjustment.
 
 ### Mutation and idempotency
 
@@ -132,9 +156,9 @@ The push Function accepts `PushRequest { contractVersion, robotId, operations }`
 and returns `PushResponse { contractVersion, robotId, acknowledgements }`. The
 pull Function accepts `PullRequest { contractVersion, robotId, cursor,
 checkpoint, limit }`. `limit` is `1..100`; cursor and checkpoint are nullable
-only on the first request. Both Functions authenticate the human, strictly
-parse the request, and resolve the active link for the parsed `robotId` before
-applying any operation or returning scoped data.
+only on the first request. Both Functions authenticate the calling principal,
+strictly parse the request, and resolve active access for the parsed `robotId`
+before applying any operation or returning scoped data.
 
 Cursor and checkpoint wire values are strings so JSON cannot round large
 integers, but their content is numeric: canonical non-negative base-10
@@ -201,14 +225,19 @@ produce structurally identical JSON (use deep comparison, not Dart `Map.==`).
 
 ## Appwrite Function adapters
 
+The adapter temporarily rejects a contract-valid `missed` event with
+`MISSED_EVENT_NOT_IMPLEMENTED` before append conversion. This transitional
+fail-closed gate does not add service/store enforcement for terminal outcomes.
+
 The TypeScript adapter parses untrusted JSON with `parsePushRequest` or
 `parsePullRequest`. These functions return `PushRequest` and `PullRequest`
 respectively and throw `MedicationSyncContractError { code, path, message }`.
 Adapters catch only that class to produce their invalid-request response;
 unknown exceptions remain server errors. After authentication, the adapter
-loads the active `human_robot_links` row for the parsed `robotId`, derives
-account/role/household scope, and applies the normalized values. It never maps
-a client body field into authoritative account, role, or household columns.
+loads active principal access for the parsed `robotId`, derives account,
+role/device, and household scope, and applies normalized values. It never maps
+a client body field into authoritative account, role, device, or household
+columns.
 
 Push request JSON:
 

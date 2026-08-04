@@ -132,6 +132,34 @@ void main() {
     },
   );
 
+  test('pull rejects a contract-valid missed dose event safely', () async {
+    final api = _FakeMedicationSyncFunctionsApi([
+      MedicationSyncFunctionResponse(
+        statusCode: 200,
+        body: jsonEncode(
+          _pullPage(
+            cursor: null,
+            checkpoint: '1',
+            nextCursor: '1',
+            hasMore: false,
+            changes: [_doseEventChange(kind: 'missed')],
+          ),
+        ),
+      ),
+    ]);
+
+    await expectLater(
+      _gateway(api).pull('robot-1'),
+      throwsA(
+        isA<CaregiverSyncException>().having(
+          (error) => error.message,
+          'message',
+          'This app cannot display missed dose outcomes yet.',
+        ),
+      ),
+    );
+  });
+
   test('pull cache is isolated when the signed-in account changes', () async {
     final api = _FakeMedicationSyncFunctionsApi([
       MedicationSyncFunctionResponse(
@@ -921,7 +949,7 @@ Map<String, Object?> _scheduleChange() => {
   },
 };
 
-Map<String, Object?> _doseEventChange() => {
+Map<String, Object?> _doseEventChange({String kind = 'taken_confirmed'}) => {
   'cursor': '1',
   'entityType': 'dose_event',
   'entityId': 'event-1',
@@ -940,7 +968,7 @@ Map<String, Object?> _doseEventChange() => {
       'localDate': '2026-07-29',
       'timezoneId': 'UTC',
     },
-    'kind': 'taken_confirmed',
+    'kind': kind,
     'occurredAt': '2026-07-29T09:05:00.000Z',
     'actorAccountId': 'account-1',
   },

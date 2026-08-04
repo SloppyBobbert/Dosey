@@ -191,6 +191,47 @@
       }
     },
     {
+      "name": "patient device missed outcome mutation",
+      "type": "mutation",
+      "value": {
+        "contractVersion": 1,
+        "mutationId": "mutation-dose-event-missed",
+        "deviceId": "patient-device-1",
+        "idempotencyKey": "patient-device-1:mutation-dose-event-missed",
+        "entityType": "dose_event",
+        "operation": "append",
+        "entityId": "dose-event-missed-1",
+        "baseRevision": null,
+        "payload": {
+          "medicationId": "medication-1",
+          "occurrence": {
+            "contractVersion": 1,
+            "occurrenceId": "schedule-1:2:2026-07-29T15:30:00.000Z",
+            "scheduleId": "schedule-1",
+            "scheduleRevision": 2,
+            "scheduledAt": "2026-07-29T15:30:00Z",
+            "localDate": "2026-07-29",
+            "timezoneId": "America/Los_Angeles"
+          },
+          "kind": "missed",
+          "occurredAt": "2026-07-29T15:34:12Z"
+        }
+      }
+    },
+    {
+      "name": "inventory adjustment ledger shape",
+      "type": "inventoryAdjustment",
+      "value": {
+        "contractVersion": 1,
+        "ledgerId": "inventory-ledger-1",
+        "medicationId": "medication-1",
+        "delta": -1,
+        "actorId": "patient-device-1",
+        "reason": "taken_confirmed",
+        "idempotencyKey": "patient-device-1:inventory-ledger-1"
+      }
+    },
+    {
       "name": "push request scoped by robot id",
       "type": "pushRequest",
       "value": {
@@ -302,6 +343,28 @@
           "timezoneId": "America/Los_Angeles",
           "enabled": true,
           "revision": 2,
+          "deletedAt": null,
+          "updatedAt": "2026-07-29T08:15:30Z"
+        }
+      }
+    },
+    {
+      "name": "creation race conflict permits expected revision zero",
+      "type": "conflict",
+      "value": {
+        "contractVersion": 1,
+        "entityType": "medication",
+        "entityId": "medication-1",
+        "expectedRevision": 0,
+        "actualRevision": 1,
+        "authoritativeRecord": {
+          "contractVersion": 1,
+          "id": "medication-1",
+          "householdId": "robot-1",
+          "name": "Morning tablet",
+          "pillType": "tablet",
+          "instructions": null,
+          "revision": 1,
           "deletedAt": null,
           "updatedAt": "2026-07-29T08:15:30Z"
         }

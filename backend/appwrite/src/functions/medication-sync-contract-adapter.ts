@@ -67,6 +67,13 @@ function toApplicationOperation(
     canonicalHashInput: canonicalMutationHashInput(robotId, mutation),
   };
   if (mutation.entityType === 'dose_event') {
+    if (mutation.payload.kind === 'missed') {
+      throw new MedicationSyncContractError(
+        'MISSED_EVENT_NOT_IMPLEMENTED',
+        '$.operations[].payload.kind',
+        'The wire contract defines missed, but the sync service does not implement it yet.',
+      );
+    }
     return {
       ...common,
       type: 'appendEvent',
