@@ -75,7 +75,55 @@ export interface MedicationSyncChangeRecord {
   readonly operationHash: string;
 }
 
+export type MedicationSyncTerminalKind = 'taken_confirmed' | 'skipped' | 'missed';
+export type MedicationSyncTerminalConflictCode =
+  | 'TERMINAL_OUTCOME_REPLAY_MISMATCH'
+  | 'TERMINAL_OUTCOME_CONFLICT';
+
+export interface MedicationSyncTerminalOccurrenceRecord {
+  readonly robotId: string;
+  readonly occurrenceId: string;
+  readonly acceptedKind: MedicationSyncTerminalKind;
+  readonly acceptedEventId: string;
+  readonly acceptedOperationHash: string;
+  readonly acceptedIdempotencyKey: string;
+  readonly acceptedDeviceId: string;
+  readonly acceptedActorAccountId: string;
+  readonly acceptedSequence: number;
+  readonly occurredAt: Date;
+  readonly acceptedAt: Date;
+}
+
+export interface MedicationSyncTerminalConflictRecord {
+  readonly robotId: string;
+  readonly occurrenceId: string;
+  readonly conflictCode: MedicationSyncTerminalConflictCode;
+  readonly acceptedEventId: string;
+  readonly acceptedOperationHash: string;
+  readonly acceptedKind: MedicationSyncTerminalKind;
+  readonly acceptedSequence: number;
+  readonly incomingEventId: string;
+  readonly incomingOperationHash: string;
+  readonly incomingKind: MedicationSyncTerminalKind;
+  readonly incomingIdempotencyKey: string;
+  readonly incomingDeviceId: string;
+  readonly incomingActorAccountId: string;
+  readonly incomingPayload: string;
+  readonly incomingOccurredAt: Date;
+  readonly recordedAt: Date;
+}
+
 export interface MedicationSyncTransaction {
+  getTerminalOccurrence(
+    robotId: string,
+    occurrenceId: string,
+  ): Promise<MedicationSyncTerminalOccurrenceRecord | null>;
+  createTerminalOccurrence(record: MedicationSyncTerminalOccurrenceRecord): Promise<void>;
+  getTerminalConflict(
+    robotId: string,
+    incomingOperationHash: string,
+  ): Promise<MedicationSyncTerminalConflictRecord | null>;
+  createTerminalConflict(record: MedicationSyncTerminalConflictRecord): Promise<void>;
   getDocument(
     robotId: string,
     resourceType: MedicationSyncResourceType,

@@ -20,6 +20,8 @@ const environment = {
   DOSEY_MEDICATION_SYNC_RECEIPTS_TABLE_ID: 'sync-receipts',
   DOSEY_MEDICATION_SYNC_STATE_TABLE_ID: 'sync-state',
   DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID: 'sync-changes',
+  DOSEY_MEDICATION_SYNC_TERMINAL_OCCURRENCES_TABLE_ID: 'sync-terminal-occurrences',
+  DOSEY_MEDICATION_SYNC_TERMINAL_CONFLICTS_TABLE_ID: 'sync-terminal-conflicts',
 };
 
 const parser: MedicationSyncRequestParser = {
@@ -41,16 +43,26 @@ describe('Medication sync runtime', () => {
     assert.equal(runtime.parser, parser);
   });
 
-  test('requires every medication sync table ID', () => {
-    const { DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID: _, ...missing } = environment;
-    assert.throws(
-      () => createMedicationSyncRuntime(
-        { 'x-appwrite-key': 'dynamic-key' },
-        parser,
-        missing,
-      ),
-      /DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID/,
-    );
+  test('requires changes and terminal medication sync table IDs', () => {
+    for (const key of [
+      'DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID',
+      'DOSEY_MEDICATION_SYNC_TERMINAL_OCCURRENCES_TABLE_ID',
+      'DOSEY_MEDICATION_SYNC_TERMINAL_CONFLICTS_TABLE_ID',
+    ] as const) {
+      const { [key]: _, ...missing } = environment;
+      assert.throws(
+        () => createMedicationSyncRuntime({ 'x-appwrite-key': 'dynamic-key' }, parser, missing),
+        new RegExp(key),
+      );
+      assert.throws(
+        () => createMedicationSyncRuntime(
+          { 'x-appwrite-key': 'dynamic-key' },
+          parser,
+          { ...environment, [key]: ' ' },
+        ),
+        new RegExp(key),
+      );
+    }
   });
 
   test('requires server-side mounted access configuration for anonymous devices', () => {

@@ -6,13 +6,86 @@ import { AppwriteException } from 'node-appwrite';
 import {
   AppwriteMedicationSyncPersistence,
   AppwriteMedicationSyncRowsApi,
+  type AppwriteMedicationSyncTableConfiguration,
   type MedicationSyncRow,
   type MedicationSyncRowsApi,
   type MedicationSyncTable,
 } from '../src/infrastructure/appwrite-medication-sync-persistence.js';
+import type {
+  MedicationSyncTerminalConflictRecord,
+  MedicationSyncTerminalOccurrenceRecord,
+} from '../src/infrastructure/transactional-medication-sync-store.js';
+
+const tableConfiguration: AppwriteMedicationSyncTableConfiguration = {
+  databaseId: 'database',
+  documentsTableId: 'documents',
+  eventsTableId: 'events',
+  helpRequestsTableId: 'helpRequests',
+  receiptsTableId: 'receipts',
+  stateTableId: 'state',
+  changesTableId: 'changes',
+  terminalOccurrencesTableId: 'terminal-occurrences',
+  terminalConflictsTableId: 'terminal-conflicts',
+};
+
+const terminalDates = {
+  occurredAt: new Date('2026-08-04T09:00:00.000Z'),
+  acceptedAt: new Date('2026-08-04T10:00:00.000Z'),
+  incomingOccurredAt: new Date('2026-08-04T11:00:00.000Z'),
+  recordedAt: new Date('2026-08-04T12:00:00.000Z'),
+};
+
+function terminalOccurrence(
+  overrides: Partial<MedicationSyncTerminalOccurrenceRecord> = {},
+): MedicationSyncTerminalOccurrenceRecord {
+  return {
+    robotId: 'robot-1',
+    occurrenceId: 'occurrence-1',
+    acceptedKind: 'taken_confirmed',
+    acceptedEventId: 'accepted-event-1',
+    acceptedOperationHash: 'a'.repeat(64),
+    acceptedIdempotencyKey: 'accepted-key-1',
+    acceptedDeviceId: 'accepted-device-1',
+    acceptedActorAccountId: 'accepted-account-1',
+    acceptedSequence: Number.MAX_SAFE_INTEGER,
+    occurredAt: terminalDates.occurredAt,
+    acceptedAt: terminalDates.acceptedAt,
+    ...overrides,
+  };
+}
+
+function terminalConflict(
+  overrides: Partial<MedicationSyncTerminalConflictRecord> = {},
+): MedicationSyncTerminalConflictRecord {
+  return {
+    robotId: 'robot-1',
+    occurrenceId: 'conflict-occurrence-2',
+    conflictCode: 'TERMINAL_OUTCOME_CONFLICT',
+    acceptedEventId: 'accepted-event-1',
+    acceptedOperationHash: 'a'.repeat(64),
+    acceptedKind: 'taken_confirmed',
+    acceptedSequence: Number.MAX_SAFE_INTEGER,
+    incomingEventId: 'incoming-event-1',
+    incomingOperationHash: 'b'.repeat(64),
+    incomingKind: 'missed',
+    incomingIdempotencyKey: 'incoming-key-1',
+    incomingDeviceId: 'incoming-device-1',
+    incomingActorAccountId: 'incoming-account-1',
+    incomingPayload: '{not parsed}',
+    incomingOccurredAt: terminalDates.incomingOccurredAt,
+    recordedAt: terminalDates.recordedAt,
+    ...overrides,
+  };
+}
 
 class FakeRows implements MedicationSyncRowsApi {
   events: string[] = [];
+  writes: Array<{
+    method: 'create' | 'upsert';
+    table: MedicationSyncTable;
+    row: MedicationSyncRow;
+    transactionId: string;
+  }> = [];
   rows = new Map<string, MedicationSyncRow>();
   transactions = new Map<string, Map<string, MedicationSyncRow>>();
   commitFailures = 0;
@@ -42,9 +115,11 @@ class FakeRows implements MedicationSyncRowsApi {
     return this.transaction(transactionId).get(`${table}:${id}`) ?? null;
   }
   async createRow(table: MedicationSyncTable, row: MedicationSyncRow, transactionId: string) {
+    this.writes.push({ method: 'create', table, row, transactionId });
     this.transaction(transactionId).set(`${table}:${row.$id}`, row);
   }
   async upsertRow(table: MedicationSyncTable, row: MedicationSyncRow, transactionId: string) {
+    this.writes.push({ method: 'upsert', table, row, transactionId });
     this.transaction(transactionId).set(`${table}:${row.$id}`, row);
   }
   async listChanges(
@@ -110,6 +185,211 @@ describe('Appwrite medication sync persistence', () => {
         [[1, 'device']],
       );
     });
+  });
+
+  test('maps terminal rows with create-only writes and deterministic identities', async () => {
+    const rows = new FakeRows();
+    const persistence = new AppwriteMedicationSyncPersistence(rows);
+    const occurrence = terminalOccurrence();
+    const conflict = terminalConflict();
+
+    await persistence.transaction(async (transaction) => {
+      await transaction.createTerminalOccurrence(occurrence);
+      await transaction.createTerminalConflict(conflict);
+      assert.deepEqual(
+        await transaction.getTerminalOccurrence(occurrence.robotId, occurrence.occurrenceId),
+        occurrence,
+      );
+      assert.deepEqual(
+        await transaction.getTerminalConflict(conflict.robotId, conflict.incomingOperationHash),
+        conflict,
+      );
+      assert.equal(await transaction.getTerminalOccurrence('robot-1', 'absent'), null);
+      assert.equal(await transaction.getTerminalConflict('robot-1', 'c'.repeat(64)), null);
+    });
+
+    const occurrenceId = rowId('terminalOccurrence', occurrence.robotId, occurrence.occurrenceId);
+    const conflictId = rowId('terminalConflict', conflict.robotId, conflict.incomingOperationHash);
+    assert.notEqual(conflictId, rowId('terminalConflict', conflict.robotId, conflict.occurrenceId));
+    assert.deepEqual(rows.rows.get(`terminalOccurrences:${occurrenceId}`), {
+      $id: occurrenceId,
+      ...occurrence,
+      occurredAt: '2026-08-04T09:00:00.000Z',
+      acceptedAt: '2026-08-04T10:00:00.000Z',
+    });
+    assert.deepEqual(rows.rows.get(`terminalConflicts:${conflictId}`), {
+      $id: conflictId,
+      ...conflict,
+      incomingOccurredAt: '2026-08-04T11:00:00.000Z',
+      recordedAt: '2026-08-04T12:00:00.000Z',
+    });
+    assert.deepEqual(rows.writes.map(({ method, table }) => ({ method, table })), [
+      { method: 'create', table: 'terminalOccurrences' },
+      { method: 'create', table: 'terminalConflicts' },
+    ]);
+    assert.equal(rows.writes.some((write) => write.method === 'upsert'), false);
+  });
+
+  test('accepts terminal identifiers at their schema limits', async () => {
+    const rows = new FakeRows();
+    const persistence = new AppwriteMedicationSyncPersistence(rows);
+    const identifier = 'i'.repeat(128);
+    const occurrenceId = 'o'.repeat(256);
+    const occurrence = terminalOccurrence({
+      robotId: identifier,
+      occurrenceId,
+      acceptedEventId: identifier,
+      acceptedIdempotencyKey: identifier,
+      acceptedDeviceId: identifier,
+      acceptedActorAccountId: identifier,
+    });
+    const conflict = terminalConflict({
+      robotId: identifier,
+      occurrenceId,
+      acceptedEventId: identifier,
+      incomingEventId: identifier,
+      incomingIdempotencyKey: identifier,
+      incomingDeviceId: identifier,
+      incomingActorAccountId: identifier,
+    });
+
+    await persistence.transaction(async (transaction) => {
+      await transaction.createTerminalOccurrence(occurrence);
+      await transaction.createTerminalConflict(conflict);
+      assert.deepEqual(
+        await transaction.getTerminalOccurrence(occurrence.robotId, occurrence.occurrenceId),
+        occurrence,
+      );
+      assert.deepEqual(
+        await transaction.getTerminalConflict(conflict.robotId, conflict.incomingOperationHash),
+        conflict,
+      );
+    });
+
+    assert.deepEqual(rows.writes.map(({ method }) => method), ['create', 'create']);
+  });
+
+  test('rejects invalid terminal records before writing', async () => {
+    const invalidRecords: Array<
+      | { method: 'occurrence'; record: MedicationSyncTerminalOccurrenceRecord }
+      | { method: 'conflict'; record: MedicationSyncTerminalConflictRecord }
+    > = [
+      { method: 'occurrence', record: terminalOccurrence({ robotId: ' robot-1 ' }) },
+      { method: 'occurrence', record: terminalOccurrence({ robotId: 'r'.repeat(129) }) },
+      { method: 'occurrence', record: terminalOccurrence({ occurrenceId: 'o'.repeat(257) }) },
+      { method: 'occurrence', record: terminalOccurrence({ acceptedOperationHash: 'bad-hash' }) },
+      { method: 'occurrence', record: terminalOccurrence({ acceptedKind: 'other' as never }) },
+      { method: 'occurrence', record: terminalOccurrence({ acceptedSequence: 0 }) },
+      { method: 'occurrence', record: terminalOccurrence({ acceptedSequence: Number.MAX_SAFE_INTEGER + 1 }) },
+      { method: 'occurrence', record: terminalOccurrence({ occurredAt: new Date('invalid') }) },
+      { method: 'conflict', record: terminalConflict({ conflictCode: 'OTHER' as never }) },
+      { method: 'conflict', record: terminalConflict({ incomingEventId: 'e'.repeat(129) }) },
+      { method: 'conflict', record: terminalConflict({ incomingPayload: '' }) },
+    ];
+
+    for (const invalid of invalidRecords) {
+      const rows = new FakeRows();
+      const persistence = new AppwriteMedicationSyncPersistence(rows);
+      await assert.rejects(persistence.transaction(async (transaction) => {
+        if (invalid.method === 'occurrence') {
+          await transaction.createTerminalOccurrence(invalid.record);
+        } else {
+          await transaction.createTerminalConflict(invalid.record);
+        }
+      }));
+      assert.deepEqual(rows.writes, []);
+    }
+  });
+
+  test('fails closed for malformed stored terminal rows', async () => {
+    const occurrence = terminalOccurrence();
+    const conflict = terminalConflict();
+    const validOccurrenceRow = terminalOccurrenceRow(occurrence);
+    const validConflictRow = terminalConflictRow(conflict);
+    const invalidOccurrences: Array<Readonly<Record<string, unknown>>> = [
+      { robotId: ' robot-1' },
+      { acceptedEventId: 'e'.repeat(129) },
+      { occurrenceId: 'o'.repeat(257) },
+      { acceptedKind: 'other' },
+      { acceptedOperationHash: 'bad-hash' },
+      { acceptedSequence: 0 },
+      { acceptedSequence: Number.MAX_SAFE_INTEGER + 1 },
+      { acceptedSequence: '1' },
+      { acceptedSequence: BigInt(1) },
+      { occurredAt: 'invalid-date' },
+      { $id: 'wrong-id' },
+    ];
+    const invalidConflicts: Array<Readonly<Record<string, unknown>>> = [
+      { conflictCode: 'OTHER' },
+      { incomingDeviceId: 'd'.repeat(129) },
+      { occurrenceId: 'o'.repeat(257) },
+      { incomingKind: 'other' },
+      { incomingOperationHash: 'bad-hash' },
+      { incomingPayload: '' },
+      { recordedAt: 'invalid-date' },
+      { $id: 'wrong-id' },
+    ];
+
+    for (const mutation of invalidOccurrences) {
+      const rows = new FakeRows();
+      rows.rows.set(`terminalOccurrences:${validOccurrenceRow.$id}`, { ...validOccurrenceRow, ...mutation });
+      await assert.rejects(readTerminalOccurrence(rows, occurrence));
+    }
+    for (const mutation of invalidConflicts) {
+      const rows = new FakeRows();
+      rows.rows.set(`terminalConflicts:${validConflictRow.$id}`, { ...validConflictRow, ...mutation });
+      await assert.rejects(readTerminalConflict(rows, conflict));
+    }
+
+    const rows = new FakeRows();
+    rows.rows.set(`terminalOccurrences:${validOccurrenceRow.$id}`, validOccurrenceRow);
+    rows.rows.set(`terminalConflicts:${validConflictRow.$id}`, validConflictRow);
+    const persistence = new AppwriteMedicationSyncPersistence(rows);
+    await persistence.transaction(async (transaction) => {
+      assert.equal(
+        (await transaction.getTerminalOccurrence(occurrence.robotId, occurrence.occurrenceId))?.acceptedSequence,
+        Number.MAX_SAFE_INTEGER,
+      );
+      assert.equal(
+        (await transaction.getTerminalConflict(conflict.robotId, conflict.incomingOperationHash))?.acceptedSequence,
+        Number.MAX_SAFE_INTEGER,
+      );
+    });
+  });
+
+  test('routes terminal rows to their configured physical tables', async () => {
+    const calls: unknown[] = [];
+    const rows = new AppwriteMedicationSyncRowsApi({
+      async createRow(input: unknown) {
+        calls.push(input);
+      },
+    } as never, {
+      ...tableConfiguration,
+      terminalOccurrencesTableId: 'physical-terminal-occurrences',
+      terminalConflictsTableId: 'physical-terminal-conflicts',
+    });
+    const occurrenceRow = terminalOccurrenceRow(terminalOccurrence());
+    const conflictRow = terminalConflictRow(terminalConflict());
+
+    await rows.createRow('terminalOccurrences', occurrenceRow, 'transaction-1');
+    await rows.createRow('terminalConflicts', conflictRow, 'transaction-2');
+
+    assert.deepEqual(calls, [
+      {
+        databaseId: 'database',
+        tableId: 'physical-terminal-occurrences',
+        rowId: occurrenceRow.$id,
+        data: withoutId(occurrenceRow),
+        transactionId: 'transaction-1',
+      },
+      {
+        databaseId: 'database',
+        tableId: 'physical-terminal-conflicts',
+        rowId: conflictRow.$id,
+        data: withoutId(conflictRow),
+        transactionId: 'transaction-2',
+      },
+    ]);
   });
 
   test('rolls back a staged mutation and retries the complete atomic write after a conflict', async () => {
@@ -220,11 +500,7 @@ describe('Appwrite medication sync persistence', () => {
         throw new AppwriteException('not found', 404, 'row_not_found');
       },
     };
-    const rows = new AppwriteMedicationSyncRowsApi(tables as never, {
-      databaseId: 'database', documentsTableId: 'documents', eventsTableId: 'events',
-      helpRequestsTableId: 'helpRequests', receiptsTableId: 'receipts', stateTableId: 'state',
-      changesTableId: 'changes',
-    });
+    const rows = new AppwriteMedicationSyncRowsApi(tables as never, tableConfiguration);
 
     assert.equal(await rows.getRow('documents', 'document-1', 'transaction-1'), null);
 
@@ -232,11 +508,7 @@ describe('Appwrite medication sync persistence', () => {
       getRow: async () => {
         throw new AppwriteException('other missing', 404, 'table_not_found');
       },
-    } as never, {
-      databaseId: 'database', documentsTableId: 'documents', eventsTableId: 'events',
-      helpRequestsTableId: 'helpRequests', receiptsTableId: 'receipts', stateTableId: 'state',
-      changesTableId: 'changes',
-    });
+    } as never, tableConfiguration);
     await assert.rejects(
       nonRowNotFound.getRow('documents', 'document-1', 'transaction-1'),
       AppwriteException,
@@ -258,4 +530,47 @@ describe('Appwrite medication sync persistence', () => {
 
 function rowId(...parts: readonly string[]): string {
   return createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 36);
+}
+
+function terminalOccurrenceRow(record: MedicationSyncTerminalOccurrenceRecord): MedicationSyncRow {
+  return {
+    $id: rowId('terminalOccurrence', record.robotId, record.occurrenceId),
+    ...record,
+    occurredAt: record.occurredAt.toISOString(),
+    acceptedAt: record.acceptedAt.toISOString(),
+  };
+}
+
+function terminalConflictRow(record: MedicationSyncTerminalConflictRecord): MedicationSyncRow {
+  return {
+    $id: rowId('terminalConflict', record.robotId, record.incomingOperationHash),
+    ...record,
+    incomingOccurredAt: record.incomingOccurredAt.toISOString(),
+    recordedAt: record.recordedAt.toISOString(),
+  };
+}
+
+async function readTerminalOccurrence(
+  rows: FakeRows,
+  record: MedicationSyncTerminalOccurrenceRecord,
+): Promise<void> {
+  const persistence = new AppwriteMedicationSyncPersistence(rows);
+  await persistence.transaction(async (transaction) => {
+    await transaction.getTerminalOccurrence(record.robotId, record.occurrenceId);
+  });
+}
+
+async function readTerminalConflict(
+  rows: FakeRows,
+  record: MedicationSyncTerminalConflictRecord,
+): Promise<void> {
+  const persistence = new AppwriteMedicationSyncPersistence(rows);
+  await persistence.transaction(async (transaction) => {
+    await transaction.getTerminalConflict(record.robotId, record.incomingOperationHash);
+  });
+}
+
+function withoutId(row: MedicationSyncRow): Record<string, unknown> {
+  const { $id: _, ...data } = row;
+  return data;
 }
