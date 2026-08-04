@@ -1,70 +1,40 @@
 # Dosey app
 
-Flutter app for the Dosey medication-dispensing companion robot prototype.
+Flutter application for the Dosey medication-dispensing companion robot
+prototype. Run all Flutter commands in this directory.
 
-Android Personal and Robot Modes and web remain active. iOS Personal Mode development and distribution are paused. Existing iOS source, native integrations, project files, and implementation are intentionally retained for possible future revival, but Dosey does not currently provide iOS releases or active iOS feature support.
+## Product boundary
 
-## Status badges
+- **Personal Mode** runs on Android. The iOS Personal implementation is
+  retained only for preservation and compile-regression; it is not released or
+  qualified. Personal phones do not control the XIAO.
+- **Robot Mode** is Android-only and runs on the mounted robot phone. It is
+  local-first, uses app-owned navigation and screen-awake behavior, and does
+  not use device-owner, lock-task, or immersive-kiosk provisioning.
+- Drift/SQLite is the authoritative local store for medication, schedules,
+  dose history and state, inventory, carousel, controller, and audit data.
+  Local reminders and core safety behavior work without cloud access.
 
-![Flutter](https://img.shields.io/badge/Flutter-3.44.6-02569B?logo=flutter&logoColor=white)
-![Dart](https://img.shields.io/badge/Dart-3.12.2-0175C2?logo=dart&logoColor=white)
-![Local data](https://img.shields.io/badge/local%20data-Drift%20%2F%20SQLite-336791)
-![Backend](https://img.shields.io/badge/backend-Appwrite-F02E65?logo=appwrite&logoColor=white)
+The phone—not the controller—owns medication and dose state. Movement or a
+successful controller command does not mean a dose was Taken. Track movement,
+visibility, Taken, skipped, missed, and error states separately; change
+inventory only after explicit Taken confirmation. A missed-dose acknowledgement
+only records that the warning was seen. It does not change dose state or
+inventory. Never advise double dosing: “This dose was missed. Follow your
+prescription instructions or ask your caregiver, pharmacist, or doctor.”
 
-## Current scope
+## Cloud configuration
 
-- Three visible destinations: Today, Medications, and Settings. Schedule, Prescriptions, and carousel management are under Medications; technical tools are protected in Robot Maintenance; the Robot distribution retains full-screen Robot Face.
-- Safety-first copy and local safety acknowledgement storage.
-- Local prescription storage with remaining-dose counts, refill thresholds, refill-add history, and medication-type display.
-- Local reminder schedule storage with add/edit/delete controls, enabled/disabled state, duplicate-time checks, and schedule profiles.
-- Local household/profile metadata plus Appwrite-backed robot ownership and current legacy mounted-phone pairing. Personal account and household use requires human authentication; the Robot distribution remains usable as a guest. Secure mounted-access restoration is a pending mobile follow-up; the live staging backend rollout remains pending/incomplete.
-- Four-digit Action PIN gating for protected admin edits, plus a separate local admin audit history for prescription, schedule, carousel, household/profile, and PIN lifecycle changes.
-- Carousel loading workflow with Daviky slot assignment, loaded/dispensed/review states, and controller-gated dispense actions.
-- Today dose-state logging that keeps dispense, visible, taken, skipped, missed, and caregiver/help actions separate.
-- Robot Face scaffolding with local face-state timing settings for wake-before-dose and stay-awake-after-dose behavior.
-- Mounted Robot Mode behavior that returns to Robot Face on resume, Back, or configurable inactivity; routes local notification taps by role and alert type; and keeps the Android display awake only while Robot Face is active and the app is resumed, never while backgrounded.
-- Fixed WAV voice catalog for the mounted Robot Mode phone, with app-owned asset playback wiring, previews, category toggles, quiet hours, configurable repetition cooldowns, and reminder repeat policy controls for normal reminder speech.
-- Controller simulator plus a compile-tested D1 BLE transport and staged controller gateway; Android-to-bare-XIAO connection, safe-default HEARTBEAT, device/config/safety status, LED test, and disconnect indication were observed. That bench evidence does not qualify the identified APK or integrated carousel/hardware path. Integrated external-hardware lifecycle, reconnect, power-loss, movement cancellation/timeout, and movement/dispensing behavior remain unverified.
-- Guided Trial scenarios for simulator-backed happy-path dispensing, missed-dose recognition, and offline/reconnect behavior.
-- Appwrite-backed human identity and robot linking plus retained native iOS Apple sign-in implementation, all behind app-owned interfaces. Human authentication, device pairing, and hardware authorization are independent capabilities: sign-in/sign-out does not change pairing, hardware authorization, settings, or local medication data, and pairing does not alter human authentication.
-- App-owned interfaces for controller/BLE, connectivity, auth, robot pairing, reminders, permissions, notifications, and dose logging.
-- Drift/SQLite local database for device role settings, prescriptions, reminders, schedule profiles, carousel slots, cached auth state, refill records, dose log events, household/profile metadata, and admin audit events.
-
-Selected background packages:
-
-- `flutter_blue_plus` for filtered Dosey discovery, GATT service discovery, notifications, and bounded D1 writes.
-- `connectivity_plus` for advisory connectivity/Wi-Fi status only, not provisioning.
-- `appwrite` for human identity, robot ownership, and current legacy mounted-phone pairing. The target secure path uses server-only `mounted_robot_access` and `get-mounted-robot`; anonymous Robot accounts must never join or enumerate Teams on that path, which remain for human household ownership and membership.
-- `google_sign_in` plus a retained native iOS Apple sign-in bridge for local/provider-specific auth paths.
-- `flutter_local_notifications` for local reminder notifications and sounds.
-- `permission_handler` for runtime permission requests/checks. Android 12 and
-  newer request nearby Bluetooth scan/connect access; Android 11 and older map
-  the same scan gate to fine location, which Android requires for BLE scans.
-
-Notification channel IDs and sound IDs are intended to stay stable. Custom reminder sound assets may still need platform provisioning on Android; retained iOS notification provisioning remains for possible future revival.
-
-Appwrite Functions define the target account, human household, pairing, and
-mounted restoration contract. The backend source implements that contract, but
-it is not active in live staging. Prescriptions, schedules, dose state/history,
-inventory, and related medication data remain local in Drift/SQLite. No
-medication-data sync or upload is introduced. Appwrite/auth outages must not
-block the local Robot shell, and mounted credentials do not save, swap, or
-restore a human session.
-
-## Appwrite setup
-
-Configured Android builds require four public values from the ignored `.env`
-file:
+`CloudConfiguration` accepts public Dart defines only. `APPWRITE_ENDPOINT` and
+`APPWRITE_PROJECT_ID` must be supplied together. The pairing predicate requires
+both of these Function IDs, but it is not a production-availability guarantee:
 
 ```text
-APPWRITE_ENDPOINT
-APPWRITE_PROJECT_ID
 APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID
 APPWRITE_CLAIM_ROBOT_FUNCTION_ID
 ```
 
-Personal household management additionally uses these public Function IDs when
-that feature is configured:
+Household management additionally requires all of these public Function IDs:
 
 ```text
 APPWRITE_CREATE_ROBOT_FUNCTION_ID
@@ -73,75 +43,31 @@ APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID
 APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID
 ```
 
-The mounted-access mobile follow-up will add
-`APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID`. In supported Android Robot builds,
-`APPWRITE_CLAIM_ROBOT_FUNCTION_ID` will point to the separate/versioned secure
-claim Function; there is no `APPWRITE_CLAIM_ROBOT_SECURE_FUNCTION_ID`. Current
-clients do not read `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID` and remain on the
-legacy Function until that follow-up is released, configured, and validated.
-The app invokes the pairing Functions; it does not read pairing tables
-directly, so database and table IDs stay in the Function environment rather
-than Flutter configuration. Never add the server pairing HMAC secret or a
-Function dynamic API key to this file. See
-[`../../backend/appwrite/README.md`](../../backend/appwrite/README.md) for server
-schema and deployment details.
+Medication-sync defines satisfy only a dormant `CloudConfiguration` predicate:
+`CAREGIVER_SYNC_ENABLED=true`, endpoint/project configuration, and both IDs
+below. Production mobile does not wire a medication-sync gateway, so these
+values do not activate sync. The feature remains default-off and unwired.
 
-## App distributions
+```text
+APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID
+APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID
+```
 
-Dosey ships as two fixed Android distributions rather than a runtime mode choice:
+Flutter calls Functions; it never reads server tables directly. Do not put
+database/table IDs, dynamic API keys, HMAC secrets, or any other server
+credential in `.env` or a Dart define. Cloud/auth outages must not block local
+medication, reminder, Robot Mode, or safety behavior.
 
-- **Dosey Personal:** package `com.sloppybobbert.dosey_app`. It updates the existing Android app in place, requires sign-in, and owns the only Android Appwrite OAuth callback. The retained iOS implementation uses Personal behavior if revived.
-- **Dosey Robot:** package `com.sloppybobbert.dosey_app.robot`. It is Android-only, works locally without sign-in, and has no OAuth callback or account actions. It retains schedule, carousel, history, household, and other management features. It uses soft in-app navigation and screen-awake guardrails, not device-owner or lock-task kiosk provisioning.
+The required Android Robot `phone-only` runtime does not create cloud gateways
+and uses disabled cloud gateways, including for pairing. Secure mounted
+pairing/restoration remains inactive pending compatible mobile wiring and
+rollout. Do not treat configured Function IDs as an available mounted-phone
+feature.
 
-The phone is the brain. It handles schedules, medication data, refill logic, dose history, PIN, caregiver logic, UI, reminders, Bluetooth commands, and future cloud, voice-command, or local AI features. The XIAO should only execute hardware actions and report status.
-
-The build profile is authoritative. Imported or stale local role settings cannot enable Robot capabilities in Personal or disable them in Robot.
-
-## Local configuration
-
-`.env` is ignored and must be bootstrapped separately in every checkout or worktree. Never commit it or print its values. It must contain the four required public Appwrite keys listed above, plus the optional public Function IDs for features enabled in that build, and must not contain `DOSEY_BUILD_PROFILE`; each build command supplies the profile explicitly.
-
-Personal Android Google/Appwrite sign-in requires the existing package and callback scheme to remain registered in Appwrite. Robot does not support OAuth. App-owned non-OAuth robot pairing remains available when its public Function configuration is present.
-
-## Android package migration
-
-Personal keeps the old package and its app-private Drift database. Robot uses a separate Android sandbox and cannot automatically inherit data from the old shared-package installation.
-
-To migrate non-sensitive prototype data, export a backup from the old/Personal installation before uninstalling anything, install Dosey Robot side by side, then import the backup from Settings. Verify prescriptions, schedules, carousel slots, app settings, dose history, and admin audit history after import. Device role is intentionally not portable and cannot override the destination build profile. Uninstalling before export loses app-private data.
-
-The package migration still requires a physical Android exercise. Until that is recorded, treat a new Robot installation as a clean start and do not assume automatic migration.
-
-## What works locally
-
-See the [Robot software demo qualification record](ROBOT_SOFTWARE_DEMO_QUALIFICATION.md)
-for the automated evidence and pending physical-device evidence.
-
-- Create, edit, and delete local prescriptions and reminders.
-- Track remaining doses, refill thresholds, refill warnings, and refill-add history locally.
-- Assign reminders to Daviky carousel slots and exercise controller flows with either the simulator or the compile-tested BLE bench path.
-- Run the Guided Trial against deterministic simulator scenarios for successful dispensing, missed-dose recognition, and offline/reconnect behavior.
-- Log Today actions separately for dispense success, dose visible, taken confirmations, already taken, early/late taken, snooze, skip, missed, and caregiver help.
-- Prevent duplicate terminal Today actions from double-logging the same dose or spending inventory twice.
-- Store device role, safety acknowledgement, cached auth state, Action PIN state, refill data, carousel state, household/profile metadata, admin audit events, and dose log events locally.
-- Return mounted Robot Mode to Robot Face after 1, 2, 5, 10, or 15 minutes of inactivity, with 2 minutes as the default; pause the timer in the background and defer it while a dialog or sheet is open.
-- Route local dose reminders to Robot Face in Robot Mode and Today in Personal Mode, route shortage alerts to Carousel, and run missed-dose reconciliation when the app resumes.
-- Sign in with Google through Appwrite for Personal use, generate an owner-authorized ten-minute pairing code, and claim a robot from the mounted Android phone with a dedicated anonymous device identity. Current clients use legacy Team-backed restoration; the pending secure follow-up will restore through `get-mounted-robot` without adding the mounted account to Teams.
-- Run Android debug APK builds on this machine. The retained iOS no-codesign debug build remains a preservation and compile-regression check, not release qualification or production readiness.
-
-The app must not mark a dose taken because the servo moved. Dispense logging requires a controller success event, and the app separately tracks dose visible and dose taken confirmation.
-
-## Near-term app work
-
-- Extend the existing bare-XIAO BLE evidence through integrated external hardware, reconnect, controller power loss, missed-heartbeat and fresh-heartbeat gating, movement cancellation/timeout, and movement behavior.
-- Run mounted-phone manual QA on the Android test device for resume, inactivity, Back, notification, screen-awake, and role-change behavior.
-- Keep Today dose actions and refill inventory behavior aligned with local-first safety rules.
-- Physically verify the fail-closed heartbeat/offline and reconnect lifecycle for XIAO power loss, crash, disconnect, and missed responses.
-- Add server-authorized robot creation, invitations, and seven-account enforcement before exposing broader household management.
-- Keep caregiver alerts, medication-data cloud sync, remote push notifications, voice commands, facial recognition, and local AI as later features. The current voice scope is fixed prerecorded WAV phrases only.
+`.env` is ignored. Bootstrap it separately for each checkout/worktree, never
+commit or print it, and pass it only through `--dart-define-from-file=.env`.
 
 ## Local commands
-
-Run from this directory:
 
 ```sh
 flutter pub get
@@ -150,20 +76,27 @@ dart run build_runner build
 git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
-flutter run --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
-flutter run --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
-flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
-flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
-# Retained iOS preservation and compile-regression check; not release qualification.
+flutter run --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
+flutter run --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
+flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
+flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
 flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
 git diff --check
 ```
 
-## CI commands
+The iOS command builds the retained Personal implementation for preservation
+and compile-regression only; it is not release or qualification evidence.
 
-Mobile CI has two jobs. Its Ubuntu job first checks committed whitespace, then
-runs the generated Drift code check, format, analyze, tests, Personal debug APK
-build, and Robot debug APK build:
+## Android package migration
+
+Personal and Robot have separate Android package IDs and app sandboxes. Export
+a backup before uninstalling Personal data. Where possible, install Robot
+side-by-side, then import the backup from Settings and verify prescriptions,
+schedules, carousel slots, app settings, dose history, and audit history.
+Device role and runtime capability do not transfer; the destination build keeps
+its configured capability.
+
+## CI commands
 
 ```sh
 flutter pub get
@@ -172,19 +105,9 @@ git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 dart format --set-exit-if-changed .
 flutter analyze
 flutter test
-flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
-flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot
+flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
+flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
 ```
 
-The Ubuntu job uploads both debug APKs as short-lived artifacts. Its macOS job
-retains the no-codesign Personal-profile iOS debug build as a preservation and
-compile-regression check, not release qualification or evidence of production
-readiness. Each job prepares the temporary public configuration it needs and
-removes it after the run.
-
-## Local toolchain notes
-
-- Android SDK: `/opt/homebrew/share/android-commandlinetools`.
-- JDK: Homebrew OpenJDK 17.
-- Android packages installed: platform-tools, Android SDK Platforms 35 and 36, Build-Tools 36.0.0, NDK 28.2.13676358, CMake 3.22.1.
-- Xcode 26.5 is selected at `/Applications/Xcode.app/Contents/Developer`; retained no-codesign iOS debug builds can run locally as preservation and compile-regression checks, not release qualification or evidence of production readiness.
+For the local backup contract, see
+[`../../docs/local_backup_format.md`](../../docs/local_backup_format.md).

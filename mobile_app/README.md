@@ -1,76 +1,51 @@
 # Mobile app
 
-Flutter app workspace for Dosey.
+Dosey's Flutter workspace is [`dosey_app/`](dosey_app/). Run Flutter commands
+from that directory; its README is the canonical reference for local commands.
 
-The app lives in `mobile_app/dosey_app/`. Android Personal and Robot Modes and web remain active. iOS Personal Mode development and distribution are paused; its source, native integrations, project files, and implementation are intentionally retained for possible future revival. Robot Mode is Android-only because the embedded robot phone is mounted inside Dosey. Dosey does not currently provide iOS releases or active iOS feature support.
+## Scope
 
-## Workspace summary
+- **Personal Mode** runs on Android. The retained iOS Personal implementation
+  is for preservation and compile-regression only; it is not released or
+  qualified. Personal phones do not control the mounted XIAO controller.
+- **Robot Mode** is Android-only because it runs on the mounted robot phone.
+  It is an app-owned, local mode; it does not use device-owner, lock-task, or
+  immersive-kiosk provisioning.
+- Drift/SQLite on the phone is authoritative for medication, schedules, dose
+  history and state, inventory, carousel, controller, and audit data. Local
+  reminders, safety flows, simulator, and Guided Trial behavior must continue
+  without cloud access.
 
-| Item | Status |
-| --- | --- |
-| App shell | Today, Medications, and Settings; prescriptions, schedules, and carousel management live within those surfaces, Controller is protected under Robot Maintenance, and Robot Face is the mounted Android surface |
-| Local storage | Drift/SQLite on the phone app only |
-| Prescriptions and schedules | Local prescriptions, refill inventory tracking, schedule profiles, schedule editing, and enabled state |
-| Accounts and robot linking | Personal human authentication for account/household use; guest Robot distribution with current legacy pairing and a pending secure mounted-access follow-up |
-| Carousel and controller | Daviky loading workflow, simulator, and compile-tested D1 BLE bench path; bare-XIAO Android BLE connection, safe-default HEARTBEAT, device/config/safety status, LED test, and disconnect indication observed; that bench evidence does not qualify the identified APK or integrated carousel/hardware path; integrated external-hardware lifecycle, reconnect, power-loss, movement cancellation/timeout, and movement/dispensing remain unverified |
-| Mounted Robot Mode | Face-first resume and Back behavior, configurable inactivity return, role-aware local notification routing, and screen-awake control only while Robot Face is active and the app is resumed |
-| Builds | Mobile CI builds Personal and Robot debug APKs, uploads both as short-lived artifacts, and retains a separate no-codesign iOS debug build as a preservation and compile-regression check, not release qualification or production readiness |
+The phone owns medication and safety decisions. A controller command or
+movement never means a dose was Taken. Record delivery/visibility and Taken
+separately, and change inventory only after explicit Taken confirmation. A
+missed-dose acknowledgement records that the warning was seen; it does not
+change dose state or inventory. Never advise double dosing: “This dose was
+missed. Follow your prescription instructions or ask your caregiver,
+pharmacist, or doctor.”
 
-## Current app
+## Cloud boundary
 
-This directory is the Flutter workspace. The app itself lives in `mobile_app/dosey_app/`, which is the canonical place for current app scope and commands.
+`CloudConfiguration` reads only public build configuration: the Appwrite
+endpoint and project ID, plus public Function IDs. Its pairing predicates are
+configuration checks, not production availability. The required Android Robot
+`phone-only` runtime creates no cloud gateways and uses disabled cloud
+gateways, so pairing/restoration is disabled there. Secure mounted
+pairing/restoration remains inactive pending compatible mobile wiring and
+rollout. Flutter invokes Functions and must never read server tables directly
+or contain table/database IDs, API keys, HMAC values, or other server secrets.
 
-Current workspace-level status:
-
-- Android Personal and Robot Modes and web stay in scope. iOS Personal Mode development and distribution are paused; its source, native integrations, project files, and implementation remain for possible future revival. Dosey does not currently provide iOS releases or active iOS feature support. Robot Mode stays Android-only.
-- The app shell has Today, Medications, and Settings; prescriptions, schedules, and carousel management live within those surfaces, Controller is protected under Robot Maintenance, and Robot Face is the mounted Android surface. Local storage, refill tracking, reminder flows, the Daviky carousel loading workflow, controller simulator, Guided Trial scenarios, and fixed prerecorded Robot Mode voice prompts are in place.
-- Mounted Robot Mode returns to Robot Face on resume and after configurable inactivity, contains Back navigation inside the app, and keeps the display awake only while Robot Face is active and the app is resumed; it does not keep the display awake while backgrounded.
-- The D1 controller protocol now has a compile-tested Flutter BLE transport, staged gateway, and foreground Robot Mode heartbeat/reconnect lifecycle. Android-to-bare-XIAO connection, safe-default HEARTBEAT, device/config/safety status, LED test, and disconnect indication were observed. That bench evidence does not qualify the identified APK or integrated carousel/hardware path. Integrated external-hardware lifecycle, reconnect, power-loss, movement cancellation/timeout, and movement/dispensing behavior remain unverified.
-- Personal account and household use requires human authentication. The mounted Robot distribution remains fully usable as a guest. Human authentication, device pairing, and hardware authorization are independent; sign-in/sign-out does not change pairing, hardware authorization, settings, or local medication data, and pairing does not alter human authentication.
-- The target mounted-access contract uses server-only `mounted_robot_access` and `get-mounted-robot`; it is not active in live staging. Current-main Android clients still use legacy Team-backed restoration and do not read `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID`. Anonymous mounted accounts must never enter Teams on the secure path; Teams remain for human household ownership and membership.
-- A pending mobile follow-up will add `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID`, point `APPWRITE_CLAIM_ROBOT_FUNCTION_ID` at a separate/versioned secure Function for supported Android Robot builds, and restore through `get-mounted-robot`. Until it is released, configured, and validated, legacy clients stay on the legacy Function. Do not dual-write mounted accounts to Teams. The target contract is seven server-authorized Functions and six server-only TablesDB tables. Medication schedules, dose state/history, inventory, and related medication data remain local Drift/SQLite; no medication cloud sync or upload is introduced.
-- Appwrite/auth outages must not block the local Robot shell, and mounted credentials never replace or multiplex a human session.
-- First physical test device: 2024 Moto G Play.
-
-## Target app direction
-
-Robot Mode on the mounted Android phone handles the face screen, reminders, dispense UI, missed-dose recognition, hardware test screen, refill status, dose history, fixed prerecorded voice prompts, quiet-hours behavior, and soft in-app mounted-phone guardrails. Android device-owner, lock-task, and immersive kiosk provisioning remain out of scope.
-
-Voice commands and local AI remain future work.
-
-Personal Mode should handle patient or caregiver notifications, missed dose/refill alerts, dose history, and medication schedule editing when permissions allow.
-
-The phone owns medication schedules, medication data, refill logic, PIN rules, caregiver logic, and dose states. The XIAO should only execute and report hardware actions.
-
-For detailed feature coverage, local behavior, and app-specific commands, see [`dosey_app/README.md`](dosey_app/README.md).
-
-Run Flutter commands from `mobile_app/dosey_app/`.
+Medication-sync defines satisfy only a dormant `CloudConfiguration` predicate.
+Production mobile does not wire a medication-sync gateway: the feature is
+default-off and unwired, and setting its flag or Function IDs does not activate
+sync. Local medication behavior never depends on cloud availability.
 
 ## Commands
 
-Use the canonical [local commands](dosey_app/README.md#local-commands) and
-[CI commands](dosey_app/README.md#ci-commands) in the app README. Select a
-build flavor and `DOSEY_BUILD_PROFILE` explicitly; unflavored APK commands are
-not canonical.
+See [local commands](dosey_app/README.md#local-commands) and
+[CI commands](dosey_app/README.md#ci-commands). Select `personal` or `robot`
+and pass `DOSEY_BUILD_PROFILE` explicitly; unflavored commands are not
+canonical.
 
-The ignored `dosey_app/.env` contains the six public Function configuration names
-currently present in source, plus the public endpoint and project ID. The
-pending mobile follow-up will add `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID` and
-point the existing `APPWRITE_CLAIM_ROBOT_FUNCTION_ID` at a separate/versioned
-secure Function for supported Android Robot builds. There is no separate secure
-claim configuration key today. Until that follow-up is released, configured,
-and validated, keep current clients on the legacy Function. Database/table IDs,
-dynamic API keys, and HMAC secrets stay in the Function environment. Web remains
-auth-only, and no server credential belongs in the Flutter environment.
-
-Android SDK platforms 35 and 36 and OpenJDK 17 are configured locally for the first Moto G Play builds. Xcode 26.5 is retained for local iOS no-codesign preservation and compile-regression checks, not release qualification or production readiness.
-
-## CI
-
-GitHub Actions runs [Mobile CI](../.github/workflows/mobile-ci.yml) for pull
-requests and pushes to `main`. Its Ubuntu job checks committed whitespace,
-generated Drift code, formatting, analyzer output, and tests, then builds and
-uploads short-lived Personal and Robot debug APK artifacts. Its macOS job retains
-the separate no-codesign iOS debug build as a preservation and compile-regression
-check, not release qualification or production readiness. These artifacts are not
-releases.
+For the portable local-backup contract, see
+[`../docs/local_backup_format.md`](../docs/local_backup_format.md).

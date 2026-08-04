@@ -1,8 +1,9 @@
 # Controller Bench Runbook
 
-Use this sequence to verify the safe-default XIAO ESP32-C6 controller build
-before connecting the Grove Base, Grove Servo, or any Grove module. This runbook
-does not authorize real medication testing.
+Use this sequence to inspect the safe-default XIAO ESP32-C6 controller build
+before connecting the Grove Base, Grove Servo, or any Grove module. It records
+bench observations only; it does not qualify physical hardware or authorize
+real medication testing.
 
 ## Preconditions
 
@@ -10,6 +11,9 @@ does not authorize real medication testing.
 - Disconnect the Grove Base, servo, battery pads, and every external wire.
 - Confirm `firmware/include/hardware_config.local.h` does not exist.
 - Build `controller_baseline` for normal checks or `controller_debug` only when USB diagnostics are needed.
+- Use the command form `D1 CMD <command-id> <command>`; valid-command responses
+  use the matching command ID, except unsolicited `D1 EVT pir WAKE_FACE`.
+  Malformed or oversized input without a trusted ID may use `none`.
 - Stop immediately for heat, smell, repeated resets, malformed output, connection instability, or unexpected movement.
 
 ## Safe-default identity
@@ -59,6 +63,11 @@ DISPENSE_NEXT_DISABLED
 These events report compiled values. They do not prove physical timeout,
 travel, power, alignment, or jam behavior.
 
+The safe-default `STATUS` transcript must end in `MOVEMENT_IDLE`; its earlier
+events are `COMMAND_RECEIVED`, `STATUS_OK`, `SERVO_UNCONFIGURED`,
+`PIR_UNCONFIGURED`, `DEBUG_UNAVAILABLE`, and `DEBUG_OFF` for the baseline
+build. `HEARTBEAT` returns `COMMAND_RECEIVED` then `HEARTBEAT_OK`.
+
 ## Debug Build
 
 Use this only with `controller_debug` and an open USB serial monitor at 115200
@@ -80,6 +89,20 @@ With external hardware still disconnected:
 - `DISPENSE_NEXT` must return `COMMAND_DISABLED`.
 - No command may attach PWM or produce movement.
 - A completed command session is controller evidence only. It never marks a dose visible, correct, or taken and never changes inventory.
+
+`CANCEL` returns `NACK … NOT_MOVING` while this lockout is in effect. There is
+no D1 `EMERGENCY_STOP` command. On an active configured movement, `CANCEL`
+reports the interrupted command as `MOVEMENT_CANCELLED_UNRESOLVED`; a 2.5-second
+deadline reports `MOVEMENT_TIMEOUT`. A disconnect stops active movement without
+a completion event. These are source and native-test semantics, not physical
+qualification evidence.
+
+## Review boundary
+
+The phone owns dose state and inventory. It changes inventory only after
+explicit Taken confirmation. Treat a jam, ambiguous movement, cup/lid fault,
+power interruption, timeout, cancellation, or disconnect as review-required;
+do not infer a visible, correct, or Taken dose from a controller event.
 
 Record observed radio and hardware behavior separately from automated build and
 host-test results. Physical validation starts only after connector orientation,
