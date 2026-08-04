@@ -538,15 +538,15 @@ function terminalConflictFromRow(row: MedicationSyncRow): MedicationSyncTerminal
 }
 
 function assertTerminalOccurrence(record: MedicationSyncTerminalOccurrenceRecord): void {
+  assertTerminalIdentifier(record.robotId, 128);
+  assertTerminalIdentifier(record.occurrenceId, 256);
   for (const value of [
-    record.robotId,
-    record.occurrenceId,
     record.acceptedEventId,
     record.acceptedIdempotencyKey,
     record.acceptedDeviceId,
     record.acceptedActorAccountId,
   ]) {
-    assertTerminalIdentifier(value);
+    assertTerminalIdentifier(value, 128);
   }
   assertTerminalHash(record.acceptedOperationHash);
   assertTerminalKind(record.acceptedKind);
@@ -556,16 +556,16 @@ function assertTerminalOccurrence(record: MedicationSyncTerminalOccurrenceRecord
 }
 
 function assertTerminalConflict(record: MedicationSyncTerminalConflictRecord): void {
+  assertTerminalIdentifier(record.robotId, 128);
+  assertTerminalIdentifier(record.occurrenceId, 256);
   for (const value of [
-    record.robotId,
-    record.occurrenceId,
     record.acceptedEventId,
     record.incomingEventId,
     record.incomingIdempotencyKey,
     record.incomingDeviceId,
     record.incomingActorAccountId,
   ]) {
-    assertTerminalIdentifier(value);
+    assertTerminalIdentifier(value, 128);
   }
   assertTerminalHash(record.acceptedOperationHash);
   assertTerminalHash(record.incomingOperationHash);
@@ -580,8 +580,13 @@ function assertTerminalConflict(record: MedicationSyncTerminalConflictRecord): v
   }
 }
 
-function assertTerminalIdentifier(value: unknown): asserts value is string {
-  if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
+function assertTerminalIdentifier(value: unknown, maximumLength: number): asserts value is string {
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > maximumLength ||
+    value.trim() !== value
+  ) {
     throw new Error('Invalid terminal identifier.');
   }
 }
