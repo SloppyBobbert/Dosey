@@ -16,6 +16,7 @@ test('maps mounted access and active robot installation rows without Teams acces
           $id: 'robot-1',
           robotId: 'robot-1',
           mountedDeviceAccountId: 'device-1',
+          registeredPatientDeviceId: 'patient-device-1',
           pairingClaimId: 'claim-1',
           createdAt: '2026-07-26T12:00:00.000Z',
           updatedAt: '2026-07-26T12:01:00.000Z',
@@ -37,6 +38,7 @@ test('maps mounted access and active robot installation rows without Teams acces
   assert.deepEqual(await reader.findByDevice('device-1'), [{
     robotId: 'robot-1',
     mountedDeviceAccountId: 'device-1',
+    registeredPatientDeviceId: 'patient-device-1',
     pairingClaimId: 'claim-1',
     createdAt: new Date('2026-07-26T12:00:00.000Z'),
     updatedAt: new Date('2026-07-26T12:01:00.000Z'),
@@ -51,6 +53,21 @@ test('maps mounted access and active robot installation rows without Teams acces
       '{"method":"limit","values":[2]}',
     ],
   }]);
+});
+
+test('maps legacy mounted access rows without a registered patient device ID to null', async () => {
+  const reader = new AppwriteMountedRobotAccessReader({
+    listRows: async () => ({ rows: [{
+      $id: 'robot-1', robotId: 'robot-1', mountedDeviceAccountId: 'device-1',
+      pairingClaimId: 'claim-1', createdAt: '2026-07-26T12:00:00.000Z',
+      updatedAt: '2026-07-26T12:00:00.000Z',
+    }] }),
+  } as unknown as TablesDB, {
+    databaseId: 'database-1', mountedRobotAccessTableId: 'mounted-access',
+    robotInstallationsTableId: 'robot-installations',
+  });
+
+  assert.equal((await reader.findByDevice('device-1'))[0]?.registeredPatientDeviceId, null);
 });
 
 test('does not turn malformed installation rows into an absent robot', async () => {

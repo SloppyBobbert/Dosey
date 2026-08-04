@@ -77,6 +77,7 @@ function toApplicationOperation(
     return {
       ...common,
       type: 'appendEvent',
+      contractMutation: mutation,
       eventId: mutation.entityId,
       kind: mutation.payload.kind,
       doseId: mutation.payload.occurrence.occurrenceId,
@@ -172,6 +173,10 @@ function errorCode(code: string | undefined): string {
     case 'event_id_reused': return 'EVENT_ID_REUSED';
     case 'version_conflict': return 'VERSION_CONFLICT';
     case 'retryable_internal_error': return 'RETRYABLE_INTERNAL_ERROR';
+    case 'terminal_persistence_not_implemented': return 'TERMINAL_PERSISTENCE_NOT_IMPLEMENTED';
+    case 'HUMAN_TERMINAL_OUTCOME_FORBIDDEN': return 'HUMAN_TERMINAL_OUTCOME_FORBIDDEN';
+    case 'PATIENT_DEVICE_AUTHORITY_REQUIRED': return 'PATIENT_DEVICE_AUTHORITY_REQUIRED';
+    case 'DEVICE_IDENTITY_MISMATCH': return 'DEVICE_IDENTITY_MISMATCH';
     default: return 'MUTATION_REJECTED';
   }
 }

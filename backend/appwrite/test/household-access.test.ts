@@ -76,6 +76,7 @@ describe('Mounted-device sync authorization', () => {
     const mounted = {
       findByDevice: async () => [{
         robotId: 'robot-1', mountedDeviceAccountId: 'device-1', pairingClaimId: 'claim-1',
+        registeredPatientDeviceId: 'patient-device-1',
         createdAt: new Date('2026-07-29T10:00:00Z'), updatedAt: new Date('2026-07-29T10:00:00Z'),
       }],
       getRobotInstallation: async () => ({
@@ -89,7 +90,12 @@ describe('Mounted-device sync authorization', () => {
 
     assert.deepEqual(await access.authorize({
       accountId: 'device-1', actorType: 'device', robotId: 'robot-1',
-    }), { robotId: 'robot-1', role: 'device' });
+    }), {
+      robotId: 'robot-1',
+      role: 'device',
+      authority: 'patient_device',
+      registeredPatientDeviceId: 'patient-device-1',
+    });
     assert.equal(await access.authorize({
       accountId: 'device-1', actorType: 'device', robotId: 'other-robot',
     }), null);

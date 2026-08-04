@@ -11,6 +11,11 @@ import type {
   MedicationSyncMutationResult,
   MedicationSyncResourceType,
 } from '../infrastructure/transactional-medication-sync-store.js';
+import {
+  evaluateTerminalOutcomeAuthority,
+  isTerminalDoseEventMutation,
+  type DoseEventAppendMutation,
+} from '../domain/medication-sync-contract.js';
 
 interface MedicationSyncAccessAuthorizer {
   authorize(input: {
@@ -97,6 +102,7 @@ export type MedicationSyncPushOperation =
       readonly scheduleId: string;
       readonly occurredAt: Date;
       readonly payload: string;
+      readonly contractMutation: DoseEventAppendMutation;
     };
 
 export interface MedicationSyncAcknowledgement {
@@ -141,14 +147,34 @@ export class MedicationSyncPushService {
 
     const acknowledgements: MedicationSyncAcknowledgement[] = [];
     for (const operation of input.operations) {
-      if (
-        operation.type !== 'appendEvent' &&
-        authorized.role !== 'owner'
-      ) {
+      if (operation.type !== 'appendEvent' && authorized.authority !== 'human') {
         acknowledgements.push({
           operationId: operation.operationId,
           status: 'rejected',
           code: 'owner_required',
+        });
+        continue;
+      }
+
+      if (operation.type === 'appendEvent' && isTerminalDoseEventMutation(operation.contractMutation)) {
+        const terminalAuthority = evaluateTerminalOutcomeAuthority({
+          accountId: input.accountId,
+          authority: authorized.authority,
+          registeredDeviceId: authorized.registeredPatientDeviceId,
+          role: authorized.role === 'device' ? null : authorized.role,
+        }, operation.contractMutation);
+        if (terminalAuthority.outcome === 'rejected') {
+          acknowledgements.push({
+            operationId: operation.operationId,
+            status: 'rejected',
+            code: terminalAuthority.errorCode,
+          });
+          continue;
+        }
+        acknowledgements.push({
+          operationId: operation.operationId,
+          status: 'rejected',
+          code: 'terminal_persistence_not_implemented',
         });
         continue;
       }

@@ -23,6 +23,7 @@ interface MountedDeviceAccessLookup {
   findByDevice(accountId: string): Promise<readonly {
     readonly robotId: string;
     readonly mountedDeviceAccountId: string;
+    readonly registeredPatientDeviceId?: string | null;
   }[]>;
   getRobotInstallation(robotId: string): Promise<{
     readonly robotId: string;
@@ -30,10 +31,19 @@ interface MountedDeviceAccessLookup {
   } | null>;
 }
 
-export interface AuthorizedMedicationSyncAccess {
-  readonly robotId: string;
-  readonly role: MedicationSyncActorRole;
-}
+export type AuthorizedMedicationSyncAccess =
+  | {
+      readonly robotId: string;
+      readonly role: HouseholdRole;
+      readonly authority: 'human';
+      readonly registeredPatientDeviceId: null;
+    }
+  | {
+      readonly robotId: string;
+      readonly role: 'device';
+      readonly authority: 'patient_device';
+      readonly registeredPatientDeviceId: string | null;
+    };
 
 export class HouseholdAccessAuthorizer {
   constructor(private readonly links: HouseholdLinkLookup) {}
@@ -62,7 +72,12 @@ export class MedicationSyncAccessAuthorizer {
     readonly robotId: string;
   }): Promise<AuthorizedMedicationSyncAccess | null> {
     if (input.actorType === 'human') {
-      return this.humans.authorize(input);
+      const authorized = await this.humans.authorize(input);
+      return authorized == null ? null : {
+        ...authorized,
+        authority: 'human',
+        registeredPatientDeviceId: null,
+      };
     }
     try {
       const records = await this.mountedDevices.findByDevice(input.accountId);
@@ -78,7 +93,12 @@ export class MedicationSyncAccessAuthorizer {
         installation.robotId !== input.robotId ||
         installation.status !== 'active'
       ) return null;
-      return { robotId: input.robotId, role: 'device' };
+      return {
+        robotId: input.robotId,
+        role: 'device',
+        authority: 'patient_device',
+        registeredPatientDeviceId: record.registeredPatientDeviceId ?? null,
+      };
     } catch {
       return null;
     }
