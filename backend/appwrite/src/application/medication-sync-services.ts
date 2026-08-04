@@ -12,6 +12,7 @@ import type {
   MedicationSyncResourceType,
 } from '../infrastructure/transactional-medication-sync-store.js';
 import {
+  canonicalMutationHashInput,
   evaluateTerminalOutcomeAuthority,
   isTerminalDoseEventMutation,
   type DoseEventAppendMutation,
@@ -147,6 +148,18 @@ export class MedicationSyncPushService {
 
     const acknowledgements: MedicationSyncAcknowledgement[] = [];
     for (const operation of input.operations) {
+      if (
+        operation.type === 'appendEvent' &&
+        !matchesContractMutation(input.robotId, operation)
+      ) {
+        acknowledgements.push({
+          operationId: operation.contractMutation.mutationId,
+          status: 'rejected',
+          code: 'mutation_handoff_mismatch',
+        });
+        continue;
+      }
+
       if (operation.type !== 'appendEvent' && authorized.authority !== 'human') {
         acknowledgements.push({
           operationId: operation.operationId,
@@ -257,6 +270,27 @@ export class MedicationSyncPullService {
 
 function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function matchesContractMutation(
+  robotId: string,
+  operation: Extract<MedicationSyncPushOperation, { type: 'appendEvent' }>,
+): boolean {
+  try {
+    const mutation = operation.contractMutation;
+    return operation.operationId === mutation.mutationId &&
+      operation.idempotencyKey === mutation.idempotencyKey &&
+      operation.deviceId === mutation.deviceId &&
+      operation.eventId === mutation.entityId &&
+      operation.kind === mutation.payload.kind &&
+      operation.doseId === mutation.payload.occurrence.occurrenceId &&
+      operation.scheduleId === mutation.payload.occurrence.scheduleId &&
+      operation.occurredAt.toISOString() === mutation.payload.occurredAt &&
+      operation.payload === JSON.stringify(mutation.payload) &&
+      operation.canonicalHashInput === canonicalMutationHashInput(robotId, mutation);
+  } catch {
+    return false;
+  }
 }
 
 function toAcknowledgement(

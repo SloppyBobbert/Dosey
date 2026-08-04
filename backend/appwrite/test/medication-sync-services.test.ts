@@ -6,8 +6,12 @@ import {
   MedicationSyncPullService,
   MedicationSyncPushService,
   type MedicationSyncApplicationStore,
+  type MedicationSyncPushOperation,
 } from '../src/application/medication-sync-services.js';
-import type { DoseEventAppendMutation } from '../src/domain/medication-sync-contract.js';
+import {
+  canonicalMutationHashInput,
+  type DoseEventAppendMutation,
+} from '../src/domain/medication-sync-contract.js';
 
 const now = new Date('2026-07-29T10:00:00Z');
 
@@ -69,12 +73,7 @@ describe('Medication sync application services', () => {
           type: 'upsertDocument', operationId: 'mutation-1', idempotencyKey: 'key-1', deviceId: 'device-1', canonicalHashInput: 'document-1',
           resourceType: 'medication', resourceId: 'medication-1', baseVersion: 0, payload: '{}',
         },
-        {
-          type: 'appendEvent', operationId: 'mutation-2', idempotencyKey: 'key-2', deviceId: 'device-1', canonicalHashInput: 'event-1',
-          eventId: 'event-1', kind: 'snoozed', doseId: 'dose-1',
-          scheduleId: 'schedule-1', occurredAt: new Date('2026-07-29T08:00:00Z'), payload: '{}',
-          contractMutation: doseEventMutation('snoozed', 'mutation-2', 'device-1'),
-        },
+        appendOperation(doseEventMutation('snoozed', 'mutation-2', 'device-1')),
       ],
     });
 
@@ -84,7 +83,7 @@ describe('Medication sync application services', () => {
         { operationId: 'mutation-2', status: 'applied', sequence: 7 },
       ],
     });
-    assert.deepEqual(appended, ['event-1']);
+    assert.deepEqual(appended, ['event-mutation-2']);
   });
 
   test('lets members archive plans', async () => {
@@ -164,30 +163,14 @@ describe('Medication sync application services', () => {
       }),
       () => now,
     );
-    const base = {
-      type: 'appendEvent' as const,
-      deviceId: 'device-1',
-      idempotencyKey: 'same-key',
-      eventId: 'event-1',
-      kind: 'snoozed' as const,
-      doseId: 'dose-1',
-      scheduleId: 'schedule-1',
-      occurredAt: new Date('2026-07-29T08:00:00Z'),
-      contractMutation: doseEventMutation('snoozed', 'event-1', 'device-1'),
-    };
+    const snoozed = doseEventMutation('snoozed', 'mutation-1', 'device-1', 'same-key');
+    const help = doseEventMutation('help_requested', 'mutation-2', 'device-1', 'same-key');
 
     await service.push({
       accountId: 'member-1', actorType: 'human', robotId: 'robot-1',
       operations: [
-        { ...base, operationId: 'mutation-1', canonicalHashInput: 'snoozed', payload: '{"kind":"snoozed"}' },
-        {
-          ...base,
-          operationId: 'mutation-2',
-          canonicalHashInput: 'help_requested',
-          kind: 'help_requested',
-          payload: '{"kind":"help_requested"}',
-          contractMutation: doseEventMutation('help_requested', 'event-1', 'device-1'),
-        },
+        appendOperation(snoozed),
+        appendOperation(help),
       ],
     });
 
@@ -238,13 +221,7 @@ describe('Medication sync application services', () => {
           deviceId: 'mounted-1', canonicalHashInput: 'delete', resourceType: 'medication',
           resourceId: 'medication-1', baseVersion: 1,
         },
-        {
-          type: 'appendEvent', operationId: 'mutation-2', idempotencyKey: 'key-2',
-          deviceId: 'mounted-1', canonicalHashInput: 'event', eventId: 'event-1',
-          kind: 'snoozed', doseId: 'dose-1', scheduleId: 'schedule-1',
-          occurredAt: now, payload: '{}',
-          contractMutation: doseEventMutation('snoozed', 'mutation-2', 'mounted-1'),
-        },
+        appendOperation(doseEventMutation('snoozed', 'mutation-2', 'mounted-1')),
       ],
     });
     assert.deepEqual(result.acknowledgements, [
@@ -326,9 +303,44 @@ describe('Medication sync application services', () => {
     assert.deepEqual(result.acknowledgements, [{
       operationId: 'mutation-1',
       status: 'rejected',
-      code: 'terminal_persistence_not_implemented',
+      code: 'mutation_handoff_mismatch',
     }]);
     assert.equal(writes, 0);
+  });
+
+  test('rejects mismatched append-event handoffs before terminal authorization or persistence', async () => {
+    const mutation = doseEventMutation('snoozed', 'mutation-1', 'patient-device-1');
+    const mismatches: readonly Partial<AppendOperation>[] = [
+      { operationId: 'other-mutation' },
+      { idempotencyKey: 'other-key' },
+      { kind: 'taken_confirmed' },
+      { eventId: 'other-event' },
+      { deviceId: 'other-device' },
+      { doseId: 'other-occurrence' },
+      { scheduleId: 'other-schedule' },
+      { occurredAt: new Date('2026-07-29T08:01:00.000Z') },
+      { payload: '{"kind":"help_requested"}' },
+      { canonicalHashInput: 'other-hash' },
+    ];
+
+    for (const overrides of mismatches) {
+      let writes = 0;
+      const service = new MedicationSyncPushService(
+        { authorize: async () => patientDevice('patient-device-1') },
+        store({ appendEvent: async () => { writes += 1; return { status: 'applied', sequence: 1 }; } }),
+        () => now,
+      );
+
+      const result = await service.push({
+        accountId: 'mounted-1', actorType: 'device', robotId: 'robot-1',
+        operations: [appendOperation(mutation, overrides)],
+      });
+
+      assert.deepEqual(result.acknowledgements, [{
+        operationId: 'mutation-1', status: 'rejected', code: 'mutation_handoff_mismatch',
+      }]);
+      assert.equal(writes, 0);
+    }
   });
 
   test('marks a transient failure retryable and continues processing later operations', async () => {
@@ -366,32 +378,20 @@ function terminalOperation(
   operationId: string,
   deviceId: string,
 ) {
-  return {
-    type: 'appendEvent' as const,
-    operationId,
-    idempotencyKey: `${deviceId}:${operationId}`,
-    deviceId,
-    canonicalHashInput: `${kind}:${operationId}`,
-    eventId: `event-${operationId}`,
-    kind,
-    doseId: 'dose-1',
-    scheduleId: 'schedule-1',
-    occurredAt: now,
-    payload: '{}',
-    contractMutation: doseEventMutation(kind, operationId, deviceId),
-  };
+  return appendOperation(doseEventMutation(kind, operationId, deviceId));
 }
 
 function doseEventMutation(
   kind: DoseEventAppendMutation['payload']['kind'],
   mutationId: string,
   deviceId: string,
+  idempotencyKey = `${deviceId}:${mutationId}`,
 ): DoseEventAppendMutation {
   return {
     contractVersion: 1,
     mutationId,
     deviceId,
-    idempotencyKey: `${deviceId}:${mutationId}`,
+    idempotencyKey,
     entityType: 'dose_event',
     operation: 'append',
     entityId: `event-${mutationId}`,
@@ -411,4 +411,27 @@ function doseEventMutation(
       occurredAt: '2026-07-29T08:00:00.000Z',
     },
   };
+}
+
+type AppendOperation = Extract<MedicationSyncPushOperation, { readonly type: 'appendEvent' }>;
+
+function appendOperation(
+  contractMutation: DoseEventAppendMutation,
+  overrides: Partial<AppendOperation> = {},
+): AppendOperation {
+  const operation: AppendOperation = {
+    type: 'appendEvent',
+    operationId: contractMutation.mutationId,
+    idempotencyKey: contractMutation.idempotencyKey,
+    deviceId: contractMutation.deviceId,
+    canonicalHashInput: canonicalMutationHashInput('robot-1', contractMutation),
+    eventId: contractMutation.entityId,
+    kind: contractMutation.payload.kind,
+    doseId: contractMutation.payload.occurrence.occurrenceId,
+    scheduleId: contractMutation.payload.occurrence.scheduleId,
+    occurredAt: new Date(contractMutation.payload.occurredAt),
+    payload: JSON.stringify(contractMutation.payload),
+    contractMutation,
+  };
+  return {...operation, ...overrides};
 }
