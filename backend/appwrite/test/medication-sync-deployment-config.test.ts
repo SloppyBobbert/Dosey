@@ -5,7 +5,21 @@ import { test } from 'node:test';
 type Table = {
   $id: string;
   $permissions: string[];
-  columns: Array<{ key: string }>;
+  databaseId: string;
+  enabled: boolean;
+  rowSecurity: boolean;
+  columns: Array<{
+    key: string;
+    type: string;
+    required: boolean;
+    array: boolean;
+    default: null;
+    size?: number;
+    min?: number;
+    max?: number;
+    elements?: string[];
+    format?: string;
+  }>;
   indexes: Array<{ key: string; type: string; columns: string[]; orders?: string[] }>;
 };
 
@@ -31,8 +45,13 @@ test('defines additive server-only sync tables and callable human function deplo
     'dosey_sync_receipts_v1',
     'dosey_sync_state_v1',
     'dosey_sync_changes_v1',
+    'dosey_sync_terminal_occurrences_v1',
+    'dosey_sync_terminal_conflicts_v1',
   ]);
-  for (const table of tables.values()) assert.deepEqual(table.$permissions, []);
+  for (const table of tables.values()) {
+    assert.deepEqual(table.$permissions, []);
+    assert.equal(table.rowSecurity, false);
+  }
   assert.deepEqual(
     tables.get('dosey_sync_documents_v1')?.columns.map(({ key }) => key),
     [
@@ -40,6 +59,49 @@ test('defines additive server-only sync tables and callable human function deplo
       'createdAt', 'createdByAccountId', 'updatedAt', 'updatedByAccountId',
     ],
   );
+  assertTerminalTable(tables.get('dosey_sync_terminal_occurrences_v1'), {
+    columns: [
+      varchar('robotId', 128),
+      varchar('occurrenceId', 256),
+      enumColumn('acceptedKind', 16, ['taken_confirmed', 'skipped', 'missed']),
+      varchar('acceptedEventId', 128),
+      varchar('acceptedOperationHash', 64),
+      varchar('acceptedIdempotencyKey', 128),
+      varchar('acceptedDeviceId', 128),
+      varchar('acceptedActorAccountId', 128),
+      bigint('acceptedSequence'),
+      datetime('occurredAt'),
+      datetime('acceptedAt'),
+    ],
+    indexes: [
+      {key: 'robot_occurrence', type: 'unique', columns: ['robotId', 'occurrenceId'], orders: ['ASC', 'ASC']},
+      {key: 'robot_accepted_sequence', type: 'key', columns: ['robotId', 'acceptedSequence'], orders: ['ASC', 'ASC']},
+    ],
+  });
+  assertTerminalTable(tables.get('dosey_sync_terminal_conflicts_v1'), {
+    columns: [
+      varchar('robotId', 128),
+      varchar('occurrenceId', 256),
+      enumColumn('conflictCode', 40, ['TERMINAL_OUTCOME_REPLAY_MISMATCH', 'TERMINAL_OUTCOME_CONFLICT']),
+      varchar('acceptedEventId', 128),
+      varchar('acceptedOperationHash', 64),
+      enumColumn('acceptedKind', 16, ['taken_confirmed', 'skipped', 'missed']),
+      bigint('acceptedSequence'),
+      varchar('incomingEventId', 128),
+      varchar('incomingOperationHash', 64),
+      enumColumn('incomingKind', 16, ['taken_confirmed', 'skipped', 'missed']),
+      varchar('incomingIdempotencyKey', 128),
+      varchar('incomingDeviceId', 128),
+      varchar('incomingActorAccountId', 128),
+      text('incomingPayload'),
+      datetime('incomingOccurredAt'),
+      datetime('recordedAt'),
+    ],
+    indexes: [
+      {key: 'robot_incoming_hash', type: 'unique', columns: ['robotId', 'incomingOperationHash'], orders: ['ASC', 'ASC']},
+      {key: 'robot_occurrence', type: 'key', columns: ['robotId', 'occurrenceId'], orders: ['ASC', 'ASC']},
+    ],
+  });
   assert.deepEqual(
     tables.get('dosey_sync_events_v1')?.columns.map(({ key }) => key),
     [
@@ -113,3 +175,36 @@ test('defines additive server-only sync tables and callable human function deplo
     ]);
   }
 });
+
+function assertTerminalTable(table: Table | undefined, expected: {
+  columns: Table['columns'];
+  indexes: Table['indexes'];
+}): void {
+  assert.ok(table);
+  assert.equal(table.databaseId, '<DOSEY_DATABASE_ID>');
+  assert.equal(table.enabled, true);
+  assert.deepEqual(table.$permissions, []);
+  assert.equal(table.rowSecurity, false);
+  assert.deepEqual(table.columns, expected.columns);
+  assert.deepEqual(table.indexes, expected.indexes);
+}
+
+function varchar(key: string, size: number): Table['columns'][number] {
+  return {key, type: 'varchar', size, required: true, array: false, default: null};
+}
+
+function enumColumn(key: string, size: number, elements: string[]): Table['columns'][number] {
+  return {key, type: 'varchar', size, required: true, array: false, elements, format: 'enum', default: null};
+}
+
+function bigint(key: string): Table['columns'][number] {
+  return {key, type: 'bigint', required: true, array: false, min: 1, max: 9007199254740991, default: null};
+}
+
+function datetime(key: string): Table['columns'][number] {
+  return {key, type: 'datetime', required: true, array: false, format: '', default: null};
+}
+
+function text(key: string): Table['columns'][number] {
+  return {key, type: 'text', required: true, array: false, default: null};
+}
