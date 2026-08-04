@@ -14,14 +14,26 @@ enum WebLocalPersonalDestination {
   final IconData icon;
 
   static WebLocalPersonalDestination fromPath(String path) {
+    final normalizedPath = normalizePath(path);
     return values.firstWhere(
-      (destination) => destination.path == path,
+      (destination) => destination.path == normalizedPath,
       orElse: () => WebLocalPersonalDestination.today,
     );
   }
 
-  static bool containsPath(String path) =>
-      values.any((destination) => destination.path == path);
+  static bool containsPath(String path) {
+    final normalizedPath = normalizePath(path);
+    return values.any((destination) => destination.path == normalizedPath);
+  }
+
+  static String normalizePath(String path) {
+    if (path.isEmpty) return '/today';
+    var normalizedPath = path;
+    while (normalizedPath.length > 1 && normalizedPath.endsWith('/')) {
+      normalizedPath = normalizedPath.substring(0, normalizedPath.length - 1);
+    }
+    return normalizedPath == '/' ? '/today' : normalizedPath;
+  }
 }
 
 class WebLocalPersonalRouteController extends ChangeNotifier {
@@ -29,7 +41,7 @@ class WebLocalPersonalRouteController extends ChangeNotifier {
     : _history = [WebLocalPersonalDestination.fromPath(initialPath)],
       _unknownPath = WebLocalPersonalDestination.containsPath(initialPath)
           ? null
-          : initialPath;
+          : WebLocalPersonalDestination.normalizePath(initialPath);
 
   final List<WebLocalPersonalDestination> _history;
   int _index = 0;
@@ -55,13 +67,14 @@ class WebLocalPersonalRouteController extends ChangeNotifier {
   }
 
   void setPath(String path) {
-    if (!WebLocalPersonalDestination.containsPath(path)) {
-      if (_unknownPath == path) return;
-      _unknownPath = path;
+    final normalizedPath = WebLocalPersonalDestination.normalizePath(path);
+    if (!WebLocalPersonalDestination.containsPath(normalizedPath)) {
+      if (_unknownPath == normalizedPath) return;
+      _unknownPath = normalizedPath;
       notifyListeners();
       return;
     }
-    goTo(WebLocalPersonalDestination.fromPath(path));
+    goTo(WebLocalPersonalDestination.fromPath(normalizedPath));
   }
 
   bool goBack() {

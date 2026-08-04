@@ -22,7 +22,7 @@ Widget buildWebLocalPersonalFoundationPage(
   final copy = switch (destination) {
     WebLocalPersonalDestination.today => (
       title: 'Today',
-      message: 'Local schedule details will appear here.',
+      message: 'Your next local dose details will appear here.',
       action: null,
       actionLabel: null,
     ),

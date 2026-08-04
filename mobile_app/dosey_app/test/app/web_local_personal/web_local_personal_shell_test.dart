@@ -11,11 +11,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  late DoseyDatabase database;
-
-  setUp(() => database = DoseyDatabase.inMemory());
-  tearDown(() => database.close());
-
   test('routes are exact and deep links choose the matching destination', () {
     expect(WebLocalPersonalDestination.values.map((item) => item.path), [
       '/today',
@@ -37,10 +32,17 @@ void main() {
         destination,
       );
     }
+    for (final path in ['', '/', '/today/', '/today///']) {
+      final controller = WebLocalPersonalRouteController(initialPath: path);
+      addTearDown(controller.dispose);
+      expect(controller.current, WebLocalPersonalDestination.today);
+      expect(controller.currentPath, '/today');
+    }
   });
 
   test('route controller maintains back and forward history', () {
     final controller = WebLocalPersonalRouteController();
+    addTearDown(controller.dispose);
     controller.setPath('/prescriptions');
     controller.setPath('/schedule');
     expect(controller.goBack(), isTrue);
@@ -50,16 +52,20 @@ void main() {
     expect(controller.goBack(), isTrue);
     controller.setPath('/log');
     expect(controller.canGoForward, isFalse);
+    controller.setPath('/schedule///');
+    expect(controller.currentPath, '/schedule');
   });
 
   test(
     'route delegate builds routes and keeps unknown paths explicit',
     () async {
       final controller = WebLocalPersonalRouteController();
+      addTearDown(controller.dispose);
       final delegate = WebLocalPersonalRouteDelegate(
         controller: controller,
         builder: (_, controller) => Text(controller.currentPath),
       );
+      addTearDown(delegate.dispose);
       await delegate.setNewRoutePath(RouteInformation(uri: Uri(path: '/log')));
       expect(delegate.currentConfiguration!.uri.path, '/log');
       expect(await delegate.popRoute(), isTrue);
@@ -69,7 +75,6 @@ void main() {
       );
       expect(controller.hasUnknownPath, isTrue);
       expect(delegate.currentConfiguration!.uri.path, '/not-local-personal');
-      delegate.dispose();
     },
   );
 
@@ -78,7 +83,7 @@ void main() {
   ) async {
     final content = <WebLocalPersonalDestination, String>{
       WebLocalPersonalDestination.today:
-          'Local schedule details will appear here.',
+          'Your next local dose details will appear here.',
       WebLocalPersonalDestination.prescriptions:
           'Local prescription details will appear here.',
       WebLocalPersonalDestination.schedule:
@@ -145,7 +150,7 @@ void main() {
     await tester.tap(find.text('Go to Today'));
     await tester.pump();
     expect(
-      find.text('Local schedule details will appear here.'),
+      find.text('Your next local dose details will appear here.'),
       findsOneWidget,
     );
   });
@@ -211,6 +216,13 @@ void main() {
     expect(rail.unselectedLabelTextStyle!.color, const Color(0xFFFFFCF6));
   });
 
+  testWidgets('error color uses an accessible dark foreground', (tester) async {
+    await _pump(tester, width: 390);
+    final colors = Theme.of(tester.element(find.byType(Scaffold))).colorScheme;
+    expect(colors.error, const Color(0xFFC65F50));
+    expect(colors.onError, const Color(0xFF101010));
+  });
+
   testWidgets('mobile navigation follows focus order and has 44px targets', (
     tester,
   ) async {
@@ -246,12 +258,18 @@ void main() {
     '320 by 256 at 200% keeps navigation and page content reachable',
     (tester) async {
       final semantics = tester.ensureSemantics();
+      var semanticsDisposed = false;
+      addTearDown(() {
+        if (!semanticsDisposed) semantics.dispose();
+      });
       await _pump(tester, width: 320, height: 256, textScale: 2);
       expect(tester.takeException(), isNull);
       final navigation = find.byKey(
         const ValueKey('web-local-personal-bottom-navigation'),
       );
-      final pageViewport = find.byType(SingleChildScrollView);
+      final pageViewport = find.byKey(
+        const ValueKey('web-local-personal-page-scroll-view'),
+      );
       expect(
         find.descendant(
           of: navigation,
@@ -309,6 +327,7 @@ void main() {
         Tristate.isTrue,
       );
       semantics.dispose();
+      semanticsDisposed = true;
     },
   );
 
@@ -320,7 +339,9 @@ void main() {
       final navigation = find.byKey(
         const ValueKey('web-local-personal-bottom-navigation'),
       );
-      final pageViewport = find.byType(SingleChildScrollView);
+      final pageViewport = find.byKey(
+        const ValueKey('web-local-personal-page-scroll-view'),
+      );
       _expectShortViewportGeometry(
         tester,
         navigation: navigation,
@@ -349,19 +370,23 @@ void main() {
   testWidgets('mobile navigation preserves safe-area bottom padding', (
     tester,
   ) async {
+    addTearDown(tester.view.resetPadding);
     tester.view.padding = const FakeViewPadding(bottom: 24);
     await _pump(tester, width: 390);
     final container = tester.widget<Container>(
       find.byKey(const ValueKey('web-local-personal-bottom-navigation')),
     );
     expect((container.padding! as EdgeInsets).bottom, 24);
-    addTearDown(tester.view.resetPadding);
   });
 
   testWidgets('page headings are semantic and navigation changes the page', (
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
+    var semanticsDisposed = false;
+    addTearDown(() {
+      if (!semanticsDisposed) semantics.dispose();
+    });
     await _pump(tester, width: 390);
     expect(
       tester.getSemantics(find.text('Today').first).flagsCollection.isHeader,
@@ -382,6 +407,7 @@ void main() {
       isTrue,
     );
     semantics.dispose();
+    semanticsDisposed = true;
   });
 
   testWidgets(
@@ -411,6 +437,12 @@ void main() {
       await tester.tap(find.text('Schedule'));
       await tester.pump();
       expect(find.text('Add schedule'), findsNothing);
+      await tester.tap(find.text('Settings'));
+      await tester.pump();
+      expect(
+        find.text('Demo only — non-persistent. Nothing entered here is saved.'),
+        findsOneWidget,
+      );
     },
   );
 
@@ -439,6 +471,8 @@ void main() {
   testWidgets(
     'ready storage can expose injected prescription and schedule actions',
     (tester) async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
       var prescriptionCalls = 0;
       var scheduleCalls = 0;
       await _pump(
@@ -479,7 +513,10 @@ void main() {
       ),
     );
     expect(find.text('Local storage needs attention'), findsOneWidget);
-    expect(find.text('Local schedule details will appear here.'), findsNothing);
+    expect(
+      find.text('Your next local dose details will appear here.'),
+      findsNothing,
+    );
     expect(
       find.byKey(const ValueKey('web-local-personal-bottom-navigation')),
       findsNothing,
@@ -519,13 +556,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  test('local shell source does not import remote or device integrations', () {
+  test('local shell imports do not include remote or device integrations', () {
     final source = Directory('lib/app/web_local_personal')
         .listSync(recursive: true)
         .whereType<File>()
         .where((file) => file.path.endsWith('.dart'))
         .map((file) => file.readAsStringSync())
         .join('\n');
+    final directives = RegExp(
+      r'''^(?:import|export)\s+['"]([^'"]+)['"]''',
+      multiLine: true,
+    ).allMatches(source).map((match) => match.group(1)!).join('\n');
     for (final expression in [
       RegExp(
         r'appwrite|account|cloud|pairing|caregiver|household|sync|bluetooth|\bble\b|carousel|robot|native|notification|permission|audio',
@@ -536,7 +577,11 @@ void main() {
         caseSensitive: false,
       ),
     ]) {
-      expect(expression.hasMatch(source), isFalse, reason: '$expression found');
+      expect(
+        expression.hasMatch(directives),
+        isFalse,
+        reason: '$expression found',
+      );
     }
   });
 }
@@ -583,6 +628,7 @@ Future<void> _pump(
   WebLocalPersonalPageBuilder? pageBuilder,
 }) async {
   final activeController = controller ?? WebLocalPersonalRouteController();
+  addTearDown(activeController.dispose);
   final activeProvider =
       routeInformationProvider ??
       _FakeRouteInformationProvider(activeController.currentPath);

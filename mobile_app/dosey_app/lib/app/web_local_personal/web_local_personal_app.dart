@@ -93,6 +93,7 @@ ThemeData _theme() {
       surface: paper,
       onSurface: Color(0xFF1D2929),
       error: coral,
+      onError: Color(0xFF101010),
     ),
     scaffoldBackgroundColor: cream,
     textTheme: const TextTheme(
@@ -184,6 +185,7 @@ class _PersonalShellState extends State<_PersonalShell> {
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
+                  key: const ValueKey('web-local-personal-page-scroll-view'),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1120),
                     child: Padding(
