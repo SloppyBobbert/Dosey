@@ -132,6 +132,14 @@ export function createMedicationSyncRuntime(
       environment.DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID,
       'DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID',
     ),
+    terminalOccurrencesTableId: required(
+      environment.DOSEY_MEDICATION_SYNC_TERMINAL_OCCURRENCES_TABLE_ID,
+      'DOSEY_MEDICATION_SYNC_TERMINAL_OCCURRENCES_TABLE_ID',
+    ),
+    terminalConflictsTableId: required(
+      environment.DOSEY_MEDICATION_SYNC_TERMINAL_CONFLICTS_TABLE_ID,
+      'DOSEY_MEDICATION_SYNC_TERMINAL_CONFLICTS_TABLE_ID',
+    ),
   });
   const store = new TransactionalMedicationSyncStore(
     new AppwriteMedicationSyncPersistence(rows, (error) => {

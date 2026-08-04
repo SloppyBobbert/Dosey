@@ -11,6 +11,8 @@ import type {
   MedicationSyncReceiptRecord,
   MedicationSyncResourceType,
   MedicationSyncStateRecord,
+  MedicationSyncTerminalConflictRecord,
+  MedicationSyncTerminalOccurrenceRecord,
   MedicationSyncTransaction,
 } from './transactional-medication-sync-store.js';
 
@@ -20,7 +22,9 @@ export type MedicationSyncTable =
   | 'helpRequests'
   | 'receipts'
   | 'state'
-  | 'changes';
+  | 'changes'
+  | 'terminalOccurrences'
+  | 'terminalConflicts';
 export type MedicationSyncRow = Readonly<Record<string, unknown>> & { readonly $id: string };
 
 export interface MedicationSyncRowsApi {
@@ -59,6 +63,8 @@ export interface AppwriteMedicationSyncTableConfiguration {
   readonly receiptsTableId: string;
   readonly stateTableId: string;
   readonly changesTableId: string;
+  readonly terminalOccurrencesTableId: string;
+  readonly terminalConflictsTableId: string;
 }
 
 export class AppwriteMedicationSyncRowsApi implements MedicationSyncRowsApi {
@@ -159,6 +165,8 @@ export class AppwriteMedicationSyncRowsApi implements MedicationSyncRowsApi {
       case 'receipts': return this.configuration.receiptsTableId;
       case 'state': return this.configuration.stateTableId;
       case 'changes': return this.configuration.changesTableId;
+      case 'terminalOccurrences': return this.configuration.terminalOccurrencesTableId;
+      case 'terminalConflicts': return this.configuration.terminalConflictsTableId;
     }
   }
 }
@@ -205,6 +213,46 @@ class AppwriteMedicationSyncTransaction implements MedicationSyncTransaction {
     private readonly rows: MedicationSyncRowsApi,
     private readonly transactionId: string,
   ) {}
+
+  async getTerminalOccurrence(
+    robotId: string,
+    occurrenceId: string,
+  ): Promise<MedicationSyncTerminalOccurrenceRecord | null> {
+    const row = await this.rows.getRow(
+      'terminalOccurrences',
+      rowId('terminalOccurrence', robotId, occurrenceId),
+      this.transactionId,
+    );
+    return row == null ? null : terminalOccurrenceFromRow(row);
+  }
+
+  createTerminalOccurrence(record: MedicationSyncTerminalOccurrenceRecord): Promise<void> {
+    return this.rows.createRow(
+      'terminalOccurrences',
+      terminalOccurrenceToRow(record),
+      this.transactionId,
+    );
+  }
+
+  async getTerminalConflict(
+    robotId: string,
+    incomingOperationHash: string,
+  ): Promise<MedicationSyncTerminalConflictRecord | null> {
+    const row = await this.rows.getRow(
+      'terminalConflicts',
+      rowId('terminalConflict', robotId, incomingOperationHash),
+      this.transactionId,
+    );
+    return row == null ? null : terminalConflictFromRow(row);
+  }
+
+  createTerminalConflict(record: MedicationSyncTerminalConflictRecord): Promise<void> {
+    return this.rows.createRow(
+      'terminalConflicts',
+      terminalConflictToRow(record),
+      this.transactionId,
+    );
+  }
 
   async getDocument(
     robotId: string,
@@ -404,6 +452,173 @@ function changeFromRow(row: MedicationSyncRow): MedicationSyncChangeRecord {
   };
 }
 
+function terminalOccurrenceToRow(
+  record: MedicationSyncTerminalOccurrenceRecord,
+): MedicationSyncRow {
+  assertTerminalOccurrence(record);
+  return {
+    $id: rowId('terminalOccurrence', record.robotId, record.occurrenceId),
+    ...record,
+    occurredAt: record.occurredAt.toISOString(),
+    acceptedAt: record.acceptedAt.toISOString(),
+  };
+}
+
+function terminalOccurrenceFromRow(row: MedicationSyncRow): MedicationSyncTerminalOccurrenceRecord {
+  const record = {
+    robotId: requiredString(row, 'robotId'),
+    occurrenceId: requiredString(row, 'occurrenceId'),
+    acceptedKind: requiredEnum(
+      row,
+      'acceptedKind',
+      ['taken_confirmed', 'skipped', 'missed'],
+    ),
+    acceptedEventId: requiredString(row, 'acceptedEventId'),
+    acceptedOperationHash: requiredString(row, 'acceptedOperationHash'),
+    acceptedIdempotencyKey: requiredString(row, 'acceptedIdempotencyKey'),
+    acceptedDeviceId: requiredString(row, 'acceptedDeviceId'),
+    acceptedActorAccountId: requiredString(row, 'acceptedActorAccountId'),
+    acceptedSequence: requiredPositiveInteger(row, 'acceptedSequence'),
+    occurredAt: requiredDate(row, 'occurredAt'),
+    acceptedAt: requiredDate(row, 'acceptedAt'),
+  };
+  assertTerminalOccurrence(record);
+  if (row.$id !== rowId('terminalOccurrence', record.robotId, record.occurrenceId)) {
+    throw new Error('Invalid medication sync row field: $id.');
+  }
+  return record;
+}
+
+function terminalConflictToRow(record: MedicationSyncTerminalConflictRecord): MedicationSyncRow {
+  assertTerminalConflict(record);
+  return {
+    $id: rowId('terminalConflict', record.robotId, record.incomingOperationHash),
+    ...record,
+    incomingOccurredAt: record.incomingOccurredAt.toISOString(),
+    recordedAt: record.recordedAt.toISOString(),
+  };
+}
+
+function terminalConflictFromRow(row: MedicationSyncRow): MedicationSyncTerminalConflictRecord {
+  const record = {
+    robotId: requiredString(row, 'robotId'),
+    occurrenceId: requiredString(row, 'occurrenceId'),
+    conflictCode: requiredEnum(
+      row,
+      'conflictCode',
+      ['TERMINAL_OUTCOME_REPLAY_MISMATCH', 'TERMINAL_OUTCOME_CONFLICT'],
+    ),
+    acceptedEventId: requiredString(row, 'acceptedEventId'),
+    acceptedOperationHash: requiredString(row, 'acceptedOperationHash'),
+    acceptedKind: requiredEnum(
+      row,
+      'acceptedKind',
+      ['taken_confirmed', 'skipped', 'missed'],
+    ),
+    acceptedSequence: requiredPositiveInteger(row, 'acceptedSequence'),
+    incomingEventId: requiredString(row, 'incomingEventId'),
+    incomingOperationHash: requiredString(row, 'incomingOperationHash'),
+    incomingKind: requiredEnum(
+      row,
+      'incomingKind',
+      ['taken_confirmed', 'skipped', 'missed'],
+    ),
+    incomingIdempotencyKey: requiredString(row, 'incomingIdempotencyKey'),
+    incomingDeviceId: requiredString(row, 'incomingDeviceId'),
+    incomingActorAccountId: requiredString(row, 'incomingActorAccountId'),
+    incomingPayload: requiredString(row, 'incomingPayload'),
+    incomingOccurredAt: requiredDate(row, 'incomingOccurredAt'),
+    recordedAt: requiredDate(row, 'recordedAt'),
+  };
+  assertTerminalConflict(record);
+  if (row.$id !== rowId('terminalConflict', record.robotId, record.incomingOperationHash)) {
+    throw new Error('Invalid medication sync row field: $id.');
+  }
+  return record;
+}
+
+function assertTerminalOccurrence(record: MedicationSyncTerminalOccurrenceRecord): void {
+  for (const value of [
+    record.robotId,
+    record.occurrenceId,
+    record.acceptedEventId,
+    record.acceptedIdempotencyKey,
+    record.acceptedDeviceId,
+    record.acceptedActorAccountId,
+  ]) {
+    assertTerminalIdentifier(value);
+  }
+  assertTerminalHash(record.acceptedOperationHash);
+  assertTerminalKind(record.acceptedKind);
+  assertTerminalSequence(record.acceptedSequence);
+  assertTerminalDate(record.occurredAt);
+  assertTerminalDate(record.acceptedAt);
+}
+
+function assertTerminalConflict(record: MedicationSyncTerminalConflictRecord): void {
+  for (const value of [
+    record.robotId,
+    record.occurrenceId,
+    record.acceptedEventId,
+    record.incomingEventId,
+    record.incomingIdempotencyKey,
+    record.incomingDeviceId,
+    record.incomingActorAccountId,
+  ]) {
+    assertTerminalIdentifier(value);
+  }
+  assertTerminalHash(record.acceptedOperationHash);
+  assertTerminalHash(record.incomingOperationHash);
+  assertTerminalKind(record.acceptedKind);
+  assertTerminalKind(record.incomingKind);
+  assertTerminalConflictCode(record.conflictCode);
+  assertTerminalSequence(record.acceptedSequence);
+  assertTerminalDate(record.incomingOccurredAt);
+  assertTerminalDate(record.recordedAt);
+  if (typeof record.incomingPayload !== 'string' || record.incomingPayload.length === 0) {
+    throw new Error('Invalid terminal payload.');
+  }
+}
+
+function assertTerminalIdentifier(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || value.length === 0 || value.trim() !== value) {
+    throw new Error('Invalid terminal identifier.');
+  }
+}
+
+function assertTerminalHash(value: unknown): void {
+  if (typeof value !== 'string' || !/^[0-9a-f]{64}$/.test(value)) {
+    throw new Error('Invalid terminal hash.');
+  }
+}
+
+function assertTerminalKind(value: unknown): void {
+  if (value !== 'taken_confirmed' && value !== 'skipped' && value !== 'missed') {
+    throw new Error('Invalid terminal kind.');
+  }
+}
+
+function assertTerminalConflictCode(value: unknown): void {
+  if (
+    value !== 'TERMINAL_OUTCOME_REPLAY_MISMATCH' &&
+    value !== 'TERMINAL_OUTCOME_CONFLICT'
+  ) {
+    throw new Error('Invalid terminal conflict code.');
+  }
+}
+
+function assertTerminalSequence(value: unknown): void {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) {
+    throw new Error('Invalid terminal sequence.');
+  }
+}
+
+function assertTerminalDate(value: unknown): void {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) {
+    throw new Error('Invalid terminal date.');
+  }
+}
+
 function rowId(...parts: readonly string[]): string {
   return createHash('sha256').update(parts.join('\u0000')).digest('hex').slice(0, 36);
 }
@@ -419,6 +634,13 @@ function requiredString(row: MedicationSyncRow, key: string): string {
 function requiredInteger(row: MedicationSyncRow, key: string): number {
   const value = row[key];
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`Invalid medication sync row field: ${key}.`);
+  }
+  return value;
+}
+function requiredPositiveInteger(row: MedicationSyncRow, key: string): number {
+  const value = requiredInteger(row, key);
+  if (value < 1) {
     throw new Error(`Invalid medication sync row field: ${key}.`);
   }
   return value;

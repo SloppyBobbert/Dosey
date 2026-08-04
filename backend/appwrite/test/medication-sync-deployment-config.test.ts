@@ -171,6 +171,8 @@ test('defines additive server-only sync tables and callable human function deplo
       ['DOSEY_MEDICATION_SYNC_RECEIPTS_TABLE_ID', 'dosey_sync_receipts_v1'],
       ['DOSEY_MEDICATION_SYNC_STATE_TABLE_ID', 'dosey_sync_state_v1'],
       ['DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID', 'dosey_sync_changes_v1'],
+      ['DOSEY_MEDICATION_SYNC_TERMINAL_OCCURRENCES_TABLE_ID', 'dosey_sync_terminal_occurrences_v1'],
+      ['DOSEY_MEDICATION_SYNC_TERMINAL_CONFLICTS_TABLE_ID', 'dosey_sync_terminal_conflicts_v1'],
       ['DOSEY_HUMAN_AUTH_PROVIDERS', 'google'],
     ]);
   }
