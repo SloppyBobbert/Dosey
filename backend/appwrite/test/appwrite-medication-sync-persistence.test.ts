@@ -15,6 +15,7 @@ import type {
   MedicationSyncTerminalConflictRecord,
   MedicationSyncTerminalOccurrenceRecord,
 } from '../src/infrastructure/transactional-medication-sync-store.js';
+import { TransactionalMedicationSyncStore } from '../src/infrastructure/transactional-medication-sync-store.js';
 
 const tableConfiguration: AppwriteMedicationSyncTableConfiguration = {
   databaseId: 'database',
@@ -91,6 +92,7 @@ class FakeRows implements MedicationSyncRowsApi {
   commitFailures = 0;
   conflictType: string = 'transaction_conflict';
   rollbackFailures = 0;
+  onCommitConflict: (() => Promise<void>) | null = null;
 
   async beginTransaction() {
     const id = `transaction-${this.events.filter((event) => event === 'begin').length + 1}`;
@@ -101,6 +103,7 @@ class FakeRows implements MedicationSyncRowsApi {
   async commitTransaction(id: string) {
     this.events.push(`commit:${id}`);
     if (this.commitFailures-- > 0) {
+      await this.onCommitConflict?.();
       throw new AppwriteException('conflict', 409, this.conflictType);
     }
     this.rows = new Map(this.transaction(id));
@@ -115,6 +118,9 @@ class FakeRows implements MedicationSyncRowsApi {
     return this.transaction(transactionId).get(`${table}:${id}`) ?? null;
   }
   async createRow(table: MedicationSyncTable, row: MedicationSyncRow, transactionId: string) {
+    if (this.transaction(transactionId).has(`${table}:${row.$id}`)) {
+      throw new AppwriteException('duplicate row', 409, 'row_update_conflict');
+    }
     this.writes.push({ method: 'create', table, row, transactionId });
     this.transaction(transactionId).set(`${table}:${row.$id}`, row);
   }
@@ -441,6 +447,153 @@ describe('Appwrite medication sync persistence', () => {
     ].sort());
   });
 
+  test('retries terminal outcomes as one callback without partial artifacts or extra sequences', async () => {
+    const rows = new FakeRows();
+    rows.commitFailures = 1;
+    const persistence = new AppwriteMedicationSyncPersistence(rows, () => {}, 2, async () => {}, () => 0);
+    const store = new TransactionalMedicationSyncStore(persistence);
+    const input = terminalInput();
+
+    assert.deepEqual(await store.recordTerminalOutcome(input), { status: 'applied', sequence: 1 });
+    assert.equal(rows.rows.size, 5);
+    assert.equal((await terminalState(rows))?.highWatermark, 1);
+
+    assert.deepEqual(await store.recordTerminalOutcome(input), { status: 'duplicate', sequence: 1 });
+    assert.equal(rows.rows.size, 5);
+  });
+
+  test('retries a losing terminal winner as a duplicate after whole-callback contention', async () => {
+    const rows = new FakeRows();
+    rows.commitFailures = 1;
+    const persistence = new AppwriteMedicationSyncPersistence(rows, () => {}, 2, async () => {}, () => 0);
+    const store = new TransactionalMedicationSyncStore(persistence);
+    const input = terminalInput();
+    rows.onCommitConflict = async () => {
+      rows.onCommitConflict = null;
+      await new TransactionalMedicationSyncStore(
+        new AppwriteMedicationSyncPersistence(rows),
+      ).recordTerminalOutcome(input);
+    };
+
+    assert.deepEqual(await store.recordTerminalOutcome(input), { status: 'duplicate', sequence: 1 });
+    assert.equal(rows.rows.size, 5);
+  });
+
+  test('records a taken conflict after a skipped winner commits during callback retry', async () => {
+    const rows = new FakeRows();
+    rows.commitFailures = 1;
+    const persistence = new AppwriteMedicationSyncPersistence(
+      rows,
+      () => {},
+      2,
+      async () => {},
+      () => 0,
+    );
+    const outerTaken = terminalInput();
+    const winnerSkipped = terminalInput({
+      eventId: 'skipped-event',
+      kind: 'skipped',
+      idempotencyKey: 'skipped-key',
+      operationHash: 'b'.repeat(64),
+      deviceId: 'skipped-device',
+    });
+    rows.onCommitConflict = async () => {
+      rows.onCommitConflict = null;
+      await new TransactionalMedicationSyncStore(
+        new AppwriteMedicationSyncPersistence(rows),
+      ).recordTerminalOutcome(winnerSkipped);
+    };
+
+    assert.deepEqual(
+      await new TransactionalMedicationSyncStore(persistence).recordTerminalOutcome(outerTaken),
+      {
+        status: 'needs_review',
+        code: 'TERMINAL_OUTCOME_CONFLICT',
+        acceptedSequence: 1,
+      },
+    );
+    assert.equal((await terminalState(rows))?.highWatermark, 1);
+    assert.equal(rows.rows.size, 6);
+    assert.ok(rows.rows.has(`events:${rowId('event', 'robot-1', 'skipped-event')}`));
+    assert.ok(rows.rows.has(`changes:${rowId('change', 'robot-1', '1')}`));
+    assert.ok(rows.rows.has(`receipts:${rowId('receipt', 'robot-1', 'skipped-key')}`));
+    assert.ok(rows.rows.has(`terminalOccurrences:${rowId('terminalOccurrence', 'robot-1', 'occurrence-1')}`));
+    assert.equal(rows.rows.has(`events:${rowId('event', 'robot-1', 'event-1')}`), false);
+    assert.equal(rows.rows.has(`receipts:${rowId('receipt', 'robot-1', 'key-1')}`), false);
+    const conflict = await new AppwriteMedicationSyncPersistence(rows).transaction(
+      (transaction) => transaction.getTerminalConflict('robot-1', outerTaken.operationHash),
+    );
+    assert.deepEqual(conflict, {
+      robotId: 'robot-1',
+      occurrenceId: 'occurrence-1',
+      conflictCode: 'TERMINAL_OUTCOME_CONFLICT',
+      acceptedEventId: 'skipped-event',
+      acceptedOperationHash: winnerSkipped.operationHash,
+      acceptedKind: 'skipped',
+      acceptedSequence: 1,
+      incomingEventId: outerTaken.eventId,
+      incomingOperationHash: outerTaken.operationHash,
+      incomingKind: 'taken_confirmed',
+      incomingIdempotencyKey: outerTaken.idempotencyKey,
+      incomingDeviceId: outerTaken.deviceId,
+      incomingActorAccountId: outerTaken.actorAccountId,
+      incomingPayload: outerTaken.payload,
+      incomingOccurredAt: outerTaken.occurredAt,
+      recordedAt: outerTaken.now,
+    });
+  });
+
+  test('records one durable competing-kind conflict and reuses an identical conflict row', async () => {
+    const rows = new FakeRows();
+    const store = new TransactionalMedicationSyncStore(new AppwriteMedicationSyncPersistence(rows));
+    await store.recordTerminalOutcome(terminalInput());
+    const competing = terminalInput({
+      eventId: 'event-2', kind: 'skipped', idempotencyKey: 'key-2', operationHash: 'b'.repeat(64),
+    });
+
+    assert.deepEqual(await store.recordTerminalOutcome(competing), {
+      status: 'needs_review', code: 'TERMINAL_OUTCOME_CONFLICT', acceptedSequence: 1,
+    });
+    assert.deepEqual(await store.recordTerminalOutcome(competing), {
+      status: 'needs_review', code: 'TERMINAL_OUTCOME_CONFLICT', acceptedSequence: 1,
+    });
+    assert.equal([...rows.rows.keys()].filter((key) => key.startsWith('terminalConflicts:')).length, 1);
+    assert.equal((await terminalState(rows))?.highWatermark, 1);
+  });
+
+  test('creates one conflict row when identical competing terminal callbacks race', async () => {
+    const rows = new FakeRows();
+    const seed = new TransactionalMedicationSyncStore(new AppwriteMedicationSyncPersistence(rows));
+    await seed.recordTerminalOutcome(terminalInput());
+    rows.commitFailures = 1;
+    const persistence = new AppwriteMedicationSyncPersistence(rows, () => {}, 2, async () => {}, () => 0);
+    const competing = terminalInput({
+      eventId: 'event-2', kind: 'skipped', idempotencyKey: 'key-2', operationHash: 'b'.repeat(64),
+    });
+    rows.onCommitConflict = async () => {
+      rows.onCommitConflict = null;
+      await new TransactionalMedicationSyncStore(
+        new AppwriteMedicationSyncPersistence(rows),
+      ).recordTerminalOutcome(competing);
+    };
+
+    assert.deepEqual(await new TransactionalMedicationSyncStore(persistence).recordTerminalOutcome(competing), {
+      status: 'needs_review', code: 'TERMINAL_OUTCOME_CONFLICT', acceptedSequence: 1,
+    });
+    assert.equal([...rows.rows.keys()].filter((key) => key.startsWith('terminalConflicts:')).length, 1);
+  });
+
+  test('leaves no terminal artifacts when callback conflicts are exhausted', async () => {
+    const rows = new FakeRows();
+    rows.commitFailures = 2;
+    const store = new TransactionalMedicationSyncStore(
+      new AppwriteMedicationSyncPersistence(rows, () => {}, 2, async () => {}, () => 0),
+    );
+
+    await assert.rejects(store.recordTerminalOutcome(terminalInput()), AppwriteException);
+    assert.equal(rows.rows.size, 0);
+  });
+
   test('retries genuine conflicts through the configured maximum and reports rollback failures', async () => {
     const rows = new FakeRows();
     rows.commitFailures = 5;
@@ -573,4 +726,43 @@ async function readTerminalConflict(
 function withoutId(row: MedicationSyncRow): Record<string, unknown> {
   const { $id: _, ...data } = row;
   return data;
+}
+
+function terminalInput(overrides: Partial<{
+  robotId: string;
+  occurrenceId: string;
+  eventId: string;
+  kind: 'taken_confirmed' | 'skipped';
+  scheduleId: string;
+  idempotencyKey: string;
+  operationHash: string;
+  deviceId: string;
+  actorAccountId: string;
+  occurredAt: Date;
+  payload: string;
+  now: Date;
+}> = {}) {
+  const input = {
+    robotId: 'robot-1', occurrenceId: 'occurrence-1', eventId: 'event-1',
+    kind: 'taken_confirmed' as const, scheduleId: 'schedule-1', idempotencyKey: 'key-1',
+    operationHash: 'a'.repeat(64), deviceId: 'device-1', actorAccountId: 'account-1',
+    occurredAt: new Date('2026-08-04T08:00:00.000Z'), ...overrides,
+  };
+  return {
+    ...input,
+    payload: overrides.payload ?? JSON.stringify({
+      kind: input.kind,
+      occurredAt: input.occurredAt.toISOString(),
+      occurrence: {
+        occurrenceId: input.occurrenceId,
+        scheduleId: input.scheduleId,
+      },
+    }),
+    now: overrides.now ?? new Date('2026-08-04T10:00:00.000Z'),
+  };
+}
+
+async function terminalState(rows: FakeRows): Promise<{ highWatermark: number } | null> {
+  const persistence = new AppwriteMedicationSyncPersistence(rows);
+  return persistence.transaction((transaction) => transaction.getState('robot-1'));
 }

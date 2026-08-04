@@ -175,6 +175,38 @@ export type MedicationSyncMutationResult =
       readonly currentDocument?: MedicationSyncDocumentRecord | null;
     };
 
+export type TerminalOutcomeResult =
+  | {
+      readonly status: 'applied' | 'duplicate';
+      readonly sequence: number;
+    }
+  | {
+      readonly status: 'needs_review';
+      readonly code: MedicationSyncTerminalConflictCode;
+      readonly acceptedSequence: number;
+    }
+  | {
+      readonly status: 'conflict';
+      readonly code: 'operation_id_reused' | 'event_id_reused';
+    };
+
+export class TerminalOutcomeIntegrityError extends Error {}
+
+type TerminalOutcomeInput = {
+  readonly robotId: string;
+  readonly occurrenceId: string;
+  readonly eventId: string;
+  readonly kind: 'taken_confirmed' | 'skipped';
+  readonly scheduleId: string;
+  readonly idempotencyKey: string;
+  readonly operationHash: string;
+  readonly deviceId: string;
+  readonly actorAccountId: string;
+  readonly occurredAt: Date;
+  readonly payload: string;
+  readonly now: Date;
+};
+
 export class TransactionalMedicationSyncStore {
   constructor(private readonly persistence: MedicationSyncPersistence) {}
 
@@ -375,6 +407,92 @@ export class TransactionalMedicationSyncStore {
     });
   }
 
+  recordTerminalOutcome(
+    input: TerminalOutcomeInput,
+  ): Promise<TerminalOutcomeResult> {
+    return this.persistence.transaction(async (transaction) => {
+      const guard = await transaction.getTerminalOccurrence(input.robotId, input.occurrenceId);
+      if (guard != null) {
+        await assertAcceptedTerminalBundle(transaction, guard);
+        if (guard.acceptedOperationHash === input.operationHash) {
+          if (!matchesAcceptedTerminalInput(guard, input)) {
+            throw new TerminalOutcomeIntegrityError(
+              'Terminal operation hash is reserved for its accepted metadata.',
+            );
+          }
+          await assertAcceptedTerminalInput(transaction, guard, input);
+          return { status: 'duplicate', sequence: guard.acceptedSequence };
+        }
+        const code: MedicationSyncTerminalConflictCode = guard.acceptedKind === input.kind
+          ? 'TERMINAL_OUTCOME_REPLAY_MISMATCH'
+          : 'TERMINAL_OUTCOME_CONFLICT';
+        const existing = await transaction.getTerminalConflict(input.robotId, input.operationHash);
+        if (existing != null) {
+          if (!matchesTerminalConflict(existing, terminalConflictRecord(guard, input, code))) {
+            throw new TerminalOutcomeIntegrityError('Incoherent terminal conflict evidence.');
+          }
+          return { status: 'needs_review', code, acceptedSequence: guard.acceptedSequence };
+        }
+        await transaction.createTerminalConflict(terminalConflictRecord(guard, input, code));
+        return { status: 'needs_review', code, acceptedSequence: guard.acceptedSequence };
+      }
+      const receipt = await transaction.getReceipt(input.robotId, input.idempotencyKey);
+      if (receipt != null) {
+        if (receipt.operationHash !== input.operationHash) {
+          return { status: 'conflict', code: 'operation_id_reused' };
+        }
+        throw new TerminalOutcomeIntegrityError('Terminal receipt without occurrence guard.');
+      }
+      const event = await transaction.getEvent(input.robotId, input.eventId);
+      if (event != null) {
+        if (event.eventHash !== input.operationHash) {
+          return { status: 'conflict', code: 'event_id_reused' };
+        }
+        throw new TerminalOutcomeIntegrityError('Terminal event without occurrence guard.');
+      }
+
+      const sequence = await allocateSequence(transaction, input.robotId, input.now);
+      const payload = eventPayload(input);
+      await transaction.createEvent({
+        robotId: input.robotId,
+        eventId: input.eventId,
+        eventHash: input.operationHash,
+        kind: input.kind,
+        doseId: input.occurrenceId,
+        scheduleId: input.scheduleId,
+        payload,
+        occurredAt: input.occurredAt,
+        receivedAt: input.now,
+        actorAccountId: input.actorAccountId,
+        sequence,
+      });
+      await transaction.createTerminalOccurrence(terminalOccurrenceRecord(input, sequence));
+      await transaction.createChange({
+        robotId: input.robotId,
+        sequence,
+        resourceType: 'doseEvent',
+        resourceId: input.eventId,
+        resourceVersion: null,
+        operation: 'event',
+        payload,
+        actorAccountId: input.actorAccountId,
+        actorRole: 'device',
+        changedAt: input.now,
+        idempotencyKey: input.idempotencyKey,
+        operationHash: input.operationHash,
+      });
+      await transaction.saveReceipt({
+        robotId: input.robotId,
+        idempotencyKey: input.idempotencyKey,
+        operationHash: input.operationHash,
+        sequence,
+        resourceVersion: null,
+        createdAt: input.now,
+      });
+      return { status: 'applied', sequence };
+    });
+  }
+
   pull(input: {
     readonly robotId: string;
     readonly cursor: number;
@@ -501,6 +619,186 @@ async function allocateSequence(
   const sequence = ((await transaction.getState(robotId))?.highWatermark ?? 0) + 1;
   await transaction.saveState({ robotId, highWatermark: sequence, updatedAt: now });
   return sequence;
+}
+
+function terminalOccurrenceRecord(
+  input: TerminalOutcomeInput,
+  sequence: number,
+): MedicationSyncTerminalOccurrenceRecord {
+  return {
+    robotId: input.robotId,
+    occurrenceId: input.occurrenceId,
+    acceptedKind: input.kind,
+    acceptedEventId: input.eventId,
+    acceptedOperationHash: input.operationHash,
+    acceptedIdempotencyKey: input.idempotencyKey,
+    acceptedDeviceId: input.deviceId,
+    acceptedActorAccountId: input.actorAccountId,
+    acceptedSequence: sequence,
+    occurredAt: input.occurredAt,
+    acceptedAt: input.now,
+  };
+}
+
+function terminalConflictRecord(
+  guard: MedicationSyncTerminalOccurrenceRecord,
+  input: TerminalOutcomeInput,
+  conflictCode: MedicationSyncTerminalConflictCode,
+): MedicationSyncTerminalConflictRecord {
+  return {
+    robotId: input.robotId,
+    occurrenceId: input.occurrenceId,
+    conflictCode,
+    acceptedEventId: guard.acceptedEventId,
+    acceptedOperationHash: guard.acceptedOperationHash,
+    acceptedKind: guard.acceptedKind,
+    acceptedSequence: guard.acceptedSequence,
+    incomingEventId: input.eventId,
+    incomingOperationHash: input.operationHash,
+    incomingKind: input.kind,
+    incomingIdempotencyKey: input.idempotencyKey,
+    incomingDeviceId: input.deviceId,
+    incomingActorAccountId: input.actorAccountId,
+    incomingPayload: input.payload,
+    incomingOccurredAt: input.occurredAt,
+    recordedAt: input.now,
+  };
+}
+
+function matchesAcceptedTerminalInput(
+  guard: MedicationSyncTerminalOccurrenceRecord,
+  input: TerminalOutcomeInput,
+): boolean {
+  return guard.robotId === input.robotId &&
+    guard.occurrenceId === input.occurrenceId &&
+    guard.acceptedKind === input.kind &&
+    guard.acceptedEventId === input.eventId &&
+    guard.acceptedOperationHash === input.operationHash &&
+    guard.acceptedIdempotencyKey === input.idempotencyKey &&
+    guard.acceptedDeviceId === input.deviceId &&
+    guard.acceptedActorAccountId === input.actorAccountId &&
+    sameTime(guard.occurredAt, input.occurredAt);
+}
+
+async function assertAcceptedTerminalInput(
+  transaction: MedicationSyncTransaction,
+  guard: MedicationSyncTerminalOccurrenceRecord,
+  input: TerminalOutcomeInput,
+): Promise<void> {
+  const event = await transaction.getEvent(input.robotId, input.eventId);
+  if (event == null ||
+    event.eventHash !== input.operationHash ||
+    event.kind !== input.kind ||
+    event.doseId !== input.occurrenceId ||
+    event.scheduleId !== input.scheduleId ||
+    event.payload !== eventPayload(input) ||
+    !sameTime(event.occurredAt, input.occurredAt) ||
+    event.actorAccountId !== input.actorAccountId ||
+    event.sequence !== guard.acceptedSequence) {
+    throw new TerminalOutcomeIntegrityError('Terminal replay does not match accepted event evidence.');
+  }
+}
+
+async function assertAcceptedTerminalBundle(
+  transaction: MedicationSyncTransaction,
+  guard: MedicationSyncTerminalOccurrenceRecord,
+): Promise<void> {
+  const [receipt, event, state, changes] = await Promise.all([
+    transaction.getReceipt(guard.robotId, guard.acceptedIdempotencyKey),
+    transaction.getEvent(guard.robotId, guard.acceptedEventId),
+    transaction.getState(guard.robotId),
+    transaction.listChanges(
+      guard.robotId,
+      guard.acceptedSequence - 1,
+      guard.acceptedSequence,
+      1,
+    ),
+  ]);
+  const change = changes[0];
+  if (receipt == null ||
+    receipt.operationHash !== guard.acceptedOperationHash ||
+    receipt.sequence !== guard.acceptedSequence ||
+    receipt.resourceVersion !== null ||
+    !sameTime(receipt.createdAt, guard.acceptedAt) ||
+    event == null ||
+    event.eventHash !== guard.acceptedOperationHash ||
+    event.kind !== guard.acceptedKind ||
+    event.doseId !== guard.occurrenceId ||
+    !sameTime(event.occurredAt, guard.occurredAt) ||
+    !sameTime(event.receivedAt, guard.acceptedAt) ||
+    event.actorAccountId !== guard.acceptedActorAccountId ||
+    event.sequence !== guard.acceptedSequence ||
+    change == null ||
+    change.sequence !== guard.acceptedSequence ||
+    change.resourceType !== 'doseEvent' ||
+    change.resourceId !== guard.acceptedEventId ||
+    change.resourceVersion !== null ||
+    change.operation !== 'event' ||
+    change.payload !== event.payload ||
+    change.actorAccountId !== guard.acceptedActorAccountId ||
+    change.actorRole !== 'device' ||
+    !sameTime(change.changedAt, guard.acceptedAt) ||
+    change.idempotencyKey !== guard.acceptedIdempotencyKey ||
+    change.operationHash !== guard.acceptedOperationHash ||
+    state == null ||
+    state.highWatermark < guard.acceptedSequence) {
+    throw new TerminalOutcomeIntegrityError('Incoherent accepted terminal evidence.');
+  }
+  assertAcceptedTerminalEventPayload(event.payload, guard, event.scheduleId);
+}
+
+function assertAcceptedTerminalEventPayload(
+  payload: string,
+  guard: MedicationSyncTerminalOccurrenceRecord,
+  scheduleId: string,
+): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    throw new TerminalOutcomeIntegrityError('Malformed accepted terminal event payload.');
+  }
+  if (!isRecord(parsed) ||
+    parsed.contractVersion !== 1 ||
+    parsed.id !== guard.acceptedEventId ||
+    parsed.householdId !== guard.robotId ||
+    parsed.actorAccountId !== guard.acceptedActorAccountId ||
+    parsed.kind !== guard.acceptedKind ||
+    parsed.occurredAt !== guard.occurredAt.toISOString() ||
+    !isRecord(parsed.occurrence) ||
+    parsed.occurrence.occurrenceId !== guard.occurrenceId ||
+    parsed.occurrence.scheduleId !== scheduleId) {
+    throw new TerminalOutcomeIntegrityError('Incoherent accepted terminal event payload.');
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function matchesTerminalConflict(
+  existing: MedicationSyncTerminalConflictRecord,
+  expected: MedicationSyncTerminalConflictRecord,
+): boolean {
+  return existing.robotId === expected.robotId &&
+    existing.occurrenceId === expected.occurrenceId &&
+    existing.conflictCode === expected.conflictCode &&
+    existing.acceptedEventId === expected.acceptedEventId &&
+    existing.acceptedOperationHash === expected.acceptedOperationHash &&
+    existing.acceptedKind === expected.acceptedKind &&
+    existing.acceptedSequence === expected.acceptedSequence &&
+    existing.incomingEventId === expected.incomingEventId &&
+    existing.incomingOperationHash === expected.incomingOperationHash &&
+    existing.incomingKind === expected.incomingKind &&
+    existing.incomingIdempotencyKey === expected.incomingIdempotencyKey &&
+    existing.incomingDeviceId === expected.incomingDeviceId &&
+    existing.incomingActorAccountId === expected.incomingActorAccountId &&
+    existing.incomingPayload === expected.incomingPayload &&
+    sameTime(existing.incomingOccurredAt, expected.incomingOccurredAt);
+}
+
+function sameTime(left: Date, right: Date): boolean {
+  return left.getTime() === right.getTime();
 }
 
 function receipt(

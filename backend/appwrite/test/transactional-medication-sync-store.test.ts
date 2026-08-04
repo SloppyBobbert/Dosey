@@ -10,7 +10,10 @@ import {
   type MedicationSyncPersistence,
   type MedicationSyncReceiptRecord,
   type MedicationSyncStateRecord,
+  type MedicationSyncTerminalConflictRecord,
+  type MedicationSyncTerminalOccurrenceRecord,
   type MedicationSyncTransaction,
+  TerminalOutcomeIntegrityError,
 } from '../src/infrastructure/transactional-medication-sync-store.js';
 
 class MemoryPersistence implements MedicationSyncPersistence {
@@ -20,7 +23,11 @@ class MemoryPersistence implements MedicationSyncPersistence {
   receipts = new Map<string, MedicationSyncReceiptRecord>();
   states = new Map<string, MedicationSyncStateRecord>();
   changes = new Map<string, MedicationSyncChangeRecord>();
+  terminalOccurrences = new Map<string, MedicationSyncTerminalOccurrenceRecord>();
+  terminalConflicts = new Map<string, MedicationSyncTerminalConflictRecord>();
   failChange = false;
+  failTerminalWrite: 'occurrence' | 'conflict' | null = null;
+  writes = 0;
 
   async transaction<T>(operation: (transaction: MedicationSyncTransaction) => Promise<T>) {
     const snapshot = {
@@ -30,8 +37,28 @@ class MemoryPersistence implements MedicationSyncPersistence {
       receipts: new Map(this.receipts),
       states: new Map(this.states),
       changes: new Map(this.changes),
+      terminalOccurrences: new Map(this.terminalOccurrences),
+      terminalConflicts: new Map(this.terminalConflicts),
     };
     const transaction: MedicationSyncTransaction = {
+      getTerminalOccurrence: async (robotId, occurrenceId) =>
+        this.terminalOccurrences.get(`${robotId}:${occurrenceId}`) ?? null,
+      createTerminalOccurrence: async (record) => {
+        const key = `${record.robotId}:${record.occurrenceId}`;
+        if (this.terminalOccurrences.has(key)) throw new Error('duplicate terminal occurrence');
+        if (this.failTerminalWrite === 'occurrence') throw new Error('terminal occurrence failed');
+        this.writes += 1;
+        this.terminalOccurrences.set(key, record);
+      },
+      getTerminalConflict: async (robotId, hash) =>
+        this.terminalConflicts.get(`${robotId}:${hash}`) ?? null,
+      createTerminalConflict: async (record) => {
+        const key = `${record.robotId}:${record.incomingOperationHash}`;
+        if (this.terminalConflicts.has(key)) throw new Error('duplicate terminal conflict');
+        if (this.failTerminalWrite === 'conflict') throw new Error('terminal conflict failed');
+        this.writes += 1;
+        this.terminalConflicts.set(key, record);
+      },
       getDocument: async (robotId, resourceType, resourceId) =>
         this.documents.get(`${robotId}:${resourceType}:${resourceId}`) ?? null,
       saveDocument: async (record) => void this.documents.set(
@@ -40,24 +67,30 @@ class MemoryPersistence implements MedicationSyncPersistence {
       ),
       getEvent: async (robotId, eventId) =>
         this.events.get(`${robotId}:${eventId}`) ?? null,
-      createEvent: async (record) => void this.events.set(
-        `${record.robotId}:${record.eventId}`,
-        record,
-      ),
+      createEvent: async (record) => {
+        const key = `${record.robotId}:${record.eventId}`;
+        if (this.events.has(key)) throw new Error('duplicate event');
+        this.writes += 1;
+        this.events.set(key, record);
+      },
       createHelpRequest: async (record) => void this.helpRequests.set(
         `${record.robotId}:${record.helpRequestId}`,
         record,
       ),
       getReceipt: async (robotId, idempotencyKey) =>
         this.receipts.get(`${robotId}:${idempotencyKey}`) ?? null,
-      saveReceipt: async (record) => void this.receipts.set(
-        `${record.robotId}:${record.idempotencyKey}`,
-        record,
-      ),
+      saveReceipt: async (record) => {
+        this.writes += 1;
+        this.receipts.set(`${record.robotId}:${record.idempotencyKey}`, record);
+      },
       getState: async (robotId) => this.states.get(robotId) ?? null,
-      saveState: async (record) => void this.states.set(record.robotId, record),
+      saveState: async (record) => {
+        this.writes += 1;
+        this.states.set(record.robotId, record);
+      },
       createChange: async (record) => {
         if (this.failChange) throw new Error('change failed');
+        this.writes += 1;
         this.changes.set(`${record.robotId}:${record.sequence}`, record);
       },
       listChanges: async (robotId, after, through, limit) => [...this.changes.values()]
@@ -75,6 +108,8 @@ class MemoryPersistence implements MedicationSyncPersistence {
       this.receipts = snapshot.receipts;
       this.states = snapshot.states;
       this.changes = snapshot.changes;
+      this.terminalOccurrences = snapshot.terminalOccurrences;
+      this.terminalConflicts = snapshot.terminalConflicts;
       throw error;
     }
   }
@@ -439,4 +474,235 @@ describe('Transactional medication sync store', () => {
       );
     }
   });
+
+  test('atomically accepts taken and skipped terminal outcomes without inventory mutation', async () => {
+    const persistence = new MemoryPersistence();
+    const store = new TransactionalMedicationSyncStore(persistence);
+
+    assert.deepEqual(await store.recordTerminalOutcome(terminalInput()), {
+      status: 'applied', sequence: 1,
+    });
+    assert.deepEqual(await store.recordTerminalOutcome(terminalInput({
+      occurrenceId: 'occurrence-2', eventId: 'event-2', kind: 'skipped',
+      idempotencyKey: 'terminal-key-2', operationHash: 'terminal-hash-2',
+    })), { status: 'applied', sequence: 2 });
+    assert.equal(persistence.states.get('robot-1')?.highWatermark, 2);
+    assert.equal(persistence.events.size, 2);
+    assert.equal(persistence.terminalOccurrences.size, 2);
+    assert.equal(persistence.changes.size, 2);
+    assert.equal(persistence.receipts.size, 2);
+    assert.equal(persistence.documents.size, 0);
+  });
+
+  test('returns an exact coherent terminal replay without writes', async () => {
+    const persistence = new MemoryPersistence();
+    const store = new TransactionalMedicationSyncStore(persistence);
+    const input = terminalInput();
+    await store.recordTerminalOutcome(input);
+    const writes = persistence.writes;
+
+    assert.deepEqual(await store.recordTerminalOutcome(input), { status: 'duplicate', sequence: 1 });
+    assert.equal(persistence.writes, writes);
+  });
+
+  test('rejects same-hash terminal metadata changes without conflict evidence', async () => {
+    const persistence = new MemoryPersistence();
+    const store = new TransactionalMedicationSyncStore(persistence);
+    const input = terminalInput();
+    await store.recordTerminalOutcome(input);
+    const originalGuard = persistence.terminalOccurrences.get('robot-1:occurrence-1');
+    const originalEvent = persistence.events.get('robot-1:event-1');
+
+    await assert.rejects(
+      store.recordTerminalOutcome(terminalInput({ eventId: 'changed-event' })),
+      TerminalOutcomeIntegrityError,
+    );
+    await assert.rejects(
+      store.recordTerminalOutcome(terminalInput({ deviceId: 'changed-device' })),
+      TerminalOutcomeIntegrityError,
+    );
+    assert.equal(persistence.terminalConflicts.size, 0);
+    assert.equal(persistence.states.get('robot-1')?.highWatermark, 1);
+    assert.equal(persistence.terminalOccurrences.get('robot-1:occurrence-1'), originalGuard);
+    assert.equal(persistence.events.get('robot-1:event-1'), originalEvent);
+  });
+
+  test('records and reuses terminal conflict evidence without allocating a sequence', async () => {
+    const persistence = new MemoryPersistence();
+    const store = new TransactionalMedicationSyncStore(persistence);
+    await store.recordTerminalOutcome(terminalInput());
+    const mismatch = terminalInput({
+      eventId: 'replay-event', idempotencyKey: 'replay-key', operationHash: 'replay-hash',
+      payload: '{"reason":"changed"}',
+    });
+
+    assert.deepEqual(await store.recordTerminalOutcome(mismatch), {
+      status: 'needs_review', code: 'TERMINAL_OUTCOME_REPLAY_MISMATCH', acceptedSequence: 1,
+    });
+    const conflict = persistence.terminalConflicts.get('robot-1:replay-hash');
+    assert.equal(conflict?.recordedAt, mismatch.now);
+    assert.deepEqual(await store.recordTerminalOutcome({
+      ...mismatch,
+      now: new Date('2026-08-04T11:00:00Z'),
+    }), {
+      status: 'needs_review', code: 'TERMINAL_OUTCOME_REPLAY_MISMATCH', acceptedSequence: 1,
+    });
+    assert.equal(persistence.terminalConflicts.get('robot-1:replay-hash')?.recordedAt, mismatch.now);
+    assert.equal(persistence.states.get('robot-1')?.highWatermark, 1);
+
+    assert.deepEqual(await store.recordTerminalOutcome(terminalInput({
+      eventId: 'skipped-event', kind: 'skipped', idempotencyKey: 'skipped-key',
+      operationHash: 'skipped-hash',
+    })), {
+      status: 'needs_review', code: 'TERMINAL_OUTCOME_CONFLICT', acceptedSequence: 1,
+    });
+  });
+
+  test('rejects incoherent accepted or conflict evidence and scopes outcomes by robot', async () => {
+    const persistence = new MemoryPersistence();
+    const store = new TransactionalMedicationSyncStore(persistence);
+    const input = terminalInput();
+    await store.recordTerminalOutcome(input);
+    persistence.events.get('robot-1:event-1')!.scheduleId = 'wrong-schedule' as never;
+    await assert.rejects(store.recordTerminalOutcome(input), TerminalOutcomeIntegrityError);
+
+    const secondRobot = terminalInput({ robotId: 'robot-2' });
+    assert.deepEqual(await store.recordTerminalOutcome(secondRobot), { status: 'applied', sequence: 1 });
+
+    persistence.events.get('robot-1:event-1')!.scheduleId = input.scheduleId as never;
+    const conflictInput = terminalInput({ eventId: 'conflict-event', idempotencyKey: 'conflict-key', operationHash: 'conflict-hash' });
+    await store.recordTerminalOutcome(conflictInput);
+    persistence.terminalConflicts.get('robot-1:conflict-hash')!.incomingPayload = '{}' as never;
+    await assert.rejects(store.recordTerminalOutcome(conflictInput), TerminalOutcomeIntegrityError);
+  });
+
+  test('rejects changed attempts when accepted event schedule or payload is incoherent', async () => {
+    for (const corrupt of [
+      (persistence: MemoryPersistence) => {
+        persistence.events.set('robot-1:event-1', {
+          ...persistence.events.get('robot-1:event-1')!,
+          scheduleId: 'wrong-schedule',
+        });
+      },
+      (persistence: MemoryPersistence) => {
+        persistence.events.set('robot-1:event-1', {
+          ...persistence.events.get('robot-1:event-1')!,
+          payload: '{"kind":"taken_confirmed"}',
+        });
+      },
+    ]) {
+      const persistence = new MemoryPersistence();
+      const store = new TransactionalMedicationSyncStore(persistence);
+      await store.recordTerminalOutcome(terminalInput());
+      corrupt(persistence);
+
+      await assert.rejects(
+        store.recordTerminalOutcome(terminalInput({
+          eventId: 'changed-event',
+          idempotencyKey: 'changed-key',
+          operationHash: 'changed-hash',
+        })),
+        TerminalOutcomeIntegrityError,
+      );
+      assert.equal(persistence.terminalConflicts.size, 0);
+    }
+  });
+
+  test('fails closed for reused identities, partial bundles, and rollback failures', async () => {
+    const persistence = new MemoryPersistence();
+    const store = new TransactionalMedicationSyncStore(persistence);
+    await store.recordTerminalOutcome(terminalInput());
+
+    assert.deepEqual(await store.recordTerminalOutcome(terminalInput({
+      occurrenceId: 'other-occurrence', eventId: 'other-event', operationHash: 'other-hash',
+    })), { status: 'conflict', code: 'operation_id_reused' });
+    assert.deepEqual(await store.recordTerminalOutcome(terminalInput({
+      occurrenceId: 'other-occurrence', idempotencyKey: 'other-key', operationHash: 'other-hash',
+    })), { status: 'conflict', code: 'event_id_reused' });
+
+    const partial = new MemoryPersistence();
+    partial.receipts.set('robot-1:terminal-key-1', {
+      robotId: 'robot-1', idempotencyKey: 'terminal-key-1', operationHash: 'terminal-hash-1',
+      sequence: 1, resourceVersion: null, createdAt: terminalInput().now,
+    });
+    await assert.rejects(
+      new TransactionalMedicationSyncStore(partial).recordTerminalOutcome(terminalInput()),
+      TerminalOutcomeIntegrityError,
+    );
+
+    const rollback = new MemoryPersistence();
+    rollback.failChange = true;
+    await assert.rejects(
+      new TransactionalMedicationSyncStore(rollback).recordTerminalOutcome(terminalInput()),
+      /change failed/,
+    );
+    assert.equal(rollback.states.size, 0);
+    assert.equal(rollback.events.size, 0);
+    assert.equal(rollback.changes.size, 0);
+    assert.equal(rollback.terminalOccurrences.size, 0);
+    assert.equal(rollback.terminalConflicts.size, 0);
+    assert.equal(rollback.receipts.size, 0);
+  });
+
+  test('rolls back failed terminal conflict persistence without changing the accepted bundle', async () => {
+    const persistence = new MemoryPersistence();
+    const store = new TransactionalMedicationSyncStore(persistence);
+    await store.recordTerminalOutcome(terminalInput());
+    const state = persistence.states.get('robot-1');
+    const event = persistence.events.get('robot-1:event-1');
+    const change = persistence.changes.get('robot-1:1');
+    const receipt = persistence.receipts.get('robot-1:terminal-key-1');
+    const guard = persistence.terminalOccurrences.get('robot-1:occurrence-1');
+    persistence.failTerminalWrite = 'conflict';
+
+    await assert.rejects(
+      store.recordTerminalOutcome(terminalInput({
+        eventId: 'changed-event',
+        idempotencyKey: 'changed-key',
+        operationHash: 'changed-hash',
+      })),
+      /terminal conflict failed/,
+    );
+    assert.equal(persistence.terminalConflicts.size, 0);
+    assert.equal(persistence.states.get('robot-1'), state);
+    assert.equal(persistence.events.get('robot-1:event-1'), event);
+    assert.equal(persistence.changes.get('robot-1:1'), change);
+    assert.equal(persistence.receipts.get('robot-1:terminal-key-1'), receipt);
+    assert.equal(persistence.terminalOccurrences.get('robot-1:occurrence-1'), guard);
+  });
 });
+
+function terminalInput(overrides: Partial<{
+  robotId: string;
+  occurrenceId: string;
+  eventId: string;
+  kind: 'taken_confirmed' | 'skipped';
+  scheduleId: string;
+  idempotencyKey: string;
+  operationHash: string;
+  deviceId: string;
+  actorAccountId: string;
+  occurredAt: Date;
+  payload: string;
+  now: Date;
+}> = {}) {
+  const input = {
+    robotId: 'robot-1', occurrenceId: 'occurrence-1', eventId: 'event-1',
+    kind: 'taken_confirmed' as const, scheduleId: 'schedule-1',
+    idempotencyKey: 'terminal-key-1', operationHash: 'terminal-hash-1', deviceId: 'device-1',
+    actorAccountId: 'account-1', occurredAt: new Date('2026-08-04T08:00:00Z'),
+    ...overrides,
+  };
+  return {
+    ...input,
+    payload: overrides.payload ?? JSON.stringify({
+      kind: input.kind,
+      occurredAt: input.occurredAt.toISOString(),
+      occurrence: {
+        occurrenceId: input.occurrenceId,
+        scheduleId: input.scheduleId,
+      },
+    }),
+    now: overrides.now ?? new Date('2026-08-04T10:00:00Z'),
+  };
+}
