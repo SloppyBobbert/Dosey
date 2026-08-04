@@ -43,8 +43,9 @@ describe('Medication sync runtime', () => {
     assert.equal(runtime.parser, parser);
   });
 
-  test('requires every medication sync table ID', () => {
+  test('requires changes and terminal medication sync table IDs', () => {
     for (const key of [
+      'DOSEY_MEDICATION_SYNC_CHANGES_TABLE_ID',
       'DOSEY_MEDICATION_SYNC_TERMINAL_OCCURRENCES_TABLE_ID',
       'DOSEY_MEDICATION_SYNC_TERMINAL_CONFLICTS_TABLE_ID',
     ] as const) {
