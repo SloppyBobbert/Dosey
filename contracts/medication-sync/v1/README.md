@@ -21,8 +21,13 @@ case in `fixtures/valid.json` and reject every case in
   outcomes. Only an authenticated registered patient-side device authority may
   upload `taken_confirmed`, `skipped`, or `missed`; its server-derived registered
   device ID must exactly match the mutation `deviceId`.
-- These are normative contract decisions. Service/store enforcement is deferred
-  to #116; production medication sync remains disabled in this slice.
+- Phase A service authorization enforces these normative decisions for plan and
+  terminal mutations. Owner and member plan writes are allowed, device plan
+  writes are rejected, human terminal writes are forbidden, and patient-device
+  terminal writes require a matching server-derived registered device ID. All
+  terminal persistence remains fail-closed. Occurrence guards, durable conflict
+  records, registered-device provisioning, schema/runtime activation, and
+  deployment remain deferred; production medication sync remains disabled.
 - IDs are opaque, non-empty strings of at most 128 characters, except the
   deterministic `OccurrenceRef.occurrenceId`, which may be at most 256
   characters. They must not have leading or trailing whitespace.
@@ -116,9 +121,11 @@ client-supplied `actorAccountId` are rejected as unknown fields.
 outcomes for a canonical occurrence ID. An exact terminal mutation replay is a
 duplicate. A changed replay with the same terminal outcome is
 `TERMINAL_OUTCOME_REPLAY_MISMATCH`; a different terminal outcome is
-`TERMINAL_OUTCOME_CONFLICT`; both require review. These are contract decisions,
-not a storage or transaction implementation. Occurrence-level atomic exclusion
-and Taken/Skipped authority are not enforced in this slice. `missed` has no
+`TERMINAL_OUTCOME_CONFLICT`; both require review. These conflict rules remain
+contract decisions, not a storage or transaction implementation. Phase A
+enforces Taken/Skipped authority but rejects every otherwise-authorized terminal
+write with `TERMINAL_PERSISTENCE_NOT_IMPLEMENTED`. Occurrence-level atomic
+exclusion and persisted needs-review conflicts remain deferred. `missed` has no
 inventory mutation semantics. A missed acknowledgement, if represented later,
 remains separate from the terminal outcome and never changes inventory.
 
@@ -227,7 +234,10 @@ produce structurally identical JSON (use deep comparison, not Dart `Map.==`).
 
 The adapter temporarily rejects a contract-valid `missed` event with
 `MISSED_EVENT_NOT_IMPLEMENTED` before append conversion. This transitional
-fail-closed gate does not add service/store enforcement for terminal outcomes.
+gate keeps `missed` unavailable end to end. Taken/Skipped terminal mutations
+continue through Phase A authority checks, but no terminal mutation reaches the
+store because terminal persistence remains fail-closed. Registered-device
+provisioning, occurrence conflict persistence, and terminal storage are deferred.
 
 The TypeScript adapter parses untrusted JSON with `parsePushRequest` or
 `parsePullRequest`. These functions return `PushRequest` and `PullRequest`
