@@ -87,6 +87,30 @@ describe('Medication sync contract adapter', () => {
     assert.equal(parsed.value.operations[3]?.idempotencyKey, 'phone-1:mutation-4');
     assert.equal(parsed.value.operations[3]?.canonicalHashInput.includes('"robotId":"robot-1"'), true);
     assert.equal(parsed.value.operations[3]?.type, 'appendEvent');
+    assert.deepEqual(parsed.value.operations[3]?.contractMutation, {
+      contractVersion: 1,
+      mutationId: 'mutation-4',
+      deviceId: 'phone-1',
+      idempotencyKey: 'phone-1:mutation-4',
+      entityType: 'dose_event',
+      operation: 'append',
+      entityId: 'event-1',
+      baseRevision: null,
+      payload: {
+        medicationId: 'medication-1',
+        occurrence: {
+          contractVersion: 1,
+          occurrenceId: 'schedule-1:2:2026-07-29T15:30:00.000Z',
+          scheduleId: 'schedule-1',
+          scheduleRevision: 2,
+          scheduledAt: '2026-07-29T15:30:00.000Z',
+          localDate: '2026-07-29',
+          timezoneId: 'America/Los_Angeles',
+        },
+        kind: 'taken_confirmed',
+        occurredAt: '2026-07-29T15:34:12.000Z',
+      },
+    });
   });
 
   test('returns only contract validation errors as parse results', () => {
@@ -186,6 +210,44 @@ describe('Medication sync contract adapter', () => {
       errorCode: 'RETRYABLE_INTERNAL_ERROR',
       conflict: null,
     });
+  });
+
+  test('serializes unimplemented terminal persistence as a stable rejection', () => {
+    const response = serializeMedicationSyncPushResponse('robot-1', [{
+      operationId: 'mutation-1', status: 'rejected', code: 'terminal_persistence_not_implemented',
+    }]);
+
+    assert.deepEqual(response.acknowledgements[0], {
+      contractVersion: 1,
+      mutationId: 'mutation-1',
+      outcome: 'rejected',
+      revision: null,
+      cursor: null,
+      errorCode: 'TERMINAL_PERSISTENCE_NOT_IMPLEMENTED',
+      conflict: null,
+    });
+  });
+
+  test('preserves terminal authority rejection codes', () => {
+    for (const code of [
+      'HUMAN_TERMINAL_OUTCOME_FORBIDDEN',
+      'PATIENT_DEVICE_AUTHORITY_REQUIRED',
+      'DEVICE_IDENTITY_MISMATCH',
+    ]) {
+      const response = serializeMedicationSyncPushResponse('robot-1', [{
+        operationId: 'mutation-1', status: 'rejected', code,
+      }]);
+
+      assert.deepEqual(response.acknowledgements[0], {
+        contractVersion: 1,
+        mutationId: 'mutation-1',
+        outcome: 'rejected',
+        revision: null,
+        cursor: null,
+        errorCode: code,
+        conflict: null,
+      });
+    }
   });
 
   test('serializes an authorized CAS conflict with its authoritative record', () => {

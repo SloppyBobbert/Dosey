@@ -50,6 +50,7 @@ function mountedAccessFromRow(
   const record = {
     robotId: requiredString(row, 'robotId'),
     mountedDeviceAccountId: requiredString(row, 'mountedDeviceAccountId'),
+    registeredPatientDeviceId: optionalContractDeviceId(row, 'registeredPatientDeviceId'),
     pairingClaimId: requiredString(row, 'pairingClaimId'),
     createdAt: requiredDate(row, 'createdAt'),
     updatedAt: requiredDate(row, 'updatedAt'),
@@ -61,6 +62,20 @@ function mountedAccessFromRow(
     throw new Error('Mounted robot access row device does not match the requested account.');
   }
   return record;
+}
+
+function optionalContractDeviceId(row: Models.Row, key: string): string | null {
+  const value = (row as Record<string, unknown>)[key];
+  if (value === undefined || value === null) return null;
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > 128 ||
+    value.trim() !== value
+  ) {
+    throw new Error(`Invalid mounted robot row field: ${key}.`);
+  }
+  return value;
 }
 
 function installationFromRow(row: Models.Row, expectedRobotId: string): RobotInstallationRecord {

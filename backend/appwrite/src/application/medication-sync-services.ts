@@ -11,6 +11,12 @@ import type {
   MedicationSyncMutationResult,
   MedicationSyncResourceType,
 } from '../infrastructure/transactional-medication-sync-store.js';
+import {
+  canonicalMutationHashInput,
+  evaluateTerminalOutcomeAuthority,
+  isTerminalDoseEventMutation,
+  type DoseEventAppendMutation,
+} from '../domain/medication-sync-contract.js';
 
 interface MedicationSyncAccessAuthorizer {
   authorize(input: {
@@ -97,6 +103,7 @@ export type MedicationSyncPushOperation =
       readonly scheduleId: string;
       readonly occurredAt: Date;
       readonly payload: string;
+      readonly contractMutation: DoseEventAppendMutation;
     };
 
 export interface MedicationSyncAcknowledgement {
@@ -142,13 +149,45 @@ export class MedicationSyncPushService {
     const acknowledgements: MedicationSyncAcknowledgement[] = [];
     for (const operation of input.operations) {
       if (
-        operation.type !== 'appendEvent' &&
-        authorized.role !== 'owner'
+        operation.type === 'appendEvent' &&
+        !matchesContractMutation(input.robotId, operation)
       ) {
+        acknowledgements.push({
+          operationId: operation.contractMutation.mutationId,
+          status: 'rejected',
+          code: 'mutation_handoff_mismatch',
+        });
+        continue;
+      }
+
+      if (operation.type !== 'appendEvent' && authorized.authority !== 'human') {
         acknowledgements.push({
           operationId: operation.operationId,
           status: 'rejected',
           code: 'owner_required',
+        });
+        continue;
+      }
+
+      if (operation.type === 'appendEvent' && isTerminalDoseEventMutation(operation.contractMutation)) {
+        const terminalAuthority = evaluateTerminalOutcomeAuthority({
+          accountId: input.accountId,
+          authority: authorized.authority,
+          registeredDeviceId: authorized.registeredPatientDeviceId,
+          role: authorized.role === 'device' ? null : authorized.role,
+        }, operation.contractMutation);
+        if (terminalAuthority.outcome === 'rejected') {
+          acknowledgements.push({
+            operationId: operation.operationId,
+            status: 'rejected',
+            code: terminalAuthority.errorCode,
+          });
+          continue;
+        }
+        acknowledgements.push({
+          operationId: operation.operationId,
+          status: 'rejected',
+          code: 'terminal_persistence_not_implemented',
         });
         continue;
       }
@@ -231,6 +270,27 @@ export class MedicationSyncPullService {
 
 function digest(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function matchesContractMutation(
+  robotId: string,
+  operation: Extract<MedicationSyncPushOperation, { type: 'appendEvent' }>,
+): boolean {
+  try {
+    const mutation = operation.contractMutation;
+    return operation.operationId === mutation.mutationId &&
+      operation.idempotencyKey === mutation.idempotencyKey &&
+      operation.deviceId === mutation.deviceId &&
+      operation.eventId === mutation.entityId &&
+      operation.kind === mutation.payload.kind &&
+      operation.doseId === mutation.payload.occurrence.occurrenceId &&
+      operation.scheduleId === mutation.payload.occurrence.scheduleId &&
+      operation.occurredAt.toISOString() === mutation.payload.occurredAt &&
+      operation.payload === JSON.stringify(mutation.payload) &&
+      operation.canonicalHashInput === canonicalMutationHashInput(robotId, mutation);
+  } catch {
+    return false;
+  }
 }
 
 function toAcknowledgement(
