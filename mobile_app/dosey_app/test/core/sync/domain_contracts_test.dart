@@ -551,9 +551,146 @@ void main() {
       expect(DoseEventKindContract.values.map((kind) => kind.wireValue), [
         'taken_confirmed',
         'skipped',
+        'missed',
         'snoozed',
         'help_requested',
       ]);
+    });
+
+    test('classifies exactly the three terminal dose event kinds', () {
+      for (final kind in const ['taken_confirmed', 'skipped', 'missed']) {
+        expect(isTerminalDoseEventMutation(_terminalMutation(kind)), isTrue);
+      }
+      expect(
+        isTerminalDoseEventMutation(_terminalMutation('snoozed')),
+        isFalse,
+      );
+      expect(
+        isTerminalDoseEventMutation(_terminalMutation('help_requested')),
+        isFalse,
+      );
+    });
+
+    test('requires terminal mutations for authority decisions', () {
+      final terminal = _terminalMutation('missed');
+      final ownerDecision = evaluateTerminalOutcomeAuthority(
+        const MedicationSyncActorContract(
+          accountId: 'owner-1',
+          authority: MedicationSyncActorAuthority.human,
+          registeredDeviceId: null,
+          role: HouseholdRoleContract.owner,
+        ),
+        terminal,
+      );
+      final caregiverDecision = evaluateTerminalOutcomeAuthority(
+        const MedicationSyncActorContract(
+          accountId: 'caregiver-1',
+          authority: MedicationSyncActorAuthority.human,
+          registeredDeviceId: null,
+          role: HouseholdRoleContract.member,
+        ),
+        terminal,
+      );
+      final deviceDecision = evaluateTerminalOutcomeAuthority(
+        const MedicationSyncActorContract(
+          accountId: 'device-account-1',
+          authority: MedicationSyncActorAuthority.patientDevice,
+          registeredDeviceId: 'patient-device-1',
+          role: null,
+        ),
+        terminal,
+      );
+      final mismatchedDecision = evaluateTerminalOutcomeAuthority(
+        const MedicationSyncActorContract(
+          accountId: 'device-1',
+          authority: MedicationSyncActorAuthority.patientDevice,
+          registeredDeviceId: 'patient-device-2',
+          role: null,
+        ),
+        terminal,
+      );
+      final missingDecision = evaluateTerminalOutcomeAuthority(
+        const MedicationSyncActorContract(
+          accountId: 'device-1',
+          authority: MedicationSyncActorAuthority.patientDevice,
+          registeredDeviceId: null,
+          role: null,
+        ),
+        terminal,
+      );
+      expect(ownerDecision.errorCode, 'HUMAN_TERMINAL_OUTCOME_FORBIDDEN');
+      expect(caregiverDecision.errorCode, 'HUMAN_TERMINAL_OUTCOME_FORBIDDEN');
+      expect(deviceDecision.outcome, MutationAuthorityOutcome.allowed);
+      expect(mismatchedDecision.errorCode, 'DEVICE_IDENTITY_MISMATCH');
+      expect(missingDecision.errorCode, 'PATIENT_DEVICE_AUTHORITY_REQUIRED');
+      expect(
+        () => evaluateTerminalOutcomeAuthority(
+          const MedicationSyncActorContract(
+            accountId: 'owner-1',
+            authority: MedicationSyncActorAuthority.human,
+            registeredDeviceId: null,
+            role: HouseholdRoleContract.owner,
+          ),
+          _terminalMutation('snoozed'),
+        ),
+        _contractCode('TERMINAL_OUTCOME_REQUIRED'),
+      );
+    });
+
+    test('resolves terminal outcomes deterministically per occurrence', () {
+      final taken = _terminalMutation('taken_confirmed');
+      expect(resolveTerminalOutcome(taken, taken).outcome, 'duplicate');
+      expect(
+        resolveTerminalOutcome(
+          taken,
+          _terminalMutation('taken_confirmed', entityId: 'event-2'),
+        ).errorCode,
+        'TERMINAL_OUTCOME_REPLAY_MISMATCH',
+      );
+      expect(
+        resolveTerminalOutcome(
+          taken,
+          _terminalMutation(
+            'taken_confirmed',
+            occurredAt: '2026-07-29T15:35:12Z',
+          ),
+        ).errorCode,
+        'TERMINAL_OUTCOME_REPLAY_MISMATCH',
+      );
+      for (final pair in const [
+        ['taken_confirmed', 'skipped'],
+        ['taken_confirmed', 'missed'],
+        ['skipped', 'missed'],
+      ]) {
+        expect(
+          resolveTerminalOutcome(
+            _terminalMutation(pair[0]),
+            _terminalMutation(pair[1]),
+          ).errorCode,
+          'TERMINAL_OUTCOME_CONFLICT',
+        );
+      }
+      expect(
+        () => resolveTerminalOutcome(
+          taken,
+          _terminalMutation(
+            'missed',
+            occurrenceId: 'schedule-2:2:2026-07-29T15:30:00.000Z',
+          ),
+        ),
+        _contractCode('TERMINAL_OUTCOME_OCCURRENCE_MISMATCH'),
+      );
+      expect(
+        () => resolveTerminalOutcome(taken, _terminalMutation('snoozed')),
+        _contractCode('TERMINAL_OUTCOME_REQUIRED'),
+      );
+      expect(
+        () => resolveTerminalOutcome(
+          _terminalMutation('help_requested'),
+          _terminalMutation('help_requested'),
+        ),
+        _contractCode('TERMINAL_OUTCOME_REQUIRED'),
+      );
     });
   });
 }
@@ -572,3 +709,43 @@ late final Directory _packageRoot;
 
 File _repositoryFile(String relativePath) =>
     File('${_packageRoot.parent.parent.path}/$relativePath');
+
+MutationContract _terminalMutation(
+  String kind, {
+  String entityId = 'event-1',
+  String occurredAt = '2026-07-29T15:34:12Z',
+  String occurrenceId = 'schedule-1:2:2026-07-29T15:30:00.000Z',
+}) => MutationContract.fromJson({
+  'contractVersion': 1,
+  'mutationId': 'terminal-1',
+  'deviceId': 'patient-device-1',
+  'idempotencyKey': 'patient-device-1:terminal-1',
+  'entityType': 'dose_event',
+  'operation': 'append',
+  'entityId': entityId,
+  'baseRevision': null,
+  'payload': {
+    'medicationId': 'medication-1',
+    'kind': kind,
+    'occurredAt': occurredAt,
+    'occurrence': {
+      'contractVersion': 1,
+      'occurrenceId': occurrenceId,
+      'scheduleId': occurrenceId.startsWith('schedule-2:')
+          ? 'schedule-2'
+          : 'schedule-1',
+      'scheduleRevision': 2,
+      'scheduledAt': '2026-07-29T15:30:00Z',
+      'localDate': '2026-07-29',
+      'timezoneId': 'America/Los_Angeles',
+    },
+  },
+});
+
+Matcher _contractCode(String code) => throwsA(
+  isA<MedicationSyncContractException>().having(
+    (error) => error.code,
+    'code',
+    code,
+  ),
+);

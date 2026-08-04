@@ -169,7 +169,7 @@
       }
     },
     {
-      "name": "missed remains local in synced v1",
+      "name": "unsupported snoozed outcome spelling",
       "type": "doseEvent",
       "value": {
         "contractVersion": 1,
@@ -185,7 +185,7 @@
           "localDate": "2026-07-29",
           "timezoneId": "America/Los_Angeles"
         },
-        "kind": "missed",
+        "kind": "snoozed_local_only",
         "occurredAt": "2026-07-29T15:34:12Z",
         "actorAccountId": "account-owner"
       }

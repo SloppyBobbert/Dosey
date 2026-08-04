@@ -350,14 +350,44 @@ export const medicationSyncCanonicalTimezones: readonly string[] = Object.freeze
 const canonicalTimezoneSet = new Set(medicationSyncCanonicalTimezones);
 
 export type HouseholdRole = 'owner' | 'member';
+/** `member` is the stable wire value for a caregiver; it is not renamed on the wire. */
 export type PillType = 'pill' | 'capsule' | 'tablet';
 export type DoseEventKind =
   | 'taken_confirmed'
   | 'skipped'
+  | 'missed'
   | 'snoozed'
   | 'help_requested';
 export type EntityType = 'medication' | 'schedule' | 'dose_event';
 export type MutationOutcome = 'applied' | 'duplicate' | 'conflict' | 'rejected';
+export type MedicationSyncActorAuthority = 'human' | 'patient_device';
+export type TerminalDoseEventKind = 'taken_confirmed' | 'skipped' | 'missed';
+export type MedicationSyncRejectionCode =
+  | 'HUMAN_TERMINAL_OUTCOME_FORBIDDEN'
+  | 'PATIENT_DEVICE_AUTHORITY_REQUIRED'
+  | 'DEVICE_IDENTITY_MISMATCH';
+export type TerminalOutcomeConflictCode =
+  | 'TERMINAL_OUTCOME_CONFLICT'
+  | 'TERMINAL_OUTCOME_REPLAY_MISMATCH';
+
+/** Server-derived authority; this is never client mutation input. */
+export interface MedicationSyncActor {
+  readonly accountId: string;
+  readonly authority: MedicationSyncActorAuthority;
+  readonly registeredDeviceId: string | null;
+  readonly role: HouseholdRole | null;
+}
+
+/** Storage is deferred; these fields freeze the future immutable inventory ledger shape. */
+export interface InventoryAdjustment {
+  readonly contractVersion: 1;
+  readonly ledgerId: string;
+  readonly medicationId: string;
+  readonly delta: number;
+  readonly actorId: string;
+  readonly reason: string;
+  readonly idempotencyKey: string;
+}
 
 export interface Medication {
   readonly contractVersion: 1;
@@ -477,6 +507,10 @@ export type Mutation =
   | ScheduleUpsertMutation
   | ScheduleDeleteMutation
   | DoseEventAppendMutation;
+
+export type TerminalDoseEventMutation = DoseEventAppendMutation & {
+  readonly payload: DoseEventMutationPayload & {readonly kind: TerminalDoseEventKind};
+};
 
 export interface Conflict {
   readonly contractVersion: 1;
@@ -881,7 +915,7 @@ export function parseDoseEvent(value: unknown, path = '$'): DoseEvent {
     occurrence: parseOccurrenceRef(data.occurrence, `${path}.occurrence`),
     kind: enumValue(
       data.kind,
-      ['taken_confirmed', 'skipped', 'snoozed', 'help_requested'],
+      ['taken_confirmed', 'skipped', 'missed', 'snoozed', 'help_requested'],
       `${path}.kind`,
     ),
     occurredAt: canonicalUtcTimestamp(data.occurredAt, `${path}.occurredAt`),
@@ -927,7 +961,7 @@ function parseDoseEventPayload(value: unknown, path: string): DoseEventMutationP
     occurrence: parseOccurrenceRef(data.occurrence, `${path}.occurrence`),
     kind: enumValue(
       data.kind,
-      ['taken_confirmed', 'skipped', 'snoozed', 'help_requested'],
+      ['taken_confirmed', 'skipped', 'missed', 'snoozed', 'help_requested'],
       `${path}.kind`,
     ),
     occurredAt: canonicalUtcTimestamp(data.occurredAt, `${path}.occurredAt`),
@@ -983,6 +1017,76 @@ export function parseMutation(value: unknown, path = '$'): Mutation {
     return {...base, entityType, operation, baseRevision: null, payload: parseDoseEventPayload(data.payload, `${path}.payload`)};
   }
   fail('INVALID_MUTATION_OPERATION', `${path}.operation`, 'Operation does not match entity type.');
+}
+
+export function isTerminalDoseEventMutation(
+  mutation: Mutation,
+): mutation is TerminalDoseEventMutation {
+  return mutation.entityType === 'dose_event' &&
+    (mutation.payload.kind === 'taken_confirmed' ||
+      mutation.payload.kind === 'skipped' ||
+      mutation.payload.kind === 'missed');
+}
+
+export function evaluateTerminalOutcomeAuthority(
+  actor: MedicationSyncActor,
+  mutation: Mutation,
+): { readonly outcome: 'allowed' } | { readonly outcome: 'rejected'; readonly errorCode: MedicationSyncRejectionCode } {
+  if (!isTerminalDoseEventMutation(mutation)) {
+    throw new MedicationSyncContractError(
+      'TERMINAL_OUTCOME_REQUIRED',
+      '$.mutation',
+      'Terminal outcome authority requires a taken_confirmed, skipped, or missed dose event mutation.',
+    );
+  }
+  if (actor.authority === 'human') {
+    return {outcome: 'rejected', errorCode: 'HUMAN_TERMINAL_OUTCOME_FORBIDDEN'};
+  }
+  if (actor.authority !== 'patient_device' || actor.registeredDeviceId === null) {
+    return {outcome: 'rejected', errorCode: 'PATIENT_DEVICE_AUTHORITY_REQUIRED'};
+  }
+  return actor.registeredDeviceId === mutation.deviceId
+    ? {outcome: 'allowed'}
+    : {outcome: 'rejected', errorCode: 'DEVICE_IDENTITY_MISMATCH'};
+}
+
+export function resolveTerminalOutcome(
+  recorded: Mutation,
+  incoming: Mutation,
+): { readonly outcome: 'duplicate' } | { readonly outcome: 'needs_review'; readonly errorCode: TerminalOutcomeConflictCode } {
+  if (!isTerminalDoseEventMutation(recorded) || !isTerminalDoseEventMutation(incoming)) {
+    throw new MedicationSyncContractError(
+      'TERMINAL_OUTCOME_REQUIRED',
+      '$.mutation',
+      'Terminal outcome resolution requires taken_confirmed, skipped, or missed dose event mutations.',
+    );
+  }
+  if (recorded.payload.occurrence.occurrenceId !== incoming.payload.occurrence.occurrenceId) {
+    throw new MedicationSyncContractError('TERMINAL_OUTCOME_OCCURRENCE_MISMATCH', '$.occurrenceId', 'Terminal outcomes must be compared for one occurrence.');
+  }
+  if (canonicalMedicationSyncJson(recorded) === canonicalMedicationSyncJson(incoming)) {
+    return {outcome: 'duplicate'};
+  }
+  return {
+    outcome: 'needs_review',
+    errorCode: recorded.payload.kind === incoming.payload.kind
+      ? 'TERMINAL_OUTCOME_REPLAY_MISMATCH'
+      : 'TERMINAL_OUTCOME_CONFLICT',
+  };
+}
+
+export function parseInventoryAdjustment(value: unknown, path = '$'): InventoryAdjustment {
+  const data = object(value, path);
+  exactKeys(data, ['contractVersion', 'ledgerId', 'medicationId', 'delta', 'actorId', 'reason', 'idempotencyKey'], path);
+  return {
+    contractVersion: version(data.contractVersion, `${path}.contractVersion`),
+    ledgerId: id(data.ledgerId, `${path}.ledgerId`),
+    medicationId: id(data.medicationId, `${path}.medicationId`),
+    delta: integer(data.delta, `${path}.delta`, -9_007_199_254_740_991, 9_007_199_254_740_991),
+    actorId: id(data.actorId, `${path}.actorId`),
+    reason: stringValue(data.reason, `${path}.reason`, 200),
+    idempotencyKey: id(data.idempotencyKey, `${path}.idempotencyKey`),
+  };
 }
 
 export function parseConflict(value: unknown, path = '$'): Conflict {
@@ -1264,6 +1368,8 @@ export function parseMedicationSyncValue(type: string, value: unknown): unknown 
       return parsePushResponse(value);
     case 'pullRequest':
       return parsePullRequest(value);
+    case 'inventoryAdjustment':
+      return parseInventoryAdjustment(value);
     default:
       fail('UNKNOWN_FIXTURE_TYPE', '$.type', `Unknown fixture type: ${type}.`);
   }
