@@ -289,21 +289,28 @@ class _BottomNavigation extends StatelessWidget {
           child: roomyLabels
               ? Column(
                   children: [
-                    for (final destination
-                        in WebLocalPersonalDestination.values)
-                      FocusTraversalOrder(
-                        order: NumericFocusOrder(destination.index.toDouble()),
-                        child: SizedBox(
-                          height: 52,
-                          width: double.infinity,
-                          child: _BottomDestination(
-                            destination: destination,
-                            selected: destination == controller.current,
-                            expanded: true,
-                            onSelect: () => controller.goTo(destination),
-                          ),
-                        ),
+                    LayoutBuilder(
+                      builder: (context, constraints) => Wrap(
+                        children: [
+                          for (final destination
+                              in WebLocalPersonalDestination.values)
+                            SizedBox(
+                              width: constraints.maxWidth / 3,
+                              child: FocusTraversalOrder(
+                                order: NumericFocusOrder(
+                                  destination.index.toDouble(),
+                                ),
+                                child: _BottomDestination(
+                                  destination: destination,
+                                  selected: destination == controller.current,
+                                  expanded: true,
+                                  onSelect: () => controller.goTo(destination),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
+                    ),
                   ],
                 )
               : SizedBox(
@@ -355,6 +362,8 @@ class _BottomDestination extends StatelessWidget {
     button: true,
     selected: selected,
     label: destination.label,
+    onTap: onSelect,
+    excludeSemantics: true,
     child: TextButton(
       key: ValueKey('web-local-personal-nav-${destination.name}'),
       autofocus: selected,
@@ -367,20 +376,10 @@ class _BottomDestination extends StatelessWidget {
             : const Color(0xFFFFFCF6),
       ),
       child: expanded
-          ? Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(destination.icon, size: 22),
-                const SizedBox(width: 12),
-                Text(
-                  destination.label,
-                  maxLines: 2,
-                  style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+          ? Text(
+              destination.label,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
             )
           : Column(
               mainAxisAlignment: MainAxisAlignment.center,

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:dosey_app/app/web_local_personal/web_local_personal_app.dart';
 import 'package:dosey_app/app/web_local_personal/web_local_personal_pages.dart';
@@ -241,32 +242,80 @@ void main() {
     );
   });
 
-  testWidgets('320px at 200% uses fully visible vertical navigation', (
-    tester,
-  ) async {
-    await _pump(tester, width: 320, textScale: 2);
-    expect(tester.takeException(), isNull);
-    final navigation = find.byKey(
-      const ValueKey('web-local-personal-bottom-navigation'),
-    );
-    expect(
-      find.descendant(
-        of: navigation,
-        matching: find.byType(SingleChildScrollView),
-      ),
-      findsNothing,
-    );
-    for (final destination in WebLocalPersonalDestination.values) {
+  testWidgets(
+    '320 by 256 at 200% keeps navigation and page content reachable',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      await _pump(tester, width: 320, height: 256, textScale: 2);
+      expect(tester.takeException(), isNull);
+      final navigation = find.byKey(
+        const ValueKey('web-local-personal-bottom-navigation'),
+      );
       expect(
-        find.descendant(of: navigation, matching: find.text(destination.label)),
+        find.descendant(
+          of: navigation,
+          matching: find.byType(SingleChildScrollView),
+        ),
+        findsNothing,
+      );
+      for (final destination in WebLocalPersonalDestination.values) {
+        final destinationFinder = find.descendant(
+          of: navigation,
+          matching: find.bySemanticsLabel(destination.label),
+        );
+        expect(
+          find.descendant(
+            of: navigation,
+            matching: find.text(destination.label),
+          ),
+          findsOneWidget,
+        );
+        expect(destinationFinder, findsOneWidget);
+        final node = tester.getSemantics(destinationFinder);
+        expect(node.label, destination.label);
+        expect(node.flagsCollection.isButton, isTrue);
+        expect(
+          node.flagsCollection.isSelected,
+          destination == WebLocalPersonalDestination.today
+              ? Tristate.isTrue
+              : Tristate.isFalse,
+        );
+      }
+      final schedule = find.descendant(
+        of: navigation,
+        matching: find.bySemanticsLabel('Schedule'),
+      );
+      await tester.tap(schedule);
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text('Local schedule details will appear here.'),
         findsOneWidget,
       );
-    }
-    expect(
-      find.text('Local schedule details will appear here.'),
-      findsOneWidget,
-    );
-  });
+      expect(
+        tester.getSemantics(schedule).flagsCollection.isSelected,
+        Tristate.isTrue,
+      );
+      semantics.dispose();
+    },
+  );
+
+  testWidgets(
+    'short landscape at 200% keeps navigation and page content reachable',
+    (tester) async {
+      await _pump(tester, width: 480, height: 320, textScale: 2);
+      expect(tester.takeException(), isNull);
+
+      await tester.tap(find.bySemanticsLabel('Log'));
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.text('This read-only space will show local dose history.'),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('mobile navigation preserves safe-area bottom padding', (
     tester,
