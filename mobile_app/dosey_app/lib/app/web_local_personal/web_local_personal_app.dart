@@ -287,31 +287,27 @@ class _BottomNavigation extends StatelessWidget {
         child: FocusTraversalGroup(
           policy: OrderedTraversalPolicy(),
           child: roomyLabels
-              ? Column(
-                  children: [
-                    LayoutBuilder(
-                      builder: (context, constraints) => Wrap(
-                        children: [
-                          for (final destination
-                              in WebLocalPersonalDestination.values)
-                            SizedBox(
-                              width: constraints.maxWidth / 3,
-                              child: FocusTraversalOrder(
-                                order: NumericFocusOrder(
-                                  destination.index.toDouble(),
-                                ),
-                                child: _BottomDestination(
-                                  destination: destination,
-                                  selected: destination == controller.current,
-                                  expanded: true,
-                                  onSelect: () => controller.goTo(destination),
-                                ),
-                              ),
+              ? LayoutBuilder(
+                  builder: (context, constraints) => Wrap(
+                    children: [
+                      for (final destination
+                          in WebLocalPersonalDestination.values)
+                        SizedBox(
+                          width: constraints.maxWidth / 3,
+                          child: FocusTraversalOrder(
+                            order: NumericFocusOrder(
+                              destination.index.toDouble(),
                             ),
-                        ],
-                      ),
-                    ),
-                  ],
+                            child: _BottomDestination(
+                              destination: destination,
+                              selected: destination == controller.current,
+                              expanded: true,
+                              onSelect: () => controller.goTo(destination),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 )
               : SizedBox(
                   height: 72,

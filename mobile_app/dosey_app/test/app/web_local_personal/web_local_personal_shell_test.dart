@@ -251,12 +251,19 @@ void main() {
       final navigation = find.byKey(
         const ValueKey('web-local-personal-bottom-navigation'),
       );
+      final pageViewport = find.byType(SingleChildScrollView);
       expect(
         find.descendant(
           of: navigation,
           matching: find.byType(SingleChildScrollView),
         ),
         findsNothing,
+      );
+      _expectShortViewportGeometry(
+        tester,
+        navigation: navigation,
+        pageViewport: pageViewport,
+        viewportHeight: 256,
       );
       for (final destination in WebLocalPersonalDestination.values) {
         final destinationFinder = find.descendant(
@@ -292,6 +299,11 @@ void main() {
         find.text('Local schedule details will appear here.'),
         findsOneWidget,
       );
+      await _expectPageContentReachable(
+        tester,
+        pageViewport: pageViewport,
+        content: find.text('Local schedule details will appear here.'),
+      );
       expect(
         tester.getSemantics(schedule).flagsCollection.isSelected,
         Tristate.isTrue,
@@ -305,6 +317,16 @@ void main() {
     (tester) async {
       await _pump(tester, width: 480, height: 320, textScale: 2);
       expect(tester.takeException(), isNull);
+      final navigation = find.byKey(
+        const ValueKey('web-local-personal-bottom-navigation'),
+      );
+      final pageViewport = find.byType(SingleChildScrollView);
+      _expectShortViewportGeometry(
+        tester,
+        navigation: navigation,
+        pageViewport: pageViewport,
+        viewportHeight: 320,
+      );
 
       await tester.tap(find.bySemanticsLabel('Log'));
       await tester.pump();
@@ -313,6 +335,13 @@ void main() {
       expect(
         find.text('This read-only space will show local dose history.'),
         findsOneWidget,
+      );
+      await _expectPageContentReachable(
+        tester,
+        pageViewport: pageViewport,
+        content: find.text(
+          'This read-only space will show local dose history.',
+        ),
       );
     },
   );
@@ -510,6 +539,34 @@ void main() {
       expect(expression.hasMatch(source), isFalse, reason: '$expression found');
     }
   });
+}
+
+void _expectShortViewportGeometry(
+  WidgetTester tester, {
+  required Finder navigation,
+  required Finder pageViewport,
+  required double viewportHeight,
+}) {
+  expect(navigation, findsOneWidget);
+  expect(pageViewport, findsOneWidget);
+  final navigationRect = tester.getRect(navigation);
+  final pageViewportRect = tester.getRect(pageViewport);
+  expect(navigationRect.height, lessThan(viewportHeight - 44));
+  expect(pageViewportRect.height, greaterThanOrEqualTo(44));
+  expect(pageViewportRect.bottom, lessThanOrEqualTo(navigationRect.top));
+}
+
+Future<void> _expectPageContentReachable(
+  WidgetTester tester, {
+  required Finder pageViewport,
+  required Finder content,
+}) async {
+  await tester.ensureVisible(content);
+  await tester.pump();
+  expect(
+    tester.getRect(pageViewport).overlaps(tester.getRect(content)),
+    isTrue,
+  );
 }
 
 Future<void> _pump(
