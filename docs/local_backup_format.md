@@ -54,8 +54,6 @@ whole seconds. `?` marks a nullable field.
 | `prescriptions` | `id`, `name`, `pillType`, `remainingDoses`, `guidedPillIcon`, `availableDoses`, `loadedDoses`, `usedDoses`, `reviewDoses`, `defaultRefillQuantity`, `defaultDoseCountPerDose`, `doseInstructions`, `refillThreshold`, `createdAt`, `updatedAt` |
 | `prescriptionRefills` | `id`, `prescriptionId`, `doseDelta`, `remainingAfter`, `occurredAt`, `note?` |
 | `reminderSchedules` | `id`, `label`, `prescriptionId?`, `profileId`, `hour`, `minute`, `revision`, `isEnabled`, `createdAt`, `updatedAt` |
-| `phoneDoseActionEvents` | `id`, `deviceId`, `occurrenceId`, `scheduleId`, `scheduleRevision`, `scheduledAt`, `localDate`, `timezoneId`, `medicationId`, `kind`, `occurredAt`, `marksDoseTaken`, `idempotencyKey`, `createdAt` |
-| `syncOutboxMutations` | `mutationId`, `deviceId`, `actorAccountId?`, `robotId?`, `scopeState`, `idempotencyKey`, `entityType`, `operation`, `entityId`, `baseRevision?`, `payloadJson`, `state`, `attemptCount`, `nextAttemptAt?`, `lastAttemptAt?`, `lastErrorCode?`, `createdAt`, `updatedAt` |
 | `carouselSlots` | `id`, `slotNumber`, `prescriptionId`, `scheduleId`, `profileId`, `status`, `createdAt`, `updatedAt` |
 | `carouselLoadSessions` | `id`, `profileId`, `mode`, `status`, `predecessorSessionId?`, `planCreatedAt?`, `startedAt?`, `confirmedAt?`, `staleAt?`, `staleReason?`, `supersededAt?`, `supersededReason?`, `positionBefore`, `positionAfter`, `createdAt`, `updatedAt` |
 | `carouselLoadSlotSnapshots` | `id`, `sessionId`, `slotNumber`, `status`, `scheduledAt?`, `bundleKey?`, `scheduleIdsJson`, `prescriptionIdsJson`, `prescriptionNamesJson`, `pillIconsJson`, `doseInstructionsJson`, `loadedAt?`, `movedAt?`, `resolvedAt?`, `reviewReason?`, `createdAt` |
@@ -65,12 +63,16 @@ whole seconds. `?` marks a nullable field.
 | `controllerCommandSessions` | `id`, `commandType`, `doseId?`, `scheduleId?`, `slotId?`, `state`, `failureReason?`, `createdAt`, `acceptedAt?`, `resolvedAt?`, `updatedAt` |
 | `controllerCommandEvents` | `id`, `sessionId`, `sequence`, `eventType`, `occurredAt`, `details?` |
 | `adminAuditEvents` | `id`, `eventType`, `targetType`, `targetId?`, `actorType`, `actorUserId?`, `actorLabel`, `sourceDeviceRole`, `summary`, `detailsJson?`, `cloudEventId?`, `lastSyncedAt?`, `occurredAt` |
+| `phoneDoseActionEvents` | `id`, `deviceId`, `occurrenceId`, `scheduleId`, `scheduleRevision`, `scheduledAt`, `localDate`, `timezoneId`, `medicationId`, `kind`, `occurredAt`, `marksDoseTaken`, `idempotencyKey`, `createdAt` |
+| `syncOutboxMutations` | `mutationId`, `deviceId`, `actorAccountId?`, `robotId?`, `scopeState`, `idempotencyKey`, `entityType`, `operation`, `entityId`, `baseRevision?`, `payloadJson`, `state`, `attemptCount`, `nextAttemptAt?`, `lastAttemptAt?`, `lastErrorCode?`, `createdAt`, `updatedAt` |
 
 `syncOutboxMutations` is portable local state. Pending, `in_flight`,
 `succeeded`, and `permanent_failure` rows are restored exactly, including bound
 account/robot IDs, retry timestamps/counts, and error fields. Restore does not
 reset, rebind, requeue, or retry them. This does not make production sync
-required or active: production mobile leaves sync default-off and unwired.
+required or active: production mobile leaves sync default-off and unwired. No
+current worker acts on a restored `in_flight` row; any future sync worker must
+define its own recovery policy rather than relying on restore to change it.
 
 Only these setting keys are portable:
 
@@ -99,8 +101,8 @@ deferred_deleted_prescription:<prescription-id>
 
 The final key requires a nonempty ID for a prescription in the document.
 Authentication, Action PIN, device role, onboarding and safety acknowledgements,
-robot identity, display and timing settings, and unknown settings are excluded
-and preserved at the destination.
+robot identity, unlisted display and timing settings, and unknown settings are
+excluded and preserved at the destination.
 
 Pure derived projections, caches, and checkpoints are not separately backed up.
 This includes reconciliation checkpoints and any remote-sync checkpoint: a
@@ -159,12 +161,15 @@ remainingDoses = availableDoses + loadedDoses + reviewDoses
 
 ## Restore
 
-Before changing data, Dosey health-checks the current database, writes and
-verifies the app-private `pre_restore_recovery.json`, then verifies the live
-snapshot has not changed. It replaces included logical tables in one SQLite
-transaction, canonically reads them back, and runs `PRAGMA integrity_check`
-before commit. Any replacement or verification failure rolls back the database;
-a recovery-write failure prevents replacement.
+Before changing data, Dosey health-checks the current database, reads a recovery
+snapshot in a database transaction, validates it, then writes and verifies
+app-private `pre_restore_recovery.json`. It next starts the replacement
+transaction, compares a fresh canonical snapshot with the recovery bytes, and
+aborts if they differ. In that transaction it replaces included logical tables,
+canonically reads them back, and runs `PRAGMA integrity_check` before commit.
+Any replacement or verification failure rolls back the database; a
+recovery-write failure prevents replacement. No transaction spans the recovery
+write and replacement; the final comparison detects changes before it runs.
 
 Restore writes exact persisted values. It never infers Taken, decrements
 inventory, normalizes movement, or creates behavioral audit events. OS

@@ -36,9 +36,13 @@ rollout. Flutter invokes Functions and must never read server tables directly
 or contain table/database IDs, API keys, HMAC values, or other server secrets.
 
 Medication-sync defines satisfy only a dormant `CloudConfiguration` predicate.
-Production mobile does not wire a medication-sync gateway: the feature is
-default-off and unwired, and setting its flag or Function IDs does not activate
-sync. Local medication behavior never depends on cloud availability.
+They are future isolated-staging-only inputs after the authoritative activation
+gates in the backend deployment guidance, not current mobile configuration. The
+backend template, runtime, and tests—not the runbook's stale schema section—are
+authoritative for provisioning. Production mobile does not wire a medication-sync
+gateway: the feature is default-off and unwired, and setting its flag or Function
+IDs does not activate sync. Local medication behavior never depends on cloud
+availability.
 
 ## Commands
 

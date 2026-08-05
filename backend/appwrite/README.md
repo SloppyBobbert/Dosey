@@ -15,9 +15,13 @@ independent: signing in or out does not alter pairing, hardware authorization,
 settings, or local medication data.
 
 The secure mounted-access rollout is inactive. Do not activate or replace the
-legacy staging create/claim deployments. Do not add medication-sync Function IDs
-to client, generated-environment, or workflow configuration. Medication data is
-local by default and is not generally cloud-synced.
+legacy staging create/claim deployments. Medication-sync Function IDs are future
+isolated-staging-only inputs after the activation gates in
+[`MEDICATION_SYNC_DEPLOYMENT.md`](MEDICATION_SYNC_DEPLOYMENT.md); those gates are
+authoritative for activation. Schema provisioning authority remains the
+eight-table template, runtime, and tests. Do not add the IDs to current client,
+generated-environment, or workflow configuration. Medication data is local by
+default and is not generally cloud-synced.
 
 ## Source foundations
 

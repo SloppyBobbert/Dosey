@@ -45,8 +45,12 @@ APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID
 
 Medication-sync defines satisfy only a dormant `CloudConfiguration` predicate:
 `CAREGIVER_SYNC_ENABLED=true`, endpoint/project configuration, and both IDs
-below. Production mobile does not wire a medication-sync gateway, so these
-values do not activate sync. The feature remains default-off and unwired.
+below. They are future isolated-staging-only inputs after the authoritative
+activation gates in the backend deployment guidance, not current mobile
+configuration. The backend template, runtime, and tests—not the runbook's stale
+schema section—are authoritative for provisioning. Production mobile does not
+wire a medication-sync gateway, so these values do not activate sync. The
+feature remains default-off and unwired.
 
 ```text
 APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID
@@ -95,6 +99,11 @@ side-by-side, then import the backup from Settings and verify prescriptions,
 schedules, carousel slots, app settings, dose history, and audit history.
 Device role and runtime capability do not transfer; the destination build keeps
 its configured capability.
+
+`syncOutboxMutations` are restored exactly. Remote-sync checkpoints are skipped
+and not separately backed up. Restored bound `pending` or `in_flight` local sync
+state may be stale on another device and cannot retroactively satisfy or
+activate production sync.
 
 ## CI commands
 

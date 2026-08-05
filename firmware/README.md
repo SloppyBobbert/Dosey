@@ -235,8 +235,9 @@ compile/test evidence.
 - Servo programs never attach PWM or move at boot.
 - USB input is bounded to 96 characters; an oversized line is rejected and the next newline-delimited command can still be processed.
 - Servo movement is nonblocking, allows only one active movement, rejects busy or duplicate active command IDs, and has a 2.5-second deadline.
-- `CANCEL` detaches PWM and reports the interrupted movement as unresolved, not successful.
-- Timeout detaches PWM and emits `MOVEMENT_TIMEOUT`; attach, write, and detach failures emit explicit errors.
+- `CANCEL` attempts to detach PWM and reports `COMMAND_RECEIVED` with the cancel request ID, then the interrupted movement as unresolved with its movement ID.
+- Timeout attempts to detach PWM and emits `MOVEMENT_TIMEOUT`; the firmware also attempts detachment after attach failure and normal completion. Attach, write, and detach failures emit explicit errors.
+- `SERVO_DETACH_FAILED` may follow cancellation or timeout. It remains unresolved and review-required; `SERVO_DONE` is emitted only after successful detachment.
 - A transport disconnect stops active movement without a completion event and clears partial input before advertising resumes.
 - No `EMERGENCY_STOP` command exists in D1. `CANCEL` is the implemented command-level stop request; power interruption is an ambiguous condition for the phone to send to review.
 - Servo attachment failure emits `SERVO_ATTACH_FAILED` before movement starts.

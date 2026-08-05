@@ -63,6 +63,12 @@ D1 NACK <command-id> <reason>
 D1 ERROR <command-id> <error>
 ```
 
+Responses to a command use that command's ID, except that `CANCEL` reports
+`COMMAND_RECEIVED` with the cancel request ID and
+`MOVEMENT_CANCELLED_UNRESOLVED` with the interrupted movement ID. The only
+unsolicited event is `D1 EVT pir WAKE_FACE`; malformed or oversized input
+without a trusted ID uses `none`.
+
 ## Canonical commands and responses
 
 These are the only implemented D1 commands. Each response carries one event or
@@ -151,14 +157,15 @@ safety-limit values `MOVEMENT_TIMEOUT_MS_2500`, `SERVO_PULSE_US_1000_2000`,
 After a servo and its power path are physically verified and explicitly enabled, `SERVO_TEST` and `DISPENSE_TEST` accept one movement at a time. Their lifecycle is `COMMAND_RECEIVED`, `MOVEMENT_STARTED`, then `SERVO_DONE` or an error. An overlapping command returns `BUSY`; reuse of the active ID returns `DUPLICATE_ACTIVE_ID`. `CANCEL` first replies `COMMAND_RECEIVED` with its own ID, then emits `MOVEMENT_CANCELLED_UNRESOLVED` with the interrupted movement ID. A deadline failure emits `MOVEMENT_TIMEOUT` with the movement ID.
 
 `SERVO_ATTACH_FAILED` is emitted after command receipt but before
-`MOVEMENT_STARTED` if the PWM path cannot attach. The firmware detaches the
-servo path before reporting attach failure, cancellation, timeout, or normal
+`MOVEMENT_STARTED` if the PWM path cannot attach. The firmware attempts to
+detach the servo path after attach failure, cancellation, timeout, and normal
 completion.
 
 Other movement errors are `SERVO_WRITE_FAILED` and `SERVO_DETACH_FAILED`.
 They are `ERROR` responses with the active movement ID. A detach failure may
-follow another movement error. `SERVO_DONE` is emitted only after a successful
-detach.
+follow cancellation, timeout, or another movement error. `SERVO_DONE` is
+emitted only after a successful detach. A failed detach remains unresolved and
+review-required.
 
 `SERVO_DONE` means only that the commanded PWM sequence completed. It is not evidence of carousel advance, dose visibility, dose correctness, or dose intake.
 

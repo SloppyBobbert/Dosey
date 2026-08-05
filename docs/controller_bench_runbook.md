@@ -12,7 +12,10 @@ real medication testing.
 - Confirm `firmware/include/hardware_config.local.h` does not exist.
 - Build `controller_baseline` for normal checks or `controller_debug` only when USB diagnostics are needed.
 - Use the command form `D1 CMD <command-id> <command>`; valid-command responses
-  use the matching command ID, except unsolicited `D1 EVT pir WAKE_FACE`.
+  use the matching command ID, except that `CANCEL` reports
+  `COMMAND_RECEIVED` with the cancel request ID and
+  `MOVEMENT_CANCELLED_UNRESOLVED` with the interrupted movement ID. The
+  unsolicited `D1 EVT pir WAKE_FACE` uses `pir`.
   Malformed or oversized input without a trusted ID may use `none`.
 - Stop immediately for heat, smell, repeated resets, malformed output, connection instability, or unexpected movement.
 
