@@ -6,9 +6,9 @@ This is prototype firmware. Test only with candy, beads, dry beans, vitamins, or
 
 ## Firmware role
 
-The XIAO handles direct hardware actions and status: servo movement, PIR input, LEDs, buttons, basic sensors, heartbeat replies, and hardware error reporting. The phone owns medication names, schedules, dose decisions, refill logic, history, caregiver behavior, PIN logic, voice, and medical copy.
+The XIAO handles direct hardware actions and status: servo movement, PIR input, LEDs, buttons, basic sensors, heartbeat replies, and hardware error reporting. The phone owns medication names, schedules, dose decisions, inventory, history, caregiver behavior, PIN logic, voice, and medical copy.
 
-A servo completion event reports movement only. It never proves that a dose is visible, correct, or taken.
+A servo completion event reports commanded PWM completion only. It never proves carousel advance, dose visibility, correctness, or Taken. The phone changes inventory only after explicit Taken confirmation. It must treat jams, ambiguous movement, cup/lid faults, power interruption, timeout, cancellation, and disconnects as review-required rather than infer success.
 
 ## Toolchain
 
@@ -125,11 +125,12 @@ Build every safe-default XIAO environment sequentially:
 /tmp/dosey-platformio/bin/pio check -e controller_debug --skip-packages
 ```
 
-`.github/workflows/firmware-ci.yml` runs the same tests, builds, and protocol
-static check for pull requests and pushes to `main`. These checks prove that the
-code compiles and that host-side protocol transcripts match the contract. They
-do not prove BLE advertising, discovery, connection stability, wiring,
-electrical stability, sensor behavior, servo movement, or carousel movement.
+`.github/workflows/firmware-ci.yml` runs the same native tests, builds, and
+protocol static checks for pull requests and pushes to `main`. They establish
+host-side protocol transcripts and safe-default build coverage. They do not
+establish BLE radio behavior, wiring, electrical stability, sensor behavior,
+servo movement, carousel movement, cancellation or timeout behavior on a
+physical rig, or integrated hardware qualification.
 
 ## First physical test
 
@@ -137,9 +138,9 @@ Test the bare XIAO before attaching the Grove Base or any module:
 
 1. Disconnect every external wire and module. Do not connect the battery/JST port or SWD pins.
 2. Place the board on a nonconductive surface and connect it directly to the computer with a known USB data cable.
-3. Run `pio device list` and record the exact port without guessing.
+3. Run `/tmp/dosey-platformio/bin/pio device list` and record the exact port without guessing.
 4. Run `/tmp/dosey-platformio/bin/pio run -e 01_blink_serial -t upload --upload-port <port>`.
-5. Run `pio device monitor --port <port> --baud 115200`.
+5. Run `/tmp/dosey-platformio/bin/pio device monitor --port <port> --baud 115200`.
 6. Confirm the serial header identifies `XIAO_ESP32_C6`, then confirm the onboard user LED changes with matching `LED ON` and `LED OFF` lines.
 7. Disconnect immediately if the board heats, smells unusual, repeatedly resets, or behaves unexpectedly.
 
@@ -152,7 +153,7 @@ firmware with no external hardware connected:
 
 ```sh
 /tmp/dosey-platformio/bin/pio run -e 08_serial_protocol -t upload --upload-port <port>
-pio device monitor --port <port> --baud 115200
+/tmp/dosey-platformio/bin/pio device monitor --port <port> --baud 115200
 ```
 
 Expected boot lines are:
@@ -234,8 +235,11 @@ compile/test evidence.
 - Servo programs never attach PWM or move at boot.
 - USB input is bounded to 96 characters; an oversized line is rejected and the next newline-delimited command can still be processed.
 - Servo movement is nonblocking, allows only one active movement, rejects busy or duplicate active command IDs, and has a 2.5-second deadline.
-- `CANCEL` detaches PWM and reports the movement as unresolved, not successful.
-- Timeout detaches PWM and emits `MOVEMENT_TIMEOUT`.
+- `CANCEL` attempts to detach PWM and reports `COMMAND_RECEIVED` with the cancel request ID, then the interrupted movement as unresolved with its movement ID.
+- Timeout attempts to detach PWM and emits `MOVEMENT_TIMEOUT`; the firmware also attempts detachment after attach failure and normal completion. Attach, write, and detach failures emit explicit errors.
+- `SERVO_DETACH_FAILED` may follow cancellation or timeout. It remains unresolved and review-required; `SERVO_DONE` is emitted only after successful detachment.
+- A transport disconnect stops active movement without a completion event and clears partial input before advertising resumes.
+- No `EMERGENCY_STOP` command exists in D1. `CANCEL` is the implemented command-level stop request; power interruption is an ambiguous condition for the phone to send to review.
 - Servo attachment failure emits `SERVO_ATTACH_FAILED` before movement starts.
 - `DISPENSE_TEST` is movement-only. `DISPENSE_NEXT` returns `COMMAND_DISABLED` until carousel movement meets the mechanical test gate.
 - Motors must not be powered from the phone or a XIAO GPIO pin. Prior loaded movement on the Expansion Board's 3.3 V Grove socket is preliminary cross-board evidence only; it does not validate the Grove Base's `D8/A8` power and signal path. Continue supervised final-rig testing and stop on weak movement, jitter, resets, disconnects, or heat.

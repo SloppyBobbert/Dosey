@@ -1,35 +1,25 @@
 # Dosey Local Backup Format
 
-Dosey local backups are logical, versioned JSON documents. They are not copies
-of the SQLite database, WAL, or shared-memory files.
+Dosey local backups are logical, versioned UTF-8 JSON documents, not SQLite,
+WAL, or shared-memory copies. They are plain text and can contain medication,
+schedule, dose-history, household-label, and audit data. Handle exported files
+as sensitive data.
 
-## Sensitive Data Warning
+## Current envelope
 
-Version 1 backups are plain UTF-8 JSON and are not encrypted. They can contain
-medication names, schedules, dose history, household labels, and audit actor
-details. Anyone who can read the exported file can read that information.
-
-Plain JSON keeps this prototype portable and recoverable across supported
-devices. Password encryption would require a cryptographic envelope, key
-derivation, password and recovery UX, and password-loss handling. Device-key
-encryption would prevent normal cross-device restore. A later format version
-can add an encrypted envelope without changing version 1 files.
-
-## Envelope
-
-Every version 1 document has exactly these top-level fields:
+New exports use format **v2** and source schema **18**:
 
 ```json
 {
   "format": "dosey-local-backup",
-  "formatVersion": 1,
-  "sourceSchemaVersion": 14,
+  "formatVersion": 2,
+  "sourceSchemaVersion": 18,
   "data": {}
 }
 ```
 
-Version 1 accepts only source schema version 14. `data` has exactly these array
-fields, in this canonical order:
+The four envelope fields and the `data` fields are exact. The v2 sections, in
+canonical order, are:
 
 1. `settings`
 2. `scheduleProfiles`
@@ -45,25 +35,17 @@ fields, in this canonical order:
 12. `controllerCommandSessions`
 13. `controllerCommandEvents`
 14. `adminAuditEvents`
+15. `phoneDoseActionEvents`
+16. `syncOutboxMutations`
 
-`authSessions` is intentionally absent.
+Imports also accept v1/source-schema-14 documents and normalize a valid v1
+document to v2. New exports are always v2/schema 18.
 
-## Versioning And Database Schema
+## Portable data
 
-The Drift database schema version and portable backup `sourceSchemaVersion` are
-independent contracts. Backup format version 1 began at database schema 14.
-Database migrations 15 and 16 add device-local tables that are excluded from
-portable backups, so version 1 backups with source schema 14 remain valid.
-
-Change the backup version or supported `sourceSchemaVersion` only when the
-portable backup contract changes. A database-only migration does not require a
-new portable backup version.
-
-## Fields
-
-Each row must contain exactly the listed fields. A `?` suffix means the value
-may be JSON `null`; all other fields are required. Timestamps are UTC integer
-microseconds since the Unix epoch and must represent whole seconds.
+Each section is an array of rows with exact fields and validated primitive
+types. Timestamps are UTC integer microseconds since the Unix epoch and must be
+whole seconds. `?` marks a nullable field.
 
 | Section | Fields |
 | --- | --- |
@@ -71,7 +53,7 @@ microseconds since the Unix epoch and must represent whole seconds.
 | `scheduleProfiles` | `id`, `name`, `isActive`, `createdAt`, `updatedAt` |
 | `prescriptions` | `id`, `name`, `pillType`, `remainingDoses`, `guidedPillIcon`, `availableDoses`, `loadedDoses`, `usedDoses`, `reviewDoses`, `defaultRefillQuantity`, `defaultDoseCountPerDose`, `doseInstructions`, `refillThreshold`, `createdAt`, `updatedAt` |
 | `prescriptionRefills` | `id`, `prescriptionId`, `doseDelta`, `remainingAfter`, `occurredAt`, `note?` |
-| `reminderSchedules` | `id`, `label`, `prescriptionId?`, `profileId`, `hour`, `minute`, `isEnabled`, `createdAt`, `updatedAt` |
+| `reminderSchedules` | `id`, `label`, `prescriptionId?`, `profileId`, `hour`, `minute`, `revision`, `isEnabled`, `createdAt`, `updatedAt` |
 | `carouselSlots` | `id`, `slotNumber`, `prescriptionId`, `scheduleId`, `profileId`, `status`, `createdAt`, `updatedAt` |
 | `carouselLoadSessions` | `id`, `profileId`, `mode`, `status`, `predecessorSessionId?`, `planCreatedAt?`, `startedAt?`, `confirmedAt?`, `staleAt?`, `staleReason?`, `supersededAt?`, `supersededReason?`, `positionBefore`, `positionAfter`, `createdAt`, `updatedAt` |
 | `carouselLoadSlotSnapshots` | `id`, `sessionId`, `slotNumber`, `status`, `scheduledAt?`, `bundleKey?`, `scheduleIdsJson`, `prescriptionIdsJson`, `prescriptionNamesJson`, `pillIconsJson`, `doseInstructionsJson`, `loadedAt?`, `movedAt?`, `resolvedAt?`, `reviewReason?`, `createdAt` |
@@ -81,78 +63,115 @@ microseconds since the Unix epoch and must represent whole seconds.
 | `controllerCommandSessions` | `id`, `commandType`, `doseId?`, `scheduleId?`, `slotId?`, `state`, `failureReason?`, `createdAt`, `acceptedAt?`, `resolvedAt?`, `updatedAt` |
 | `controllerCommandEvents` | `id`, `sessionId`, `sequence`, `eventType`, `occurredAt`, `details?` |
 | `adminAuditEvents` | `id`, `eventType`, `targetType`, `targetId?`, `actorType`, `actorUserId?`, `actorLabel`, `sourceDeviceRole`, `summary`, `detailsJson?`, `cloudEventId?`, `lastSyncedAt?`, `occurredAt` |
+| `phoneDoseActionEvents` | `id`, `deviceId`, `occurrenceId`, `scheduleId`, `scheduleRevision`, `scheduledAt`, `localDate`, `timezoneId`, `medicationId`, `kind`, `occurredAt`, `marksDoseTaken`, `idempotencyKey`, `createdAt` |
+| `syncOutboxMutations` | `mutationId`, `deviceId`, `actorAccountId?`, `robotId?`, `scopeState`, `idempotencyKey`, `entityType`, `operation`, `entityId`, `baseRevision?`, `payloadJson`, `state`, `attemptCount`, `nextAttemptAt?`, `lastAttemptAt?`, `lastErrorCode?`, `createdAt`, `updatedAt` |
 
-Fields ending in `Json` remain JSON-encoded strings in the outer document.
-Snapshot and shortage list fields must decode to arrays of strings; snapshot
-parallel arrays must have equal lengths. `adminAuditEvents.detailsJson`, when
-present, must decode to an object. Controller `details` is ordinary text.
+`syncOutboxMutations` is portable local state. Pending, `in_flight`,
+`succeeded`, and `permanent_failure` rows are restored exactly, including bound
+account/robot IDs, retry timestamps/counts, and error fields. Restore does not
+reset, rebind, requeue, or retry them. This does not make production sync
+required or active: production mobile leaves sync default-off and unwired. No
+current worker acts on a restored `in_flight` row; any future sync worker must
+define its own recovery policy rather than relying on restore to change it.
 
-## Settings Policy
+Only these setting keys are portable:
 
-Only these portable settings are included:
+```text
+household_display_name
+profile_display_name
+relationship_label
+robot_face_voice_enabled
+robot_face_voice_variety_enabled
+robot_face_voice_volume_preset
+robot_face_voice_quiet_hours_enabled
+robot_face_voice_quiet_hours_start_minutes
+robot_face_voice_quiet_hours_end_minutes
+robot_face_voice_safety_during_quiet_hours_enabled
+robot_face_reminder_voice_enabled
+robot_face_dispense_narration_enabled
+robot_face_safety_confirmation_voice_enabled
+robot_face_missed_dose_voice_enabled
+robot_face_controller_alert_voice_enabled
+robot_face_idle_chatter_voice_enabled
+robot_face_idle_chatter_cooldown_minutes
+robot_face_reminder_repeat_cooldown_minutes
+robot_face_reminder_repeat_policy
+deferred_deleted_prescription:<prescription-id>
+```
 
-- `household_display_name`
-- `profile_display_name`
-- `relationship_label`
-- `robot_face_voice_enabled`
-- `robot_face_voice_variety_enabled`
-- `robot_face_voice_volume_preset`
-- `robot_face_voice_quiet_hours_enabled`
-- `robot_face_voice_quiet_hours_start_minutes`
-- `robot_face_voice_quiet_hours_end_minutes`
-- `robot_face_voice_safety_during_quiet_hours_enabled`
-- `robot_face_reminder_voice_enabled`
-- `robot_face_dispense_narration_enabled`
-- `robot_face_safety_confirmation_voice_enabled`
-- `robot_face_missed_dose_voice_enabled`
-- `robot_face_controller_alert_voice_enabled`
-- `robot_face_idle_chatter_voice_enabled`
-- `robot_face_idle_chatter_cooldown_minutes`
-- `robot_face_reminder_repeat_cooldown_minutes`
-- `robot_face_reminder_repeat_policy`
-- `deferred_deleted_prescription:<prescription-id>` for nonempty IDs
+The final key requires a nonempty ID for a prescription in the document.
+Authentication, Action PIN, device role, onboarding and safety acknowledgements,
+robot identity, unlisted display and timing settings, and unknown settings are
+excluded and preserved at the destination.
 
-Restore preserves destination authentication rows and all excluded settings,
-including Action PIN hash/salt, device role, onboarding and safety
-acknowledgement, robot-hub identity, face orientation, screen/display timing,
-wake timing, inactivity timing, and unknown keys. This prevents an Android
-Robot Mode role from being imported onto iOS.
+Pure derived projections, caches, and checkpoints are not separately backed up.
+This includes reconciliation checkpoints and any remote-sync checkpoint: a
+restore does not reinstate remote progress, reapply a checkpoint, or claim it
+is current.
 
-## Canonical Encoding
+## Canonical encoding and validation
 
-The encoder uses the envelope and section order above. Settings sort by `key`,
-carousel states by `profileId`, controller events by `sessionId`, `sequence`,
-then `id`, and other rows by `id`. Output ends with one newline and contains no
-export timestamp, so identical logical data produces identical bytes.
+The encoder writes the envelope and section order above, sorts settings by
+`key`, carousel states by `profileId`, outbox mutations by `mutationId`,
+controller events by `sessionId`, `sequence`, then `id`, and other rows by
+`id`. Row field names are sorted. Output has one trailing newline and no export
+timestamp, so identical logical data has identical bytes.
 
-## Validation And Restore
+Import is limited to 25 MiB and requires strict UTF-8 JSON, exact fields,
+supported format/schema versions, valid types, enums, timestamps, unique IDs,
+references, and embedded JSON. IDs and primary keys must be unique and nonempty.
+Timestamps must be representable UTC whole seconds; `createdAt` must not follow
+`updatedAt`, and lifecycle timestamps must not precede creation.
 
-Import is limited to 25 MiB and requires strict UTF-8, valid JSON, exact fields
-and primitive types, supported versions, valid enums and timestamps, unique
-IDs and composite positions, valid required references, and valid embedded
-JSON. Carousel positions are limited to `0..14`; slot positions use `1..14`.
-There must be exactly one active schedule profile and one carousel state per
-profile. Controller event sequences are contiguous from one.
+The validator also enforces these rules:
 
-Inventory must satisfy:
+- Prescriptions use supported pill types/icons; counts are nonnegative except
+  positive `defaultDoseCountPerDose`, and inventory satisfies:
 
 ```text
 remainingDoses = availableDoses + loadedDoses + reviewDoses
 ```
 
-`usedDoses` is historical and is not part of that equation. Only confirmed,
-already-taken, early, and late dose kinds may set `marksDoseTaken` to `true`.
-Controller movement, visible confirmation, snooze, help, skipped, missed,
-missed recognition, and error events must remain false.
+- `usedDoses` is historical. Refill deltas are positive. Schedule hours are
+  `0..23`, minutes are `0..59`, and schedule revisions are positive.
+- Phone dose actions use a valid `YYYY-MM-DD` local date and one of
+  `taken_confirmed`, `skipped`, `snoozed`, `help_requested`, `missed`, or
+  `missed_acknowledged`. Only `taken_confirmed` marks Taken; terminal actions
+  are unique per device occurrence, and Taken is unique per occurrence.
+- Outbox rows use states `pending`, `in_flight`, `succeeded`, or
+  `permanent_failure`. `local_only` rows have no account/robot IDs; `bound`
+  rows require trimmed, nonempty account and robot IDs of at most 128 characters.
+  Outbox idempotency keys are unique.
+- Carousel slot numbers are `1..14`; carousel positions are `0..14`. There is
+  exactly one active schedule profile and exactly one carousel state for each
+  profile. Profile slot numbers and profile schedule assignments are unique;
+  slots must match an enabled schedule in the same profile and prescription.
+  Active and predecessor load sessions must belong to the same profile.
+- Snapshot and shortage `*Json` values decode to arrays of strings. Snapshot
+  parallel arrays have equal lengths; shortage prescription-ID and name arrays
+  have equal lengths. `adminAuditEvents.detailsJson`, when present, decodes to
+  an object. Controller `details` is plain nullable text.
+- Controller-event sequences are positive, unique per session, and contiguous
+  from one; every event references an existing command session. Referenced
+  profiles, prescriptions, schedules, sessions, and carousel states must exist.
+  A current shortage references a same-profile session.
+- Dose-log `marksDoseTaken` is true only for confirmed, already-taken, early,
+  or late Taken kinds. Controller movement, visibility, snooze, help, skipped,
+  missed, missed recognition, and error events remain false.
 
-Before replacement, Dosey checks the current database, writes and verifies one
-app-private `pre_restore_recovery.json`, then replaces the included logical
-tables in one SQLite transaction. It performs canonical read-back validation
-and `PRAGMA integrity_check` before commit. Any failure rolls back the database;
-a recovery-write failure prevents deletion. Restore inserts exact persisted
-values and never infers a taken dose, decrements inventory, normalizes movement,
-or creates behavioral audit events.
+## Restore
 
-Persisted shortage delivery fields are historical and remain exact. OS
-notification instances are not exported; future reminder scheduling is
-reconciled only after a successful commit.
+Before changing data, Dosey health-checks the current database, reads a recovery
+snapshot in a database transaction, validates it, then writes and verifies
+app-private `pre_restore_recovery.json`. It next starts the replacement
+transaction, compares a fresh canonical snapshot with the recovery bytes, and
+aborts if they differ. In that transaction it replaces included logical tables,
+canonically reads them back, and runs `PRAGMA integrity_check` before commit.
+Any replacement or verification failure rolls back the database; a
+recovery-write failure prevents replacement. No transaction spans the recovery
+write and replacement; the final comparison detects changes before it runs.
+
+Restore writes exact persisted values. It never infers Taken, decrements
+inventory, normalizes movement, or creates behavioral audit events. OS
+notification instances are not exported; future reminders are reconciled only
+after a successful commit. It does not restore remote checkpoints.
