@@ -12,6 +12,7 @@ import {
 } from '../domain/medication-sync-contract.js';
 
 export type TransactionStatus = 'pending' | 'committing' | 'committed' | 'rolled_back' | 'failed';
+export class TerminalLedgerStoredEvidenceError extends Error { readonly permanent = true; }
 export type TerminalOutcomeKind = 'taken_confirmed' | 'skipped';
 
 export interface TerminalLedgerRow {
@@ -146,7 +147,7 @@ export class TransactionalTerminalLedgerStore {
       return {status: 'applied' as const, sequence};
     });
     if (transaction.outcome === 'committed') return transaction.value;
-    if (transaction.outcome === 'not_committed') return {status: 'retryable_failure', transactionStatus: transaction.status};
+    if (transaction.outcome === 'not_committed') return transaction.error instanceof TerminalLedgerStoredEvidenceError ? {status: 'rejected', code: 'malformed_stored_row'} : {status: 'retryable_failure', transactionStatus: transaction.status};
     return {
       status: 'indeterminate', transactionId: transaction.transactionId,
       ...(transaction.observedStatus === undefined ? {} : {transactionStatus: transaction.observedStatus}),

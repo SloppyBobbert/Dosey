@@ -4,9 +4,11 @@ import { test } from "node:test";
 import {
   AppwriteTerminalLedgerRowsApi,
   AppwriteTerminalLedgerPersistence,
+  UnknownCommitResponseStatusError,
   type TerminalLedgerRowsApi,
 } from "../src/infrastructure/appwrite-terminal-ledger.js";
 import { AppwriteException, Query } from "node-appwrite";
+import { TerminalLedgerStoredEvidenceError } from "../src/infrastructure/transactional-terminal-ledger-store.js";
 
 test("commits a completed callback only after a committed transaction status", async () => {
   const rows = new FakeRows();
@@ -16,6 +18,28 @@ test("commits a completed callback only after a committed transaction status", a
     value: "saved",
   });
   assert.deepEqual(rows.calls, ["begin", "commit:tx-1", "status:tx-1"]);
+});
+
+test("uses definitive commit responses and resolves only nondefinitive responses", async () => {
+  for (const response of ["committed", "failed", "rolled_back", "pending", "committing"] as const) {
+    const rows = new FakeRows();
+    rows.commitResponse = response;
+    rows.status = "committed";
+    const result = await new AppwriteTerminalLedgerPersistence(rows).transaction(async () => "saved");
+    if (response === "committed") assert.deepEqual(result, {outcome: "committed", value: "saved"});
+    else if (response === "failed" || response === "rolled_back") assert.equal(result.outcome, "not_committed");
+    else assert.deepEqual(result, {outcome: "committed", value: "saved"});
+    assert.equal(rows.calls.includes("status:tx-1"), response === "pending" || response === "committing");
+  }
+});
+
+test("does not resolve an unknown commit response status", async () => {
+  const rows = new FakeRows();
+  rows.status = "committed";
+  rows.commitError = new UnknownCommitResponseStatusError("unknown response");
+  const result = await new AppwriteTerminalLedgerPersistence(rows).transaction(async () => "saved");
+  assert.deepEqual(result, {outcome: "indeterminate", transactionId: "tx-1", error: rows.commitError});
+  assert.deepEqual(rows.calls, ["begin", "commit:tx-1"]);
 });
 
 test("resolves a lost commit response from the authoritative transaction status without replaying", async () => {
@@ -131,6 +155,8 @@ test("maps only exact row_not_found to null and rejects unknown transaction stat
   await assert.rejects(() => rows.getRow("ledger", "x", "tx-1"));
   tables.status = "mystery";
   await assert.rejects(() => rows.getTransaction("tx-1"));
+  tables.status = "mystery";
+  await assert.rejects(() => rows.commitTransaction("tx-1"));
 });
 
 test("retries classified callback conflicts with a fresh transaction and stops at its bound", async () => {
@@ -264,18 +290,58 @@ test("maps accepted lookup queries, nulls, duplicates, and malformed rows", asyn
     const lookupRows = new LedgerRows(); lookupRows.listQueue = [rowsForLookup];
     const result = await new AppwriteTerminalLedgerPersistence(lookupRows).transaction((transaction) => transaction.getEvent("robot-1", "event-1"));
     if (rowsForLookup.length === 0) assert.deepEqual(result, {outcome: "committed", value: null});
-    else assert.equal(result.outcome, "not_committed");
+    else assertStoredEvidenceFailure(result);
   }
 
   for (const [field, value] of [
-    ["eventId", ""], ["kind", "unknown"], ["acceptedAt", "2026-08-01T08:00:00Z"],
+    ["eventId", ""], ["kind", "unknown"], ["acceptedAt", "2026-08-01T08:00:00+01:00"],
     ["acceptedAt", "invalid"], ["sequence", 0], ["sequence", 1.5],
     ["sequence", Number.MAX_SAFE_INTEGER + 1],
   ] as const) {
     const malformed = {...expectedAcceptedRow(), [field]: value};
     const malformedRows = new LedgerRows(); malformedRows.listQueue = [[malformed]];
     const result = await new AppwriteTerminalLedgerPersistence(malformedRows).transaction((transaction) => transaction.getEvent("robot-1", "event-1"));
-    assert.equal(result.outcome, "not_committed", `${field}=${value}`);
+    assertStoredEvidenceFailure(result, `${field}=${value}`);
+  }
+});
+
+test("canonicalizes strict UTC timestamps across ledger, state, and conflict reads", async () => {
+  for (const [value, expected] of [
+    ["0001-01-01T00:00:00Z", "0001-01-01T00:00:00.000Z"],
+    ["0099-12-31T23:59:59.999+00:00", "0099-12-31T23:59:59.999Z"],
+    ["2024-02-29T08:00:00Z", "2024-02-29T08:00:00.000Z"],
+    ["2026-08-01T08:00:00.000Z", "2026-08-01T08:00:00.000Z"],
+    ["2026-08-01T08:00:00+00:00", "2026-08-01T08:00:00.000Z"],
+    ["2026-08-01T08:00:00.000+00:00", "2026-08-01T08:00:00.000Z"],
+  ]) {
+    const ledgerRows = new LedgerRows();
+    ledgerRows.listQueue = [[{...expectedAcceptedRow(), acceptedAt: value}]];
+    const ledger = await committed(ledgerRows, transaction => transaction.getEvent("robot-1", "event-1"));
+    assert.equal(ledger?.acceptedAt, expected);
+  }
+
+  const stateRows = new LedgerRows();
+  stateRows.row = {...stateRow(), $id: "state", updatedAt: "2026-08-01T08:03:00+00:00"};
+  const state = await committed(stateRows, transaction => transaction.getState("robot-1"));
+  assert.equal(state?.updatedAt, "2026-08-01T08:03:00.000Z");
+
+  const conflictRows = new LedgerRows();
+  conflictRows.row = {...expectedConflictRow(), incomingOccurredAt: "2026-08-01T08:04:00+00:00", recordedAt: "2026-08-01T08:05:00.000+00:00"};
+  conflictRows.listQueue = [[expectedAcceptedRow()]];
+  const conflict = await committed(conflictRows, transaction => transaction.getConflict("conflict-1"));
+  assert.equal(conflict?.occurredAt, "2026-08-01T08:04:00.000Z");
+  assert.equal(conflict?.recordedAt, "2026-08-01T08:05:00.000Z");
+
+  for (const value of [
+    "2024-02-30T08:00:00Z", "2023-02-29T08:00:00Z", "2026-13-01T08:00:00Z",
+    "2026-08-00T08:00:00Z", "2026-08-01T24:00:00Z", "2026-08-01T08:60:00Z",
+    "2026-08-01T08:00:60Z", "2026-08-01T08:00:00+01:00", "2026-08-01T08:00:00",
+    "2026-08-01T08:00:00.0Z", "2026-08-01T08:00:00.00Z", "2026-08-01T08:00:00.0000Z", "invalid",
+  ]) {
+    const rows = new LedgerRows();
+    rows.listQueue = [[{...expectedAcceptedRow(), acceptedAt: value}]];
+    const result = await new AppwriteTerminalLedgerPersistence(rows).transaction(transaction => transaction.getEvent("robot-1", "event-1"));
+    assertStoredEvidenceFailure(result);
   }
 });
 
@@ -306,7 +372,7 @@ test("maps changes and state rows through the active transaction", async () => {
   for (const invalid of [
     {...state, highWatermark: -1}, {...state, highWatermark: 1.5},
     {...state, highWatermark: Number.MAX_SAFE_INTEGER + 1},
-    {...state, updatedAt: "2026-08-01T08:03:00Z"}, {...state, updatedAt: "invalid"},
+    {...state, updatedAt: "2026-08-01T08:03:00+01:00"}, {...state, updatedAt: "invalid"},
   ]) {
     const invalidRows = new LedgerRows(); invalidRows.row = {...invalid, $id: "state"};
     const result = await new AppwriteTerminalLedgerPersistence(invalidRows).transaction((transaction) => transaction.getState("robot-1"));
@@ -319,7 +385,7 @@ test("rejects invalid state values before staging", async () => {
   for (const invalid of [
     {...state, highWatermark: -1}, {...state, highWatermark: 1.5},
     {...state, highWatermark: Number.MAX_SAFE_INTEGER + 1},
-    {...state, updatedAt: "2026-08-01T08:03:00Z"}, {...state, updatedAt: "invalid"},
+    {...state, updatedAt: "2026-08-01T08:03:00+01:00"}, {...state, updatedAt: "invalid"},
   ]) {
     const rows = new LedgerRows();
     const result = await new AppwriteTerminalLedgerPersistence(rows).transaction((transaction) => transaction.stageState(invalid));
@@ -355,18 +421,18 @@ test("rejects incoherent staged and stored conflicts", async () => {
   ]) {
     const rows = new LedgerRows(); rows.row = accepted;
     const result = await new AppwriteTerminalLedgerPersistence(rows).transaction((transaction) => transaction.stageConflict(conflictRow()));
-    assert.equal(result.outcome, "not_committed"); assert.equal(rows.operations.filter(({kind}) => kind === "create").length, 0);
+    assertStoredEvidenceFailure(result); assert.equal(rows.operations.filter(({kind}) => kind === "create").length, 0);
   }
   for (const row of [
     {...expectedConflictRow(), conflictCode: "UNKNOWN"},
-    {...expectedConflictRow(), incomingOccurredAt: "2026-08-01T08:04:00Z"},
+    {...expectedConflictRow(), incomingOccurredAt: "2026-08-01T08:04:00+01:00"},
     {...expectedConflictRow(), incomingOccurredAt: "invalid"},
-    {...expectedConflictRow(), recordedAt: "2026-08-01T08:05:00Z"},
+    {...expectedConflictRow(), recordedAt: "2026-08-01T08:05:00+01:00"},
     {...expectedConflictRow(), recordedAt: "invalid"}, {...expectedConflictRow(), incomingEventId: ""},
   ]) {
     const rows = new LedgerRows(); rows.row = row; rows.listQueue = [[expectedAcceptedRow()]];
     const result = await new AppwriteTerminalLedgerPersistence(rows).transaction((transaction) => transaction.getConflict("conflict-1"));
-    assert.equal(result.outcome, "not_committed");
+    assertStoredEvidenceFailure(result);
   }
   for (const accepted of [null, [expectedAcceptedRow(), expectedAcceptedRow()],
     [{...expectedAcceptedRow(), eventId: "wrong"}], [{...expectedAcceptedRow(), operationHash: "b".repeat(64)}],
@@ -374,7 +440,7 @@ test("rejects incoherent staged and stored conflicts", async () => {
   ]) {
     const rows = new LedgerRows(); rows.row = expectedConflictRow(); rows.listQueue = [accepted === null ? [] : accepted];
     const result = await new AppwriteTerminalLedgerPersistence(rows).transaction((transaction) => transaction.getConflict("conflict-1"));
-    assert.equal(result.outcome, "not_committed");
+    assertStoredEvidenceFailure(result);
   }
 });
 
@@ -389,6 +455,11 @@ async function committed<T>(rows: LedgerRows, callback: (transaction: any) => Pr
   return result.value;
 }
 
+function assertStoredEvidenceFailure(result: any, message?: string) {
+  assert.equal(result.outcome, "not_committed", message);
+  assert.ok(result.error instanceof TerminalLedgerStoredEvidenceError, message);
+}
+
 class FakeRows implements TerminalLedgerRowsApi {
   calls: string[] = [];
   status: "pending" | "committing" | "committed" | "rolled_back" | "failed" =
@@ -397,6 +468,7 @@ class FakeRows implements TerminalLedgerRowsApi {
   rollbackError: Error | undefined;
   statusError: Error | undefined;
   beginError: Error | undefined;
+  commitResponse: "pending" | "committing" | "committed" | "rolled_back" | "failed" = "pending";
   row: any = null;
   listedRows: any[] = [];
   listCalls = 0;
@@ -408,6 +480,7 @@ class FakeRows implements TerminalLedgerRowsApi {
   async commitTransaction(id: string) {
     this.calls.push(`commit:${id}`);
     if (this.commitError) throw this.commitError;
+    return this.commitResponse;
   }
   async rollbackTransaction(id: string) {
     this.calls.push(`rollback:${id}`);
@@ -460,7 +533,7 @@ const configuration = {databaseId: "db", terminalLedgerTableId: "ledger", change
 class TablesBoundary {
   calls: unknown[] = []; listQueries: string[] = []; status = "committed"; getError: Error | undefined;
   async createTransaction() { this.calls.push(["begin"]); return {$id: "tx-1"}; }
-  async updateTransaction(value: unknown) { this.calls.push(["update", value]); return {}; }
+  async updateTransaction(value: unknown) { this.calls.push(["update", value]); return {status: this.status}; }
   async getTransaction(value: unknown) { this.calls.push(["status", value]); return {status: this.status}; }
   async getRow(value: any) { this.calls.push(["get", value]); if (this.getError) throw this.getError; return {$id: value.rowId}; }
   async listRows(value: any) { this.calls.push(["list", value.databaseId, value.tableId, value.transactionId]); this.listQueries = value.queries; return {rows: []}; }
@@ -474,6 +547,6 @@ class RetryRows extends FakeRows {
 class ScriptedRows extends FakeRows {
   next = 0; commitErrors: Error[] = []; statuses: Array<"pending" | "committing" | "committed" | "rolled_back" | "failed"> = [];
   override async beginTransaction() { const id = `tx-${++this.next}`; this.calls.push(`begin:${id}`); return id; }
-  override async commitTransaction(id: string) { this.calls.push(`commit:${id}`); const error = this.commitErrors.shift(); if (error) throw error; }
+  override async commitTransaction(id: string) { this.calls.push(`commit:${id}`); const error = this.commitErrors.shift(); if (error) throw error; return "pending" as const; }
   override async getTransaction(id: string) { this.calls.push(`status:${id}`); if (this.statusError) throw this.statusError; return this.statuses.shift() ?? this.status; }
 }

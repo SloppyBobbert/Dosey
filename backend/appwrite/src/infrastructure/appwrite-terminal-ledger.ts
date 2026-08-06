@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { AppwriteException, Query, TablesDB, type Models } from "node-appwrite";
+import { TerminalLedgerStoredEvidenceError } from "./transactional-terminal-ledger-store.js";
 
 import type {
   TerminalLedgerChange,
@@ -14,13 +15,14 @@ import type {
 
 export type TerminalLedgerTable =
   "ledger" | "changes" | "state" | "terminalConflicts";
+export class UnknownCommitResponseStatusError extends Error {}
 export type TerminalLedgerAppwriteRow = Readonly<Record<string, unknown>> & {
   readonly $id: string;
 };
 
 export interface TerminalLedgerRowsApi {
   beginTransaction(): Promise<string>;
-  commitTransaction(transactionId: string): Promise<void>;
+  commitTransaction(transactionId: string): Promise<TransactionStatus>;
   rollbackTransaction(transactionId: string): Promise<void>;
   getTransaction(transactionId: string): Promise<TransactionStatus>;
   getRow(
@@ -61,8 +63,10 @@ export class AppwriteTerminalLedgerRowsApi implements TerminalLedgerRowsApi {
   async beginTransaction(): Promise<string> {
     return (await this.tables.createTransaction()).$id;
   }
-  async commitTransaction(transactionId: string): Promise<void> {
-    await this.tables.updateTransaction({ transactionId, commit: true });
+  async commitTransaction(transactionId: string): Promise<TransactionStatus> {
+    const status = (await this.tables.updateTransaction({ transactionId, commit: true })).status;
+    if (!isStatus(status)) throw new UnknownCommitResponseStatusError("Unknown Appwrite transaction status.");
+    return status;
   }
   async rollbackTransaction(transactionId: string): Promise<void> {
     await this.tables.updateTransaction({ transactionId, rollback: true });
@@ -173,8 +177,14 @@ export class AppwriteTerminalLedgerPersistence implements TerminalLedgerPersiste
           new AppwriteTerminalLedgerTransaction(this.rows, transactionId),
         );
         try {
-          await this.rows.commitTransaction(transactionId);
+          const responseStatus = await this.rows.commitTransaction(transactionId);
+          if (responseStatus === "committed")
+            return { outcome: "committed" as const, value };
+          if (responseStatus === "failed" || responseStatus === "rolled_back")
+            return { outcome: "not_committed" as const, status: responseStatus };
         } catch (error) {
+          if (error instanceof UnknownCommitResponseStatusError)
+            return { outcome: "indeterminate" as const, transactionId, error };
           const result = await this.resolveCommit<T>(
             transactionId,
             value,
@@ -311,14 +321,14 @@ class AppwriteTerminalLedgerTransaction implements TerminalLedgerTransaction {
       this.transactionId,
     );
     if (accepted === null)
-      throw new Error("Accepted terminal ledger row is missing.");
+      throw new TerminalLedgerStoredEvidenceError("Accepted terminal ledger row is missing.");
     const parsed = ledgerFromRow(accepted);
     if (
       parsed.id !== conflict.acceptedLedgerId ||
       parsed.robotId !== conflict.robotId ||
       parsed.occurrenceId !== conflict.occurrenceId ||
       parsed.operationHash !== conflict.acceptedOperationHash
-    ) throw new Error("Accepted terminal ledger row does not match conflict.");
+    ) throw new TerminalLedgerStoredEvidenceError("Accepted terminal ledger row does not match conflict.");
     await this.rows.createRow(
       "terminalConflicts",
       conflictToRow(conflict, parsed),
@@ -331,7 +341,8 @@ class AppwriteTerminalLedgerTransaction implements TerminalLedgerTransaction {
     parse: (row: TerminalLedgerAppwriteRow) => T,
   ): Promise<T | null> {
     const rows = await this.rows.listRows(table, queries, this.transactionId);
-    if (rows.length > 1) throw new Error("Duplicate terminal ledger rows.");
+    if (rows.length > 1)
+      throw new TerminalLedgerStoredEvidenceError("Duplicate terminal ledger rows.");
     return rows.length === 0 ? null : parse(rows[0]!);
   }
   private async conflictFromRow(
@@ -345,7 +356,7 @@ class AppwriteTerminalLedgerTransaction implements TerminalLedgerTransaction {
       ledgerFromRow,
     );
     if (accepted === null)
-      throw new Error("Accepted terminal ledger row is missing.");
+      throw new TerminalLedgerStoredEvidenceError("Accepted terminal ledger row is missing.");
     return conflictFromRow(row, accepted);
   }
 }
@@ -435,7 +446,7 @@ function conflictFromRow(
     accepted.robotId !== robotId || accepted.occurrenceId !== occurrenceId ||
     accepted.eventId !== acceptedEventId || accepted.operationHash !== acceptedOperationHash ||
     accepted.kind !== acceptedKind || accepted.sequence !== acceptedSequence
-  ) throw new Error("Stored terminal conflict does not match accepted ledger.");
+  ) throw new TerminalLedgerStoredEvidenceError("Stored terminal conflict does not match accepted ledger.");
   return {
     id: row.$id,
     robotId,
@@ -460,7 +471,7 @@ function conflictFromRow(
 function requiredString(row: TerminalLedgerAppwriteRow, key: string): string {
   const value = row[key];
   if (typeof value !== "string" || value.length === 0)
-    throw new Error(`Invalid terminal ledger row field: ${key}.`);
+    throw new TerminalLedgerStoredEvidenceError(`Invalid terminal ledger row field: ${key}.`);
   return value;
 }
 function nonnegativeInteger(
@@ -469,13 +480,13 @@ function nonnegativeInteger(
 ): number {
   const value = row[key];
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0)
-    throw new Error(`Invalid terminal ledger row field: ${key}.`);
+    throw new TerminalLedgerStoredEvidenceError(`Invalid terminal ledger row field: ${key}.`);
   return value;
 }
 function positiveInteger(row: TerminalLedgerAppwriteRow, key: string): number {
   const value = nonnegativeInteger(row, key);
   if (value === 0)
-    throw new Error(`Invalid terminal ledger row field: ${key}.`);
+    throw new TerminalLedgerStoredEvidenceError(`Invalid terminal ledger row field: ${key}.`);
   return value;
 }
 function enumValue<const T extends string>(
@@ -485,13 +496,26 @@ function enumValue<const T extends string>(
 ): T {
   const value = requiredString(row, key);
   if (!values.includes(value as T))
-    throw new Error(`Invalid terminal ledger row field: ${key}.`);
+    throw new TerminalLedgerStoredEvidenceError(`Invalid terminal ledger row field: ${key}.`);
   return value as T;
 }
 function timestamp(value: string): string {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime()) || date.toISOString() !== value)
-    throw new Error("Invalid terminal ledger timestamp.");
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?(Z|\+00:00)$/.exec(value);
+  if (match === null) throw new TerminalLedgerStoredEvidenceError("Invalid terminal ledger timestamp.");
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, fractionText] = match;
+  const year = Number(yearText), month = Number(monthText), day = Number(dayText), hour = Number(hourText), minute = Number(minuteText), second = Number(secondText), millisecond = Number(fractionText ?? 0);
+  if (year < 1 || month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59 || second > 59)
+    throw new TerminalLedgerStoredEvidenceError("Invalid terminal ledger timestamp.");
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
+  date.setUTCHours(hour, minute, second, millisecond);
+  if (
+    date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day || date.getUTCHours() !== hour ||
+    date.getUTCMinutes() !== minute || date.getUTCSeconds() !== second ||
+    date.getUTCMilliseconds() !== millisecond
+  )
+    throw new TerminalLedgerStoredEvidenceError("Invalid terminal ledger timestamp.");
   return date.toISOString();
 }
 function codeToStorage(

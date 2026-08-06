@@ -4,6 +4,7 @@ import {describe, test} from 'node:test';
 import {canonicalMedicationSyncJson, parseDoseEvent, parseMutation, type MedicationSyncActor, type Mutation} from '../src/domain/medication-sync-contract.js';
 import {
   TransactionalTerminalLedgerStore,
+  TerminalLedgerStoredEvidenceError,
   type TerminalLedgerChange,
   type TerminalLedgerConflict,
   type TerminalLedgerPersistence,
@@ -109,6 +110,17 @@ function input(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Transactional terminal ledger store', () => {
+  test('maps only permanent persistence evidence failures to malformed stored rows', async () => {
+    for (const error of [new TerminalLedgerStoredEvidenceError('bad row'), new Error('network')]) {
+      const persistence: TerminalLedgerPersistence = {
+        transaction: async () => ({outcome: 'not_committed', status: 'failed', error}),
+      };
+      const result = await new TransactionalTerminalLedgerStore(persistence).accept(input());
+      assert.deepEqual(result, error instanceof TerminalLedgerStoredEvidenceError
+        ? {status: 'rejected', code: 'malformed_stored_row'}
+        : {status: 'retryable_failure', transactionStatus: 'failed'});
+    }
+  });
   test('accepts Taken and Skipped as immutable terminal ledger outcomes', async () => {
     const persistence = new MemoryPersistence();
     const store = new TransactionalTerminalLedgerStore(persistence);
