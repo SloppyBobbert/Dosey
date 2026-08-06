@@ -147,6 +147,33 @@
       ]
     },
     {
+      "$id": "dosey_sync_terminal_ledger_v1",
+      "$permissions": [],
+      "databaseId": "<DOSEY_DATABASE_ID>",
+      "name": "Dosey sync terminal ledger v1",
+      "enabled": true,
+      "rowSecurity": false,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "occurrenceId", "type": "varchar", "size": 256, "required": true, "array": false, "default": null },
+        { "key": "eventId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "idempotencyKey", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "operationHash", "type": "varchar", "size": 64, "required": true, "array": false, "default": null },
+        { "key": "canonicalMutation", "type": "text", "required": true, "array": false, "default": null },
+        { "key": "kind", "type": "varchar", "size": 16, "required": true, "array": false, "elements": ["taken_confirmed", "skipped"], "format": "enum", "default": null },
+        { "key": "actorAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "deviceId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "sequence", "type": "bigint", "required": true, "array": false, "min": 1, "max": 9007199254740991, "default": null },
+        { "key": "acceptedAt", "type": "datetime", "required": true, "array": false, "format": "", "default": null }
+      ],
+      "indexes": [
+        { "key": "robot_occurrence", "type": "unique", "columns": ["robotId", "occurrenceId"], "orders": ["ASC", "ASC"] },
+        { "key": "robot_idempotency", "type": "unique", "columns": ["robotId", "idempotencyKey"], "orders": ["ASC", "ASC"] },
+        { "key": "robot_event", "type": "unique", "columns": ["robotId", "eventId"], "orders": ["ASC", "ASC"] },
+        { "key": "robot_sequence", "type": "unique", "columns": ["robotId", "sequence"], "orders": ["ASC", "ASC"] }
+      ]
+    },
+    {
       "$id": "dosey_sync_terminal_conflicts_v1",
       "$permissions": [],
       "databaseId": "<DOSEY_DATABASE_ID>",

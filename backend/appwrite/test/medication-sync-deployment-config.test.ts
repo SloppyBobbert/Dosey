@@ -46,6 +46,7 @@ test('defines additive server-only sync tables and callable human function deplo
     'dosey_sync_state_v1',
     'dosey_sync_changes_v1',
     'dosey_sync_terminal_occurrences_v1',
+    'dosey_sync_terminal_ledger_v1',
     'dosey_sync_terminal_conflicts_v1',
   ]);
   for (const table of tables.values()) {
@@ -76,6 +77,20 @@ test('defines additive server-only sync tables and callable human function deplo
     indexes: [
       {key: 'robot_occurrence', type: 'unique', columns: ['robotId', 'occurrenceId'], orders: ['ASC', 'ASC']},
       {key: 'robot_accepted_sequence', type: 'key', columns: ['robotId', 'acceptedSequence'], orders: ['ASC', 'ASC']},
+    ],
+  });
+  assertTerminalTable(tables.get('dosey_sync_terminal_ledger_v1'), {
+    columns: [
+      varchar('robotId', 128), varchar('occurrenceId', 256), varchar('eventId', 128),
+      varchar('idempotencyKey', 128), varchar('operationHash', 64), text('canonicalMutation'),
+      enumColumn('kind', 16, ['taken_confirmed', 'skipped']), varchar('actorAccountId', 128),
+      varchar('deviceId', 128), bigint('sequence'), datetime('acceptedAt'),
+    ],
+    indexes: [
+      {key: 'robot_occurrence', type: 'unique', columns: ['robotId', 'occurrenceId'], orders: ['ASC', 'ASC']},
+      {key: 'robot_idempotency', type: 'unique', columns: ['robotId', 'idempotencyKey'], orders: ['ASC', 'ASC']},
+      {key: 'robot_event', type: 'unique', columns: ['robotId', 'eventId'], orders: ['ASC', 'ASC']},
+      {key: 'robot_sequence', type: 'unique', columns: ['robotId', 'sequence'], orders: ['ASC', 'ASC']},
     ],
   });
   assertTerminalTable(tables.get('dosey_sync_terminal_conflicts_v1'), {
