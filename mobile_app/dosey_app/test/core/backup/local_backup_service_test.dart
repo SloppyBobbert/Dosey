@@ -27,6 +27,138 @@ void main() {
     expect(gateway.recoveryWrites, 0);
   });
 
+  test('restore rejects a valid document paired with invalid bytes', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await database.customStatement(
+      "INSERT INTO app_settings (key, value, updated_at) VALUES ('profile_display_name', 'Before', 1)",
+    );
+    final store = LocalBackupStore(database);
+    final valid = await store.readSnapshot();
+    final gateway = _FakeGateway();
+    final service = LocalBackupService(
+      database: database,
+      store: store,
+      gateway: gateway,
+    );
+
+    final result = await service.restore(
+      BackupPreview(valid, Uint8List.fromList([1, 2, 3])),
+    );
+
+    expect(result.status, BackupOperationStatus.invalidBackup);
+    expect(gateway.recoveryWrites, 0);
+    expect(
+      (await store.readSnapshot()).data['settings']!.single['value'],
+      'Before',
+    );
+  });
+
+  test('unsupported fixture schema is rejected before replacement', () async {
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await database.customStatement(
+      "INSERT INTO app_settings (key, value, updated_at) VALUES ('profile_display_name', 'Before', 1)",
+    );
+    final payload =
+        jsonDecode(utf8.decode(_fixtureBytes('schema18.json')))
+            as Map<String, Object?>;
+    payload['sourceSchemaVersion'] = 16;
+    final gateway = _FakeGateway()
+      ..picked = Uint8List.fromList(utf8.encode(jsonEncode(payload)));
+    final service = LocalBackupService(
+      database: database,
+      store: LocalBackupStore(database),
+      gateway: gateway,
+    );
+
+    final result = await service.pickBackupForRestore();
+
+    expect(result.status, BackupOperationStatus.invalidBackup);
+    expect(gateway.recoveryWrites, 0);
+    expect(
+      (await LocalBackupStore(
+        database,
+      ).readSnapshot()).data['settings']!.single['value'],
+      'Before',
+    );
+  });
+
+  test(
+    'schema 17 fixture restores normalized outbox without changing inventory',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      List<ReminderScheduleRow>? schedulesSeenBySync;
+      final gateway = _FakeGateway()..picked = _fixtureBytes('schema17.json');
+      final service = LocalBackupService(
+        database: database,
+        store: LocalBackupStore(database),
+        gateway: gateway,
+        syncNotifications: () async {
+          schedulesSeenBySync = await database
+              .select(database.reminderSchedules)
+              .get();
+        },
+      );
+
+      final preview = await service.pickBackupForRestore();
+      final result = await service.restore(preview.preview!);
+      final snapshot = await LocalBackupStore(database).readSnapshot();
+      final outbox = {
+        for (final row in snapshot.data['syncOutboxMutations']!)
+          row['mutationId'] as String: row,
+      };
+
+      expect(result.status, BackupOperationStatus.success);
+      expect(schedulesSeenBySync!.single.id, 'schedule-1');
+      expect(snapshot.data['prescriptions']!.single['remainingDoses'], 4);
+      expect(snapshot.data['prescriptions']!.single['availableDoses'], 3);
+      expect(snapshot.data['prescriptions']!.single['loadedDoses'], 1);
+      expect(snapshot.data['prescriptions']!.single['reviewDoses'], 0);
+      expect(outbox['local-flight']!['state'], 'pending');
+      expect(outbox['bound-flight']!['state'], 'permanent_failure');
+      expect(
+        outbox['bound-flight']!['lastErrorCode'],
+        'restore_review_required',
+      );
+      expect(outbox['bound-flight']!['mutationId'], 'bound-flight');
+      expect(outbox['bound-flight']!['deviceId'], 'source-device');
+      expect(outbox['bound-flight']!['actorAccountId'], 'account-fixture');
+      expect(outbox['bound-flight']!['robotId'], 'robot-fixture');
+      expect(outbox['bound-flight']!['idempotencyKey'], 'outbox-key-4');
+      expect(outbox['bound-flight']!['entityId'], 'action-bound-flight');
+      expect(
+        outbox['bound-flight']!['payloadJson'],
+        contains('schedule-1:1:1970-01-01T00:00:01.000Z'),
+      );
+    },
+  );
+
+  test(
+    'restore quarantines a direct preview with replay-eligible bound work',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final unsafe = _fixtureDocument('schema18.json');
+      final bytes = const BackupCodec().encode(unsafe);
+      final service = LocalBackupService(
+        database: database,
+        store: LocalBackupStore(database),
+        gateway: _FakeGateway(),
+      );
+
+      final result = await service.restore(BackupPreview(unsafe, bytes));
+      final outbox = (await LocalBackupStore(
+        database,
+      ).readSnapshot()).data['syncOutboxMutations']!.single;
+
+      expect(result.status, BackupOperationStatus.success);
+      expect(outbox['state'], 'permanent_failure');
+      expect(outbox['lastErrorCode'], 'restore_review_required');
+    },
+  );
+
   test('restore writes verified recovery and replaces atomically', () async {
     final sourceDatabase = DoseyDatabase.inMemory();
     await sourceDatabase.customStatement(
@@ -253,6 +385,23 @@ void main() {
             .value,
         'During',
       );
+    },
+  );
+}
+
+Uint8List _fixtureBytes(String name) => Uint8List.fromList(
+  File('test/core/backup/fixtures/$name').readAsBytesSync(),
+);
+
+BackupDocument _fixtureDocument(String name) {
+  final payload = jsonDecode(utf8.decode(_fixtureBytes(name))) as Map;
+  final rawData = payload['data'] as Map;
+  return BackupDocument(
+    data: {
+      for (final entry in rawData.entries)
+        entry.key as String: (entry.value as List)
+            .map((row) => Map<String, Object?>.from(row as Map))
+            .toList(),
     },
   );
 }

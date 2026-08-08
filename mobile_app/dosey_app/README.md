@@ -93,17 +93,19 @@ and compile-regression only; it is not release or qualification evidence.
 
 ## Android package migration
 
-Personal and Robot have separate Android package IDs and app sandboxes. Export
-a backup before uninstalling Personal data. Where possible, install Robot
+Personal and Robot have separate Android package IDs and app sandboxes. Before
+uninstalling the Personal app or clearing its data, export a backup and keep it
+in trusted transfer storage. Retain one trusted transfer copy until restore or
+import is verified, then delete unneeded copies. Where possible, install Robot
 side-by-side, then import the backup from Settings and verify prescriptions,
 schedules, carousel slots, app settings, dose history, and audit history.
 Device role and runtime capability do not transfer; the destination build keeps
 its configured capability.
 
-`syncOutboxMutations` are restored exactly. Remote-sync checkpoints are skipped
-and not separately backed up. Restored bound `pending` or `in_flight` local sync
-state may be stale on another device and cannot retroactively satisfy or
-activate production sync.
+Remote-sync checkpoints are skipped and not separately backed up. Restored
+`local_only` pending work is reset for a fresh attempt; restored bound `pending`
+or `in_flight` work is quarantined as `permanent_failure` with
+`restore_review_required`. This cannot satisfy or activate production sync.
 
 ## CI commands
 

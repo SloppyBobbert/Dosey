@@ -9,7 +9,7 @@ import 'package:dosey_app/core/settings/device_role.dart';
 import 'package:dosey_app/core/settings/effective_device_role_source.dart';
 import 'package:dosey_app/core/settings/local_app_settings_repository.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
-import 'package:drift/drift.dart';
+import 'package:drift/drift.dart' hide isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/common.dart' show SqlError, SqliteException;
@@ -203,6 +203,46 @@ void main() {
     );
   });
 
+  test(
+    'schema 18 fixture persists quarantined bound outbox identity exactly',
+    () async {
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final store = LocalBackupStore(database);
+      final document = const BackupCodec().decode(
+        _fixtureBytes('schema18.json'),
+      );
+
+      await database.transaction(() => store.replaceSnapshot(document));
+      final restored = await store.readSnapshot();
+      final outbox = restored.data['syncOutboxMutations']!.single;
+
+      expect(restored.data['prescriptions']!.single['remainingDoses'], 4);
+      expect(restored.data['prescriptions']!.single['availableDoses'], 3);
+      expect(restored.data['prescriptions']!.single['loadedDoses'], 1);
+      expect(restored.data['prescriptions']!.single['reviewDoses'], 0);
+      expect(outbox['state'], 'permanent_failure');
+      expect(outbox['attemptCount'], 0);
+      expect(outbox['nextAttemptAt'], isNull);
+      expect(outbox['lastAttemptAt'], isNull);
+      expect(outbox['lastErrorCode'], 'restore_review_required');
+      expect(outbox['mutationId'], 'bound-flight');
+      expect(outbox['deviceId'], 'source-device');
+      expect(outbox['actorAccountId'], 'account-fixture');
+      expect(outbox['robotId'], 'robot-fixture');
+      expect(outbox['scopeState'], 'bound');
+      expect(outbox['idempotencyKey'], 'outbox-key-1');
+      expect(outbox['entityType'], 'dose_event');
+      expect(outbox['operation'], 'append');
+      expect(outbox['entityId'], 'action-bound-flight');
+      expect(outbox['baseRevision'], isNull);
+      expect(
+        outbox['payloadJson'],
+        contains('schedule-1:1:1970-01-01T00:00:01.000Z'),
+      );
+    },
+  );
+
   test('replacement deletes stale action and outbox rows', () async {
     final database = DoseyDatabase.inMemory();
     addTearDown(database.close);
@@ -244,6 +284,10 @@ void main() {
     await store.replaceSnapshot(original);
     final before = const BackupCodec().encode(await store.readSnapshot());
     final duplicateData = mutableData(original);
+    duplicateData['phoneDoseActionEvents']!.single
+      ..['kind'] = 'taken_confirmed'
+      ..['marksDoseTaken'] = true
+      ..['occurrenceId'] = 'occurrence-1';
     duplicateData['phoneDoseActionEvents']!.add({
       'id': 'action-2',
       'deviceId': 'device-2',
@@ -251,7 +295,7 @@ void main() {
       'scheduleId': 'schedule-1',
       'scheduleRevision': 1,
       'scheduledAt': 1767225600000000,
-      'localDate': '2026-01-01',
+      'localDate': '1969-12-31',
       'timezoneId': 'America/Los_Angeles',
       'medicationId': 'rx-1',
       'kind': 'taken_confirmed',
@@ -409,6 +453,10 @@ Map<String, List<Map<String, Object?>>> mutableData(BackupDocument document) =>
         entry.key: entry.value.map(Map<String, Object?>.from).toList(),
     };
 
+Uint8List _fixtureBytes(String name) => Uint8List.fromList(
+  File('test/core/backup/fixtures/$name').readAsBytesSync(),
+);
+
 BackupDocument _populatedDocument() {
   const time = 1000000;
   final data = BackupDocument.emptyData();
@@ -471,17 +519,17 @@ BackupDocument _populatedDocument() {
     {
       'id': 'action-1',
       'deviceId': 'device-1',
-      'occurrenceId': 'occurrence-1',
+      'occurrenceId': 'schedule-1:1:1970-01-01T00:00:01.000Z',
       'scheduleId': 'schedule-1',
       'scheduleRevision': 1,
       'scheduledAt': time,
-      'localDate': '2026-01-01',
+      'localDate': '1969-12-31',
       'timezoneId': 'America/Los_Angeles',
       'medicationId': 'rx-1',
-      'kind': 'taken_confirmed',
+      'kind': 'snoozed',
       'occurredAt': time,
-      'marksDoseTaken': true,
-      'idempotencyKey': 'action-key-1',
+      'marksDoseTaken': false,
+      'idempotencyKey': 'mutation-key-1',
       'createdAt': time,
     },
   ];
@@ -493,11 +541,12 @@ BackupDocument _populatedDocument() {
       'robotId': null,
       'scopeState': 'local_only',
       'idempotencyKey': 'mutation-key-1',
-      'entityType': 'phone_dose_action_event',
-      'operation': 'upsert',
+      'entityType': 'dose_event',
+      'operation': 'append',
       'entityId': 'action-1',
       'baseRevision': null,
-      'payloadJson': '{}',
+      'payloadJson':
+          '{"medicationId":"rx-1","profileId":"profile-1","kind":"snoozed","occurredAt":"1970-01-01T00:00:01.000Z","occurrence":{"occurrenceId":"schedule-1:1:1970-01-01T00:00:01.000Z","scheduleId":"schedule-1","scheduleRevision":1,"scheduledAtUtc":"1970-01-01T00:00:01.000Z","localDate":"1969-12-31","timezoneId":"America/Los_Angeles"}}',
       'state': 'pending',
       'attemptCount': 0,
       'nextAttemptAt': null,

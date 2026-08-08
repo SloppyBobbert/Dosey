@@ -5,6 +5,10 @@ WAL, or shared-memory copies. They are plain text and can contain medication,
 schedule, dose-history, household-label, and audit data. Handle exported files
 as sensitive data.
 
+Store exports only in trusted transfer storage, especially before uninstalling
+the Personal app or clearing its data. Retain one trusted transfer copy until
+restore or import is verified, then delete unneeded copies.
+
 ## Current envelope
 
 New exports use format **v2** and source schema **18**:
@@ -38,8 +42,10 @@ canonical order, are:
 15. `phoneDoseActionEvents`
 16. `syncOutboxMutations`
 
-Imports also accept v1/source-schema-14 documents and normalize a valid v1
-document to v2. New exports are always v2/schema 18.
+Imports accept only these format/schema pairs and normalize each valid document
+to v2/schema 18: v1/schema 14, v2/schema 17, and v2/schema 18. Schema 17
+introduced phone-action and outbox tables; schema 18 added only the Taken
+uniqueness index. New exports are always v2/schema 18.
 
 ## Portable data
 
@@ -66,13 +72,16 @@ whole seconds. `?` marks a nullable field.
 | `phoneDoseActionEvents` | `id`, `deviceId`, `occurrenceId`, `scheduleId`, `scheduleRevision`, `scheduledAt`, `localDate`, `timezoneId`, `medicationId`, `kind`, `occurredAt`, `marksDoseTaken`, `idempotencyKey`, `createdAt` |
 | `syncOutboxMutations` | `mutationId`, `deviceId`, `actorAccountId?`, `robotId?`, `scopeState`, `idempotencyKey`, `entityType`, `operation`, `entityId`, `baseRevision?`, `payloadJson`, `state`, `attemptCount`, `nextAttemptAt?`, `lastAttemptAt?`, `lastErrorCode?`, `createdAt`, `updatedAt` |
 
-`syncOutboxMutations` is portable local state. Pending, `in_flight`,
-`succeeded`, and `permanent_failure` rows are restored exactly, including bound
-account/robot IDs, retry timestamps/counts, and error fields. Restore does not
-reset, rebind, requeue, or retry them. This does not make production sync
-required or active: production mobile leaves sync default-off and unwired. No
-current worker acts on a restored `in_flight` row; any future sync worker must
-define its own recovery policy rather than relying on restore to change it.
+`syncOutboxMutations` is portable local state, but restore makes replay-eligible
+rows destination-safe. `local_only` `pending` and `in_flight` rows become fresh
+`pending` rows with zero attempts and cleared retry, attempt, and error fields.
+`bound` `pending` and `in_flight` rows become `permanent_failure` with zero
+attempts, cleared retry and attempt timestamps, and
+`restore_review_required`. Their payload, mutation, idempotency, entity/event,
+device, account, robot, scope, operation, and occurrence identity are retained.
+Already `succeeded` and `permanent_failure` rows remain terminal. This does not
+activate production sync; checkpoints, credentials, destination phone identity,
+and other device-local settings are not backed up or restored.
 
 Only these setting keys are portable:
 
@@ -171,7 +180,8 @@ Any replacement or verification failure rolls back the database; a
 recovery-write failure prevents replacement. No transaction spans the recovery
 write and replacement; the final comparison detects changes before it runs.
 
-Restore writes exact persisted values. It never infers Taken, decrements
-inventory, normalizes movement, or creates behavioral audit events. OS
+Restore writes validated persisted values, with the outbox quarantine above. It
+never infers Taken, decrements inventory, normalizes movement, or creates
+behavioral audit events. OS
 notification instances are not exported; future reminders are reconciled only
 after a successful commit. It does not restore remote checkpoints.
