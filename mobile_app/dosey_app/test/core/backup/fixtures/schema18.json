@@ -1,0 +1,21 @@
+{
+  "format": "dosey-local-backup",
+  "formatVersion": 2,
+  "sourceSchemaVersion": 18,
+  "data": {
+    "settings": [{"key":"profile_display_name","value":"Casey Fixture","updatedAt":1000000}],
+    "scheduleProfiles": [{"id":"profile-1","name":"Fixture profile","isActive":true,"createdAt":1000000,"updatedAt":1000000}],
+    "prescriptions": [{"id":"rx-1","name":"Fictional medication","pillType":"tablet","remainingDoses":4,"guidedPillIcon":"roundPill","availableDoses":3,"loadedDoses":1,"usedDoses":2,"reviewDoses":0,"defaultRefillQuantity":30,"defaultDoseCountPerDose":1,"doseInstructions":"With water","refillThreshold":3,"createdAt":1000000,"updatedAt":1000000}],
+    "prescriptionRefills": [{"id":"refill-1","prescriptionId":"rx-1","doseDelta":4,"remainingAfter":4,"occurredAt":1000000,"note":"Fixture refill"}],
+    "reminderSchedules": [{"id":"schedule-1","label":"Morning fixture","prescriptionId":"rx-1","profileId":"profile-1","hour":8,"minute":0,"revision":1,"isEnabled":true,"createdAt":1000000,"updatedAt":1000000}],
+    "carouselSlots": [], "carouselLoadSessions": [], "carouselLoadSlotSnapshots": [],
+    "carouselStates": [{"profileId":"profile-1","activeLoadSessionId":null,"currentPosition":0,"updatedAt":1000000}],
+    "medicationShortageAlerts": [],
+    "doseLogEvents": [{"id":"dose-event-1","kind":"doseMissed","doseId":"dose-1","occurredAt":1000000,"marksDoseTaken":false}],
+    "controllerCommandSessions": [], "controllerCommandEvents": [], "adminAuditEvents": [],
+    "phoneDoseActionEvents": [{"id":"action-bound-flight","deviceId":"source-device","occurrenceId":"schedule-1:1:1970-01-01T00:00:01.000Z","scheduleId":"schedule-1","scheduleRevision":1,"scheduledAt":1000000,"localDate":"1970-01-01","timezoneId":"UTC","medicationId":"rx-1","kind":"help_requested","occurredAt":4000000,"marksDoseTaken":false,"idempotencyKey":"outbox-key-1","createdAt":4000000}],
+    "syncOutboxMutations": [
+      {"mutationId":"bound-flight","deviceId":"source-device","actorAccountId":"account-fixture","robotId":"robot-fixture","scopeState":"bound","idempotencyKey":"outbox-key-1","entityType":"dose_event","operation":"append","entityId":"action-bound-flight","baseRevision":null,"payloadJson":"{\"medicationId\":\"rx-1\",\"profileId\":\"profile-1\",\"kind\":\"help_requested\",\"occurredAt\":\"1970-01-01T00:00:04.000Z\",\"occurrence\":{\"occurrenceId\":\"schedule-1:1:1970-01-01T00:00:01.000Z\",\"scheduleId\":\"schedule-1\",\"scheduleRevision\":1,\"scheduledAtUtc\":\"1970-01-01T00:00:01.000Z\",\"localDate\":\"1970-01-01\",\"timezoneId\":\"UTC\"}}","state":"in_flight","attemptCount":3,"nextAttemptAt":5000000,"lastAttemptAt":4000000,"lastErrorCode":"retry","createdAt":4000000,"updatedAt":4000000}
+    ]
+  }
+}

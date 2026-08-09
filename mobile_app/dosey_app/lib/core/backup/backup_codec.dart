@@ -10,6 +10,7 @@ class BackupCodec {
   final BackupValidator validator;
 
   static const maxBytes = 25 * 1024 * 1024;
+  static const restoredOutboxReviewErrorCode = 'restore_review_required';
 
   Uint8List encode(BackupDocument document) {
     final canonicalData = <String, Object?>{};
@@ -78,10 +79,12 @@ class BackupCodec {
       );
     }
     final isV1 = version == 1;
-    final expectedSchema = isV1
-        ? BackupDocument.v1SourceSchemaVersion
-        : BackupDocument.currentSourceSchemaVersion;
-    if (schema != expectedSchema) {
+    final supported =
+        (isV1 && schema == BackupDocument.v1SourceSchemaVersion) ||
+        (!isV1 &&
+            (schema == BackupDocument.v2LegacySourceSchemaVersion ||
+                schema == BackupDocument.currentSourceSchemaVersion));
+    if (!supported) {
       throw const BackupFormatException(
         'This backup database schema is not supported.',
         kind: BackupFormatErrorKind.unsupportedSchema,
@@ -120,10 +123,26 @@ class BackupCodec {
       data['reminderSchedules'] = [
         for (final row in data['reminderSchedules']!) {...row, 'revision': 1},
       ];
+    } else {
+      validator.validateOrThrow(BackupDocument(data: data));
     }
+    _normalizeRestoredOutbox(data['syncOutboxMutations']!);
     final document = BackupDocument(data: data);
     validator.validateOrThrow(document);
     return document;
+  }
+
+  static void _normalizeRestoredOutbox(List<Map<String, Object?>> rows) {
+    for (final row in rows) {
+      final state = row['state'];
+      if (state != 'pending' && state != 'in_flight') continue;
+      final isBound = row['scopeState'] == 'bound';
+      row['state'] = isBound ? 'permanent_failure' : 'pending';
+      row['attemptCount'] = 0;
+      row['nextAttemptAt'] = null;
+      row['lastAttemptAt'] = null;
+      row['lastErrorCode'] = isBound ? restoredOutboxReviewErrorCode : null;
+    }
   }
 
   static void _exactKeys(

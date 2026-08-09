@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dosey_app/core/backup/backup_codec.dart';
@@ -143,24 +144,39 @@ void main() {
     );
   });
 
-  test('decode rejects backups from any other source schema', () {
-    final payload = {
-      'format': BackupDocument.formatName,
-      'formatVersion': BackupDocument.currentFormatVersion,
-      'sourceSchemaVersion': BackupDocument.currentSourceSchemaVersion - 1,
-      'data': BackupDocument.emptyData(),
-    };
-
-    expect(
-      () => codec.decode(Uint8List.fromList(utf8.encode(jsonEncode(payload)))),
-      throwsA(
-        isA<BackupFormatException>().having(
-          (error) => error.kind,
-          'kind',
-          BackupFormatErrorKind.unsupportedSchema,
-        ),
-      ),
-    );
+  test('decode accepts only supported format and schema metadata pairs', () {
+    for (final entry in <(int, int, BackupFormatErrorKind?)>[
+      (1, 14, null),
+      (2, 17, null),
+      (2, 18, null),
+      (1, 17, BackupFormatErrorKind.unsupportedSchema),
+      (1, 18, BackupFormatErrorKind.unsupportedSchema),
+      (2, 14, BackupFormatErrorKind.unsupportedSchema),
+      (3, 18, BackupFormatErrorKind.unsupportedVersion),
+      (2, 16, BackupFormatErrorKind.unsupportedSchema),
+    ]) {
+      final (version, schema, errorKind) = entry;
+      final fixture = version == 1 ? 'schema14.json' : 'schema18.json';
+      final payload = _fixturePayload(fixture)
+        ..['formatVersion'] = version
+        ..['sourceSchemaVersion'] = schema;
+      BackupDocument decode() =>
+          codec.decode(Uint8List.fromList(utf8.encode(jsonEncode(payload))));
+      if (errorKind == null) {
+        expect(decode, returnsNormally);
+      } else {
+        expect(
+          decode,
+          throwsA(
+            isA<BackupFormatException>().having(
+              (error) => error.kind,
+              'kind',
+              errorKind,
+            ),
+          ),
+        );
+      }
+    }
   });
 
   test('decode rejects new-table invariant violations as invalid data', () {
@@ -221,6 +237,49 @@ void main() {
       );
     }
   });
+
+  test(
+    'decode rejects malformed replay-eligible outbox fields before normalization',
+    () {
+      final malformedRows =
+          <(int, String, void Function(Map<String, Object?>))>[
+            (
+              BackupDocument.v2LegacySourceSchemaVersion,
+              'schema17.json',
+              (row) => row['attemptCount'] = -1,
+            ),
+            (
+              BackupDocument.currentSourceSchemaVersion,
+              'schema18.json',
+              (row) => row['nextAttemptAt'] = 'not-a-timestamp',
+            ),
+          ];
+
+      for (final (schema, fixture, mutate) in malformedRows) {
+        final payload = _fixturePayload(fixture)
+          ..['sourceSchemaVersion'] = schema;
+        final row =
+            ((payload['data'] as Map<String, Object?>)['syncOutboxMutations']
+                        as List)
+                    .first
+                as Map<String, Object?>;
+        mutate(row);
+
+        expect(
+          () => codec.decode(
+            Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+          ),
+          throwsA(
+            isA<BackupFormatException>().having(
+              (error) => error.kind,
+              'kind',
+              BackupFormatErrorKind.invalidData,
+            ),
+          ),
+        );
+      }
+    },
+  );
 
   test('decode rejects v2-only reminder fields in a v1 backup', () {
     final data = BackupDocument.emptyData()
@@ -333,6 +392,179 @@ void main() {
     expect(document.data['syncOutboxMutations'], isEmpty);
   });
 
+  for (final fixture in ['schema14.json', 'schema17.json', 'schema18.json']) {
+    test('fixture $fixture decodes with only documented normalization', () {
+      final expected = _normalizedFixtureData(fixture);
+      final document = codec.decode(_fixtureBytes(fixture));
+
+      expect(document.formatVersion, BackupDocument.currentFormatVersion);
+      expect(
+        document.sourceSchemaVersion,
+        BackupDocument.currentSourceSchemaVersion,
+      );
+      expect(document.data, expected);
+    });
+  }
+
+  test('schema 17 fixture anchors replay normalization literally', () {
+    final document = codec.decode(_fixtureBytes('schema17.json'));
+    final rows = {
+      for (final row in document.data['syncOutboxMutations']!)
+        row['mutationId']: row,
+    };
+
+    for (final entry
+        in <
+          (String, String, String?, String?, String, String, String, String?)
+        >[
+          (
+            'local-pending',
+            'local_only',
+            null,
+            null,
+            'action-local-pending',
+            'outbox-key-1',
+            'pending',
+            null,
+          ),
+          (
+            'local-flight',
+            'local_only',
+            null,
+            null,
+            'action-local-flight',
+            'outbox-key-2',
+            'pending',
+            null,
+          ),
+          (
+            'bound-pending',
+            'bound',
+            'account-fixture',
+            'robot-fixture',
+            'action-bound-pending',
+            'outbox-key-3',
+            'permanent_failure',
+            'restore_review_required',
+          ),
+          (
+            'bound-flight',
+            'bound',
+            'account-fixture',
+            'robot-fixture',
+            'action-bound-flight',
+            'outbox-key-4',
+            'permanent_failure',
+            'restore_review_required',
+          ),
+        ]) {
+      final (
+        mutationId,
+        scopeState,
+        actorAccountId,
+        robotId,
+        entityId,
+        idempotencyKey,
+        state,
+        lastErrorCode,
+      ) = entry;
+      final row = rows[mutationId]!;
+      expect(row['mutationId'], mutationId);
+      expect(row['scopeState'], scopeState);
+      expect(row['actorAccountId'], actorAccountId);
+      expect(row['robotId'], robotId);
+      expect(row['entityId'], entityId);
+      expect(row['idempotencyKey'], idempotencyKey);
+      expect(row['state'], state);
+      expect(row['attemptCount'], 0);
+      expect(row['nextAttemptAt'], isNull);
+      expect(row['lastAttemptAt'], isNull);
+      expect(row['lastErrorCode'], lastErrorCode);
+    }
+  });
+
+  test(
+    'decode rejects malformed source replay payloads before normalization',
+    () {
+      final payload =
+          jsonDecode(utf8.decode(_fixtureBytes('schema18.json')))
+              as Map<String, Object?>;
+      final data = payload['data'] as Map<String, Object?>;
+      final outbox = (data['syncOutboxMutations'] as List).single as Map;
+      outbox['payloadJson'] = '{not json';
+
+      expect(
+        () =>
+            codec.decode(Uint8List.fromList(utf8.encode(jsonEncode(payload)))),
+        throwsA(
+          isA<BackupFormatException>().having(
+            (error) => error.kind,
+            'kind',
+            BackupFormatErrorKind.invalidData,
+          ),
+        ),
+      );
+    },
+  );
+
+  test('schema 17 and 18 reject invalid source replay contracts', () {
+    for (final fixture in ['schema17.json', 'schema18.json']) {
+      for (final mutate in <void Function(Map<String, Object?>)>[
+        (row) => row['payloadJson'] = '{not json',
+        (row) => row['entityType'] = 'unsupported',
+        (row) => row['operation'] = 'upsert',
+        (row) => row['payloadJson'] = _payload(kind: 'taken_confirmed'),
+        (row) => row['payloadJson'] = _payload(kind: 'skipped'),
+        (row) => row['payloadJson'] = _payload(
+          occurrenceId: 'not-the-occurrence-tuple',
+        ),
+        (row) => row['entityId'] = 'missing-action',
+        (row) => row['idempotencyKey'] = 'mismatched-action-key',
+      ]) {
+        final payload = _fixturePayload(fixture);
+        final row =
+            ((payload['data'] as Map<String, Object?>)['syncOutboxMutations']
+                        as List)
+                    .first
+                as Map<String, Object?>;
+        mutate(row);
+        expect(
+          () => codec.decode(
+            Uint8List.fromList(utf8.encode(jsonEncode(payload))),
+          ),
+          throwsA(isA<BackupFormatException>()),
+        );
+      }
+    }
+  });
+
+  test('malformed nullable replay fields return invalid data', () {
+    for (final mutate in <void Function(Map<String, Object?>)>[
+      (row) => row['actorAccountId'] = 1,
+      (row) => row['nextAttemptAt'] = 1 << 62,
+    ]) {
+      final payload = _fixturePayload('schema18.json');
+      final row =
+          ((payload['data'] as Map<String, Object?>)['syncOutboxMutations']
+                      as List)
+                  .single
+              as Map<String, Object?>;
+      mutate(row);
+
+      expect(
+        () =>
+            codec.decode(Uint8List.fromList(utf8.encode(jsonEncode(payload)))),
+        throwsA(
+          isA<BackupFormatException>().having(
+            (error) => error.kind,
+            'kind',
+            BackupFormatErrorKind.invalidData,
+          ),
+        ),
+      );
+    }
+  });
+
   test('decode rejects malformed UTF-8 and oversized input', () {
     expect(
       () => codec.decode(Uint8List.fromList([0xC3, 0x28])),
@@ -374,6 +606,60 @@ void main() {
     );
   });
 }
+
+Uint8List _fixtureBytes(String name) => Uint8List.fromList(
+  File('test/core/backup/fixtures/$name').readAsBytesSync(),
+);
+
+Map<String, Object?> _fixturePayload(String name) =>
+    jsonDecode(utf8.decode(_fixtureBytes(name))) as Map<String, Object?>;
+
+Map<String, List<Map<String, Object?>>> _normalizedFixtureData(String name) {
+  final payload = _fixturePayload(name);
+  final rawData = payload['data'] as Map<String, Object?>;
+  final data = BackupDocument.emptyData();
+  for (final section in BackupDocument.sectionNames) {
+    final rows = rawData[section] as List? ?? const [];
+    data[section] = rows
+        .map((row) => Map<String, Object?>.from(row as Map))
+        .toList();
+  }
+  if (payload['formatVersion'] == 1) {
+    data['reminderSchedules'] = [
+      for (final row in data['reminderSchedules']!) {...row, 'revision': 1},
+    ];
+  }
+  for (final row in data['syncOutboxMutations']!) {
+    if (row['state'] != 'pending' && row['state'] != 'in_flight') continue;
+    final bound = row['scopeState'] == 'bound';
+    row['state'] = bound ? 'permanent_failure' : 'pending';
+    row['attemptCount'] = 0;
+    row['nextAttemptAt'] = null;
+    row['lastAttemptAt'] = null;
+    row['lastErrorCode'] = bound
+        ? BackupCodec.restoredOutboxReviewErrorCode
+        : null;
+  }
+  return data;
+}
+
+String _payload({
+  String kind = 'snoozed',
+  String occurrenceId = 'schedule-1:1:1970-01-01T00:00:01.000Z',
+}) => jsonEncode({
+  'medicationId': 'rx-1',
+  'profileId': 'profile-1',
+  'kind': kind,
+  'occurredAt': '1970-01-01T00:00:01.000Z',
+  'occurrence': {
+    'occurrenceId': occurrenceId,
+    'scheduleId': 'schedule-1',
+    'scheduleRevision': 1,
+    'scheduledAtUtc': '1970-01-01T00:00:01.000Z',
+    'localDate': '1970-01-01',
+    'timezoneId': 'UTC',
+  },
+});
 
 Map<String, List<Map<String, Object?>>> _validV2Data() {
   final data = BackupDocument.emptyData();

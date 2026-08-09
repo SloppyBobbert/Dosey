@@ -68,6 +68,7 @@ class BackupDocument {
   static const currentFormatVersion = 2;
   static const currentSourceSchemaVersion = 18;
   static const v1SourceSchemaVersion = 14;
+  static const v2LegacySourceSchemaVersion = 17;
   static const sectionNames = <String>[
     'settings',
     'scheduleProfiles',

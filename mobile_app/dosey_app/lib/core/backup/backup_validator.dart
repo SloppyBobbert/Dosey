@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import '../audit/admin_audit_event.dart';
+import '../storage/dosey_database.dart';
+import '../sync/local_contract_projection.dart';
 import 'backup_document.dart';
 
 const portableSettingKeys = <String>{
@@ -870,7 +872,155 @@ class BackupValidator {
         );
       }
     }
+    _validateReplayEligibleOutbox(data, issues);
   }
+
+  static void _validateReplayEligibleOutbox(
+    Map<String, List<Map<String, Object?>>> data,
+    List<BackupValidationIssue> issues,
+  ) {
+    final actions = {
+      for (final action in data['phoneDoseActionEvents']!) action['id']: action,
+    };
+    const projection = LocalSyncContractProjection();
+    final rows = data['syncOutboxMutations']!;
+    for (var index = 0; index < rows.length; index++) {
+      final row = rows[index];
+      if (row['state'] != 'pending' && row['state'] != 'in_flight') continue;
+      final path =
+          r'$.data.syncOutboxMutations['
+          '$index]';
+      final outbox = _asOutboxRow(row);
+      if (outbox == null) continue;
+      try {
+        projection.project(outbox);
+        final action = actions[row['entityId']];
+        if (action == null ||
+            row['deviceId'] != action['deviceId'] ||
+            row['idempotencyKey'] != action['idempotencyKey'] ||
+            !_actionMatchesPayload(action, outbox.payloadJson)) {
+          issues.add(
+            BackupValidationIssue(
+              path,
+              'Replayable mutation does not match its phone dose action.',
+            ),
+          );
+        }
+      } on FormatException catch (error) {
+        issues.add(
+          BackupValidationIssue(
+            path,
+            'Replayable mutation does not satisfy the local sync contract: $error',
+          ),
+        );
+      }
+    }
+  }
+
+  static SyncOutboxMutationRow? _asOutboxRow(Map<String, Object?> row) {
+    final mutationId = row['mutationId'];
+    final deviceId = row['deviceId'];
+    final scopeState = row['scopeState'];
+    final idempotencyKey = row['idempotencyKey'];
+    final entityType = row['entityType'];
+    final operation = row['operation'];
+    final entityId = row['entityId'];
+    final payloadJson = row['payloadJson'];
+    final state = row['state'];
+    final attemptCount = row['attemptCount'];
+    final createdAt = row['createdAt'];
+    final updatedAt = row['updatedAt'];
+    if (mutationId is! String ||
+        deviceId is! String ||
+        scopeState is! String ||
+        idempotencyKey is! String ||
+        entityType is! String ||
+        operation is! String ||
+        entityId is! String ||
+        payloadJson is! String ||
+        state is! String ||
+        attemptCount is! int ||
+        createdAt is! int ||
+        updatedAt is! int) {
+      return null;
+    }
+    final actorAccountId = row['actorAccountId'];
+    final robotId = row['robotId'];
+    final baseRevision = row['baseRevision'];
+    final lastErrorCode = row['lastErrorCode'];
+    if ((actorAccountId != null && actorAccountId is! String) ||
+        (robotId != null && robotId is! String) ||
+        (baseRevision != null && baseRevision is! int) ||
+        (lastErrorCode != null && lastErrorCode is! String)) {
+      return null;
+    }
+    DateTime? nullableTimestamp(Object? value) {
+      if (value == null) return null;
+      if (value is! int) return null;
+      try {
+        return DateTime.fromMicrosecondsSinceEpoch(value, isUtc: true);
+      } on ArgumentError {
+        return null;
+      }
+    }
+
+    final nextAttemptAt = nullableTimestamp(row['nextAttemptAt']);
+    final lastAttemptAt = nullableTimestamp(row['lastAttemptAt']);
+    if ((row['nextAttemptAt'] != null && nextAttemptAt == null) ||
+        (row['lastAttemptAt'] != null && lastAttemptAt == null)) {
+      return null;
+    }
+    try {
+      return SyncOutboxMutationRow(
+        mutationId: mutationId,
+        deviceId: deviceId,
+        actorAccountId: actorAccountId as String?,
+        robotId: robotId as String?,
+        scopeState: scopeState,
+        idempotencyKey: idempotencyKey,
+        entityType: entityType,
+        operation: operation,
+        entityId: entityId,
+        baseRevision: baseRevision as int?,
+        payloadJson: payloadJson,
+        state: state,
+        attemptCount: attemptCount,
+        nextAttemptAt: nextAttemptAt,
+        lastAttemptAt: lastAttemptAt,
+        lastErrorCode: lastErrorCode as String?,
+        createdAt: DateTime.fromMicrosecondsSinceEpoch(createdAt, isUtc: true),
+        updatedAt: DateTime.fromMicrosecondsSinceEpoch(updatedAt, isUtc: true),
+      );
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  static bool _actionMatchesPayload(
+    Map<String, Object?> action,
+    String payloadJson,
+  ) {
+    final payload = jsonDecode(payloadJson);
+    if (payload is! Map) return false;
+    final occurrence = payload['occurrence'];
+    if (occurrence is! Map) return false;
+    return payload['medicationId'] == action['medicationId'] &&
+        payload['kind'] == action['kind'] &&
+        payload['occurredAt'] == _utcString(action['occurredAt']) &&
+        occurrence['occurrenceId'] == action['occurrenceId'] &&
+        occurrence['scheduleId'] == action['scheduleId'] &&
+        occurrence['scheduleRevision'] == action['scheduleRevision'] &&
+        occurrence['scheduledAtUtc'] == _utcString(action['scheduledAt']) &&
+        occurrence['localDate'] == action['localDate'] &&
+        occurrence['timezoneId'] == action['timezoneId'];
+  }
+
+  static String? _utcString(Object? value) => value is int
+      ? DateTime.fromMicrosecondsSinceEpoch(
+          value,
+          isUtc: true,
+        ).toIso8601String()
+      : null;
 
   static const _specs = <String, Map<String, _FieldType>>{
     'settings': {

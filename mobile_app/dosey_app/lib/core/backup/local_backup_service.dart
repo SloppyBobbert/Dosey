@@ -101,8 +101,11 @@ class LocalBackupService {
   Future<BackupOperationResult> restore(
     BackupPreview preview,
   ) => _run(() async {
+    late final BackupDocument document;
+    late final Uint8List documentBytes;
     try {
-      codec.validator.validateOrThrow(preview.document);
+      document = codec.decode(preview.bytes);
+      documentBytes = codec.encode(document);
     } on BackupFormatException catch (error) {
       return BackupOperationResult(
         BackupOperationStatus.invalidBackup,
@@ -138,9 +141,9 @@ class LocalBackupService {
         if (!listEquals(latestBytes, recoveryBytes)) {
           throw const _RestoreVerificationException();
         }
-        await store.replaceSnapshot(preview.document);
+        await store.replaceSnapshot(document);
         final restoredBytes = codec.encode(await store.readSnapshot());
-        if (!listEquals(restoredBytes, preview.bytes) ||
+        if (!listEquals(restoredBytes, documentBytes) ||
             !await store.integrityIsOk()) {
           throw const _RestoreVerificationException();
         }

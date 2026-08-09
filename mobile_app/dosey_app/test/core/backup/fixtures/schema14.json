@@ -1,0 +1,21 @@
+{
+  "format": "dosey-local-backup",
+  "formatVersion": 1,
+  "sourceSchemaVersion": 14,
+  "data": {
+    "settings": [{"key":"profile_display_name","value":"Jordan Fixture","updatedAt":1000000}],
+    "scheduleProfiles": [{"id":"profile-1","name":"Fixture profile","isActive":true,"createdAt":1000000,"updatedAt":1000000}],
+    "prescriptions": [{"id":"rx-1","name":"Fictional medication","pillType":"tablet","remainingDoses":4,"guidedPillIcon":"roundPill","availableDoses":3,"loadedDoses":1,"usedDoses":2,"reviewDoses":0,"defaultRefillQuantity":30,"defaultDoseCountPerDose":1,"doseInstructions":"With water","refillThreshold":3,"createdAt":1000000,"updatedAt":1000000}],
+    "prescriptionRefills": [{"id":"refill-1","prescriptionId":"rx-1","doseDelta":4,"remainingAfter":4,"occurredAt":1000000,"note":"Fixture refill"}],
+    "reminderSchedules": [{"id":"schedule-1","label":"Morning fixture","prescriptionId":"rx-1","profileId":"profile-1","hour":8,"minute":0,"isEnabled":true,"createdAt":1000000,"updatedAt":1000000}],
+    "carouselSlots": [],
+    "carouselLoadSessions": [],
+    "carouselLoadSlotSnapshots": [],
+    "carouselStates": [{"profileId":"profile-1","activeLoadSessionId":null,"currentPosition":0,"updatedAt":1000000}],
+    "medicationShortageAlerts": [],
+    "doseLogEvents": [{"id":"dose-event-1","kind":"doseMissed","doseId":"dose-1","occurredAt":1000000,"marksDoseTaken":false}],
+    "controllerCommandSessions": [],
+    "controllerCommandEvents": [],
+    "adminAuditEvents": []
+  }
+}
