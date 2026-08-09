@@ -145,27 +145,36 @@ void main() {
   });
 
   test('decode accepts only supported format and schema metadata pairs', () {
-    for (final entry in <(int, int, bool)>[
-      (1, 14, true),
-      (2, 17, true),
-      (2, 18, true),
-      (1, 17, false),
-      (1, 18, false),
-      (2, 14, false),
-      (3, 18, false),
-      (2, 16, false),
+    for (final entry in <(int, int, BackupFormatErrorKind?)>[
+      (1, 14, null),
+      (2, 17, null),
+      (2, 18, null),
+      (1, 17, BackupFormatErrorKind.unsupportedSchema),
+      (1, 18, BackupFormatErrorKind.unsupportedSchema),
+      (2, 14, BackupFormatErrorKind.unsupportedSchema),
+      (3, 18, BackupFormatErrorKind.unsupportedVersion),
+      (2, 16, BackupFormatErrorKind.unsupportedSchema),
     ]) {
-      final (version, schema, accepted) = entry;
+      final (version, schema, errorKind) = entry;
       final fixture = version == 1 ? 'schema14.json' : 'schema18.json';
       final payload = _fixturePayload(fixture)
         ..['formatVersion'] = version
         ..['sourceSchemaVersion'] = schema;
       BackupDocument decode() =>
           codec.decode(Uint8List.fromList(utf8.encode(jsonEncode(payload))));
-      if (accepted) {
+      if (errorKind == null) {
         expect(decode, returnsNormally);
       } else {
-        expect(decode, throwsA(isA<BackupFormatException>()));
+        expect(
+          decode,
+          throwsA(
+            isA<BackupFormatException>().having(
+              (error) => error.kind,
+              'kind',
+              errorKind,
+            ),
+          ),
+        );
       }
     }
   });
@@ -232,25 +241,29 @@ void main() {
   test(
     'decode rejects malformed replay-eligible outbox fields before normalization',
     () {
-      final malformedRows = <(int, Map<String, Object?>)>[
-        (
-          BackupDocument.v2LegacySourceSchemaVersion,
-          _outbox('negative-attempts')..['attemptCount'] = -1,
-        ),
-        (
-          BackupDocument.currentSourceSchemaVersion,
-          _outbox('mistyped-retry')..['nextAttemptAt'] = 'not-a-timestamp',
-        ),
-      ];
+      final malformedRows =
+          <(int, String, void Function(Map<String, Object?>))>[
+            (
+              BackupDocument.v2LegacySourceSchemaVersion,
+              'schema17.json',
+              (row) => row['attemptCount'] = -1,
+            ),
+            (
+              BackupDocument.currentSourceSchemaVersion,
+              'schema18.json',
+              (row) => row['nextAttemptAt'] = 'not-a-timestamp',
+            ),
+          ];
 
-      for (final (schema, row) in malformedRows) {
-        final data = _validV2Data()..['syncOutboxMutations'] = [row];
-        final payload = {
-          'format': BackupDocument.formatName,
-          'formatVersion': BackupDocument.currentFormatVersion,
-          'sourceSchemaVersion': schema,
-          'data': data,
-        };
+      for (final (schema, fixture, mutate) in malformedRows) {
+        final payload = _fixturePayload(fixture)
+          ..['sourceSchemaVersion'] = schema;
+        final row =
+            ((payload['data'] as Map<String, Object?>)['syncOutboxMutations']
+                        as List)
+                    .first
+                as Map<String, Object?>;
+        mutate(row);
 
         expect(
           () => codec.decode(
@@ -392,6 +405,83 @@ void main() {
       expect(document.data, expected);
     });
   }
+
+  test('schema 17 fixture anchors replay normalization literally', () {
+    final document = codec.decode(_fixtureBytes('schema17.json'));
+    final rows = {
+      for (final row in document.data['syncOutboxMutations']!)
+        row['mutationId']: row,
+    };
+
+    for (final entry
+        in <
+          (String, String, String?, String?, String, String, String, String?)
+        >[
+          (
+            'local-pending',
+            'local_only',
+            null,
+            null,
+            'action-local-pending',
+            'outbox-key-1',
+            'pending',
+            null,
+          ),
+          (
+            'local-flight',
+            'local_only',
+            null,
+            null,
+            'action-local-flight',
+            'outbox-key-2',
+            'pending',
+            null,
+          ),
+          (
+            'bound-pending',
+            'bound',
+            'account-fixture',
+            'robot-fixture',
+            'action-bound-pending',
+            'outbox-key-3',
+            'permanent_failure',
+            'restore_review_required',
+          ),
+          (
+            'bound-flight',
+            'bound',
+            'account-fixture',
+            'robot-fixture',
+            'action-bound-flight',
+            'outbox-key-4',
+            'permanent_failure',
+            'restore_review_required',
+          ),
+        ]) {
+      final (
+        mutationId,
+        scopeState,
+        actorAccountId,
+        robotId,
+        entityId,
+        idempotencyKey,
+        state,
+        lastErrorCode,
+      ) = entry;
+      final row = rows[mutationId]!;
+      expect(row['mutationId'], mutationId);
+      expect(row['scopeState'], scopeState);
+      expect(row['actorAccountId'], actorAccountId);
+      expect(row['robotId'], robotId);
+      expect(row['entityId'], entityId);
+      expect(row['idempotencyKey'], idempotencyKey);
+      expect(row['state'], state);
+      expect(row['attemptCount'], 0);
+      expect(row['nextAttemptAt'], isNull);
+      expect(row['lastAttemptAt'], isNull);
+      expect(row['lastErrorCode'], lastErrorCode);
+    }
+  });
 
   test(
     'decode rejects malformed source replay payloads before normalization',
