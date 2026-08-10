@@ -111,6 +111,28 @@ void main() {
     );
   });
 
+  test('omits native flavor for Personal IPA builds', () {
+    expect(
+      profiles.flutterArguments(
+        flavor: 'personal',
+        profilePath: 'config/appwrite/offline.json',
+        forwarded: ['build', 'ipa'],
+      ),
+      isNot(contains('--flavor')),
+    );
+  });
+
+  test('rejects Robot IPA builds', () {
+    expect(
+      () => profiles.flutterArguments(
+        flavor: 'robot',
+        profilePath: 'config/appwrite/offline.json',
+        forwarded: ['build', 'ipa'],
+      ),
+      throwsFormatException,
+    );
+  });
+
   test('accepts mounted lookup independently and endpoint project alone', () {
     final profile = onlineProfile()
       ..remove('APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID')

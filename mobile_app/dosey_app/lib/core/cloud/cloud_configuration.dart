@@ -20,6 +20,23 @@ class CloudConfiguration {
         'Appwrite endpoint and project ID must be configured together.',
       );
     }
+    final functionIds = [
+      createPairingCodeFunctionId,
+      claimRobotFunctionId,
+      createRobotFunctionId,
+      createHouseholdInvitationFunctionId,
+      acceptHouseholdInvitationFunctionId,
+      removeHouseholdMemberFunctionId,
+      medicationSyncPushFunctionId,
+      medicationSyncPullFunctionId,
+      getMountedRobotFunctionId,
+    ];
+    if (normalizedEndpoint == null &&
+        functionIds.any((value) => _normalize(value) != null)) {
+      throw ArgumentError(
+        'Appwrite Function IDs require endpoint and project ID.',
+      );
+    }
     if (normalizedEndpoint != null && !_isValidEndpoint(normalizedEndpoint)) {
       throw ArgumentError('Appwrite endpoint must be a valid HTTPS /v1 URL.');
     }

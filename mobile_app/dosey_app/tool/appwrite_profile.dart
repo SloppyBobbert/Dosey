@@ -243,7 +243,9 @@ List<String> flutterArguments({
   required List<String> forwarded,
 }) {
   final isIos =
-      forwarded.length >= 2 && forwarded[0] == 'build' && forwarded[1] == 'ios';
+      forwarded.length >= 2 &&
+      forwarded[0] == 'build' &&
+      {'ios', 'ipa'}.contains(forwarded[1]);
   if (isIos && flavor == 'robot') {
     throw const FormatException('Robot Mode is not available for iOS builds.');
   }

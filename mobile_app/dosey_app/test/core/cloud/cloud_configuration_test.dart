@@ -124,11 +124,30 @@ void main() {
     );
   });
 
-  test('cloud configuration rejects malformed public values', () {
+  test('cloud configuration rejects malformed endpoints', () {
     expect(
       () => CloudConfiguration.fromValues(
         endpoint: 'http://example.invalid',
+        projectId: 'dosey-development',
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('cloud configuration rejects malformed project IDs', () {
+    expect(
+      () => CloudConfiguration.fromValues(
+        endpoint: 'https://example.invalid/v1',
         projectId: 'invalid project',
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('cloud configuration rejects Function IDs without Appwrite setup', () {
+    expect(
+      () => CloudConfiguration.fromValues(
+        getMountedRobotFunctionId: 'mounted-robot',
       ),
       throwsArgumentError,
     );
