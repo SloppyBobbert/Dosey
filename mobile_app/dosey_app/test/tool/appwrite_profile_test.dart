@@ -162,6 +162,33 @@ void main() {
     }
   });
 
+  test('accepts 36-character Function IDs and rejects 37-character IDs', () {
+    final accepted = onlineProfile()
+      ..['APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID'] = 'a' * 36;
+    final rejected = onlineProfile()
+      ..['APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID'] = 'a' * 37;
+    expect(profiles.validateProfile(accepted), isNotEmpty);
+    expect(() => profiles.validateProfile(rejected), throwsFormatException);
+  });
+
+  test('rejects independently malformed endpoints', () {
+    for (final endpoint in [
+      'http://example.invalid/v1',
+      'https://example.invalid',
+      'https://user@example.invalid/v1',
+      'https://example.invalid:8443/v1',
+      'https://example.invalid/v1?query=value',
+      'https://example.invalid/v1#fragment',
+    ]) {
+      expect(
+        () => profiles.validateProfile(
+          onlineProfile()..['APPWRITE_ENDPOINT'] = endpoint,
+        ),
+        throwsFormatException,
+      );
+    }
+  });
+
   test('parses only documented wrapper arguments', () {
     expect(
       profiles.parseWrapperArguments([

@@ -36,7 +36,7 @@ const _medicationKeys = {
   'APPWRITE_MEDICATION_SYNC_PUSH_FUNCTION_ID',
   'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID',
 };
-final _identifier = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$');
+final _functionId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$');
 final _projectId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$');
 
 void main(List<String> arguments) async {
@@ -166,7 +166,7 @@ String validateProfile(Map<String, dynamic> profile) {
     'APPWRITE_PROJECT_ID',
   })) {
     final value = _text(profile, key);
-    if (value != null && !_identifier.hasMatch(value)) {
+    if (value != null && !_functionId.hasMatch(value)) {
       throw const FormatException('A Function ID is invalid.');
     }
   }
@@ -288,7 +288,6 @@ bool _validEndpoint(String value) {
       uri.userInfo.isEmpty &&
       !uri.hasPort &&
       !uri.authority.split('@').last.contains(':') &&
-      uri.host == uri.host.toLowerCase() &&
       uri.path == '/v1' &&
       !uri.hasQuery &&
       !uri.hasFragment;
@@ -303,7 +302,6 @@ bool _validOrigin(String value) {
       uri.userInfo.isEmpty &&
       !uri.hasPort &&
       !uri.authority.split('@').last.contains(':') &&
-      uri.host == uri.host.toLowerCase() &&
       (uri.path.isEmpty || uri.path == '/') &&
       !uri.hasQuery &&
       !uri.hasFragment;

@@ -169,4 +169,42 @@ void main() {
       throwsArgumentError,
     );
   });
+
+  test('cloud configuration validates Function ID length boundaries', () {
+    expect(
+      CloudConfiguration.fromValues(
+        endpoint: 'https://example.invalid/v1',
+        projectId: 'dosey-development',
+        getMountedRobotFunctionId: 'a' * 36,
+      ).getMountedRobotFunctionId,
+      'a' * 36,
+    );
+    expect(
+      () => CloudConfiguration.fromValues(
+        endpoint: 'https://example.invalid/v1',
+        projectId: 'dosey-development',
+        getMountedRobotFunctionId: 'a' * 37,
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('cloud configuration rejects independently malformed endpoints', () {
+    for (final endpoint in [
+      'http://example.invalid/v1',
+      'https://example.invalid',
+      'https://user@example.invalid/v1',
+      'https://example.invalid:8443/v1',
+      'https://example.invalid/v1?query=value',
+      'https://example.invalid/v1#fragment',
+    ]) {
+      expect(
+        () => CloudConfiguration.fromValues(
+          endpoint: endpoint,
+          projectId: 'dosey-development',
+        ),
+        throwsArgumentError,
+      );
+    }
+  });
 }

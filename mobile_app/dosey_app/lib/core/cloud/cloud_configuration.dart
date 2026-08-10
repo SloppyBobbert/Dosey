@@ -45,7 +45,6 @@ class CloudConfiguration {
       throw ArgumentError('Appwrite project ID is invalid.');
     }
     for (final value in [
-      normalizedProjectId,
       _normalize(createPairingCodeFunctionId),
       _normalize(claimRobotFunctionId),
       _normalize(createRobotFunctionId),
@@ -56,7 +55,7 @@ class CloudConfiguration {
       _normalize(medicationSyncPullFunctionId),
       _normalize(getMountedRobotFunctionId),
     ]) {
-      if (value != null && !_identifier.hasMatch(value)) {
+      if (value != null && !_functionId.hasMatch(value)) {
         throw ArgumentError('Appwrite public identifiers are invalid.');
       }
     }
@@ -196,7 +195,7 @@ class CloudConfiguration {
     }
   }
 
-  static final _identifier = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$');
+  static final _functionId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$');
   static final _projectId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$');
 
   static bool _isValidEndpoint(String endpoint) {
@@ -210,7 +209,6 @@ class CloudConfiguration {
         uri.userInfo.isEmpty &&
         !uri.hasPort &&
         !uri.authority.split('@').last.contains(':') &&
-        uri.host == uri.host.toLowerCase() &&
         uri.path == '/v1' &&
         !uri.hasQuery &&
         !uri.hasFragment;
