@@ -18,6 +18,7 @@ Thumbs.db
 
 # Logs and local env
 *.log
+__pycache__/
 .env
 .env.*
 

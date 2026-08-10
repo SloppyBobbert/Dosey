@@ -25,12 +25,9 @@ def assert_android_build(job:, name:, mode:, flavor:, capability:)
   step = find_step(job, name)
   tokens = Shellwords.shellsplit(step.fetch('run'))
   expected = [
-    'flutter', 'build', 'apk', mode,
-    '--flavor', flavor,
-    '--dart-define-from-file=.env',
-    "--dart-define=DOSEY_BUILD_PROFILE=#{flavor}",
-    "--dart-define=DOSEY_RUNTIME_CAPABILITY=#{capability}",
-    '--dart-define=CAREGIVER_SYNC_ENABLED=false',
+    'dart', 'run', 'tool/appwrite_profile.dart', 'flutter',
+    '--profile', 'config/appwrite/offline.json', '--flavor', flavor,
+    '--', 'build', 'apk', mode,
   ]
   abort("#{name} must use the exact #{flavor}/#{capability} build contract") unless tokens == expected
 end
@@ -40,11 +37,9 @@ def assert_ios_build(job:)
   step = find_step(job, name)
   tokens = Shellwords.shellsplit(step.fetch('run'))
   expected = [
-    'flutter', 'build', 'ios', '--debug', '--no-codesign',
-    '--dart-define-from-file=.env',
-    '--dart-define=DOSEY_BUILD_PROFILE=personal',
-    '--dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted',
-    '--dart-define=CAREGIVER_SYNC_ENABLED=false',
+    'dart', 'run', 'tool/appwrite_profile.dart', 'flutter',
+    '--profile', 'config/appwrite/offline.json', '--flavor', 'personal',
+    '--', 'build', 'ios', '--debug', '--no-codesign',
   ]
   abort("#{name} must use the exact personal/hardware-assisted build contract") unless tokens == expected
 end
@@ -81,6 +76,11 @@ def assert_phased_runtime_gate(job)
   abort('runtime capability gate must match the phased rollout policy exactly') unless script.strip == expected.strip
 end
 
+def assert_artifact_check(job, name, command)
+  step = find_step(job, name)
+  abort("#{name} must run the public artifact verification") unless step.fetch('run').strip == command
+end
+
 assert_android_build(
   job: build,
   name: 'Build hardware-assisted Personal release APK',
@@ -96,6 +96,11 @@ assert_android_build(
   capability: 'phone-only',
 )
 assert_phased_runtime_gate(build)
+assert_artifact_check(
+  build,
+  'Verify public Android configuration artifacts',
+  'python3 ../../.github/scripts/verify_public_config_artifacts.py --android --build-type release',
+)
 
 mobile = mobile_workflow.fetch('jobs').fetch('flutter-mobile')
 assert_android_build(
@@ -113,6 +118,16 @@ assert_android_build(
   capability: 'phone-only',
 )
 assert_phased_runtime_gate(mobile)
+assert_artifact_check(
+  mobile,
+  'Verify public Android configuration artifacts',
+  'python3 ../../.github/scripts/verify_public_config_artifacts.py --android',
+)
+assert_artifact_check(
+  mobile_workflow.fetch('jobs').fetch('flutter-ios'),
+  'Verify public iOS configuration artifact',
+  'python3 ../../.github/scripts/verify_public_config_artifacts.py --ios',
+)
 assert_ios_build(job: mobile_workflow.fetch('jobs').fetch('flutter-ios'))
 
 expected_build_output = '${{ steps.release.outputs.source_sha }}'

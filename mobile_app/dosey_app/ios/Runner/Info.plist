@@ -19,8 +19,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<!-- Appwrite project IDs are public client identifiers. -->
-				<string>appwrite-callback-6a66b014000547ba3892</string>
+				<string>$(DOSEY_CALLBACK_SCHEME)</string>
 			</array>
 		</dict>
 	</array>

@@ -31,29 +31,26 @@ void main() {
     expect(configuration.isHouseholdManagementEnabled, isTrue);
   });
 
-  test(
-    'identity stays enabled while incomplete pairing setup stays disabled',
-    () {
-      final configuration = CloudConfiguration.fromValues(
+  test('cloud configuration rejects incomplete pairing setup', () {
+    expect(
+      () => CloudConfiguration.fromValues(
         endpoint: 'https://nyc.cloud.appwrite.io/v1',
         projectId: 'dosey-development',
         createPairingCodeFunctionId: 'create-code',
-      );
-
-      expect(configuration.isEnabled, isTrue);
-      expect(configuration.isPairingEnabled, isFalse);
-    },
-  );
-
-  test('incomplete household Function setup stays disabled', () {
-    final configuration = CloudConfiguration.fromValues(
-      endpoint: 'https://nyc.cloud.appwrite.io/v1',
-      projectId: 'dosey-development',
-      createRobotFunctionId: 'create-robot',
+      ),
+      throwsArgumentError,
     );
+  });
 
-    expect(configuration.isEnabled, isTrue);
-    expect(configuration.isHouseholdManagementEnabled, isFalse);
+  test('cloud configuration rejects incomplete household Function setup', () {
+    expect(
+      () => CloudConfiguration.fromValues(
+        endpoint: 'https://nyc.cloud.appwrite.io/v1',
+        projectId: 'dosey-development',
+        createRobotFunctionId: 'create-robot',
+      ),
+      throwsArgumentError,
+    );
   });
 
   test('caregiver sync defaults to disabled', () {
@@ -80,17 +77,19 @@ void main() {
       medicationSyncPullFunctionId: 'medication-pull',
       caregiverSyncEnabled: true,
     );
-    final partial = CloudConfiguration.fromValues(
-      endpoint: 'https://nyc.cloud.appwrite.io/v1',
-      projectId: 'dosey-development',
-      medicationSyncPushFunctionId: 'medication-push',
-      caregiverSyncEnabled: true,
-    );
 
     expect(idsOnly.isMedicationSyncEnabled, isFalse);
     expect(complete.isMedicationSyncEnabled, isTrue);
     expect(complete.medicationSyncPullFunctionId, 'medication-pull');
-    expect(partial.isMedicationSyncEnabled, isFalse);
+    expect(
+      () => CloudConfiguration.fromValues(
+        endpoint: 'https://nyc.cloud.appwrite.io/v1',
+        projectId: 'dosey-development',
+        medicationSyncPushFunctionId: 'medication-push',
+        caregiverSyncEnabled: true,
+      ),
+      throwsArgumentError,
+    );
   });
 
   test('cloud configuration rejects a partial Appwrite setup', () {
@@ -102,6 +101,35 @@ void main() {
     );
     expect(
       () => CloudConfiguration.fromValues(projectId: 'dosey-development'),
+      throwsArgumentError,
+    );
+  });
+
+  test('cloud configuration rejects partial Function groups', () {
+    expect(
+      () => CloudConfiguration.fromValues(
+        endpoint: 'https://nyc.cloud.appwrite.io/v1',
+        projectId: 'dosey-development',
+        createPairingCodeFunctionId: 'create-code',
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => CloudConfiguration.fromValues(
+        endpoint: 'https://nyc.cloud.appwrite.io/v1',
+        projectId: 'dosey-development',
+        medicationSyncPushFunctionId: 'medication-push',
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('cloud configuration rejects malformed public values', () {
+    expect(
+      () => CloudConfiguration.fromValues(
+        endpoint: 'http://example.invalid',
+        projectId: 'invalid project',
+      ),
       throwsArgumentError,
     );
   });

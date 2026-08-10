@@ -10,6 +10,7 @@ class CloudConfiguration {
     String? removeHouseholdMemberFunctionId,
     String? medicationSyncPushFunctionId,
     String? medicationSyncPullFunctionId,
+    String? getMountedRobotFunctionId,
     bool caregiverSyncEnabled = false,
   }) {
     final normalizedEndpoint = _normalize(endpoint);
@@ -19,6 +20,40 @@ class CloudConfiguration {
         'Appwrite endpoint and project ID must be configured together.',
       );
     }
+    if (normalizedEndpoint != null && !_isValidEndpoint(normalizedEndpoint)) {
+      throw ArgumentError('Appwrite endpoint must be a valid HTTPS /v1 URL.');
+    }
+    if (normalizedProjectId != null &&
+        !_projectId.hasMatch(normalizedProjectId)) {
+      throw ArgumentError('Appwrite project ID is invalid.');
+    }
+    for (final value in [
+      normalizedProjectId,
+      _normalize(createPairingCodeFunctionId),
+      _normalize(claimRobotFunctionId),
+      _normalize(createRobotFunctionId),
+      _normalize(createHouseholdInvitationFunctionId),
+      _normalize(acceptHouseholdInvitationFunctionId),
+      _normalize(removeHouseholdMemberFunctionId),
+      _normalize(medicationSyncPushFunctionId),
+      _normalize(medicationSyncPullFunctionId),
+      _normalize(getMountedRobotFunctionId),
+    ]) {
+      if (value != null && !_identifier.hasMatch(value)) {
+        throw ArgumentError('Appwrite public identifiers are invalid.');
+      }
+    }
+    _requireCompleteGroup([createPairingCodeFunctionId, claimRobotFunctionId]);
+    _requireCompleteGroup([
+      createRobotFunctionId,
+      createHouseholdInvitationFunctionId,
+      acceptHouseholdInvitationFunctionId,
+      removeHouseholdMemberFunctionId,
+    ]);
+    _requireCompleteGroup([
+      medicationSyncPushFunctionId,
+      medicationSyncPullFunctionId,
+    ]);
     return CloudConfiguration._(
       endpoint: normalizedEndpoint,
       projectId: normalizedProjectId,
@@ -36,6 +71,7 @@ class CloudConfiguration {
       ),
       medicationSyncPushFunctionId: _normalize(medicationSyncPushFunctionId),
       medicationSyncPullFunctionId: _normalize(medicationSyncPullFunctionId),
+      getMountedRobotFunctionId: _normalize(getMountedRobotFunctionId),
       caregiverSyncEnabled: caregiverSyncEnabled,
     );
   }
@@ -51,6 +87,7 @@ class CloudConfiguration {
     this.removeHouseholdMemberFunctionId,
     this.medicationSyncPushFunctionId,
     this.medicationSyncPullFunctionId,
+    this.getMountedRobotFunctionId,
     this.caregiverSyncEnabled = false,
   });
 
@@ -81,6 +118,9 @@ class CloudConfiguration {
     medicationSyncPullFunctionId: const String.fromEnvironment(
       'APPWRITE_MEDICATION_SYNC_PULL_FUNCTION_ID',
     ),
+    getMountedRobotFunctionId: const String.fromEnvironment(
+      'APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID',
+    ),
     caregiverSyncEnabled: const bool.fromEnvironment('CAREGIVER_SYNC_ENABLED'),
   );
 
@@ -94,6 +134,7 @@ class CloudConfiguration {
   final String? removeHouseholdMemberFunctionId;
   final String? medicationSyncPushFunctionId;
   final String? medicationSyncPullFunctionId;
+  final String? getMountedRobotFunctionId;
   final bool caregiverSyncEnabled;
 
   bool get isEnabled => endpoint != null && projectId != null;
@@ -114,7 +155,40 @@ class CloudConfiguration {
       medicationSyncPullFunctionId != null;
 
   static String? _normalize(String? value) {
-    final normalized = value?.trim();
-    return normalized == null || normalized.isEmpty ? null : normalized;
+    if (value == null || value.isEmpty) return null;
+    if (value.trim() != value) {
+      throw ArgumentError('Appwrite values cannot contain whitespace.');
+    }
+    return value;
+  }
+
+  static void _requireCompleteGroup(List<String?> group) {
+    final values = group.map(_normalize).toList();
+    final present = values.whereType<String>().length;
+    if (present != 0 && present != values.length) {
+      throw ArgumentError(
+        'Appwrite Function groups must be configured completely.',
+      );
+    }
+  }
+
+  static final _identifier = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$');
+  static final _projectId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$');
+
+  static bool _isValidEndpoint(String endpoint) {
+    if (RegExp(r'^https://[^/?#]*(@|:[0-9]+/)').hasMatch(endpoint)) {
+      return false;
+    }
+    final uri = Uri.tryParse(endpoint);
+    return uri != null &&
+        uri.scheme == 'https' &&
+        uri.host.isNotEmpty &&
+        uri.userInfo.isEmpty &&
+        !uri.hasPort &&
+        !uri.authority.split('@').last.contains(':') &&
+        uri.host == uri.host.toLowerCase() &&
+        uri.path == '/v1' &&
+        !uri.hasQuery &&
+        !uri.hasFragment;
   }
 }

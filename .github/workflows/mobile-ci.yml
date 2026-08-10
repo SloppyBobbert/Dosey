@@ -56,18 +56,8 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Prepare public Appwrite configuration
-        uses: ./.github/actions/prepare-appwrite-env
-        env:
-          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
-          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
-          APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID }}
-          APPWRITE_CLAIM_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CLAIM_ROBOT_FUNCTION_ID }}
-          APPWRITE_CREATE_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_ROBOT_FUNCTION_ID }}
-          APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID }}
-          APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID }}
-          APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ${{ vars.APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID }}
-          APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID }}
+      - name: Validate public Appwrite profiles
+        run: dart run tool/appwrite_profile.dart validate --profile config/appwrite/offline.json
 
       - name: Verify generated Drift code
         run: |
@@ -112,10 +102,13 @@ jobs:
           printf 'Runtime capability contract tests are complete and covered by the full Flutter test suite.\n' | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Build hardware-assisted Personal debug APK
-        run: flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
+        run: dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build apk --debug
 
       - name: Build phone-only Robot debug APK
-        run: flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
+        run: dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor robot -- build apk --debug
+
+      - name: Verify public Android configuration artifacts
+        run: python3 ../../.github/scripts/verify_public_config_artifacts.py --android
 
       - name: Name Android artifacts
         run: |
@@ -138,9 +131,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Remove temporary configuration
+      - name: Remove generated native configuration
         if: always()
-        run: unlink .env 2>/dev/null || true
+        run: unlink ios/Flutter/DoseyProfile.xcconfig 2>/dev/null || true
 
   flutter-ios:
     name: Flutter native iOS build
@@ -163,22 +156,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get --enforce-lockfile
 
-      - name: Prepare public Appwrite configuration
-        uses: ./.github/actions/prepare-appwrite-env
-        env:
-          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
-          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
-          APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID }}
-          APPWRITE_CLAIM_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CLAIM_ROBOT_FUNCTION_ID }}
-          APPWRITE_CREATE_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_ROBOT_FUNCTION_ID }}
-          APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID }}
-          APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID }}
-          APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ${{ vars.APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID }}
-          APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID }}
+      - name: Validate public Appwrite profiles
+        run: dart run tool/appwrite_profile.dart validate --profile config/appwrite/offline.json
 
       - name: Build iOS debug app
-        run: flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
+        run: dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build ios --debug --no-codesign
 
-      - name: Remove temporary configuration
+      - name: Verify public iOS configuration artifact
+        run: python3 ../../.github/scripts/verify_public_config_artifacts.py --ios
+
+      - name: Remove generated native configuration
         if: always()
-        run: unlink .env 2>/dev/null || true
+        run: unlink ios/Flutter/DoseyProfile.xcconfig 2>/dev/null || true

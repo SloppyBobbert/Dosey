@@ -140,18 +140,8 @@ jobs:
           fi
           printf 'Runtime capability contract tests are complete and covered by the full Flutter test suite.\n' | tee -a "$GITHUB_STEP_SUMMARY"
 
-      - name: Prepare public Appwrite configuration
-        env:
-          APPWRITE_ENDPOINT: ${{ vars.APPWRITE_ENDPOINT }}
-          APPWRITE_PROJECT_ID: ${{ vars.APPWRITE_PROJECT_ID }}
-          APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID }}
-          APPWRITE_CLAIM_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CLAIM_ROBOT_FUNCTION_ID }}
-          APPWRITE_CREATE_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_ROBOT_FUNCTION_ID }}
-          APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_CREATE_HOUSEHOLD_INVITATION_FUNCTION_ID }}
-          APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID: ${{ vars.APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID }}
-          APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID: ${{ vars.APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID }}
-          APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID: ${{ vars.APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID }}
-        uses: ./.github/actions/prepare-appwrite-env
+      - name: Validate public Appwrite profiles
+        run: dart run tool/appwrite_profile.dart validate --profile config/appwrite/offline.json
 
       - name: Validate release signing configuration
         env:
@@ -192,14 +182,17 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build apk --release --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
+        run: dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build apk --release
 
       - name: Build phone-only Robot release APK
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: flutter build apk --release --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
+        run: dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor robot -- build apk --release
+
+      - name: Verify public Android configuration artifacts
+        run: python3 ../../.github/scripts/verify_public_config_artifacts.py --android --build-type release
 
       - name: Verify APK signers and name artifacts
         env:

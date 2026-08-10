@@ -40,7 +40,8 @@ for workflow in \
   build_count=0
   build_command=''
   while IFS= read -r line || [ -n "$line" ]; do
-    if [ -z "$build_command" ] && [[ "$line" == *'flutter build '* ]]; then
+    if [ -z "$build_command" ] && \
+      { [[ "$line" == *'flutter build '* ]] || [[ "$line" == *'appwrite_profile.dart flutter '* ]]; }; then
       build_command="$line"
     elif [ -n "$build_command" ]; then
       build_command+=" $line"
@@ -48,7 +49,12 @@ for workflow in \
 
     if [ -n "$build_command" ] && [[ "$line" != *\\ ]]; then
       build_count=$((build_count + 1))
-      if [[ "$build_command" != *'--dart-define=CAREGIVER_SYNC_ENABLED=false'* ]]; then
+      if [[ "$build_command" == *'appwrite_profile.dart flutter '* ]]; then
+        if [[ "$build_command" != *'--profile config/appwrite/offline.json'* ]]; then
+          printf '%s wrapped Flutter build must use the offline profile.\n' "$workflow" >&2
+          exit 1
+        fi
+      elif [[ "$build_command" != *'--dart-define=CAREGIVER_SYNC_ENABLED=false'* ]]; then
         printf '%s Flutter build must explicitly disable caregiver sync.\n' "$workflow" >&2
         exit 1
       fi
@@ -61,11 +67,5 @@ for workflow in \
     exit 1
   fi
 done
-
-if grep -Eq -- 'APPWRITE_MEDICATION_SYNC_|medication-sync-(push|pull)-' \
-  "$ROOT_DIR/.github/actions/prepare-appwrite-env/action.yml"; then
-  printf 'Generated .env configuration must not include medication-sync Function IDs.\n' >&2
-  exit 1
-fi
 
 printf 'Caregiver sync foundation checks passed.\n'

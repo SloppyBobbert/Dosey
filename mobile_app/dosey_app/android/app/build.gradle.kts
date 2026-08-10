@@ -8,24 +8,6 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-fun dotenvValue(key: String): String? {
-    val dotenv = rootProject.file("../.env")
-    if (!dotenv.isFile) return null
-    return dotenv.readLines()
-        .firstOrNull { it.trimStart().startsWith("$key=") }
-        ?.substringAfter('=')
-        ?.trim()
-        ?.trim('"', '\'')
-        ?.takeIf { it.isNotEmpty() }
-}
-
-val requiredPublicKeys = listOf(
-    "APPWRITE_ENDPOINT",
-    "APPWRITE_PROJECT_ID",
-    "APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID",
-    "APPWRITE_CLAIM_ROBOT_FUNCTION_ID",
-)
-val publicConfiguration = requiredPublicKeys.associateWith { key -> dotenvValue(key) }
 val dartDefines = providers.gradleProperty("dart-defines").orNull
     ?.split(',')
     ?.mapNotNull { encoded ->
@@ -35,6 +17,8 @@ val dartDefines = providers.gradleProperty("dart-defines").orNull
     .orEmpty()
 val configuredProfile = dartDefines["DOSEY_BUILD_PROFILE"]
 val configuredRuntimeCapability = dartDefines["DOSEY_RUNTIME_CAPABILITY"]
+val appwriteProjectId = dartDefines["APPWRITE_PROJECT_ID"]?.takeIf { it.isNotBlank() }
+val appwriteCallbackScheme = "appwrite-callback-${appwriteProjectId ?: "offline"}"
 
 val keystorePath = System.getenv("ANDROID_KEYSTORE_PATH")
 val keystorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
@@ -59,12 +43,6 @@ gradle.taskGraph.whenReady(Action<TaskExecutionGraph> {
         }
     }
     if (requestedFlavors.isNotEmpty()) {
-        val missingKeys = publicConfiguration.filterValues { it == null }.keys
-        if (missingKeys.isNotEmpty()) {
-            throw GradleException(
-                "Missing required public Appwrite values in .env: ${missingKeys.joinToString()}",
-            )
-        }
         if (configuredProfile !in setOf("personal", "robot")) {
             throw GradleException(
                 "DOSEY_BUILD_PROFILE must be explicitly set to personal or robot for Android flavor builds.",
@@ -124,7 +102,7 @@ android {
         create("personal") {
             dimension = "distribution"
             manifestPlaceholders["appwriteCallbackScheme"] =
-                "appwrite-callback-${publicConfiguration["APPWRITE_PROJECT_ID"] ?: "not-configured"}"
+                appwriteCallbackScheme
         }
         create("robot") {
             dimension = "distribution"
