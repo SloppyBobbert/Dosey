@@ -130,7 +130,10 @@ creation recovery, concurrent seventh/eighth acceptance, membership failure
 recovery, removal recovery, and table permissions. Never run those scenarios
 against production data.
 
-The iOS URL scheme in `../../mobile_app/dosey_app/ios/Runner/Info.plist` must remain
-`appwrite-callback-<APPWRITE_PROJECT_ID>`. Android derives the same scheme from
-the ignored `.env` file at build time; update the iOS value manually if the
-Appwrite project changes.
+The mobile wrapper derives `appwrite-callback-<APPWRITE_PROJECT_ID>` from a
+validated public profile for Android and the generated iOS xcconfig. The mounted
+lookup Function ID is independently optional; pairing, household, and medication
+groups may be absent but cannot be partial. URLs are canonical HTTPS origins or
+`/v1` endpoints. Direct Xcode builds fail closed without generated configuration;
+Robot iOS builds are unsupported. Medication IDs remain dormant and staging or
+production profiles cannot enable sync.

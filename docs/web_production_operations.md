@@ -61,7 +61,9 @@ non-default ref, but the workflow pins the release tag to the exact built
 `GITHUB_SHA` and verifies the published tag resolves to that artifact source;
 an advance of `main` cannot retarget an in-flight release.
 
-The generated Android `.env` contains public Appwrite configuration only. Never
+Android builds use the validated checked-in offline profile and wrapper. Named
+online shells remain unavailable until authoritative public values are approved;
+do not invent values or activate staging. Never
 add API keys, pairing HMAC secrets, session credentials, or other server secrets.
 Current Android clients still use legacy Team-backed mounted restoration and do
 not consume `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID`; do not qualify or roll out

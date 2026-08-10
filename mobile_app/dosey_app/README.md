@@ -43,6 +43,14 @@ APPWRITE_ACCEPT_HOUSEHOLD_INVITATION_FUNCTION_ID
 APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID
 ```
 
+`APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID` is independently optional. Pairing,
+household, and medication groups may be omitted, but a present group must be
+complete. Profiles require canonical HTTPS `/v1` endpoints and derive the
+callback scheme from the project ID. Direct Xcode builds fail closed until the
+wrapper generates `ios/Flutter/DoseyProfile.xcconfig`; Robot iOS builds are not
+supported. Medication sync remains dormant, and staging/production profiles keep
+it disabled.
+
 Medication-sync defines satisfy only a dormant `CloudConfiguration` predicate:
 `CAREGIVER_SYNC_ENABLED=true`, endpoint/project configuration, and both IDs
 below. They are future isolated-staging-only inputs after the authoritative
@@ -68,8 +76,10 @@ pairing/restoration remains inactive pending compatible mobile wiring and
 rollout. Do not treat configured Function IDs as an available mounted-phone
 feature.
 
-`.env` is ignored. Bootstrap it separately for each checkout/worktree, never
-commit or print it, and pass it only through `--dart-define-from-file=.env`.
+Use a checked-in named profile or an isolated public JSON profile. The named
+development, staging, and production shells intentionally fail validation until
+authoritative public values exist. The wrapper rejects secrets, table IDs, and
+unknown keys; it writes the ignored iOS callback setting before invoking Flutter.
 
 ## Local commands
 
@@ -80,11 +90,11 @@ dart run build_runner build
 git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
-flutter run --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
-flutter run --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
-flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
-flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
-flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- run
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor robot -- run
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build apk --debug
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor robot -- build apk --debug
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build ios --debug --no-codesign
 git diff --check
 ```
 
@@ -116,8 +126,8 @@ git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 dart format --set-exit-if-changed .
 flutter analyze
 flutter test
-flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
-flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build apk --debug
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor robot -- build apk --debug
 ```
 
 For the local backup contract, see

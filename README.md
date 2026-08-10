@@ -107,7 +107,7 @@ Medication schedules, dose state and history, inventory, and related medication 
 
 ### Development commands
 
-Run these from `mobile_app/dosey_app/`. The `.env` file is local and ignored; never commit it or put server secrets in it.
+Run these from `mobile_app/dosey_app/`. Use the validated public JSON profile wrapper; never put server secrets in a client profile.
 
 ```sh
 flutter pub get
@@ -116,17 +116,17 @@ dart run build_runner build
 git diff --exit-code -- lib/core/storage/dosey_database.g.dart
 flutter analyze
 flutter test
-flutter run --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
-flutter run --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
-flutter build apk --debug --flavor personal --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal --dart-define=DOSEY_RUNTIME_CAPABILITY=hardware-assisted --dart-define=CAREGIVER_SYNC_ENABLED=false
-flutter build apk --debug --flavor robot --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=robot --dart-define=DOSEY_RUNTIME_CAPABILITY=phone-only --dart-define=CAREGIVER_SYNC_ENABLED=false
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- run
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor robot -- run
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build apk --debug
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor robot -- build apk --debug
 git diff --check
 ```
 
 The retained iOS build is a preservation and compile-regression check, not release qualification:
 
 ```sh
-flutter build ios --debug --no-codesign --dart-define-from-file=.env --dart-define=DOSEY_BUILD_PROFILE=personal
+dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build ios --debug --no-codesign
 ```
 
 For firmware, run the safe-default controller build from `firmware/`. The command below uses a machine-specific PlatformIO path; see [`firmware/README.md`](firmware/README.md) for setup and the command for your environment:
