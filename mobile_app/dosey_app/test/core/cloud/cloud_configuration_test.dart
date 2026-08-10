@@ -85,7 +85,24 @@ void main() {
       () => CloudConfiguration.fromValues(
         endpoint: 'https://nyc.cloud.appwrite.io/v1',
         projectId: 'dosey-development',
+        caregiverSyncEnabled: true,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => CloudConfiguration.fromValues(
+        endpoint: 'https://nyc.cloud.appwrite.io/v1',
+        projectId: 'dosey-development',
         medicationSyncPushFunctionId: 'medication-push',
+        caregiverSyncEnabled: true,
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => CloudConfiguration.fromValues(
+        endpoint: 'https://nyc.cloud.appwrite.io/v1',
+        projectId: 'dosey-development',
+        medicationSyncPullFunctionId: 'medication-pull',
         caregiverSyncEnabled: true,
       ),
       throwsArgumentError,

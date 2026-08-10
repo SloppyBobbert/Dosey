@@ -71,6 +71,13 @@ class CloudConfiguration {
       medicationSyncPushFunctionId,
       medicationSyncPullFunctionId,
     ]);
+    if (caregiverSyncEnabled &&
+        (_normalize(medicationSyncPushFunctionId) == null ||
+            _normalize(medicationSyncPullFunctionId) == null)) {
+      throw ArgumentError(
+        'Caregiver sync requires both medication sync Function IDs.',
+      );
+    }
     return CloudConfiguration._(
       endpoint: normalizedEndpoint,
       projectId: normalizedProjectId,
