@@ -77,9 +77,8 @@ export function createHouseholdRuntime(
     ),
   });
   const registry = new TransactionalHouseholdRegistry(
-    new AppwriteHouseholdPersistence(rows, (error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      reportError(`Household transaction rollback failed: ${message}`);
+    new AppwriteHouseholdPersistence(rows, () => {
+      reportError('Household transaction rollback failed.');
     }),
   );
   const teams = new AppwriteHouseholdTeams(

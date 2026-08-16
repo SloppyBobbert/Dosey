@@ -14,6 +14,32 @@ const environment = {
 };
 
 describe('household runtime', () => {
+  test('reports rollback failures without provider error details', async () => {
+    const secret = 'APPWRITE_KEY=rollback-secret-user-id-123';
+    const reported: string[] = [];
+    const runtime = createHouseholdRuntime(
+      { 'x-appwrite-key': 'dynamic-key' },
+      environment,
+      (message) => reported.push(message),
+    );
+    const persistence = (runtime.createInvitation as unknown as {
+      dependencies: { registry: { persistence: RuntimePersistence } };
+    }).dependencies.registry.persistence;
+    persistence.rows = {
+      beginTransaction: async () => 'transaction-1',
+      rollbackTransaction: async () => { throw new Error(secret); },
+    };
+    const original = new Error('operation failed');
+
+    await assert.rejects(
+      persistence.transaction(async () => { throw original; }),
+      (error: unknown) => error === original,
+    );
+
+    assert.deepEqual(reported, ['Household transaction rollback failed.']);
+    assert.equal(reported.some((message) => message.includes(secret)), false);
+  });
+
   test('constructs all four services from server-only configuration', () => {
     const runtime = createHouseholdRuntime(
       {
@@ -50,3 +76,11 @@ describe('household runtime', () => {
     }), null);
   });
 });
+
+type RuntimePersistence = {
+  rows: {
+    beginTransaction(): Promise<string>;
+    rollbackTransaction(transactionId: string): Promise<void>;
+  };
+  transaction<T>(operation: () => Promise<T>): Promise<T>;
+};

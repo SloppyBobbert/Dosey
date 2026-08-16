@@ -142,9 +142,8 @@ export function createMedicationSyncRuntime(
     ),
   });
   const store = new TransactionalMedicationSyncStore(
-    new AppwriteMedicationSyncPersistence(rows, (error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      reportError(`Medication sync transaction rollback failed: ${message}`);
+    new AppwriteMedicationSyncPersistence(rows, () => {
+      reportError('Medication sync transaction rollback failed.');
     }),
   );
 

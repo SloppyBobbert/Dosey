@@ -92,9 +92,8 @@ export function createPairingRuntime(
       : {}),
   });
   const store = new TransactionalPairingStore(
-    new AppwritePairingPersistence(tables, (error) => {
-      const message = error instanceof Error ? error.message : String(error);
-      reportError(`Pairing transaction rollback failed: ${message}`);
+    new AppwritePairingPersistence(tables, () => {
+      reportError('Pairing transaction rollback failed.');
     }),
   );
   const robots = new AppwriteRobotAccessDirectory(
