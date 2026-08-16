@@ -13,6 +13,8 @@ restore or import is verified, then delete unneeded copies.
 
 New exports use format **v2** and source schema **18**:
 
+The current `sourceSchemaVersion: 18` maps directly to Drift schema 18.
+
 ```json
 {
   "format": "dosey-local-backup",

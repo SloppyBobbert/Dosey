@@ -7,7 +7,11 @@ import 'package:dosey_app/core/backup/backup_document.dart';
 import 'package:dosey_app/core/backup/backup_file_gateway.dart';
 import 'package:dosey_app/core/backup/local_backup_service.dart';
 import 'package:dosey_app/core/backup/local_backup_store.dart';
+import 'package:dosey_app/core/notifications/reminder_scheduler.dart';
+import 'package:dosey_app/core/reminders/local_reminder_repository.dart';
+import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
+import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -211,27 +215,59 @@ void main() {
     expect(result.status, BackupOperationStatus.successWithNotificationWarning);
   });
 
-  test('notification sync observes the restored enabled schedule', () async {
+  test('restore commits before independent notification reconciliation', () async {
     final sourceDatabase = DoseyDatabase.inMemory();
     await sourceDatabase.customStatement(
-      "INSERT INTO reminder_schedules (id, label, profile_id, hour, minute, is_enabled, created_at, updated_at) VALUES ('restored-schedule', 'Restored', 'schedule-1', 9, 45, 1, 1, 1)",
+      "INSERT INTO reminder_schedules (id, label, profile_id, hour, minute, is_enabled, created_at, updated_at) VALUES ('enabled-schedule', 'Restored enabled', 'schedule-1', 9, 45, 1, 1, 1)",
+    );
+    await sourceDatabase.customStatement(
+      "INSERT INTO reminder_schedules (id, label, profile_id, hour, minute, is_enabled, created_at, updated_at) VALUES ('disabled-schedule', 'Restored disabled', 'schedule-1', 12, 0, 0, 1, 1)",
     );
     final source = await LocalBackupStore(sourceDatabase).readSnapshot();
     await sourceDatabase.close();
-    final destinationDatabase = DoseyDatabase.inMemory();
-    addTearDown(destinationDatabase.close);
-    await destinationDatabase.customStatement(
-      "INSERT INTO reminder_schedules (id, label, profile_id, hour, minute, is_enabled, created_at, updated_at) VALUES ('stale-schedule', 'Stale', 'schedule-1', 7, 30, 0, 1, 1)",
+    final directory = await Directory.systemTemp.createTemp(
+      'dosey-backup-service-test-',
     );
-    List<ReminderScheduleRow>? schedulesSeenBySync;
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/dosey.sqlite');
+    final destinationDatabase = DoseyDatabase(NativeDatabase(file));
+    addTearDown(destinationDatabase.close);
+    final notificationDatabase = DoseyDatabase(NativeDatabase(file));
+    addTearDown(notificationDatabase.close);
+    await destinationDatabase.customStatement(
+      "INSERT INTO reminder_schedules (id, label, profile_id, hour, minute, is_enabled, created_at, updated_at) VALUES ('stale-database-schedule', 'Stale database', 'schedule-1', 7, 30, 1, 1, 1)",
+    );
+    expect(
+      (await notificationDatabase
+              .select(notificationDatabase.reminderSchedules)
+              .get())
+          .map((schedule) => schedule.id),
+      ['stale-database-schedule'],
+    );
+    final scheduler = _ReconciliationScheduler()
+      ..activeReminders['enabled-schedule'] = _ReminderNotification(
+        label: 'Stale enabled',
+        scheduledFor: DateTime(2026, 6, 29, 8),
+      )
+      ..activeReminders['disabled-schedule'] = _ReminderNotification(
+        label: 'Stale disabled',
+        scheduledFor: DateTime(2026, 6, 29, 12),
+      );
+    final reminders = ReminderScheduleService(
+      repository: LocalReminderRepository(notificationDatabase),
+      scheduler: scheduler,
+      now: () => DateTime(2026, 6, 29, 7, 15),
+    );
+    List<ReminderScheduleRow>? schedulesAtReconciliation;
     final service = LocalBackupService(
       database: destinationDatabase,
       store: LocalBackupStore(destinationDatabase),
       gateway: _FakeGateway(),
       syncNotifications: () async {
-        schedulesSeenBySync = await destinationDatabase
-            .select(destinationDatabase.reminderSchedules)
+        schedulesAtReconciliation = await notificationDatabase
+            .select(notificationDatabase.reminderSchedules)
             .get();
+        await reminders.syncScheduledNotifications();
       },
     );
 
@@ -240,11 +276,17 @@ void main() {
     );
 
     expect(result.status, BackupOperationStatus.success);
-    expect(schedulesSeenBySync, hasLength(1));
-    expect(schedulesSeenBySync!.single.id, 'restored-schedule');
-    expect(schedulesSeenBySync!.single.hour, 9);
-    expect(schedulesSeenBySync!.single.minute, 45);
-    expect(schedulesSeenBySync!.single.isEnabled, isTrue);
+    expect(
+      schedulesAtReconciliation!.map((schedule) => schedule.id),
+      unorderedEquals(['enabled-schedule', 'disabled-schedule']),
+    );
+    expect(scheduler.cancelledDoseIds, ['disabled-schedule']);
+    expect(scheduler.activeReminders, {
+      'enabled-schedule': _ReminderNotification(
+        label: 'Restored enabled',
+        scheduledFor: DateTime(2026, 6, 29, 9, 45),
+      ),
+    });
   });
 
   test('restore accepts valid non-canonical JSON', () async {
@@ -324,10 +366,12 @@ void main() {
     final normalStore = LocalBackupStore(database);
     final source = await normalStore.readSnapshot();
     final gateway = _FakeGateway();
+    var notificationSyncs = 0;
     final service = LocalBackupService(
       database: database,
       store: _FailingReplacementStore(database),
       gateway: gateway,
+      syncNotifications: () async => notificationSyncs++,
     );
 
     final result = await service.restore(
@@ -336,6 +380,7 @@ void main() {
 
     expect(result.status, BackupOperationStatus.restoreRolledBack);
     expect(gateway.recoveryWrites, 1);
+    expect(notificationSyncs, 0);
     expect(
       (await normalStore.readSnapshot()).data['settings']!.single['value'],
       'Before',
@@ -454,4 +499,51 @@ class _FakeGateway implements BackupFileGateway {
     recovery = Uint8List.fromList(bytes);
     await onWriteRecovery?.call();
   }
+}
+
+class _ReconciliationScheduler implements ReminderScheduler {
+  final activeReminders = <String, _ReminderNotification>{};
+  final cancelledDoseIds = <String>[];
+
+  @override
+  Future<void> cancelDoseReminder(String doseId) async {
+    cancelledDoseIds.add(doseId);
+    activeReminders.remove(doseId);
+  }
+
+  @override
+  Future<void> requestPermission() async {}
+
+  @override
+  Future<void> scheduleDoseReminder({
+    required String doseId,
+    required DateTime scheduledFor,
+    required String label,
+    required bool repeatsDaily,
+  }) async {
+    activeReminders[doseId] = _ReminderNotification(
+      label: label,
+      scheduledFor: scheduledFor,
+    );
+  }
+}
+
+class _ReminderNotification {
+  const _ReminderNotification({
+    required this.label,
+    required this.scheduledFor,
+  });
+
+  final String label;
+  final DateTime scheduledFor;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _ReminderNotification &&
+        other.label == label &&
+        other.scheduledFor == scheduledFor;
+  }
+
+  @override
+  int get hashCode => Object.hash(label, scheduledFor);
 }
