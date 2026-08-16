@@ -14,6 +14,32 @@ const environment = {
 };
 
 describe('pairing runtime account adapter', () => {
+  test('reports rollback failures without provider error details', async () => {
+    const secret = 'APPWRITE_KEY=rollback-secret-user-id-123';
+    const reported: string[] = [];
+    const runtime = createPairingRuntime(
+      { 'x-appwrite-key': 'dynamic-key' },
+      environment,
+      (message) => reported.push(message),
+    );
+    const persistence = (runtime.createPairingCode as unknown as {
+      dependencies: { store: { persistence: RuntimePersistence } };
+    }).dependencies.store.persistence;
+    persistence.rows = {
+      beginTransaction: async () => 'transaction-1',
+      rollbackTransaction: async () => { throw new Error(secret); },
+    };
+    const original = new Error('operation failed');
+
+    await assert.rejects(
+      persistence.transaction(async () => { throw original; }),
+      (error: unknown) => error === original,
+    );
+
+    assert.deepEqual(reported, ['Pairing transaction rollback failed.']);
+    assert.equal(reported.some((message) => message.includes(secret)), false);
+  });
+
   test('requires mounted access configuration only for claim runtime use', () => {
     const { DOSEY_MOUNTED_ROBOT_ACCESS_TABLE_ID: _, ...withoutMountedAccess } = environment;
     assert.doesNotThrow(() => createPairingRuntime(
@@ -69,3 +95,11 @@ describe('pairing runtime account adapter', () => {
     assert.deepEqual(calls.sort(), ['account.get', 'account.getSession:current']);
   });
 });
+
+type RuntimePersistence = {
+  rows: {
+    beginTransaction(): Promise<string>;
+    rollbackTransaction(transactionId: string): Promise<void>;
+  };
+  transaction<T>(operation: () => Promise<T>): Promise<T>;
+};

@@ -30,6 +30,33 @@ const parser: MedicationSyncRequestParser = {
 };
 
 describe('Medication sync runtime', () => {
+  test('reports rollback failures without provider error details', async () => {
+    const secret = 'APPWRITE_KEY=rollback-secret-user-id-123';
+    const reported: string[] = [];
+    const runtime = createMedicationSyncRuntime(
+      { 'x-appwrite-key': 'dynamic-key' },
+      parser,
+      environment,
+      (message) => reported.push(message),
+    );
+    const persistence = (runtime.push as unknown as {
+      store: { persistence: RuntimePersistence };
+    }).store.persistence;
+    persistence.rows = {
+      beginTransaction: async () => 'transaction-1',
+      rollbackTransaction: async () => { throw new Error(secret); },
+    };
+    const original = new Error('operation failed');
+
+    await assert.rejects(
+      persistence.transaction(async () => { throw original; }),
+      (error: unknown) => error === original,
+    );
+
+    assert.deepEqual(reported, ['Medication sync transaction rollback failed.']);
+    assert.equal(reported.some((message) => message.includes(secret)), false);
+  });
+
   test('constructs push and pull dependencies from environment-only table IDs', () => {
     const runtime = createMedicationSyncRuntime(
       { 'x-appwrite-key': 'dynamic-key', 'x-appwrite-user-jwt': 'user-jwt' },
@@ -92,3 +119,11 @@ describe('Medication sync runtime', () => {
     assert.throws(() => configuredHumanProviders(''), /human provider/);
   });
 });
+
+type RuntimePersistence = {
+  rows: {
+    beginTransaction(): Promise<string>;
+    rollbackTransaction(transactionId: string): Promise<void>;
+  };
+  transaction<T>(operation: () => Promise<T>): Promise<T>;
+};

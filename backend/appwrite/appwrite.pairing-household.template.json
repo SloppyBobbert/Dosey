@@ -1,0 +1,109 @@
+{
+  "database": { "name": "Dosey pairing and household" },
+  "tables": [
+    {
+      "$id": "pairing_claims",
+      "name": "Pairing claims",
+      "$permissions": [],
+      "rowSecurity": false,
+      "enabled": true,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "codeDigest", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "expiresAt", "type": "datetime", "required": true, "array": false, "default": null },
+        { "key": "consumedAt", "type": "datetime", "required": false, "array": false, "default": null },
+        { "key": "mountedDeviceAccountId", "type": "varchar", "size": 128, "required": false, "array": false, "default": null },
+        { "key": "failedAttempts", "type": "integer", "min": 0, "max": 9007199254740991, "required": true, "array": false, "default": null },
+        { "key": "active", "type": "boolean", "required": true, "array": false, "default": null }
+      ],
+      "indexes": [
+        { "key": "active_code_digest", "type": "key", "columns": ["active", "codeDigest"], "orders": ["ASC", "ASC"] },
+        { "key": "robot_active", "type": "key", "columns": ["robotId", "active"], "orders": ["ASC", "ASC"] }
+      ]
+    },
+    {
+      "$id": "pairing_attempts",
+      "name": "Pairing attempts",
+      "$permissions": [],
+      "rowSecurity": false,
+      "enabled": true,
+      "columns": [
+        { "key": "deviceAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "failedAttempts", "type": "integer", "min": 0, "max": 9007199254740991, "required": true, "array": false, "default": null },
+        { "key": "blockedUntil", "type": "datetime", "required": false, "array": false, "default": null }
+      ],
+      "indexes": []
+    },
+    {
+      "$id": "mounted_robot_access",
+      "name": "Mounted robot access",
+      "$permissions": [],
+      "rowSecurity": false,
+      "enabled": true,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "mountedDeviceAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "registeredPatientDeviceId", "type": "varchar", "size": 128, "required": false, "array": false, "default": null },
+        { "key": "pairingClaimId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "createdAt", "type": "datetime", "required": true, "array": false, "default": null },
+        { "key": "updatedAt", "type": "datetime", "required": true, "array": false, "default": null }
+      ],
+      "indexes": [
+        { "key": "mounted_device", "type": "key", "columns": ["mountedDeviceAccountId"], "orders": ["ASC"] }
+      ]
+    },
+    {
+      "$id": "robot_installations",
+      "name": "Robot installations",
+      "$permissions": [],
+      "rowSecurity": false,
+      "enabled": true,
+      "columns": [
+        { "key": "ownerAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "displayName", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "humanCount", "type": "integer", "min": 0, "max": 7, "required": true, "array": false, "default": null },
+        { "key": "status", "type": "varchar", "size": 16, "required": true, "array": false, "default": null },
+        { "key": "createdAt", "type": "datetime", "required": true, "array": false, "default": null },
+        { "key": "updatedAt", "type": "datetime", "required": true, "array": false, "default": null }
+      ],
+      "indexes": []
+    },
+    {
+      "$id": "human_robot_links",
+      "name": "Human robot links",
+      "$permissions": [],
+      "rowSecurity": false,
+      "enabled": true,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "role", "type": "varchar", "size": 16, "required": true, "array": false, "default": null },
+        { "key": "membershipId", "type": "varchar", "size": 128, "required": false, "array": false, "default": null },
+        { "key": "status", "type": "varchar", "size": 16, "required": true, "array": false, "default": null },
+        { "key": "createdAt", "type": "datetime", "required": true, "array": false, "default": null },
+        { "key": "updatedAt", "type": "datetime", "required": true, "array": false, "default": null }
+      ],
+      "indexes": []
+    },
+    {
+      "$id": "household_invitations",
+      "name": "Household invitations",
+      "$permissions": [],
+      "rowSecurity": false,
+      "enabled": true,
+      "columns": [
+        { "key": "robotId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "invitedEmail", "type": "varchar", "size": 320, "required": true, "array": false, "default": null },
+        { "key": "codeDigest", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "expiresAt", "type": "datetime", "required": true, "array": false, "default": null },
+        { "key": "createdByAccountId", "type": "varchar", "size": 128, "required": true, "array": false, "default": null },
+        { "key": "consumedAt", "type": "datetime", "required": false, "array": false, "default": null },
+        { "key": "acceptedAccountId", "type": "varchar", "size": 128, "required": false, "array": false, "default": null },
+        { "key": "createdAt", "type": "datetime", "required": true, "array": false, "default": null },
+        { "key": "updatedAt", "type": "datetime", "required": true, "array": false, "default": null }
+      ],
+      "indexes": [
+        { "key": "code_digest", "type": "key", "columns": ["codeDigest"], "orders": ["ASC"] }
+      ]
+    }
+  ]
+}
