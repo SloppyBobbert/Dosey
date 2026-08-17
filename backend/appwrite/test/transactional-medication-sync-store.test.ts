@@ -21,6 +21,7 @@ class MemoryPersistence implements MedicationSyncPersistence {
   states = new Map<string, MedicationSyncStateRecord>();
   changes = new Map<string, MedicationSyncChangeRecord>();
   failChange = false;
+  dropChanges = false;
 
   async transaction<T>(operation: (transaction: MedicationSyncTransaction) => Promise<T>) {
     const snapshot = {
@@ -60,7 +61,7 @@ class MemoryPersistence implements MedicationSyncPersistence {
         if (this.failChange) throw new Error('change failed');
         this.changes.set(`${record.robotId}:${record.sequence}`, record);
       },
-      listChanges: async (robotId, after, through, limit) => [...this.changes.values()]
+      listChanges: async (robotId, after, through, limit) => this.dropChanges ? [] : [...this.changes.values()]
         .filter((change) => change.robotId === robotId)
         .filter((change) => change.sequence > after && change.sequence <= through)
         .sort((left, right) => left.sequence - right.sequence)
@@ -438,5 +439,15 @@ describe('Transactional medication sync store', () => {
         /Invalid medication sync cursor/,
       );
     }
+  });
+
+  test('fails closed when persistence omits changes before the checkpoint', async () => {
+    const persistence = new MemoryPersistence();
+    persistence.states.set('robot-1', { robotId: 'robot-1', highWatermark: 1, updatedAt: new Date() });
+    persistence.dropChanges = true;
+    await assert.rejects(
+      new TransactionalMedicationSyncStore(persistence).pull({ robotId: 'robot-1', cursor: 0, limit: 1 }),
+      /did not advance/,
+    );
   });
 });

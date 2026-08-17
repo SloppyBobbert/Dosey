@@ -46,6 +46,18 @@ const parser: MedicationSyncRequestParser = {
 };
 
 describe('Medication sync function boundaries', () => {
+  test('maps pull persistence failures to a safe retryable response', async () => {
+    const request = context();
+    await medicationSyncPullHandler(
+      { pull: async () => { throw new Error('Medication sync pull did not advance the cursor.'); } },
+      identity,
+      parser,
+    )(request.value);
+    assert.deepEqual(request.response(), {
+      body: { error: 'retryable_internal_error' }, status: 500,
+    });
+  });
+
   test('requires POST and a verified human before parsing', async () => {
     let parsed = false;
     const guardedParser: MedicationSyncRequestParser = {

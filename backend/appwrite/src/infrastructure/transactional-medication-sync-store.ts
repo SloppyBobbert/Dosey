@@ -409,6 +409,9 @@ export class TransactionalMedicationSyncStore {
         input.limit,
       );
       const nextCursor = changes.at(-1)?.sequence ?? input.cursor;
+      if (checkpoint > input.cursor && nextCursor <= input.cursor) {
+        throw new Error('Medication sync pull did not advance the cursor.');
+      }
       return {
         changes,
         nextCursor,

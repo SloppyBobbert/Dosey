@@ -132,7 +132,7 @@ function medicationSyncHandler(
       if (error instanceof MedicationSyncAuthorizationError) {
         return context.res.json({ error: 'household_access_denied' }, 403);
       }
-      throw error;
+      return context.res.json({ error: 'retryable_internal_error' }, 500);
     }
   };
 }
