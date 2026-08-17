@@ -856,6 +856,182 @@ void main() {
   });
 
   test(
+    'retries transient responses and Appwrite errors without changing pushes',
+    () async {
+      final pushApi = _FakeMedicationSyncFunctionsApi([
+        const MedicationSyncFunctionResponse(statusCode: 429, body: '{}'),
+        MedicationSyncFunctionResponse(
+          statusCode: 200,
+          body: jsonEncode({
+            'contractVersion': 1,
+            'robotId': 'robot-1',
+            'acknowledgements': [_pushAcknowledgement('mutation-1')],
+          }),
+        ),
+      ]);
+
+      await _gateway(pushApi).push('robot-1', [
+        CaregiverMutation.upsertMedication(
+          CaregiverMedication(
+            id: 'medication-1',
+            name: 'Aspirin',
+            instructions: '',
+            active: true,
+            version: 3,
+          ),
+        ),
+      ]);
+
+      expect(pushApi.calls, hasLength(2));
+      expect(pushApi.calls.first.body, pushApi.calls.last.body);
+      expect(
+        ((jsonDecode(pushApi.calls.first.body) as Map)['operations'] as List)
+            .single['mutationId'],
+        'mutation-1',
+      );
+
+      for (final failure in <Object>[
+        const MedicationSyncFunctionResponse(statusCode: 503, body: '{}'),
+        AppwriteException('transport unavailable'),
+        AppwriteException('server unavailable', 503),
+      ]) {
+        final api = _FakeMedicationSyncFunctionsApi([
+          failure,
+          MedicationSyncFunctionResponse(
+            statusCode: 200,
+            body: jsonEncode(
+              _pullPage(
+                cursor: null,
+                checkpoint: '1',
+                nextCursor: '1',
+                hasMore: false,
+                changes: const [],
+              ),
+            ),
+          ),
+        ]);
+
+        await _gateway(api).pull('robot-1');
+
+        expect(api.calls, hasLength(2), reason: '$failure');
+        expect(api.calls.first.body, api.calls.last.body, reason: '$failure');
+      }
+    },
+  );
+
+  test('exhausted pull retries leave the committed cache unchanged', () async {
+    final api = _FakeMedicationSyncFunctionsApi([
+      MedicationSyncFunctionResponse(
+        statusCode: 200,
+        body: jsonEncode(
+          _pullPage(
+            cursor: null,
+            checkpoint: '1',
+            nextCursor: '1',
+            hasMore: false,
+            changes: [_medicationChange(name: 'Committed')],
+          ),
+        ),
+      ),
+      const MedicationSyncFunctionResponse(statusCode: 503, body: '{}'),
+      const MedicationSyncFunctionResponse(statusCode: 503, body: '{}'),
+      const MedicationSyncFunctionResponse(statusCode: 503, body: '{}'),
+      MedicationSyncFunctionResponse(
+        statusCode: 200,
+        body: jsonEncode(
+          _pullPage(
+            cursor: '1',
+            checkpoint: '1',
+            nextCursor: '1',
+            hasMore: false,
+            changes: const [],
+          ),
+        ),
+      ),
+    ]);
+    final gateway = _gateway(api);
+    await gateway.pull('robot-1');
+
+    await expectLater(
+      gateway.pull('robot-1', cursor: '1', checkpoint: '1'),
+      throwsA(isA<CaregiverSyncException>()),
+    );
+
+    expect(api.calls, hasLength(4));
+    expect(api.calls.skip(1).map((call) => call.body).toSet(), hasLength(1));
+
+    final recovered = await gateway.pull(
+      'robot-1',
+      cursor: '1',
+      checkpoint: '1',
+    );
+
+    expect(recovered.snapshot.medications.single.name, 'Committed');
+  });
+
+  test(
+    'a later pull page failure does not publish partial cache changes',
+    () async {
+      final api = _FakeMedicationSyncFunctionsApi([
+        MedicationSyncFunctionResponse(
+          statusCode: 200,
+          body: jsonEncode(
+            _pullPage(
+              cursor: null,
+              checkpoint: '1',
+              nextCursor: '1',
+              hasMore: false,
+              changes: [_medicationChange(name: 'Committed')],
+            ),
+          ),
+        ),
+        MedicationSyncFunctionResponse(
+          statusCode: 200,
+          body: jsonEncode(
+            _pullPage(
+              cursor: null,
+              checkpoint: '3',
+              nextCursor: '2',
+              hasMore: true,
+              changes: [_medicationChange(cursor: '2', name: 'Partial')],
+            ),
+          ),
+        ),
+        const MedicationSyncFunctionResponse(statusCode: 400, body: '{}'),
+        MedicationSyncFunctionResponse(
+          statusCode: 200,
+          body: jsonEncode(
+            _pullPage(
+              cursor: '1',
+              checkpoint: '1',
+              nextCursor: '1',
+              hasMore: false,
+              changes: const [],
+            ),
+          ),
+        ),
+      ]);
+      final gateway = _gateway(api);
+      await gateway.pull('robot-1');
+
+      await expectLater(
+        gateway.pull('robot-1'),
+        throwsA(isA<CaregiverSyncException>()),
+      );
+
+      expect(api.calls, hasLength(3));
+
+      final recovered = await gateway.pull(
+        'robot-1',
+        cursor: '1',
+        checkpoint: '1',
+      );
+
+      expect(recovered.snapshot.medications.single.name, 'Committed');
+    },
+  );
+
+  test(
     'Function 401 requires sign-in when account revalidation fails',
     () async {
       final api = _FakeMedicationSyncFunctionsApi(
