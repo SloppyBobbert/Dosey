@@ -16,6 +16,7 @@ import {
 } from '../infrastructure/appwrite-household-teams.js';
 import { TransactionalHouseholdRegistry } from '../infrastructure/transactional-household-registry.js';
 import { AppwriteFunctionIdentityVerifier } from '../functions/function-identity.js';
+import { parseHumanAuthProviders } from './human-auth-providers.js';
 
 export function createHouseholdRuntime(
   headers: Readonly<Record<string, string | undefined>>,
@@ -60,7 +61,7 @@ export function createHouseholdRuntime(
         provider: session.provider,
       };
     },
-  });
+  }, parseHumanAuthProviders(environment.DOSEY_HUMAN_AUTH_PROVIDERS));
   const rows = new AppwriteHouseholdRowsApi(new TablesDB(adminClient), {
     databaseId: required(environment.DOSEY_DATABASE_ID, 'DOSEY_DATABASE_ID'),
     robotInstallationsTableId: required(
