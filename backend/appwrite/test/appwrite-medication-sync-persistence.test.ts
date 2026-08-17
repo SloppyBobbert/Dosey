@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { describe, test } from 'node:test';
-import { AppwriteException } from 'node-appwrite';
+import { AppwriteException, Query } from 'node-appwrite';
 
 import {
   AppwriteMedicationSyncPersistence,
@@ -390,6 +390,78 @@ describe('Appwrite medication sync persistence', () => {
         transactionId: 'transaction-2',
       },
     ]);
+  });
+
+  test('maps bounded ordered change queries to the configured changes table', async () => {
+    let call: unknown;
+    const rows = new AppwriteMedicationSyncRowsApi({
+      async listRows(input: unknown) {
+        call = input;
+        return { rows: [{ $id: 'change-row', sequence: 7 }] };
+      },
+    } as never, tableConfiguration);
+
+    const result = await rows.listChanges('robot-1', 3, 9, 4, 'transaction-1');
+
+    assert.deepEqual(call, {
+      databaseId: 'database',
+      tableId: tableConfiguration.changesTableId,
+      queries: [
+        Query.equal('robotId', ['robot-1']),
+        Query.greaterThan('sequence', 3),
+        Query.lessThanEqual('sequence', 9),
+        Query.orderAsc('sequence'),
+        Query.limit(4),
+      ],
+      transactionId: 'transaction-1',
+    });
+    assert.deepEqual(result, [{ $id: 'change-row', sequence: 7 }]);
+  });
+
+  test('routes lifecycle and row operations across every physical table', async () => {
+    const calls: Array<{ method: string; input: any }> = [];
+    const rows = new AppwriteMedicationSyncRowsApi({
+      async createTransaction() { return { $id: 'created-transaction' }; },
+      async updateTransaction(input: any) { calls.push({ method: 'transaction', input }); },
+      async getRow(input: any) { calls.push({ method: 'get', input }); return { $id: input.rowId, value: input.tableId }; },
+      async createRow(input: any) { calls.push({ method: 'create', input }); },
+      async upsertRow(input: any) { calls.push({ method: 'upsert', input }); },
+    } as never, tableConfiguration);
+    const tables: Array<[MedicationSyncTable, string]> = [
+      ['documents', 'documents'], ['events', 'events'], ['helpRequests', 'helpRequests'],
+      ['receipts', 'receipts'], ['state', 'state'], ['changes', 'changes'],
+      ['terminalOccurrences', 'terminal-occurrences'], ['terminalConflicts', 'terminal-conflicts'],
+    ];
+
+    assert.equal(await rows.beginTransaction(), 'created-transaction');
+    await rows.commitTransaction('commit-transaction');
+    await rows.rollbackTransaction('rollback-transaction');
+    for (const [table, physical] of tables) {
+      const row = { $id: `${table}-row`, value: table };
+      assert.deepEqual(await rows.getRow(table, row.$id, 'read-transaction'), { ...row, value: physical });
+      await rows.createRow(table, row, 'write-transaction');
+      await rows.upsertRow(table, row, 'upsert-transaction');
+      const relevant = calls.filter((call) => call.input?.tableId === physical);
+      assert.deepEqual(relevant.map((call) => [call.method, call.input.databaseId, call.input.tableId, call.input.rowId, call.input.transactionId, call.input.data]), [
+        ['get', 'database', physical, row.$id, 'read-transaction', undefined],
+        ['create', 'database', physical, row.$id, 'write-transaction', { value: table }],
+        ['upsert', 'database', physical, row.$id, 'upsert-transaction', { value: table }],
+      ]);
+    }
+    assert.deepEqual(calls.filter((call) => call.method === 'transaction').map((call) => call.input), [
+      { transactionId: 'commit-transaction', commit: true },
+      { transactionId: 'rollback-transaction', rollback: true },
+    ]);
+  });
+
+  test('propagates write provider errors unchanged', async () => {
+    const duplicate = new AppwriteException('duplicate', 409, 'row_already_exists');
+    const forbidden = new AppwriteException('forbidden', 403, 'general_forbidden');
+    const create = new AppwriteMedicationSyncRowsApi({ async createRow() { throw duplicate; } } as never, tableConfiguration);
+    const upsert = new AppwriteMedicationSyncRowsApi({ async upsertRow() { throw forbidden; } } as never, tableConfiguration);
+    const row = { $id: 'row-1', value: 'value' };
+    await assert.rejects(create.createRow('documents', row, 'transaction-1'), (error) => error === duplicate);
+    await assert.rejects(upsert.upsertRow('documents', row, 'transaction-1'), (error) => error === forbidden);
   });
 
   test('rolls back a staged mutation and retries the complete atomic write after a conflict', async () => {
