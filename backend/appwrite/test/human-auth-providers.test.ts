@@ -8,11 +8,12 @@ test('parses the default and explicitly configured human providers', () => {
   assert.deepEqual(parseHumanAuthProviders('google'), ['google']);
   assert.deepEqual(parseHumanAuthProviders('email'), ['email']);
   assert.deepEqual(parseHumanAuthProviders('google,email'), ['google', 'email']);
+  assert.deepEqual(parseHumanAuthProviders(' google, email '), ['google', 'email']);
   assert.deepEqual(parseHumanAuthProviders('email,google'), ['email', 'google']);
 });
 
 test('rejects blank, duplicate, and unsupported human provider configuration', () => {
-  for (const value of ['', ' ', 'google,google', 'email,', ',email', 'google,,email', 'github']) {
+  for (const value of ['', ' ', 'google,google', 'google, google ', 'email,', ',email', 'google,,email', 'github']) {
     assert.throws(() => parseHumanAuthProviders(value), /human provider/i);
   }
 });
