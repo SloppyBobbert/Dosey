@@ -21,6 +21,9 @@ import {
 } from '../infrastructure/appwrite-medication-sync-persistence.js';
 import { TransactionalMedicationSyncStore } from '../infrastructure/transactional-medication-sync-store.js';
 import { AppwriteMountedRobotAccessReader } from '../infrastructure/appwrite-mounted-robot-access.js';
+import { parseHumanAuthProviders } from './human-auth-providers.js';
+
+export { parseHumanAuthProviders as configuredHumanProviders } from './human-auth-providers.js';
 
 export function createMedicationSyncRuntime(
   headers: Readonly<Record<string, string | undefined>>,
@@ -85,7 +88,7 @@ export function createMedicationSyncRuntime(
         };
       },
     },
-    configuredHumanProviders(environment.DOSEY_HUMAN_AUTH_PROVIDERS),
+    parseHumanAuthProviders(environment.DOSEY_HUMAN_AUTH_PROVIDERS),
   );
   const tables = new TablesDB(adminClient);
   const access = new MedicationSyncAccessAuthorizer(
@@ -153,20 +156,6 @@ export function createMedicationSyncRuntime(
     push: new MedicationSyncPushService(access, store, () => new Date()),
     pull: new MedicationSyncPullService(access, store),
   };
-}
-
-export function configuredHumanProviders(value: string | undefined): readonly string[] {
-  if (value == null) return ['google'];
-  const providers = [...new Set(value.split(',').map((provider) => provider.trim()).filter(Boolean))];
-  if (providers.length === 0) {
-    throw new Error('At least one human provider must be configured.');
-  }
-  for (const provider of providers) {
-    if (provider !== 'google' && provider !== 'email') {
-      throw new Error(`Unsupported human provider: ${provider}.`);
-    }
-  }
-  return providers;
 }
 
 function required(value: string | undefined, name: string): string {
