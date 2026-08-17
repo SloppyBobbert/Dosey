@@ -149,6 +149,14 @@ class AppwriteCaregiverSyncGateway implements CaregiverSyncGateway {
       for (final operation in operations) {
         contracts.add(_mutation(accountId, robotId, operation));
       }
+      final mutationIds = contracts.map((value) => value.mutationId).toSet();
+      final idempotencyKeys = contracts
+          .map((value) => value.idempotencyKey)
+          .toSet();
+      if (mutationIds.length != contracts.length ||
+          idempotencyKeys.length != contracts.length) {
+        throw StateError('Duplicate mutation identity.');
+      }
     } on Object {
       throw const CaregiverSyncException('Medication change is invalid.');
     }
@@ -168,8 +176,10 @@ class AppwriteCaregiverSyncGateway implements CaregiverSyncGateway {
         .toSet();
     if (parsed.robotId != robotId ||
         parsed.acknowledgements.length != contracts.length ||
-        receivedIds.length != contracts.length ||
-        !receivedIds.containsAll(expectedIds)) {
+        receivedIds.length != parsed.acknowledgements.length ||
+        expectedIds.length != contracts.length ||
+        !receivedIds.containsAll(expectedIds) ||
+        !expectedIds.containsAll(receivedIds)) {
       throw const CaregiverSyncException(
         'Medication data returned an invalid response.',
       );

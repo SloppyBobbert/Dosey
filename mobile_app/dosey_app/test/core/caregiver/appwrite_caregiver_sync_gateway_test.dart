@@ -456,6 +456,127 @@ void main() {
   );
 
   test(
+    'push rejects duplicate generated mutation identities before calling',
+    () async {
+      final api = _FakeMedicationSyncFunctionsApi([]);
+      final gateway = AppwriteCaregiverSyncGateway(
+        api,
+        pushFunctionId: 'medication-push',
+        pullFunctionId: 'medication-pull',
+        deviceId: 'web-device',
+        newId: () => 'duplicate-id',
+        now: () => DateTime.utc(2026, 7, 29, 12),
+      );
+
+      await expectLater(
+        gateway.push('robot-1', [
+          _medicationMutation('medication-1'),
+          _medicationMutation('medication-2'),
+        ]),
+        throwsA(
+          isA<CaregiverSyncException>().having(
+            (error) => error.message,
+            'message',
+            'Medication change is invalid.',
+          ),
+        ),
+      );
+
+      expect(api.calls, isEmpty);
+    },
+  );
+
+  test('push rejects an unexpected acknowledgement identity', () async {
+    final api = _FakeMedicationSyncFunctionsApi([
+      MedicationSyncFunctionResponse(
+        statusCode: 200,
+        body: jsonEncode({
+          'contractVersion': 1,
+          'robotId': 'robot-1',
+          'acknowledgements': [_pushAcknowledgement('unexpected-id')],
+        }),
+      ),
+    ]);
+
+    await expectLater(
+      _gateway(api).push('robot-1', [_medicationMutation('medication-1')]),
+      throwsA(isA<CaregiverSyncException>()),
+    );
+
+    expect(api.calls, hasLength(1));
+  });
+
+  test('push rejects duplicate acknowledgement identities', () async {
+    var sequence = 0;
+    final api = _FakeMedicationSyncFunctionsApi([
+      MedicationSyncFunctionResponse(
+        statusCode: 200,
+        body: jsonEncode({
+          'contractVersion': 1,
+          'robotId': 'robot-1',
+          'acknowledgements': [
+            _pushAcknowledgement('mutation-1'),
+            _pushAcknowledgement('mutation-1'),
+          ],
+        }),
+      ),
+    ]);
+    final gateway = AppwriteCaregiverSyncGateway(
+      api,
+      pushFunctionId: 'medication-push',
+      pullFunctionId: 'medication-pull',
+      deviceId: 'web-device',
+      newId: () => 'mutation-${++sequence}',
+      now: () => DateTime.utc(2026, 7, 29, 12),
+    );
+
+    await expectLater(
+      gateway.push('robot-1', [
+        _medicationMutation('medication-1'),
+        _medicationMutation('medication-2'),
+      ]),
+      throwsA(isA<CaregiverSyncException>()),
+    );
+
+    expect(api.calls, hasLength(1));
+  });
+
+  test(
+    'push accepts complete unique acknowledgements for multiple operations',
+    () async {
+      var sequence = 0;
+      final api = _FakeMedicationSyncFunctionsApi([
+        MedicationSyncFunctionResponse(
+          statusCode: 200,
+          body: jsonEncode({
+            'contractVersion': 1,
+            'robotId': 'robot-1',
+            'acknowledgements': [
+              _pushAcknowledgement('mutation-1'),
+              {..._pushAcknowledgement('mutation-2'), 'outcome': 'duplicate'},
+            ],
+          }),
+        ),
+      ]);
+      final gateway = AppwriteCaregiverSyncGateway(
+        api,
+        pushFunctionId: 'medication-push',
+        pullFunctionId: 'medication-pull',
+        deviceId: 'web-device',
+        newId: () => 'mutation-${++sequence}',
+        now: () => DateTime.utc(2026, 7, 29, 12),
+      );
+
+      await gateway.push('robot-1', [
+        _medicationMutation('medication-1'),
+        _medicationMutation('medication-2'),
+      ]);
+
+      expect(api.calls, hasLength(1));
+    },
+  );
+
+  test(
     'push fails closed when the cached schedule changed after projection',
     () async {
       final api = _FakeMedicationSyncFunctionsApi([
@@ -1064,6 +1185,17 @@ AppwriteCaregiverSyncGateway _gateway(AppwriteMedicationSyncFunctionsApi api) =>
       deviceId: 'web-device',
       newId: () => 'mutation-1',
       now: () => DateTime.utc(2026, 7, 29, 12),
+    );
+
+CaregiverMutation _medicationMutation(String id) =>
+    CaregiverMutation.upsertMedication(
+      CaregiverMedication(
+        id: id,
+        name: 'Aspirin',
+        instructions: '',
+        active: true,
+        version: 3,
+      ),
     );
 
 Map<String, Object?> _pullPage({
