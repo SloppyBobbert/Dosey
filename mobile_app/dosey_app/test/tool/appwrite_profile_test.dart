@@ -133,6 +133,91 @@ void main() {
     );
   });
 
+  test('requires generated metadata for Android --no-pub builds', () {
+    const requiredMetadata = {
+      '.dart_tool/package_config.json',
+      '.dart_tool/package_graph.json',
+      '.flutter-plugins-dependencies',
+    };
+    for (final forwarded in [
+      ['build', 'apk', '--debug', '--no-pub'],
+      ['build', 'appbundle', '--release', '--no-pub'],
+    ]) {
+      for (final missing in requiredMetadata) {
+        final existingMetadata = {...requiredMetadata}..remove(missing);
+
+        expect(
+          () => profiles.validateNoPubAndroidBuildMetadata(
+            forwarded,
+            existingMetadata: existingMetadata,
+          ),
+          throwsA(
+            isA<FormatException>().having(
+              (error) => error.message,
+              'message',
+              'Android --no-pub builds require generated Flutter package metadata. Run flutter pub get first.',
+            ),
+          ),
+          reason: '$forwarded without $missing',
+        );
+      }
+    }
+  });
+
+  test('accepts Android --no-pub builds with generated metadata', () {
+    for (final forwarded in [
+      ['build', 'appbundle', '--release', '--no-pub'],
+      ['--verbose', 'build', 'apk', '--no-pub'],
+      ['-v', 'build', 'appbundle', '--no-pub'],
+      ['-d', 'emulator-5554', 'build', 'apk', '--no-pub'],
+      ['--device-id', 'emulator-5554', 'build', 'appbundle', '--no-pub'],
+      ['--device-id=emulator-5554', 'build', 'apk', '--no-pub'],
+    ]) {
+      profiles.validateNoPubAndroidBuildMetadata(
+        forwarded,
+        existingMetadata: const {
+          '.dart_tool/package_config.json',
+          '.dart_tool/package_graph.json',
+          '.flutter-plugins-dependencies',
+        },
+      );
+    }
+  });
+
+  test('guards Android --no-pub builds after Flutter options', () {
+    for (final forwarded in [
+      ['--verbose', 'build', 'apk', '--no-pub'],
+      ['-v', 'build', 'appbundle', '--no-pub'],
+      ['-d', 'emulator-5554', 'build', 'apk', '--no-pub'],
+      ['--device-id', 'emulator-5554', 'build', 'appbundle', '--no-pub'],
+      ['--device-id=emulator-5554', 'build', 'apk', '--no-pub'],
+    ]) {
+      expect(
+        () => profiles.validateNoPubAndroidBuildMetadata(
+          forwarded,
+          existingMetadata: const {},
+        ),
+        throwsFormatException,
+      );
+    }
+  });
+
+  test('does not guard commands outside Android --no-pub builds', () {
+    for (final forwarded in [
+      ['test', '--no-pub'],
+      ['build', 'apk', '--debug'],
+      ['build', 'web', '--no-pub'],
+      ['build', 'ios', '--no-pub'],
+      ['run', 'build', 'apk', '--no-pub'],
+      ['run', 'build', 'appbundle', '--no-pub'],
+    ]) {
+      profiles.validateNoPubAndroidBuildMetadata(
+        forwarded,
+        existingMetadata: const {},
+      );
+    }
+  });
+
   test('accepts mounted lookup independently and endpoint project alone', () {
     final profile = onlineProfile()
       ..remove('APPWRITE_CREATE_PAIRING_CODE_FUNCTION_ID')
