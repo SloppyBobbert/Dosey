@@ -38,6 +38,11 @@ const _medicationKeys = {
 };
 final _functionId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._-]{0,35}$');
 final _projectId = RegExp(r'^[A-Za-z0-9][A-Za-z0-9.-]{0,63}$');
+const _requiredNoPubAndroidBuildMetadata = {
+  '.dart_tool/package_config.json',
+  '.dart_tool/package_graph.json',
+  '.flutter-plugins-dependencies',
+};
 
 void main(List<String> arguments) async {
   try {
@@ -223,6 +228,13 @@ Future<void> _runFlutter(List<String> arguments) async {
       'Use one profile and the selected flavor only.',
     );
   }
+  validateNoPubAndroidBuildMetadata(
+    forwarded,
+    existingMetadata: {
+      for (final path in _requiredNoPubAndroidBuildMetadata)
+        if (File(path).existsSync()) path,
+    },
+  );
   final callback = validateProfile(loadProfile(profilePath));
   _writeXcconfig(callback);
   final result = await Process.start(
@@ -235,6 +247,29 @@ Future<void> _runFlutter(List<String> arguments) async {
     mode: ProcessStartMode.inheritStdio,
   );
   exitCode = await result.exitCode;
+}
+
+void validateNoPubAndroidBuildMetadata(
+  List<String> forwarded, {
+  required Set<String> existingMetadata,
+}) {
+  if (forwarded.isEmpty ||
+      forwarded.first == 'run' ||
+      !forwarded.contains('--no-pub')) {
+    return;
+  }
+  final isAndroidBuild = List.generate(
+    forwarded.length - 1,
+    (index) =>
+        forwarded[index] == 'build' &&
+        {'apk', 'appbundle'}.contains(forwarded[index + 1]),
+  ).contains(true);
+  if (!isAndroidBuild) return;
+  if (!_requiredNoPubAndroidBuildMetadata.every(existingMetadata.contains)) {
+    throw const FormatException(
+      'Android --no-pub builds require generated Flutter package metadata. Run flutter pub get first.',
+    );
+  }
 }
 
 List<String> flutterArguments({
