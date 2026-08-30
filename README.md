@@ -28,7 +28,7 @@ Dosey keeps a schedule on the phone and can present reminders through its app. T
 
 When a dose is due, the app can record a request to move the carousel, ask whether the expected dose is visible and correct, and then ask for an explicit **Taken** confirmation. These are separate steps. Supply changes only after an explicit Taken confirmation, never because the controller moved or because a missed-dose warning was acknowledged.
 
-The app keeps local dose history and supply information. It can run as an optional mounted Android Robot Mode or as Personal Mode on a mobile device.
+The app keeps local dose history and supply information. It can run as an optional mounted Android Robot Mode or as Personal Mode on Android and the web.
 
 ## What you can try locally
 
@@ -43,15 +43,19 @@ The local software foundations support use without cloud medication sync:
 
 ![Dosey Today shown in Android, iPhone, and computer frames](media/readme/device-showcase.png)
 
-The computer view is a responsive presentation preview, not a shipped or qualified Personal Today app. Android is the current mounted Robot target; iPhone Personal is retained but not release-qualified.
+The computer view is a responsive presentation preview, not a shipped or qualified Personal Today app. Android is the mounted Robot target; use the web app on iOS, iPadOS, and computers.
 
 ## Modes and platforms
 
 | Experience | Platform | Current note |
 | --- | --- | --- |
-| Personal Mode | Android and iOS mobile | The iOS implementation is retained but is not currently released or actively developed. iOS cannot be the phone mounted in the robot. |
+| Personal Mode | Android native; web on iOS, iPadOS, and computers | Native iOS source is frozen historical source and is unsupported. iOS cannot be the phone mounted in the robot. |
 | Robot Mode | Android only | Intended for the phone mounted in Dosey; it provides Robot Face and app-owned, soft navigation guardrails. |
 | Appwrite pairing and caregiver features | Backend foundation | Legacy create/claim staging deployments remain active. Secure mounted-access and medication-sync staging/deployment are incomplete and inactive; medication data is not cloud-synced. |
+
+Native Android distribution is through an Android app store or GitHub downloads
+when a release is available. The web app is the supported route on iOS, iPadOS,
+and computers.
 
 ## Project status
 
@@ -123,12 +127,6 @@ dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.js
 git diff --check
 ```
 
-The retained iOS build is a preservation and compile-regression check, not release qualification:
-
-```sh
-dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build ios --debug --no-codesign
-```
-
 For firmware, run the safe-default controller build from `firmware/`. The command below uses a machine-specific PlatformIO path; see [`firmware/README.md`](firmware/README.md) for setup and the command for your environment:
 
 ```sh
@@ -139,7 +137,7 @@ Read [`firmware/README.md`](firmware/README.md) for setup, tests, upload command
 
 ### Verification limits
 
-Mobile CI checks formatting, analysis, tests, generated Drift code, and debug builds. It does not qualify a release, background reminders, physical behavior, or production readiness. The committed controller firmware starts with external hardware paths disabled by default; see the [protocol](docs/protocol.md) for its current safe-default behavior and tested boundaries.
+Mobile CI checks formatting, analysis, tests, generated Drift code, and Android debug builds. It does not qualify a release, background reminders, physical behavior, or production readiness. The committed controller firmware starts with external hardware paths disabled by default; see the [protocol](docs/protocol.md) for its current safe-default behavior and tested boundaries.
 
 ## License
 

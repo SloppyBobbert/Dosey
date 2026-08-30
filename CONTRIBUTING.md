@@ -6,9 +6,9 @@ you are changing:
 
 - [Mobile app](mobile_app/dosey_app/README.md): run the Flutter checks listed
   in the root README's [mobile section](README.md#mobile-app). Active
-  development supports Android Personal Mode. iOS Personal Mode source is
-  retained, but active development, distribution, releases, and feature support
-  are paused; iOS cannot host Robot Mode, which remains Android-only.
+  development supports Android Personal Mode and the web app on iOS, iPadOS,
+  and computers. Native iOS Personal source is frozen historical source and is
+  unsupported; iOS cannot host Robot Mode, which remains Android-only.
 - [Firmware](firmware/README.md): follow the pinned setup, host tests, build
   commands, and physical safety gates.
 - [Appwrite backend](backend/appwrite/README.md): run its tests, typecheck,

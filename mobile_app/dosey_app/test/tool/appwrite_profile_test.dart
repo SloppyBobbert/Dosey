@@ -81,7 +81,7 @@ void main() {
     }
   });
 
-  test('adds the native flavor for Android builds only', () {
+  test('adds the native flavor for Android builds', () {
     expect(
       profiles.flutterArguments(
         flavor: 'personal',
@@ -90,46 +90,68 @@ void main() {
       ),
       containsAllInOrder(['build', 'apk', '--debug', '--flavor', 'personal']),
     );
-    expect(
-      profiles.flutterArguments(
-        flavor: 'personal',
-        profilePath: 'config/appwrite/offline.json',
-        forwarded: ['build', 'ios', '--debug'],
-      ),
-      isNot(contains('--flavor')),
-    );
   });
 
-  test('rejects Robot iOS builds', () {
-    expect(
-      () => profiles.flutterArguments(
-        flavor: 'robot',
-        profilePath: 'config/appwrite/offline.json',
-        forwarded: ['build', 'ios', '--debug'],
-      ),
-      throwsFormatException,
-    );
+  test('rejects native iOS build targets', () {
+    for (final forwarded in [
+      ['build', 'ios', '--debug'],
+      ['--verbose', 'build', 'ipa'],
+    ]) {
+      expect(
+        () => profiles.flutterArguments(
+          flavor: 'personal',
+          profilePath: 'config/appwrite/offline.json',
+          forwarded: forwarded,
+        ),
+        throwsA(
+          isA<FormatException>().having(
+            (error) => error.message,
+            'message',
+            'Native iOS builds are unsupported. Use the web app on iOS, iPadOS, and computers.',
+          ),
+        ),
+      );
+    }
   });
 
-  test('omits native flavor for Personal IPA builds', () {
-    expect(
-      profiles.flutterArguments(
-        flavor: 'personal',
-        profilePath: 'config/appwrite/offline.json',
-        forwarded: ['build', 'ipa'],
-      ),
-      isNot(contains('--flavor')),
-    );
-  });
+  test(
+    'handles empty and incomplete Flutter arguments without an iOS guard error',
+    () {
+      for (final forwarded in [
+        <String>[],
+        ['build'],
+      ]) {
+        expect(
+          () => profiles.flutterArguments(
+            flavor: 'personal',
+            profilePath: 'config/appwrite/offline.json',
+            forwarded: forwarded,
+          ),
+          returnsNormally,
+        );
+      }
+    },
+  );
 
-  test('rejects Robot IPA builds', () {
+  test('rejects native iOS build targets before profile access', () {
     expect(
-      () => profiles.flutterArguments(
-        flavor: 'robot',
-        profilePath: 'config/appwrite/offline.json',
-        forwarded: ['build', 'ipa'],
+      () => profiles.parseWrapperArguments([
+        'flutter',
+        '--profile',
+        'missing.json',
+        '--flavor',
+        'personal',
+        '--',
+        'build',
+        'ios',
+      ]),
+      throwsA(
+        isA<FormatException>().having(
+          (error) => error.message,
+          'message',
+          'Native iOS builds are unsupported. Use the web app on iOS, iPadOS, and computers.',
+        ),
       ),
-      throwsFormatException,
     );
   });
 
@@ -275,17 +297,8 @@ void main() {
   });
 
   test('parses only documented wrapper arguments', () {
-    expect(
-      profiles.parseWrapperArguments([
-        'prepare',
-        '--profile',
-        'offline.json',
-        '--flavor',
-        'personal',
-      ]).flavor,
-      'personal',
-    );
     for (final arguments in [
+      ['prepare', '--profile', 'offline.json', '--flavor', 'personal'],
       ['validate', '--profile', 'a', '--profile', 'b'],
       ['prepare', '--flavor', 'personal', '--profile', 'a'],
       ['prepare', '--profile', 'a', '--flavor', 'robot'],

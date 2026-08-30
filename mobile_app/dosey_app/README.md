@@ -5,12 +5,15 @@ prototype. Run all Flutter commands in this directory.
 
 ## Product boundary
 
-- **Personal Mode** runs on Android. The iOS Personal implementation is
-  retained only for preservation and compile-regression; it is not released or
-  qualified. Personal phones do not control the XIAO.
+- **Personal Mode** runs natively on Android and in the web app on iOS, iPadOS,
+  and computers. Native iOS source is frozen historical source and is
+  unsupported. Personal phones do not control the XIAO.
 - **Robot Mode** is Android-only and runs on the mounted robot phone. It is
   local-first, uses app-owned navigation and screen-awake behavior, and does
   not use device-owner, lock-task, or immersive-kiosk provisioning.
+- Native Android distribution is through an Android app store or GitHub downloads
+  when a release is available. The web app is the supported route on iOS,
+  iPadOS, and computers.
 - Drift/SQLite is the authoritative local store for medication, schedules,
   dose history and state, inventory, carousel, controller, and audit data.
   Local reminders and core safety behavior work without cloud access.
@@ -46,10 +49,10 @@ APPWRITE_REMOVE_HOUSEHOLD_MEMBER_FUNCTION_ID
 `APPWRITE_GET_MOUNTED_ROBOT_FUNCTION_ID` is independently optional. Pairing,
 household, and medication groups may be omitted, but a present group must be
 complete. Profiles require canonical HTTPS `/v1` endpoints and derive the
-callback scheme from the project ID. Direct Xcode builds fail closed until the
-wrapper generates `ios/Flutter/DoseyProfile.xcconfig`; Robot iOS builds are not
-supported. Medication sync remains dormant, and staging/production profiles keep
-it disabled.
+public callback scheme from the project ID for supported configuration. Native
+iOS builds are unsupported; use the web app on iOS, iPadOS, and computers.
+Medication sync remains dormant, and staging/production profiles keep it
+disabled.
 
 Medication-sync defines satisfy only a dormant `CloudConfiguration` predicate:
 `CAREGIVER_SYNC_ENABLED=true`, endpoint/project configuration, and both IDs
@@ -79,7 +82,7 @@ feature.
 Use a checked-in named profile or an isolated public JSON profile. The named
 development, staging, and production shells intentionally fail validation until
 authoritative public values exist. The wrapper rejects secrets, table IDs, and
-unknown keys; it writes the ignored iOS callback setting before invoking Flutter.
+unknown keys.
 
 ## Local commands
 
@@ -94,12 +97,8 @@ dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.js
 dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor robot -- run
 dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build apk --debug
 dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor robot -- build apk --debug
-dart run tool/appwrite_profile.dart flutter --profile config/appwrite/offline.json --flavor personal -- build ios --debug --no-codesign
 git diff --check
 ```
-
-The iOS command builds the retained Personal implementation for preservation
-and compile-regression only; it is not release or qualification evidence.
 
 ## Android package migration
 

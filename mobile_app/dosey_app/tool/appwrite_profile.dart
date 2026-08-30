@@ -54,12 +54,6 @@ void main(List<String> arguments) async {
       case 'validate':
         final profile = loadProfile(_requiredOption(arguments, '--profile'));
         validateProfile(profile);
-      case 'prepare':
-        final profile = loadProfile(_requiredOption(arguments, '--profile'));
-        _requiredOption(arguments, '--flavor');
-        final callback = validateProfile(profile);
-        _writeXcconfig(callback);
-        stdout.writeln(callback);
       case 'flutter':
         await _runFlutter(arguments.skip(1).toList());
       default:
@@ -89,9 +83,9 @@ WrapperArguments parseWrapperArguments(List<String> arguments) {
   final forwarded = separator < 0
       ? <String>[]
       : arguments.sublist(separator + 1);
-  final expectsFlavor = command == 'prepare' || command == 'flutter';
+  final expectsFlavor = command == 'flutter';
   final expected = expectsFlavor ? ['--profile', '--flavor'] : ['--profile'];
-  if (!{'validate', 'prepare', 'flutter'}.contains(command) ||
+  if (!{'validate', 'flutter'}.contains(command) ||
       options.length != expected.length * 2 ||
       !List.generate(
         expected.length,
@@ -103,9 +97,6 @@ WrapperArguments parseWrapperArguments(List<String> arguments) {
   final flavor = expectsFlavor ? options[3] : null;
   if (expectsFlavor && !{'personal', 'robot'}.contains(flavor)) {
     throw const FormatException('Wrapper flavor is invalid.');
-  }
-  if (command == 'prepare' && flavor != 'personal') {
-    throw const FormatException('prepare supports Personal only.');
   }
   if (command == 'flutter' &&
       (separator < 0 ||
@@ -125,6 +116,7 @@ WrapperArguments parseWrapperArguments(List<String> arguments) {
   if (command != 'flutter' && separator >= 0) {
     throw const FormatException('Wrapper options are invalid.');
   }
+  if (command == 'flutter') _rejectNativeIosBuild(forwarded);
   return WrapperArguments(flavor);
 }
 
@@ -235,8 +227,7 @@ Future<void> _runFlutter(List<String> arguments) async {
         if (File(path).existsSync()) path,
     },
   );
-  final callback = validateProfile(loadProfile(profilePath));
-  _writeXcconfig(callback);
+  validateProfile(loadProfile(profilePath));
   final result = await Process.start(
     'flutter',
     flutterArguments(
@@ -277,21 +268,31 @@ List<String> flutterArguments({
   required String profilePath,
   required List<String> forwarded,
 }) {
-  final isIos =
-      forwarded.length >= 2 &&
-      forwarded[0] == 'build' &&
-      {'ios', 'ipa'}.contains(forwarded[1]);
-  if (isIos && flavor == 'robot') {
-    throw const FormatException('Robot Mode is not available for iOS builds.');
-  }
+  _rejectNativeIosBuild(forwarded);
   final capability = flavor == 'personal' ? 'hardware-assisted' : 'phone-only';
   return [
     ...forwarded,
-    if (!isIos) ...['--flavor', flavor],
+    '--flavor',
+    flavor,
     '--dart-define-from-file=$profilePath',
     '--dart-define=DOSEY_BUILD_PROFILE=$flavor',
     '--dart-define=DOSEY_RUNTIME_CAPABILITY=$capability',
   ];
+}
+
+void _rejectNativeIosBuild(List<String> arguments) {
+  if (arguments.length < 2) return;
+  final isNativeIosBuild = List.generate(
+    arguments.length - 1,
+    (index) =>
+        arguments[index] == 'build' &&
+        {'ios', 'ipa'}.contains(arguments[index + 1]),
+  ).contains(true);
+  if (isNativeIosBuild) {
+    throw const FormatException(
+      'Native iOS builds are unsupported. Use the web app on iOS, iPadOS, and computers.',
+    );
+  }
 }
 
 String _requiredOption(List<String> arguments, String option) {
@@ -351,8 +352,3 @@ void _requireComplete(Map<String, dynamic> profile, Set<String> keys) {
 
 bool _allPresent(Map<String, dynamic> profile, Set<String> keys) =>
     keys.every((key) => _text(profile, key) != null);
-
-void _writeXcconfig(String callback) {
-  final file = File('ios/Flutter/DoseyProfile.xcconfig');
-  file.writeAsStringSync('DOSEY_CALLBACK_SCHEME = $callback\n');
-}

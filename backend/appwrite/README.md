@@ -131,9 +131,9 @@ recovery, removal recovery, and table permissions. Never run those scenarios
 against production data.
 
 The mobile wrapper derives `appwrite-callback-<APPWRITE_PROJECT_ID>` from a
-validated public profile for Android and the generated iOS xcconfig. The mounted
-lookup Function ID is independently optional; pairing, household, and medication
-groups may be absent but cannot be partial. URLs are canonical HTTPS origins or
-`/v1` endpoints. Direct Xcode builds fail closed without generated configuration;
-Robot iOS builds are unsupported. Medication IDs remain dormant and staging or
-production profiles cannot enable sync.
+validated public profile for supported configuration. The mounted lookup Function
+ID is independently optional; pairing, household, and medication groups may be
+absent but cannot be partial. URLs are canonical HTTPS origins or `/v1` endpoints.
+Native iOS source is frozen and unsupported; use the web app on iOS, iPadOS, and
+computers. Medication IDs remain dormant and staging or production profiles cannot
+enable sync.
