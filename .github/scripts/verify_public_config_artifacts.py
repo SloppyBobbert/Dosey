@@ -2,7 +2,6 @@
 import argparse
 import os
 import pathlib
-import plistlib
 import re
 import shutil
 import subprocess
@@ -85,20 +84,6 @@ def verify_zip_artifact(path):
             _verify_entry(info.filename, archive.read(info))
 
 
-def verify_ios_app(path):
-    info = plistlib.loads((path / 'Info.plist').read_bytes())
-    schemes = [
-        scheme
-        for item in info.get('CFBundleURLTypes', [])
-        for scheme in item.get('CFBundleURLSchemes', [])
-    ]
-    if schemes != [CALLBACK]:
-        fail('iOS Info.plist does not contain only the offline callback.')
-    for file in path.rglob('*'):
-        if file.is_file():
-            _verify_entry(str(file.relative_to(path)), file.read_bytes())
-
-
 def _single(paths, label):
     if len(paths) != 1:
         fail(f'Expected one {label}; found {len(paths)}.')
@@ -108,22 +93,18 @@ def _single(paths, label):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--android', action='store_true')
-    parser.add_argument('--ios', action='store_true')
     parser.add_argument('--build-type', choices=('debug', 'release'), default='debug')
     parser.add_argument('--root', type=pathlib.Path, default=pathlib.Path('.'))
     args = parser.parse_args()
-    if args.android == args.ios:
-        fail('Select exactly one artifact platform.')
+    if not args.android:
+        fail('Select the Android artifact platform.')
     root = args.root
-    if args.android:
-        personal = _single(list(root.glob(f'build/app/outputs/flutter-apk/*personal*{args.build_type}.apk')), 'Personal APK')
-        robot = _single(list(root.glob(f'build/app/outputs/flutter-apk/*robot*{args.build_type}.apk')), 'Robot APK')
-        verify_personal_manifest(decoded_manifest(personal))
-        verify_robot_manifest(decoded_manifest(robot))
-        verify_zip_artifact(personal)
-        verify_zip_artifact(robot)
-    else:
-        verify_ios_app(_single(list(root.glob('build/ios/iphoneos/Runner.app')), 'iOS app'))
+    personal = _single(list(root.glob(f'build/app/outputs/flutter-apk/*personal*{args.build_type}.apk')), 'Personal APK')
+    robot = _single(list(root.glob(f'build/app/outputs/flutter-apk/*robot*{args.build_type}.apk')), 'Robot APK')
+    verify_personal_manifest(decoded_manifest(personal))
+    verify_robot_manifest(decoded_manifest(robot))
+    verify_zip_artifact(personal)
+    verify_zip_artifact(robot)
 
 
 if __name__ == '__main__':

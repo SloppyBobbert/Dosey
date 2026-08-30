@@ -32,18 +32,6 @@ def assert_android_build(job:, name:, mode:, flavor:, capability:)
   abort("#{name} must use the exact #{flavor}/#{capability} build contract") unless tokens == expected
 end
 
-def assert_ios_build(job:)
-  name = 'Build iOS debug app'
-  step = find_step(job, name)
-  tokens = Shellwords.shellsplit(step.fetch('run'))
-  expected = [
-    'dart', 'run', 'tool/appwrite_profile.dart', 'flutter',
-    '--profile', 'config/appwrite/offline.json', '--flavor', 'personal',
-    '--', 'build', 'ios', '--debug', '--no-codesign',
-  ]
-  abort("#{name} must use the exact personal/hardware-assisted build contract") unless tokens == expected
-end
-
 def assert_phased_runtime_gate(job)
   script = find_step(job, 'Verify runtime capability contracts').fetch('run')
   expected = <<~'SHELL'
@@ -123,13 +111,6 @@ assert_artifact_check(
   'Verify public Android configuration artifacts',
   'python3 ../../.github/scripts/verify_public_config_artifacts.py --android',
 )
-assert_artifact_check(
-  mobile_workflow.fetch('jobs').fetch('flutter-ios'),
-  'Verify public iOS configuration artifact',
-  'python3 ../../.github/scripts/verify_public_config_artifacts.py --ios',
-)
-assert_ios_build(job: mobile_workflow.fetch('jobs').fetch('flutter-ios'))
-
 expected_build_output = '${{ steps.release.outputs.source_sha }}'
 unless build.fetch('outputs').fetch('source_sha') == expected_build_output
   abort 'release-android must export the validated artifact source SHA'

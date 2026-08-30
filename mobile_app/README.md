@@ -5,12 +5,15 @@ from that directory; its README is the canonical reference for local commands.
 
 ## Scope
 
-- **Personal Mode** runs on Android. The retained iOS Personal implementation
-  is for preservation and compile-regression only; it is not released or
-  qualified. Personal phones do not control the mounted XIAO controller.
+- **Personal Mode** runs natively on Android and in the web app on iOS, iPadOS,
+  and computers. Native iOS source is frozen historical source and is
+  unsupported. Personal phones do not control the mounted XIAO controller.
 - **Robot Mode** is Android-only because it runs on the mounted robot phone.
   It is an app-owned, local mode; it does not use device-owner, lock-task, or
   immersive-kiosk provisioning.
+- Native Android distribution is through an Android app store or GitHub downloads
+  when a release is available. The web app is the supported route on iOS,
+  iPadOS, and computers.
 - Drift/SQLite on the phone is authoritative for medication, schedules, dose
   history and state, inventory, carousel, controller, and audit data. Local
   reminders, safety flows, simulator, and Guided Trial behavior must continue

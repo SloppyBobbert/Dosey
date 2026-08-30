@@ -8,8 +8,9 @@ assignees: ''
 
 ## Scope
 
-What mobile behavior, screen, platform, or local-data path is affected? State
-whether this involves Android Robot Mode or Android/iOS Personal Mode.
+What app behavior, screen, platform, or local-data path is affected? State
+whether this involves Android Robot Mode, Android Personal Mode, or the web app
+on iOS, iPadOS, or a computer. Native iOS source is frozen and unsupported.
 
 ## Reproduction or evidence
 
