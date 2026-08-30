@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dosey_app/core/notifications/flutter_local_notification_scheduler.dart';
 import 'package:dosey_app/core/notifications/local_notification_models.dart';
@@ -25,6 +26,32 @@ void main() {
       doseyReminderNotificationChannel.sound.appleFileName,
       'dosey_reminder.aiff',
     );
+  });
+
+  test('configured Android notification sound has a raw WAV resource', () {
+    final resourceName =
+        doseyReminderNotificationChannel.sound.androidResourceName;
+
+    expect(
+      File('android/app/src/main/res/raw/$resourceName.wav').existsSync(),
+      isTrue,
+    );
+  });
+
+  test('Android manifest declares the scheduled notification receiver', () {
+    final manifest = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+    final receiverDeclarations = RegExp(
+      r'<receiver\b[^>]*>',
+    ).allMatches(manifest).map((match) => match.group(0)!);
+    final scheduledNotificationReceiver = receiverDeclarations.singleWhere(
+      (declaration) => declaration.contains(
+        'android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"',
+      ),
+    );
+
+    expect(scheduledNotificationReceiver, contains('android:exported="false"'));
   });
 
   test('scheduler keeps plugin calls behind app-owned wrapper', () async {
