@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'robot_face_golden_path.dart';
 import 'robot_face_test_font.dart';
 
 const double _goldenPrecisionTolerance = 0.00025;
@@ -104,7 +105,9 @@ void main() {
 
       await expectLater(
         find.byKey(const ValueKey<String>('robot-face-golden')),
-        matchesGoldenFile('goldens/robot_face_warm_companion_poses.png'),
+        matchesGoldenFile(
+          robotFaceGoldenPath('goldens/robot_face_warm_companion_poses.png'),
+        ),
       );
     },
   );
@@ -215,7 +218,7 @@ void main() {
 
       await expectLater(
         find.byKey(const ValueKey<String>('robot-face-overlay-golden')),
-        matchesGoldenFile(goldenFile),
+        matchesGoldenFile(robotFaceGoldenPath(goldenFile)),
       );
     }
 

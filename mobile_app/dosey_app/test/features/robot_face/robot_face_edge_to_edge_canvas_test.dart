@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'robot_face_golden_path.dart';
 import 'robot_face_test_font.dart';
 
 const _idle = RobotFaceState(
@@ -1550,7 +1551,7 @@ Future<void> _expectScrollGolden(WidgetTester tester, String path) async {
       expect(ink, greaterThan(8), reason: 'Pinned surface must paint in $path');
     }
     // Compare the exact inspected image, not a second ancestor-layer capture.
-    await expectLater(image, matchesGoldenFile(path));
+    await expectLater(image, matchesGoldenFile(robotFaceGoldenPath(path)));
   } finally {
     image.dispose();
   }
