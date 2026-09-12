@@ -39,6 +39,73 @@ void main() {
     actionDoseId: 'dose-1',
     availableActions: {RobotFaceActionKind.askForHelp},
   );
+  for (final helpFinishesFirst in <bool>[false, true]) {
+    testWidgets(
+      'Help during terminal authorization, help finishes first=$helpFinishesFirst',
+      (tester) async {
+        final states = StreamController<RobotFaceState>.broadcast();
+        addTearDown(states.close);
+        final authorizer = _DelayedActionAuthorizer();
+        final help = _DelayedDoseActionLogger();
+        final taken = _DelayedVisibleAndTakenLogger();
+        await tester.pumpWidget(
+          _ActionHostTestApp(
+            stateStream: states.stream,
+            actionAuthorizer: authorizer.call,
+            doseActionLogger: help.call,
+            visibleAndTakenLogger: taken.call,
+          ),
+        );
+        states.add(
+          readyState.copyWith(
+            availableActions: const {
+              RobotFaceActionKind.confirmTaken,
+              RobotFaceActionKind.askForHelp,
+            },
+          ),
+        );
+        await tester.pump();
+        final terminalCallback = tester
+            .widget<FilledButton>(
+              find.byKey(RobotFaceScreen.confirmTakenButtonKey),
+            )
+            .onPressed!;
+        terminalCallback();
+        await tester.pump();
+        tester
+            .widget<FilledButton>(find.byKey(RobotFaceScreen.needHelpButtonKey))
+            .onPressed!();
+        await tester.pump();
+        expect(help.calls, 1);
+        expect(
+          taken.calls,
+          0,
+        ); // Help and movement are never Taken confirmation.
+        authorizer.complete();
+        await tester.pump();
+        expect(taken.calls, 1);
+        terminalCallback();
+        expect(authorizer.calls, 1);
+        if (helpFinishesFirst) {
+          help.complete();
+        } else {
+          taken.complete();
+        }
+        await tester.pump();
+        terminalCallback();
+        if (helpFinishesFirst) {
+          taken.complete();
+        } else {
+          help.complete();
+        }
+        await tester.pump();
+        expect(help.calls, 1);
+        expect(taken.calls, 1);
+        expect(authorizer.calls, 1);
+      },
+    );
+  }
+
   const skipState = RobotFaceState(
     mode: RobotFaceMode.waitingForConfirmation,
     nextEventLabel: 'Taken? · Morning meds',
@@ -618,6 +685,153 @@ void main() {
       );
     },
   );
+
+  for (final action in <RobotFaceActionKind>[
+    RobotFaceActionKind.confirmTaken,
+    RobotFaceActionKind.skipDose,
+  ]) {
+    testWidgets('reserves ${action.name} while PIN authorization is pending', (
+      tester,
+    ) async {
+      final states = StreamController<RobotFaceState>.broadcast();
+      final authorizer = _DelayedActionAuthorizer();
+      var doseActionCalls = 0;
+      var visibleAndTakenCalls = 0;
+      addTearDown(states.close);
+
+      await tester.pumpWidget(
+        _ActionHostTestApp(
+          stateStream: states.stream,
+          actionAuthorizer: authorizer.call,
+          doseActionLogger: (_, _, _) async {
+            doseActionCalls += 1;
+            return true;
+          },
+          visibleAndTakenLogger:
+              (
+                _, {
+                required doseId,
+                required occurredAt,
+                required successMessage,
+              }) async {
+                visibleAndTakenCalls += 1;
+                return true;
+              },
+        ),
+      );
+      states.add(
+        readyState.copyWith(availableActions: <RobotFaceActionKind>{action}),
+      );
+      await tester.pump();
+
+      final button = tester.widget<FilledButton>(
+        find.byKey(
+          action == RobotFaceActionKind.confirmTaken
+              ? RobotFaceScreen.confirmTakenButtonKey
+              : RobotFaceScreen.skipDoseButtonKey,
+        ),
+      );
+      button.onPressed!.call();
+      button.onPressed!.call();
+      await tester.pump();
+
+      expect(authorizer.calls, 1);
+      authorizer.complete();
+      await tester.pump();
+
+      expect(doseActionCalls, action == RobotFaceActionKind.skipDose ? 1 : 0);
+      expect(
+        visibleAndTakenCalls,
+        action == RobotFaceActionKind.confirmTaken ? 1 : 0,
+      );
+    });
+  }
+
+  for (final firstAction in <RobotFaceActionKind>[
+    RobotFaceActionKind.confirmTaken,
+    RobotFaceActionKind.skipDose,
+  ]) {
+    testWidgets(
+      'reserves a dose across ${firstAction.name} and the other terminal action',
+      (tester) async {
+        final states = StreamController<RobotFaceState>.broadcast();
+        final authorizer = _DelayedActionAuthorizer();
+        addTearDown(states.close);
+
+        await tester.pumpWidget(
+          _ActionHostTestApp(
+            stateStream: states.stream,
+            actionAuthorizer: authorizer.call,
+          ),
+        );
+        states.add(
+          readyState.copyWith(
+            availableActions: const {
+              RobotFaceActionKind.confirmTaken,
+              RobotFaceActionKind.skipDose,
+            },
+          ),
+        );
+        await tester.pump();
+
+        final firstKey = firstAction == RobotFaceActionKind.confirmTaken
+            ? RobotFaceScreen.confirmTakenButtonKey
+            : RobotFaceScreen.skipDoseButtonKey;
+        final otherKey = firstAction == RobotFaceActionKind.confirmTaken
+            ? RobotFaceScreen.skipDoseButtonKey
+            : RobotFaceScreen.confirmTakenButtonKey;
+        final first = tester.widget<FilledButton>(find.byKey(firstKey));
+        final other = tester.widget<FilledButton>(find.byKey(otherKey));
+        first.onPressed!.call();
+        other.onPressed!.call();
+        await tester.pump();
+
+        expect(authorizer.calls, 1);
+        authorizer.complete();
+        await tester.pump();
+      },
+    );
+  }
+
+  for (final action in <RobotFaceActionKind>[
+    RobotFaceActionKind.confirmTaken,
+    RobotFaceActionKind.skipDose,
+  ]) {
+    testWidgets(
+      'releases ${action.name} after an authorization error for retry',
+      (tester) async {
+        final states = StreamController<RobotFaceState>.broadcast();
+        final authorizer = _FailingOnceActionAuthorizer();
+        addTearDown(states.close);
+
+        await tester.pumpWidget(
+          _ActionHostTestApp(
+            stateStream: states.stream,
+            actionAuthorizer: authorizer.call,
+          ),
+        );
+        states.add(
+          readyState.copyWith(availableActions: <RobotFaceActionKind>{action}),
+        );
+        await tester.pump();
+
+        final key = action == RobotFaceActionKind.confirmTaken
+            ? RobotFaceScreen.confirmTakenButtonKey
+            : RobotFaceScreen.skipDoseButtonKey;
+        tester.widget<FilledButton>(find.byKey(key)).onPressed!.call();
+        await tester.pump();
+        await tester.pump();
+
+        expect(
+          tester.widget<FilledButton>(find.byKey(key)).onPressed,
+          isNotNull,
+        );
+        tester.widget<FilledButton>(find.byKey(key)).onPressed!.call();
+        await tester.pump();
+        expect(authorizer.calls, 2);
+      },
+    );
+  }
 }
 
 class _ActionHostTestApp extends StatefulWidget {
@@ -626,12 +840,14 @@ class _ActionHostTestApp extends StatefulWidget {
     this.database,
     this.doseActionLogger,
     this.visibleAndTakenLogger,
+    this.actionAuthorizer,
   });
 
   final Stream<RobotFaceState> stateStream;
   final DoseyDatabase? database;
   final RobotFaceDoseActionLogger? doseActionLogger;
   final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
+  final RobotFaceActionAuthorizer? actionAuthorizer;
 
   @override
   State<_ActionHostTestApp> createState() => _ActionHostTestAppState();
@@ -661,6 +877,7 @@ class _ActionHostTestAppState extends State<_ActionHostTestApp> {
           stateStream: widget.stateStream,
           doseActionLogger: widget.doseActionLogger,
           visibleAndTakenLogger: widget.visibleAndTakenLogger,
+          actionAuthorizer: widget.actionAuthorizer,
         ),
       ),
     );
@@ -682,6 +899,30 @@ class _DelayedVisibleAndTakenLogger {
   }
 
   void complete() => _completion.complete(true);
+}
+
+class _DelayedActionAuthorizer {
+  final Completer<bool> _completion = Completer<bool>();
+  int calls = 0;
+
+  Future<bool> call(BuildContext context) {
+    calls += 1;
+    return _completion.future;
+  }
+
+  void complete() => _completion.complete(true);
+}
+
+class _FailingOnceActionAuthorizer {
+  int calls = 0;
+
+  Future<bool> call(BuildContext context) {
+    calls += 1;
+    if (calls == 1) {
+      return Future<bool>.error(StateError('authorization failed'));
+    }
+    return Future<bool>.value(true);
+  }
 }
 
 class _DelayedDoseActionLogger {

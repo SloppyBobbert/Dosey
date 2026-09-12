@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/rendering.dart';
+
 import 'package:dosey_app/app/dosey_app_scope.dart';
 import 'package:dosey_app/core/logging/dose_log_repository.dart';
 import 'package:dosey_app/core/demo/demo_scenario.dart';
@@ -31,6 +33,8 @@ typedef RobotFaceVisibleAndTakenLogger =
       required String successMessage,
     });
 
+typedef RobotFaceActionAuthorizer = Future<bool> Function(BuildContext context);
+
 class RobotFaceScreen extends StatefulWidget {
   const RobotFaceScreen({
     super.key,
@@ -41,6 +45,7 @@ class RobotFaceScreen extends StatefulWidget {
     this.isActive = true,
     this.doseActionLogger,
     this.visibleAndTakenLogger,
+    this.actionAuthorizer,
     this.onLongPress,
   });
 
@@ -49,6 +54,9 @@ class RobotFaceScreen extends StatefulWidget {
   static const displayFrameKey = ValueKey<String>('robot-face-display-frame');
   static const flipTransformKey = ValueKey<String>('robot-face-flip-transform');
   static const urgentPromptKey = ValueKey<String>('robot-face-urgent-prompt');
+  static const urgentPromptSurfaceKey = ValueKey<String>(
+    'robot-face-urgent-prompt-surface',
+  );
   static const urgentPromptScaleKey = ValueKey<String>(
     'robot-face-urgent-prompt-scale',
   );
@@ -88,6 +96,7 @@ class RobotFaceScreen extends StatefulWidget {
     'robot-face-lab-tour-next',
   );
   static const actionHostKey = ValueKey<String>('robot-face-action-host');
+  static const detailRevealKey = ValueKey<String>('robot-face-detail-reveal');
   static const actionPanelKey = ValueKey<String>('robot-face-action-panel');
   static const confirmTakenButtonKey = ValueKey<String>(
     'robot-face-confirm-taken-button',
@@ -109,6 +118,7 @@ class RobotFaceScreen extends StatefulWidget {
   final bool isActive;
   final RobotFaceDoseActionLogger? doseActionLogger;
   final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
+  final RobotFaceActionAuthorizer? actionAuthorizer;
   final VoidCallback? onLongPress;
 
   @override
@@ -135,6 +145,8 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
   int _voiceBindingGeneration = 0;
   late bool _isForeground;
   int _interactionRevision = 0;
+  bool _detailsRevealed = false;
+  String? _detailIdentity;
 
   bool get _isVoiceActive => widget.isActive && _isForeground;
 
@@ -238,12 +250,28 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
     super.dispose();
   }
 
-  void _handleInteraction() {
+  void _activateFace() {
+    _revealDetails();
     if (!widget.isActive) return;
     setState(() {
       _interactionRevision -= 1;
     });
     _interactionController?.recordInteraction();
+  }
+
+  void _revealDetails() {
+    if (_detailsRevealed) return;
+    setState(() => _detailsRevealed = true);
+  }
+
+  void _resetDetailsFor(RobotFaceState state) {
+    final identity =
+        state.actionDoseId != null && state.availableActions.isNotEmpty
+        ? 'action:${state.actionDoseId}'
+        : 'presentation:${state.voiceOccurrenceKey ?? state.nextEventLabel}:${state.nextEventLabel}';
+    if (_detailIdentity == identity) return;
+    _detailIdentity = identity;
+    _detailsRevealed = false;
   }
 
   void _completeInteractionAnimation(RobotFaceAnimationCue cue, int revision) {
@@ -274,6 +302,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
               final liveState = snapshot.data ?? _fallbackState;
               Widget buildFace(DemoFaceLabState labState) {
                 final state = labState.previewStateFor(liveState);
+                _resetDetailsFor(state);
                 final effectiveVoicePhase = labState.voicePhase ?? voicePhase;
                 final labControlsAnimation = labState.animationRevision > 0;
                 final animationCue = labControlsAnimation
@@ -309,6 +338,14 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                                 rotatedStatusSafePadding.top,
                               )
                             : rotatedStatusSafePadding;
+                        final squarePrompt =
+                            (state.mode == RobotFaceMode.doseReady ||
+                                state.mode == RobotFaceMode.error) &&
+                            (isPortraitFrame ||
+                                state.isFlipped ||
+                                physicalSafePadding != EdgeInsets.zero ||
+                                MediaQuery.textScalerOf(context).scale(1) >=
+                                    1.8);
                         Widget frame = _RobotFaceFrame(
                           state: state,
                           isActive: widget.isActive,
@@ -318,18 +355,76 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                           onAnimationCompleted: labControlsAnimation
                               ? faceLab?.completeAnimation
                               : _completeInteractionAnimation,
-                          onInteraction: _handleInteraction,
+                          onInteraction: _activateFace,
+                          detailsRevealed: _detailsRevealed,
                           onLongPress: widget.onLongPress,
                           doseActionLogger: widget.doseActionLogger,
                           visibleAndTakenLogger: widget.visibleAndTakenLogger,
+                          actionAuthorizer: widget.actionAuthorizer,
                           statusSafePadding: statusSafePadding,
+                          squarePrompt: squarePrompt,
+                          isPortrait: isPortraitFrame,
                         );
 
                         if (isPortraitFrame) {
                           frame = RotatedBox(quarterTurns: 1, child: frame);
                         }
 
-                        return frame;
+                        return Stack(
+                          fit: StackFit.expand,
+                          children: <Widget>[
+                            frame,
+                            if (squarePrompt)
+                              Positioned(
+                                left: physicalSafePadding.left + 8,
+                                top: physicalSafePadding.top + 8,
+                                width: 64,
+                                height: 64,
+                                child: _UrgentPromptOverlay(
+                                  state: state,
+                                  safePadding: EdgeInsets.zero,
+                                  isPortrait: isPortraitFrame,
+                                  constrained: true,
+                                ),
+                              ),
+                            if (widget.onLongPress != null)
+                              if (squarePrompt)
+                                // Share the reserved physical badge strip; keep
+                                // the exit touch target out of status and eyes.
+                                Positioned(
+                                  left: isPortraitFrame
+                                      ? constraints.maxWidth -
+                                            physicalSafePadding.right -
+                                            56
+                                      : physicalSafePadding.left + 8,
+                                  top:
+                                      physicalSafePadding.top +
+                                      (isPortraitFrame ? 8 : 80),
+                                  width: 48,
+                                  height: 48,
+                                  child: IconButton.outlined(
+                                    key: RobotFaceScreen.exitButtonKey,
+                                    tooltip: 'Open Today',
+                                    onPressed: widget.onLongPress,
+                                    style: IconButton.styleFrom(
+                                      foregroundColor: const Color(0xFFD5F4FF),
+                                      backgroundColor: const Color(0xED102A43),
+                                      side: const BorderSide(
+                                        color: Color(0x9900A8E8),
+                                      ),
+                                    ),
+                                    icon: const Icon(
+                                      Icons.arrow_back_rounded,
+                                      semanticLabel: 'Open Today',
+                                    ),
+                                  ),
+                                )
+                              else
+                                _RobotFaceExitButton(
+                                  onPressed: widget.onLongPress!,
+                                ),
+                          ],
+                        );
                       },
                     ),
                     if (scenarios != null)
@@ -339,8 +434,6 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                         controller: faceLab,
                         state: labState,
                       ),
-                    if (widget.onLongPress != null)
-                      _RobotFaceExitButton(onPressed: widget.onLongPress!),
                   ],
                 );
                 if (labState.reducedMotion) {
@@ -831,9 +924,17 @@ class _PresenterButton extends StatelessWidget {
 }
 
 class _UrgentPromptOverlay extends StatelessWidget {
-  const _UrgentPromptOverlay({required this.state});
+  const _UrgentPromptOverlay({
+    required this.state,
+    required this.safePadding,
+    required this.isPortrait,
+    required this.constrained,
+  });
 
   final RobotFaceState state;
+  final EdgeInsets safePadding;
+  final bool isPortrait;
+  final bool constrained;
 
   @override
   Widget build(BuildContext context) {
@@ -843,16 +944,65 @@ class _UrgentPromptOverlay extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    final quarterTurns = (isPortrait ? 1 : 0) + (state.isFlipped ? 2 : 0);
+    if (constrained &&
+        (state.mode == RobotFaceMode.doseReady ||
+            state.mode == RobotFaceMode.error)) {
+      // A square keeps physical safe bounds unchanged by the face rotation.
+      return IgnorePointer(
+        child: Padding(
+          padding: EdgeInsets.zero,
+          child: Align(
+            alignment: Alignment.center,
+            child: SizedBox.square(
+              dimension: 64,
+              child: DecoratedBox(
+                key: RobotFaceScreen.urgentPromptSurfaceKey,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF081019),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _promptColorFor(state.mode)),
+                ),
+                child: RotatedBox(
+                  quarterTurns: quarterTurns,
+                  child: Padding(
+                    padding: const EdgeInsets.all(6),
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          prompt,
+                          key: RobotFaceScreen.urgentPromptKey,
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            color: _promptColorFor(state.mode),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return IgnorePointer(
       child: Align(
         alignment: Alignment.topCenter,
         child: Padding(
-          padding: const EdgeInsets.only(top: 18),
+          padding: EdgeInsets.only(top: 6),
           child: AnimatedScale(
             key: RobotFaceScreen.urgentPromptScaleKey,
             scale: promptScale,
-            duration: const Duration(milliseconds: 280),
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 280),
             child: DecoratedBox(
+              key: RobotFaceScreen.urgentPromptSurfaceKey,
               decoration: BoxDecoration(
                 color: const Color(0xFF081019).withValues(alpha: 0.74),
                 borderRadius: BorderRadius.circular(999),
@@ -931,7 +1081,7 @@ class _UrgentPromptOverlay extends StatelessWidget {
   Color _promptColorFor(RobotFaceMode mode) {
     return switch (mode) {
       RobotFaceMode.doseReady => const Color(0xFF62E9C5),
-      RobotFaceMode.doseApproaching => const Color(0xFF64D8FF),
+      RobotFaceMode.doseApproaching => const Color(0xFFFFB84D),
       RobotFaceMode.happyConfirmed => const Color(0xFF62E9C5),
       RobotFaceMode.error => const Color(0xFFFF728C),
       RobotFaceMode.offline => const Color(0xFF9AA3B8),
@@ -959,10 +1109,14 @@ class _RobotFaceFrame extends StatelessWidget {
     required this.animationRevision,
     required this.onAnimationCompleted,
     required this.onInteraction,
+    required this.detailsRevealed,
     required this.statusSafePadding,
+    required this.squarePrompt,
+    required this.isPortrait,
     this.onLongPress,
     this.doseActionLogger,
     this.visibleAndTakenLogger,
+    this.actionAuthorizer,
   });
 
   final RobotFaceState state;
@@ -973,21 +1127,49 @@ class _RobotFaceFrame extends StatelessWidget {
   final void Function(RobotFaceAnimationCue cue, int revision)?
   onAnimationCompleted;
   final VoidCallback onInteraction;
+  final bool detailsRevealed;
   final EdgeInsets statusSafePadding;
+  final bool squarePrompt;
+  final bool isPortrait;
   final VoidCallback? onLongPress;
   final RobotFaceDoseActionLogger? doseActionLogger;
   final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
+  final RobotFaceActionAuthorizer? actionAuthorizer;
 
   @override
   Widget build(BuildContext context) {
-    final showActionPanel =
+    final hasActionPanel =
         state.actionDoseId != null && state.availableActions.isNotEmpty;
+    final requiresDetails =
+        hasActionPanel ||
+        state.mode == RobotFaceMode.doseApproaching ||
+        state.mode == RobotFaceMode.doseReady ||
+        state.mode == RobotFaceMode.dispensing ||
+        state.mode == RobotFaceMode.missed ||
+        state.mode == RobotFaceMode.error ||
+        state.hasPinnedShortageAlert ||
+        state.controllerCondition == RobotFaceControllerCondition.fault ||
+        state.controllerCondition ==
+            RobotFaceControllerCondition.bluetoothUnavailable;
+    final showDetails = detailsRevealed || requiresDetails;
+    final useCompactOverlay =
+        (state.mode == RobotFaceMode.doseReady ||
+            state.mode == RobotFaceMode.error) &&
+        squarePrompt;
+    final preferActionRail =
+        useCompactOverlay &&
+        hasActionPanel &&
+        state.availableActions.length == 1 &&
+        state.availableActions.contains(RobotFaceActionKind.askForHelp);
     final actionHost = _RobotFaceActionHost(
       key: RobotFaceScreen.actionHostKey,
       state: state,
-      isVisible: showActionPanel,
+      isCompact: useCompactOverlay,
+      preferRail: preferActionRail,
+      isVisible: hasActionPanel && showDetails,
       doseActionLogger: doseActionLogger,
       visibleAndTakenLogger: visibleAndTakenLogger,
+      actionAuthorizer: actionAuthorizer,
     );
 
     return SizedBox.expand(
@@ -997,109 +1179,353 @@ class _RobotFaceFrame extends StatelessWidget {
         transform: state.isFlipped
             ? Matrix4.rotationZ(math.pi)
             : Matrix4.identity(),
-        child: Stack(
-          fit: StackFit.expand,
-          children: <Widget>[
-            GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (_) => onInteraction(),
-              onLongPress: onLongPress,
-              child: Stack(
-                fit: StackFit.expand,
-                children: <Widget>[
-                  AnimatedContainer(
-                    key: RobotFaceScreen.displayFrameKey,
-                    duration: const Duration(milliseconds: 260),
-                    curve: Curves.easeOutCubic,
-                    color: const Color(0xFF02050A),
-                    child: SizedBox.expand(
-                      key: RobotFaceScreen.canvasKey,
-                      child: RobotFaceCanvas(
-                        state: state,
-                        isActive: isActive,
-                        isPreparing: voicePhase == VoicePlaybackPhase.preparing,
-                        isSpeaking: voicePhase == VoicePlaybackPhase.speaking,
-                        animationCue: animationCue,
-                        animationRevision: animationRevision,
-                        onAnimationCompleted: onAnimationCompleted,
-                      ),
-                    ),
-                  ),
-                  IgnorePointer(
-                    child: AnimatedOpacity(
-                      duration: const Duration(milliseconds: 260),
-                      curve: Curves.easeOut,
-                      opacity: _displayGlassOpacityFor(state),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: <Color>[
-                              Colors.white.withValues(alpha: 0.08),
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.08),
-                            ],
-                            stops: const <double>[0, 0.26, 1],
+        child: ColoredBox(
+          key: RobotFaceScreen.displayFrameKey,
+          color: const Color(0xFF02050A),
+          child: Padding(
+            padding: statusSafePadding.add(
+              const EdgeInsets.symmetric(horizontal: 8),
+            ),
+            child: CustomMultiChildLayout(
+              delegate: _ReservedFaceLayout(
+                squarePrompt: squarePrompt,
+                isFlipped: state.isFlipped,
+                isPortrait: isPortrait,
+                preferActionRail: preferActionRail,
+              ),
+              children: <Widget>[
+                LayoutId(
+                  id: 'prompt',
+                  child: squarePrompt
+                      ? const SizedBox.shrink()
+                      : _UrgentPromptOverlay(
+                          state: state,
+                          safePadding: EdgeInsets.zero,
+                          isPortrait: false,
+                          constrained: false,
+                        ),
+                ),
+                LayoutId(
+                  id: 'face',
+                  child: Semantics(
+                    key: RobotFaceScreen.detailRevealKey,
+                    button: true,
+                    label: showDetails
+                        ? 'Robot Face. Reminder details are shown.'
+                        : 'Robot Face. Tap to show reminder details.',
+                    onTap: onInteraction,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTapDown: (_) => onInteraction(),
+                      onLongPress: onLongPress,
+                      child: ClipRect(
+                        child: FittedBox(
+                          fit: BoxFit.contain,
+                          child: SizedBox(
+                            key: RobotFaceScreen.canvasKey,
+                            width: 800,
+                            height: 400,
+                            child: RobotFaceCanvas(
+                              state: state,
+                              isActive: isActive,
+                              isPreparing:
+                                  voicePhase == VoicePlaybackPhase.preparing,
+                              isSpeaking:
+                                  voicePhase == VoicePlaybackPhase.speaking,
+                              animationCue: animationCue,
+                              animationRevision: animationRevision,
+                              onAnimationCompleted: onAnimationCompleted,
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                  _UrgentPromptOverlay(state: state),
-                ],
-              ),
-            ),
-            Positioned.fill(
-              child: Padding(
-                padding: statusSafePadding.add(const EdgeInsets.all(20)),
-                child: Align(
-                  alignment: Alignment.bottomCenter,
-                  child: SingleChildScrollView(
-                    primary: false,
+                ),
+                LayoutId(
+                  id: 'status',
+                  child: _ScrollableFaceDetails(
+                    key: RobotFaceScreen.bottomCardKey,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       excludeFromSemantics: true,
-                      onTap: () {},
+                      onTap: onInteraction,
                       onLongPress: () {},
                       child: _RobotFaceStatusCard(
-                        key: RobotFaceScreen.bottomCardKey,
                         state: state,
-                        actionHost: actionHost,
+                        actionHost: const SizedBox.shrink(),
+                        showDetails: showDetails,
+                        compactOverlay: useCompactOverlay,
                       ),
                     ),
                   ),
                 ),
-              ),
+                LayoutId(
+                  id: 'actions',
+                  child: _RailOrBodyAction(
+                    preferRail: preferActionRail,
+                    child: actionHost,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
+}
 
-  double _displayGlassOpacityFor(RobotFaceState state) {
-    return switch (state.mode) {
-      RobotFaceMode.missed => 0.08,
-      RobotFaceMode.sleepy => 0.22,
-      RobotFaceMode.idle when state.isInAwakeWindow => 0.14,
-      RobotFaceMode.doseApproaching ||
-      RobotFaceMode.doseReady ||
-      RobotFaceMode.dispensing => 0.12,
-      _ => 0.1,
-    };
+// Native scrolling keeps the urgent badge and actions outside the viewport.
+class _ScrollableFaceDetails extends StatefulWidget {
+  const _ScrollableFaceDetails({super.key, required this.child});
+  final Widget child;
+
+  @override
+  State<_ScrollableFaceDetails> createState() => _ScrollableFaceDetailsState();
+}
+
+class _ScrollableFaceDetailsState extends State<_ScrollableFaceDetails> {
+  bool _overflows = false;
+  bool _moreBelow = false;
+  (bool, bool)? _pendingMetrics;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      void update(ScrollMetrics metrics) {
+        // Compare the unmodified content against the whole allocation, not the
+        // reduced viewport, so resizing can remove the fallback again.
+        final overflows =
+            metrics.maxScrollExtent + metrics.viewportDimension >
+            constraints.maxHeight + 0.01;
+        final moreBelow = overflows && metrics.extentAfter > 0.01;
+        final pending = _pendingMetrics != null;
+        if (!pending && overflows == _overflows && moreBelow == _moreBelow) {
+          return;
+        }
+        _pendingMetrics = (overflows, moreBelow);
+        if (pending) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final (overflows, moreBelow) = _pendingMetrics!;
+          _pendingMetrics = null;
+          if (!mounted ||
+              (overflows == _overflows && moreBelow == _moreBelow)) {
+            return;
+          }
+          setState(() {
+            _overflows = overflows;
+            _moreBelow = moreBelow;
+          });
+        });
+        // Metrics can arrive after the frame in a microtask. A post-frame
+        // callback alone does not request the frame that will execute it.
+        WidgetsBinding.instance.ensureVisualUpdate();
+      }
+
+      return NotificationListener<ScrollMetricsNotification>(
+        onNotification: (notification) {
+          update(notification.metrics);
+          return false;
+        },
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            update(notification.metrics);
+            return false;
+          },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: SingleChildScrollView(
+                  primary: false,
+                  child: widget.child,
+                ),
+              ),
+              if (_overflows)
+                Visibility(
+                  visible: _moreBelow,
+                  maintainState: true,
+                  maintainAnimation: true,
+                  maintainSize: true,
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      vertical: MediaQuery.textScalerOf(context).scale(12) / 6,
+                    ),
+                    child: const Text(
+                      'Scroll for more details',
+                      key: ValueKey('robot-face-more-details'),
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.2,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+// Keep one action subtree: measure a rail candidate, then lay it out at body
+// width if rejected. MultiChildLayoutDelegate itself permits only one layout
+// per child, so this proxy owns the optional second measurement.
+class _RailOrBodyAction extends SingleChildRenderObjectWidget {
+  const _RailOrBodyAction({required this.preferRail, required super.child});
+  final bool preferRail;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderRailOrBodyAction(preferRail);
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderRailOrBodyAction renderObject,
+  ) {
+    renderObject.preferRail = preferRail;
   }
+}
+
+class _RenderRailOrBodyAction extends RenderProxyBox {
+  _RenderRailOrBodyAction(this._preferRail);
+  bool _preferRail;
+  set preferRail(bool value) {
+    if (_preferRail == value) return;
+    _preferRail = value;
+    markNeedsLayout();
+  }
+
+  @override
+  void performLayout() {
+    final narrow = constraints.copyWith(
+      maxWidth: math.min(64, constraints.maxWidth),
+    );
+    child!.layout(_preferRail ? narrow : constraints, parentUsesSize: true);
+    if (_preferRail &&
+        child!.size.height > constraints.maxHeight - 64 - 48 - 16) {
+      child!.layout(constraints, parentUsesSize: true);
+    }
+    size = child!.size;
+  }
+}
+
+// Measure required content and touch targets before assigning leftover space
+// to the decorative face. Scroll only status when its text exceeds the area.
+class _ReservedFaceLayout extends MultiChildLayoutDelegate {
+  _ReservedFaceLayout({
+    required this.squarePrompt,
+    required this.isFlipped,
+    required this.isPortrait,
+    required this.preferActionRail,
+  });
+
+  final bool squarePrompt;
+  final bool isFlipped;
+  final bool isPortrait;
+  final bool preferActionRail;
+
+  @override
+  void performLayout(Size size) {
+    final gutter = squarePrompt ? 72.0 : 0.0;
+    final start = isFlipped ? 0.0 : gutter;
+    final header = squarePrompt ? 0.0 : 60.0;
+    final width = math.max(0.0, size.width - gutter);
+    final normalMargin = math.min(8.0, size.height / 2);
+    final bodyHeight = size.height - 2 * normalMargin;
+    final height = math.max(0.0, bodyHeight - header);
+    layoutChild(
+      'prompt',
+      BoxConstraints.tight(squarePrompt ? Size.zero : Size(size.width, header)),
+    );
+    positionChild('prompt', Offset(0, normalMargin));
+    final actions = layoutChild(
+      'actions',
+      BoxConstraints(maxWidth: width, maxHeight: height),
+    );
+    // Badge (64), exit (48), and two 8dp gaps leave the measurable rail
+    // capacity. A Help action moves there only when its actual size fits.
+    final useRail =
+        preferActionRail &&
+        actions.width <= 64 &&
+        actions.height <= bodyHeight - 64 - 48 - 16;
+    final actionHeight = useRail ? 0.0 : actions.height;
+    // Required content may reclaim up to 8dp of decorative margin, never
+    // physical safe insets. The badge, exit, and accepted rail stay anchored.
+    final reclaimable = squarePrompt ? math.min(8.0, 2 * normalMargin) : 0.0;
+    final status = layoutChild(
+      'status',
+      BoxConstraints(
+        minWidth: width,
+        maxWidth: width,
+        maxHeight: math.max(0.0, height - actionHeight + reclaimable),
+      ),
+    );
+    final reclaimed = math.max(0.0, status.height + actionHeight - height);
+    final margin = normalMargin - reclaimed / 2;
+    positionChild(
+      'actions',
+      useRail
+          ? Offset(
+              isFlipped ? size.width - actions.width : 0,
+              normalMargin +
+                  (isPortrait
+                      ? (bodyHeight + (isFlipped ? 16 : -16) - actions.height) /
+                            2
+                      : isFlipped
+                      ? bodyHeight - 128 - actions.height
+                      : 128),
+            )
+          : Offset(
+              start + (width - actions.width) / 2,
+              size.height - margin - actions.height,
+            ),
+    );
+    positionChild(
+      'status',
+      Offset(start, size.height - margin - actionHeight - status.height),
+    );
+    final faceHeight = math.max(
+      0.0,
+      height + reclaimed - actionHeight - status.height - 8,
+    );
+    layoutChild('face', BoxConstraints.tight(Size(width, faceHeight)));
+    positionChild('face', Offset(start, margin + header));
+  }
+
+  @override
+  bool shouldRelayout(_ReservedFaceLayout oldDelegate) =>
+      squarePrompt != oldDelegate.squarePrompt ||
+      isFlipped != oldDelegate.isFlipped ||
+      isPortrait != oldDelegate.isPortrait ||
+      preferActionRail != oldDelegate.preferActionRail;
 }
 
 class _RobotFaceStatusCard extends StatelessWidget {
   const _RobotFaceStatusCard({
-    super.key,
     required this.state,
     required this.actionHost,
+    required this.showDetails,
+    required this.compactOverlay,
   });
 
   final RobotFaceState state;
   final Widget actionHost;
+  final bool showDetails;
+  final bool compactOverlay;
+
+  String? get _requiredStatus =>
+      state.statusLabel ??
+      switch (state.controllerCondition) {
+        RobotFaceControllerCondition.fault => 'Controller fault',
+        RobotFaceControllerCondition.bluetoothUnavailable =>
+          'Bluetooth unavailable',
+        _ => null,
+      };
 
   @override
   Widget build(BuildContext context) {
@@ -1109,6 +1535,137 @@ class _RobotFaceStatusCard extends StatelessWidget {
     // The controller owns action availability, including offline/error
     // follow-up states after a dispense. The screen only renders that contract.
 
+    final content = compactOverlay && state.hasPinnedShortageAlert
+        ? Padding(
+            // Reserve scaled edge space for font-metric and antialias overhang.
+            padding: EdgeInsets.symmetric(
+              vertical: MediaQuery.textScalerOf(context).scale(12) / 6,
+            ),
+            child: Text(
+              <String>[
+                if (state.nextEventLabel.trim().isNotEmpty)
+                  state.nextEventLabel,
+                if (_requiredStatus?.trim().isNotEmpty == true)
+                  _requiredStatus!,
+                'Shortage: ${state.activeShortageMedicationLabel ?? 'Medication'}'
+                    '${state.activeShortageScheduledLabel == null ? '' : ' · ${state.activeShortageScheduledLabel}'}'
+                    '${state.activeShortageSlotNumber == null ? '' : ' · Slot ${state.activeShortageSlotNumber}'}. '
+                    'Local only; pinned until loading is handled. Check Carousel loading before dispense.',
+                if (state.networkAdvisory ==
+                    RobotFaceNetworkAdvisory.internetOffline)
+                  'Internet offline. Local reminders still work.',
+              ].join(' · '),
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.2,
+                letterSpacing: 0,
+                color: Color(0xFFFFB4C1),
+              ),
+            ),
+          )
+        : compactOverlay
+        ? Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              if (state.nextEventLabel.trim().isNotEmpty)
+                Text(
+                  state.nextEventLabel,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.2,
+                    color: Colors.white,
+                  ),
+                ),
+              if (_requiredStatus case final status?)
+                Text(
+                  status,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    height: 1.2,
+                    color: Color(0xFFFFB4C1),
+                  ),
+                ),
+              if (state.networkAdvisory ==
+                  RobotFaceNetworkAdvisory.internetOffline)
+                const _RobotFaceNetworkAdvisoryBadge(),
+            ],
+          )
+        : !showDetails
+        ? DecoratedBox(
+            decoration: BoxDecoration(
+              color: const Color(0xC40B111B),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _accentFor(state.mode),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      state.nextEventLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.expand_less_rounded, size: 20),
+                ],
+              ),
+            ),
+          )
+        : _buildDetails(
+            context,
+            badgeEmphasis: badgeEmphasis,
+            isMissedState: isMissedState,
+            isSleepyState: isSleepyState,
+          );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        if (compactOverlay &&
+            !state.hasPinnedShortageAlert &&
+            (state.nextEventLabel.trim().isNotEmpty ||
+                _requiredStatus != null ||
+                state.networkAdvisory ==
+                    RobotFaceNetworkAdvisory.internetOffline))
+          Padding(
+            padding: EdgeInsets.symmetric(
+              vertical: MediaQuery.textScalerOf(context).scale(12) / 6,
+            ),
+            child: content,
+          )
+        else
+          content,
+        actionHost,
+      ],
+    );
+  }
+
+  Widget _buildDetails(
+    BuildContext context, {
+    required double badgeEmphasis,
+    required bool isMissedState,
+    required bool isSleepyState,
+  }) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: isMissedState
@@ -1284,7 +1841,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
               const SizedBox(height: 12),
               _RobotFaceShortageCard(state: state),
             ],
-            actionHost,
           ],
         ),
       ),
@@ -1309,14 +1865,15 @@ class _RobotFaceStatusCard extends StatelessWidget {
   Color _accentFor(RobotFaceMode mode) {
     return switch (mode.tone) {
       RobotFaceTone.ready => const Color(0xFF56EBC6),
-      RobotFaceTone.attention || RobotFaceTone.calm => const Color(0xFF4EE6FF),
+      RobotFaceTone.attention => const Color(0xFFFFB84D),
+      RobotFaceTone.calm => const Color(0xFF4EE6FF),
       RobotFaceTone.warning => const Color(0xFFFF728C),
       RobotFaceTone.offline => const Color(0xFF98A5BC),
     };
   }
 
   String? _compactStatusLabelFor(RobotFaceState state) {
-    final statusLabel = state.statusLabel?.trim();
+    final statusLabel = _requiredStatus?.trim();
     if (statusLabel == null || statusLabel.isEmpty) {
       return null;
     }
@@ -1352,14 +1909,20 @@ class _RobotFaceActionHost extends StatelessWidget {
     super.key,
     required this.state,
     required this.isVisible,
+    required this.isCompact,
+    required this.preferRail,
     this.doseActionLogger,
     this.visibleAndTakenLogger,
+    this.actionAuthorizer,
   });
 
   final RobotFaceState state;
   final bool isVisible;
+  final bool isCompact;
+  final bool preferRail;
   final RobotFaceDoseActionLogger? doseActionLogger;
   final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
+  final RobotFaceActionAuthorizer? actionAuthorizer;
 
   @override
   Widget build(BuildContext context) {
@@ -1374,12 +1937,15 @@ class _RobotFaceActionHost extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
-                const SizedBox(height: 10),
+                SizedBox(height: isCompact ? 0 : 10),
                 _RobotFaceActionPanel(
                   key: RobotFaceScreen.actionPanelKey,
                   state: state,
+                  isCompact: isCompact,
+                  preferRail: preferRail,
                   doseActionLogger: doseActionLogger,
                   visibleAndTakenLogger: visibleAndTakenLogger,
+                  actionAuthorizer: actionAuthorizer,
                 ),
               ],
             ),
@@ -1534,20 +2100,28 @@ class _RobotFaceActionPanel extends StatefulWidget {
   const _RobotFaceActionPanel({
     super.key,
     required this.state,
+    required this.isCompact,
+    required this.preferRail,
     this.doseActionLogger,
     this.visibleAndTakenLogger,
+    this.actionAuthorizer,
   });
 
   final RobotFaceState state;
   final RobotFaceDoseActionLogger? doseActionLogger;
   final RobotFaceVisibleAndTakenLogger? visibleAndTakenLogger;
+  final RobotFaceActionAuthorizer? actionAuthorizer;
+
+  final bool isCompact;
+  final bool preferRail;
 
   @override
   State<_RobotFaceActionPanel> createState() => _RobotFaceActionPanelState();
 }
 
 class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
-  bool _isSubmitting = false;
+  final Set<String> _submittingDoseIds = <String>{};
+  final Set<String> _terminalReservedDoseIds = <String>{};
   String? _latestNonNullActionDoseId;
   int _nonNullActionDoseGeneration = 0;
   // Widget-lifetime local lockout for actions already completed on the
@@ -1599,7 +2173,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(8),
+        padding: EdgeInsets.all(widget.isCompact ? 0 : 8),
         child: Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -1723,7 +2297,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
         constraints: const BoxConstraints(minWidth: 280),
         child: FilledButton(
           key: key,
-          onPressed: _isSubmitting || !isEnabled ? null : onPressed,
+          onPressed: _isSubmittingCurrentDose || !isEnabled ? null : onPressed,
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFFD94A66),
             foregroundColor: Colors.white,
@@ -1743,10 +2317,21 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
 
     return FilledButton.tonal(
       key: key,
-      onPressed: _isSubmitting || !isEnabled ? null : onPressed,
+      onPressed: _isSubmittingCurrentDose || !isEnabled ? null : onPressed,
       style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+        minimumSize: Size(widget.preferRail ? 48 : 0, 48),
+        shape: widget.preferRail
+            ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))
+            : null,
+        padding: widget.preferRail
+            ? const EdgeInsets.symmetric(vertical: 4)
+            : const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        textStyle: TextStyle(
+          fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily,
+          fontSize: widget.preferRail ? 12 : 13,
+          height: widget.preferRail ? 1.2 : 1,
+          fontWeight: FontWeight.w600,
+        ),
       ),
       child: child,
     );
@@ -1763,7 +2348,14 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     }
 
     return !(_completedActionsByDoseId[actionDoseId]?.contains(actionKind) ??
-        false);
+            false) &&
+        !(_isTerminalAction(actionKind) &&
+            _terminalReservedDoseIds.contains(actionDoseId));
+  }
+
+  bool get _isSubmittingCurrentDose {
+    final actionDoseId = widget.state.actionDoseId;
+    return actionDoseId != null && _submittingDoseIds.contains(actionDoseId);
   }
 
   Set<RobotFaceActionKind> _completedActionsForDose(String actionDoseId) {
@@ -1781,37 +2373,50 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     };
   }
 
+  bool _reserveTerminalDose(
+    String actionDoseId,
+    RobotFaceActionKind actionKind,
+  ) {
+    if (!widget.state.availableActions.contains(actionKind) ||
+        _completedActionsByDoseId[actionDoseId]?.contains(actionKind) == true) {
+      return false;
+    }
+    if (!_terminalReservedDoseIds.add(actionDoseId)) return false;
+    if (mounted) setState(() {});
+    return true;
+  }
+
+  void _releaseTerminalDose(String actionDoseId) {
+    if (!_terminalReservedDoseIds.remove(actionDoseId)) return;
+    if (mounted) setState(() {});
+  }
+
+  Future<bool> _authorizeAction(BuildContext context) {
+    return widget.actionAuthorizer?.call(context) ??
+        authorizeActionPin(context);
+  }
+
   Future<void> _logAction(
     BuildContext context, {
     required RobotFaceActionKind actionKind,
     required DoseLogEvent event,
     required String successMessage,
   }) async {
-    if (_isSubmitting) {
+    final actionDoseId = widget.state.actionDoseId;
+    if (actionDoseId == null || _submittingDoseIds.contains(actionDoseId)) {
       return;
     }
-
-    final actionDoseId = widget.state.actionDoseId;
-    if (actionDoseId == null) {
-      return;
+    if (_isTerminalAction(actionKind)) {
+      return _runTerminalAction(
+        context,
+        actionDoseId: actionDoseId,
+        actionKind: actionKind,
+        event: event,
+        successMessage: successMessage,
+      );
     }
     final submissionGeneration = _nonNullActionDoseGeneration;
-    final submissionActions = Set<RobotFaceActionKind>.of(
-      widget.state.availableActions,
-    );
-    if (_isTerminalAction(actionKind) && !await authorizeActionPin(context)) {
-      return;
-    }
-    if (!context.mounted) {
-      return;
-    }
-    if (_nonNullActionDoseGeneration != submissionGeneration ||
-        widget.state.actionDoseId != actionDoseId ||
-        !widget.state.availableActions.contains(actionKind)) {
-      return;
-    }
-
-    setState(() => _isSubmitting = true);
+    setState(() => _submittingDoseIds.add(actionDoseId));
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     try {
       final logged =
@@ -1834,15 +2439,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
             return;
           }
           final completedActions = _completedActionsForDose(actionDoseId);
-          if (_isTerminalAction(actionKind)) {
-            // A terminal outcome resolves the dose; suppress every local action
-            // until controller state rebuilds without the panel. This avoids a
-            // brief second tap window while async streams catch up to the new
-            // dose-log state.
-            completedActions.addAll(submissionActions);
-          } else {
-            completedActions.add(actionKind);
-          }
+          completedActions.add(actionKind);
         });
       }
     } on Object catch (error) {
@@ -1854,7 +2451,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
       );
     } finally {
       if (mounted) {
-        setState(() => _isSubmitting = false);
+        setState(() => _submittingDoseIds.remove(actionDoseId));
       }
     }
   }
@@ -1863,34 +2460,57 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     BuildContext context, {
     required DateTime occurredAt,
   }) async {
-    if (_isSubmitting) return;
     final actionDoseId = widget.state.actionDoseId;
     if (actionDoseId == null) return;
-    final submissionGeneration = _nonNullActionDoseGeneration;
-    final submissionActions = Set<RobotFaceActionKind>.of(
-      widget.state.availableActions,
+    return _runTerminalAction(
+      context,
+      actionDoseId: actionDoseId,
+      actionKind: RobotFaceActionKind.confirmTaken,
+      occurredAt: occurredAt,
+      successMessage: 'Taken logged.',
     );
-    if (!await authorizeActionPin(context)) return;
-    if (!context.mounted) return;
-    if (_nonNullActionDoseGeneration != submissionGeneration ||
-        widget.state.actionDoseId != actionDoseId ||
-        !widget.state.availableActions.contains(
-          RobotFaceActionKind.confirmTaken,
-        )) {
-      return;
-    }
+  }
 
-    setState(() => _isSubmitting = true);
-    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+  Future<void> _runTerminalAction(
+    BuildContext context, {
+    required String actionDoseId,
+    required RobotFaceActionKind actionKind,
+    DoseLogEvent? event,
+    DateTime? occurredAt,
+    required String successMessage,
+  }) async {
+    if (!_reserveTerminalDose(actionDoseId, actionKind)) return;
+    var isSubmitting = false;
+    ScaffoldMessengerState? messenger;
     try {
-      final logged =
-          await (widget.visibleAndTakenLogger ??
-              DoseActionLogger.logRobotFaceVisibleAndTaken)(
-            context,
-            doseId: actionDoseId,
-            occurredAt: occurredAt,
-            successMessage: 'Taken logged.',
-          );
+      final submissionGeneration = _nonNullActionDoseGeneration;
+      final submissionActions = Set<RobotFaceActionKind>.of(
+        widget.state.availableActions,
+      );
+      if (!await _authorizeAction(context) ||
+          !context.mounted ||
+          _nonNullActionDoseGeneration != submissionGeneration ||
+          widget.state.actionDoseId != actionDoseId ||
+          !widget.state.availableActions.contains(actionKind)) {
+        return;
+      }
+
+      setState(() => _submittingDoseIds.add(actionDoseId));
+      isSubmitting = true;
+      messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      final logged = actionKind == RobotFaceActionKind.confirmTaken
+          ? await (widget.visibleAndTakenLogger ??
+                DoseActionLogger.logRobotFaceVisibleAndTaken)(
+              context,
+              doseId: actionDoseId,
+              occurredAt: occurredAt!,
+              successMessage: successMessage,
+            )
+          : await (widget.doseActionLogger ?? DoseActionLogger.logDoseAction)(
+              context,
+              event!,
+              successMessage,
+            );
       if (!logged || !context.mounted) return;
       setState(() {
         if (_nonNullActionDoseGeneration != submissionGeneration) {
@@ -1902,11 +2522,14 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
       if (!context.mounted) {
         return;
       }
-      messenger.showSnackBar(
+      messenger?.showSnackBar(
         SnackBar(content: Text('Dose action failed: $error')),
       );
     } finally {
-      if (mounted) setState(() => _isSubmitting = false);
+      if (isSubmitting && mounted) {
+        setState(() => _submittingDoseIds.remove(actionDoseId));
+      }
+      _releaseTerminalDose(actionDoseId);
     }
   }
 }

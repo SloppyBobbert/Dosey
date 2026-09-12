@@ -35,6 +35,7 @@ class RobotFaceCanvas extends StatefulWidget {
     this.isSpeaking = false,
     this.animationCue,
     this.animationRevision = 0,
+    this.compactOverlay = false,
     this.onAnimationCompleted,
   });
 
@@ -44,6 +45,7 @@ class RobotFaceCanvas extends StatefulWidget {
   final bool isSpeaking;
   final RobotFaceAnimationCue? animationCue;
   final int animationRevision;
+  final bool compactOverlay;
   final void Function(RobotFaceAnimationCue cue, int revision)?
   onAnimationCompleted;
 
@@ -333,6 +335,7 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
               cueProgress: _cueProgress,
               outgoingCue: _outgoingCue,
               outgoingCueProgress: _outgoingCueProgress,
+              compactOverlay: widget.compactOverlay,
             ),
             child: const SizedBox.expand(),
           );
@@ -343,7 +346,7 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
 }
 
 class _RobotFacePainter extends CustomPainter {
-  const _RobotFacePainter({
+  _RobotFacePainter({
     required this.state,
     required this.phase,
     required this.isPreparing,
@@ -353,6 +356,7 @@ class _RobotFacePainter extends CustomPainter {
     required this.cueProgress,
     this.outgoingCue,
     this.outgoingCueProgress = 0,
+    this.compactOverlay = false,
   });
 
   final RobotFaceState state;
@@ -364,6 +368,11 @@ class _RobotFacePainter extends CustomPainter {
   final double cueProgress;
   final RobotFaceAnimationCue? outgoingCue;
   final double outgoingCueProgress;
+  final bool compactOverlay;
+
+  // Captured from the exact RRects sent to paint, after tilt. Consumers map
+  // these through the RenderBox transform, including the reserved-area fit.
+  List<Rect> debugPaintedEyeRects = const <Rect>[];
 
   List<Color> get debugPaletteColors {
     final palette = _palette;
@@ -380,14 +389,42 @@ class _RobotFacePainter extends CustomPainter {
 
   List<Rect> debugAmbientGlowRects(Size size) => _ambientGlowRects(size);
 
+  String get debugStateMarker =>
+      _stateMarkerFor(state, _effectiveControllerCondition(state));
+
+  List<Rect> debugStateMarkerGeometry(Size size) {
+    return switch (debugStateMarker) {
+      'ready' => <Rect>[
+        Rect.fromCircle(
+          center: Offset(size.width * 0.5, size.height * 0.29),
+          radius: 18,
+        ),
+      ],
+      'missed' => <Rect>[
+        Rect.fromLTWH(size.width * 0.09, size.height * 0.16, 28, 20),
+        Rect.fromLTWH(size.width * 0.91 - 28, size.height * 0.16, 28, 20),
+      ],
+      'fault' => <Rect>[
+        Rect.fromCenter(
+          center: Offset(size.width * 0.5, size.height * 0.29),
+          width: 42,
+          height: 30,
+        ),
+      ],
+      _ => const <Rect>[],
+    };
+  }
+
   Map<String, Object> debugMotionFrame(
     Size size, {
     double? phase,
     double? cueProgress,
   }) {
+    final effectivePhase = reducedMotion ? 0.0 : phase ?? this.phase;
+    final motion = _motionProfileFor(state, size, phase: effectivePhase);
     final frame = _motionFrameFor(
       size,
-      phase: phase ?? this.phase,
+      phase: effectivePhase,
       cueProgress: cueProgress ?? this.cueProgress,
     );
     final baseEyes = _baseEyeRects(size, centerY: size.height * 0.48);
@@ -399,6 +436,13 @@ class _RobotFacePainter extends CustomPainter {
       'leftTilt': frame.concernTilt * -1,
       'rightTilt': frame.concernTilt,
       'leftGlowBoost': frame.glowBoost,
+      'breathing':
+          1 +
+          math.sin(effectivePhase * math.pi * 2) * motion.breathingAmplitude +
+          frame.cue.eyeScale,
+      'pulse': _pulseValue(effectivePhase),
+      'sleepStarDrift':
+          math.sin(effectivePhase * math.pi * 2) * size.width * 0.008,
     };
   }
 
@@ -412,13 +456,10 @@ class _RobotFacePainter extends CustomPainter {
   }
 
   List<Rect> _baseEyeRects(Size size, {required double centerY}) {
-    const eyeAspectRatio = 0.79;
-    final eyeHeight = math.min(
-      size.shortestSide * 0.34,
-      math.min(size.height * 0.58, size.width / 2.1),
-    );
-    final eyeWidth = eyeHeight * eyeAspectRatio;
-    final eyeOffset = eyeHeight * 0.55;
+    const eyeAspectRatio = 1.55;
+    final eyeWidth = math.min(size.width * 0.31, size.height * 0.72);
+    final eyeHeight = eyeWidth / eyeAspectRatio;
+    final eyeOffset = size.width * 0.19;
     return <Rect>[
       Rect.fromCenter(
         center: Offset(size.width * 0.5 - eyeOffset, centerY),
@@ -434,36 +475,39 @@ class _RobotFacePainter extends CustomPainter {
   }
 
   List<Rect> _ambientGlowRects(Size size) {
-    final radius = size.shortestSide * 0.32;
-    return _baseEyeRects(size, centerY: size.height * 0.48)
-        .map((eye) => Rect.fromCircle(center: eye.center, radius: radius))
-        .toList(growable: false);
+    return <Rect>[Offset.zero & size];
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
+    final effectivePhase = reducedMotion ? 0.0 : phase;
     final controllerCondition = _effectiveControllerCondition(state);
-    final motion = _motionProfileFor(state, size);
+    final motion = _motionProfileFor(state, size, phase: effectivePhase);
     final frame = _motionFrameFor(size);
     final speakingPulse = isSpeaking
         ? reducedMotion
               ? 0.55
-              : (math.sin(phase * math.pi * 2) + 1) / 2
+              : (math.sin(effectivePhase * math.pi * 2) + 1) / 2
         : 0.0;
     final breathing =
         1 +
-        math.sin(phase * math.pi * 2) * motion.breathingAmplitude +
+        math.sin(effectivePhase * math.pi * 2) * motion.breathingAmplitude +
         (speakingPulse * 0.035) +
         frame.cue.eyeScale;
-    final pulse = _pulseValue();
+    final pulse = _pulseValue(effectivePhase);
 
     final palette = _palette;
     final concernTilt = frame.concernTilt;
     // Keep expression changes in the eyes only. Robot Mode intentionally has no
     // mouth so status color, tilt, blink, and glow carry the state.
     final eyelidOpen =
-        (_eyelidOpenFor(state, frame.blink, phase, controllerCondition) +
+        (_eyelidOpenFor(
+                  state,
+                  frame.blink,
+                  effectivePhase,
+                  controllerCondition,
+                ) +
                 frame.cue.eyelidBoost)
             .clamp(0.12, 1.08);
 
@@ -477,38 +521,46 @@ class _RobotFacePainter extends CustomPainter {
 
     _paintDisplayTexture(canvas, size, palette, state, pulse);
 
-    for (final glow in _ambientGlowRects(size)) {
-      _paintGlowOrb(
-        canvas,
-        center: glow.center,
-        radius: glow.width * 0.5,
-        color: palette.glow.withValues(
-          alpha: 0.14 + motion.glowBoost + frame.ambientGlowPulse,
-        ),
-      );
-    }
+    final directionalGlow = _ambientGlowRects(size).single;
+    _paintDirectionalGlow(
+      canvas,
+      directionalGlow,
+      palette.glow.withValues(
+        alpha: 0.16 + motion.glowBoost + frame.ambientGlowPulse,
+      ),
+    );
 
     if (motion.wakeAura > 0) {
       _paintWakeAura(canvas, size, palette, motion.wakeAura, pulse);
     }
 
     if (state.mode == RobotFaceMode.sleepy) {
-      _paintSleepVeil(canvas, size, phase);
+      _paintSleepVeil(canvas, size, effectivePhase);
     }
 
     final baseEyes = _baseEyeRects(
       size,
       centerY:
-          size.height * (0.48 - motion.eyeLift - frame.cue.eyeLift) +
+          size.height *
+              (compactOverlay
+                  ? 0.28
+                  : 0.48 - motion.eyeLift - frame.cue.eyeLift) +
           motion.idleDrift,
     );
-    final eyeWidth = baseEyes.first.width * breathing;
-    final eyeHeight = baseEyes.first.height * eyelidOpen;
+    final compactScale = compactOverlay ? 0.5 : 1.0;
+    final eyeWidth = baseEyes.first.width * breathing * compactScale;
+    final eyeHeight = baseEyes.first.height * eyelidOpen * compactScale;
     final eyeRadius = Radius.circular(math.max(26, eyeHeight * 0.42));
 
+    final spacing = _eyeSpacingFor(state, controllerCondition);
     final leftEye = RRect.fromRectAndRadius(
       Rect.fromCenter(
-        center: baseEyes.first.center + frame.eyeOffset,
+        center:
+            Offset(
+              size.width * 0.5 - (size.width * 0.19 * spacing),
+              baseEyes.first.center.dy,
+            ) +
+            frame.eyeOffset,
         width: eyeWidth,
         height: math.max(28, eyeHeight),
       ),
@@ -516,15 +568,33 @@ class _RobotFacePainter extends CustomPainter {
     );
     final rightEye = RRect.fromRectAndRadius(
       Rect.fromCenter(
-        center: baseEyes[1].center + frame.eyeOffset,
+        center:
+            Offset(
+              size.width * 0.5 + (size.width * 0.19 * spacing),
+              baseEyes[1].center.dy,
+            ) +
+            frame.eyeOffset,
         width: eyeWidth,
         height: math.max(28, eyeHeight),
       ),
       eyeRadius,
     );
 
+    debugPaintedEyeRects = <Rect>[
+      for (final eye in <RRect>[leftEye, rightEye])
+        Rect.fromCenter(
+          center: eye.center,
+          width:
+              eye.width * math.cos(concernTilt).abs() +
+              eye.height * math.sin(concernTilt).abs(),
+          height:
+              eye.height * math.cos(concernTilt).abs() +
+              eye.width * math.sin(concernTilt).abs(),
+        ),
+    ];
+
     final attentionRingStrength = math.max(
-      math.max(motion.attentionRingStrength, frame.cue.attentionRingStrength),
+      frame.cue.attentionRingStrength,
       isSpeaking
           ? 0.38 + (speakingPulse * 0.34)
           : isPreparing
@@ -569,7 +639,92 @@ class _RobotFacePainter extends CustomPainter {
           (speakingPulse * 0.14),
     );
 
+    _paintStateMarker(canvas, size, palette, state, controllerCondition, pulse);
     _paintDisplayVignette(canvas, rect, state);
+  }
+
+  double _eyeSpacingFor(
+    RobotFaceState state,
+    RobotFaceControllerCondition? controllerCondition,
+  ) {
+    if (controllerCondition == RobotFaceControllerCondition.fault ||
+        state.mode == RobotFaceMode.missed ||
+        state.mode == RobotFaceMode.error) {
+      return 1.1;
+    }
+    return switch (state.mode) {
+      RobotFaceMode.doseReady || RobotFaceMode.waitingForConfirmation => 0.92,
+      RobotFaceMode.happyConfirmed => 0.88,
+      _ => 1,
+    };
+  }
+
+  String _stateMarkerFor(
+    RobotFaceState state,
+    RobotFaceControllerCondition? controllerCondition,
+  ) {
+    if (controllerCondition == RobotFaceControllerCondition.fault ||
+        state.mode == RobotFaceMode.error) {
+      return 'fault';
+    }
+    return switch (state.mode) {
+      RobotFaceMode.doseReady => 'ready',
+      RobotFaceMode.missed => 'missed',
+      _ => 'none',
+    };
+  }
+
+  void _paintStateMarker(
+    Canvas canvas,
+    Size size,
+    _FacePalette palette,
+    RobotFaceState state,
+    RobotFaceControllerCondition? controllerCondition,
+    double pulse,
+  ) {
+    final marker = _stateMarkerFor(state, controllerCondition);
+    if (marker == 'none') return;
+
+    final color = marker == 'ready' ? palette.accent : palette.glow;
+    final markerPaint = Paint()
+      ..color = color.withValues(alpha: 0.64 + (pulse * 0.22))
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    if (marker == 'ready') {
+      final center = Offset(size.width * 0.5, size.height * 0.29);
+      canvas.drawCircle(center, 7 + (pulse * 3), markerPaint);
+      canvas.drawCircle(center, 18 + (pulse * 5), markerPaint..strokeWidth = 2);
+      return;
+    }
+
+    if (marker == 'fault') {
+      final center = Offset(size.width * 0.5, size.height * 0.29);
+      for (final offset in const <double>[-14, 0, 14]) {
+        canvas.drawLine(
+          Offset(center.dx + offset - 5, center.dy - 10),
+          Offset(center.dx + offset + 5, center.dy + 10),
+          markerPaint,
+        );
+      }
+      return;
+    }
+
+    final y = size.height * 0.16;
+    final inset = size.width * 0.09;
+    canvas.drawLine(Offset(inset, y), Offset(inset + 28, y), markerPaint);
+    canvas.drawLine(
+      Offset(size.width - inset - 28, y),
+      Offset(size.width - inset, y),
+      markerPaint,
+    );
+    canvas.drawLine(Offset(inset, y), Offset(inset, y + 20), markerPaint);
+    canvas.drawLine(
+      Offset(size.width - inset, y),
+      Offset(size.width - inset, y + 20),
+      markerPaint,
+    );
   }
 
   void _paintEye(
@@ -606,17 +761,15 @@ class _RobotFacePainter extends CustomPainter {
     canvas.restore();
   }
 
-  void _paintGlowOrb(
-    Canvas canvas, {
-    required Offset center,
-    required double radius,
-    required Color color,
-  }) {
-    final orbPaint = Paint()
+  void _paintDirectionalGlow(Canvas canvas, Rect rect, Color color) {
+    final glowPaint = Paint()
       ..shader = RadialGradient(
+        center: const Alignment(-0.28, -0.24),
+        radius: 1.05,
         colors: <Color>[color, color.withValues(alpha: 0)],
-      ).createShader(Rect.fromCircle(center: center, radius: radius));
-    canvas.drawCircle(center, radius, orbPaint);
+        stops: const <double>[0, 1],
+      ).createShader(rect);
+    canvas.drawRect(rect, glowPaint);
   }
 
   void _paintAttentionRing(
@@ -711,6 +864,18 @@ class _RobotFacePainter extends CustomPainter {
             ],
           ).createShader(restBand),
       );
+      final moonCenter = Offset(size.width * 0.75, size.height * 0.2);
+      canvas.drawArc(
+        Rect.fromCircle(center: moonCenter, radius: 10),
+        -math.pi * 0.72,
+        math.pi * 1.45,
+        false,
+        Paint()
+          ..color = palette.accent.withValues(alpha: 0.28)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round,
+      );
     }
 
     if (state.mode == RobotFaceMode.idle && state.isInAwakeWindow) {
@@ -803,7 +968,7 @@ class _RobotFacePainter extends CustomPainter {
     );
   }
 
-  double _pulseValue() {
+  double _pulseValue(double phase) {
     final pulse = (math.sin(phase * math.pi * 2) + 1) / 2;
     return Curves.easeOut.transform(pulse);
   }
@@ -1081,7 +1246,11 @@ class _RobotFacePainter extends CustomPainter {
     );
   }
 
-  _FaceMotionProfile _motionProfileFor(RobotFaceState state, Size size) {
+  _FaceMotionProfile _motionProfileFor(
+    RobotFaceState state,
+    Size size, {
+    required double phase,
+  }) {
     final ramp = state.rampProgress.clamp(0.0, 1.0);
     final controllerCondition = _effectiveControllerCondition(state);
 
@@ -1152,7 +1321,7 @@ class _RobotFacePainter extends CustomPainter {
         breathingAmplitude: 0.02 - (ramp * 0.004),
         glowBoost: 0.08 + (ramp * 0.12),
         eyeLift: 0.008 + (ramp * 0.018),
-        attentionRingStrength: 0.25 + (ramp * 0.45),
+        attentionRingStrength: 0,
         wakeAura: state.isInAwakeWindow ? 0.5 + (ramp * 0.35) : ramp * 0.35,
         idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.004,
       ),
@@ -1184,7 +1353,7 @@ class _RobotFacePainter extends CustomPainter {
         breathingAmplitude: 0.02,
         glowBoost: 0.1,
         eyeLift: 0.014,
-        attentionRingStrength: 0.24,
+        attentionRingStrength: 0,
         wakeAura: 0.52,
         idleDrift: math.sin(phase * math.pi * 2) * size.height * 0.006,
       ),
@@ -1236,20 +1405,20 @@ class _RobotFacePainter extends CustomPainter {
         accent: Color(0xFF8AF5E0),
       ),
       RobotFaceMode.doseApproaching => const _FacePalette(
-        backgroundTop: Color(0xFF08141F),
-        backgroundBottom: Color(0xFF03070B),
-        eyeTop: Color(0xFF71F4FF),
-        eyeBottom: Color(0xFF1797BE),
-        glow: Color(0xFF2AE7FF),
-        accent: Color(0xFF7EEDFF),
+        backgroundTop: Color(0xFF21180A),
+        backgroundBottom: Color(0xFF0A0703),
+        eyeTop: Color(0xFFFFE0A1),
+        eyeBottom: Color(0xFFD99428),
+        glow: Color(0xFFFFB84D),
+        accent: Color(0xFFFFCC73),
       ),
       RobotFaceMode.dispensing => const _FacePalette(
-        backgroundTop: Color(0xFF08131E),
-        backgroundBottom: Color(0xFF03070B),
-        eyeTop: Color(0xFF67F0FF),
-        eyeBottom: Color(0xFF0FA3D1),
-        glow: Color(0xFF34EDFF),
-        accent: Color(0xFF8BEFFF),
+        backgroundTop: Color(0xFF241A08),
+        backgroundBottom: Color(0xFF0B0702),
+        eyeTop: Color(0xFFFFD98A),
+        eyeBottom: Color(0xFFE09A24),
+        glow: Color(0xFFFFB23F),
+        accent: Color(0xFFFFCB69),
       ),
       RobotFaceMode.happyConfirmed => const _FacePalette(
         backgroundTop: Color(0xFF091A16),
@@ -1367,7 +1536,8 @@ class _RobotFacePainter extends CustomPainter {
         oldDelegate.animationCue != animationCue ||
         oldDelegate.cueProgress != cueProgress ||
         oldDelegate.outgoingCue != outgoingCue ||
-        oldDelegate.outgoingCueProgress != outgoingCueProgress;
+        oldDelegate.outgoingCueProgress != outgoingCueProgress ||
+        oldDelegate.compactOverlay != compactOverlay;
   }
 }
 
