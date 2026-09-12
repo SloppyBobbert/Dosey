@@ -106,6 +106,121 @@ void main() {
     );
   }
 
+  for (final terminal in <RobotFaceActionKind>[
+    RobotFaceActionKind.confirmTaken,
+    RobotFaceActionKind.skipDose,
+  ]) {
+    for (final throws in <bool>[false, true]) {
+      for (final helpFinishesFirst in <bool>[false, true]) {
+        testWidgets('submission ownership ${terminal.name}, throws=$throws, '
+            'help first=$helpFinishesFirst', (tester) async {
+          final states = StreamController<RobotFaceState>.broadcast();
+          addTearDown(states.close);
+          final authorization = Completer<bool>();
+          final help = Completer<bool>();
+          final terminalLog = Completer<bool>();
+          var helpCalls = 0;
+          var terminalCalls = 0;
+          await tester.pumpWidget(
+            _ActionHostTestApp(
+              stateStream: states.stream,
+              actionAuthorizer: (_) => authorization.future,
+              doseActionLogger: (_, event, _) {
+                if (event.kind == DoseLogEventKind.caregiverHelpRequested) {
+                  helpCalls++;
+                  return helpCalls == 1 ? help.future : Future.value(true);
+                }
+                terminalCalls++;
+                return terminalCalls == 1
+                    ? terminalLog.future
+                    : Future.value(true);
+              },
+              visibleAndTakenLogger:
+                  (
+                    _, {
+                    required doseId,
+                    required occurredAt,
+                    required successMessage,
+                  }) {
+                    terminalCalls++;
+                    return terminalCalls == 1
+                        ? terminalLog.future
+                        : Future.value(true);
+                  },
+            ),
+          );
+          states.add(
+            readyState.copyWith(
+              availableActions: {terminal, RobotFaceActionKind.askForHelp},
+            ),
+          );
+          await tester.pump();
+          final terminalKey = terminal == RobotFaceActionKind.confirmTaken
+              ? RobotFaceScreen.confirmTakenButtonKey
+              : RobotFaceScreen.skipDoseButtonKey;
+          final terminalCallback = tester
+              .widget<FilledButton>(find.byKey(terminalKey))
+              .onPressed!;
+          terminalCallback();
+          await tester.pump();
+          // Help remains available while PIN authorization is pending.
+          final helpCallback = tester
+              .widget<FilledButton>(
+                find.byKey(RobotFaceScreen.needHelpButtonKey),
+              )
+              .onPressed!;
+          helpCallback();
+          await tester.pump();
+          expect(helpCalls, 1);
+          expect(terminalCalls, 0);
+          authorization.complete(true);
+          await tester.pump();
+          expect(terminalCalls, 1);
+          if (helpFinishesFirst) {
+            help.complete(false);
+          } else if (throws) {
+            terminalLog.completeError(StateError('terminal failure'));
+          } else {
+            terminalLog.complete(false);
+          }
+          await tester.pump();
+          // Exercise both the rendered button and a pre-rebuild callback.
+          helpCallback();
+          await tester.pump();
+          expect(helpCalls, 1);
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.byKey(RobotFaceScreen.needHelpButtonKey),
+                )
+                .onPressed,
+            isNull,
+          );
+          if (!helpFinishesFirst) {
+            help.complete(false);
+          } else if (throws) {
+            terminalLog.completeError(StateError('terminal failure'));
+          } else {
+            terminalLog.complete(false);
+          }
+          await tester.pump();
+          // Both failures release their own lock, allowing genuine retries.
+          tester
+              .widget<FilledButton>(
+                find.byKey(RobotFaceScreen.needHelpButtonKey),
+              )
+              .onPressed!();
+          await tester.pump();
+          expect(helpCalls, 2);
+          tester.widget<FilledButton>(find.byKey(terminalKey)).onPressed!();
+          await tester.pump();
+          expect(terminalCalls, 2);
+          expect(tester.takeException(), isNull);
+        });
+      }
+    }
+  }
+
   const skipState = RobotFaceState(
     mode: RobotFaceMode.waitingForConfirmation,
     nextEventLabel: 'Taken? · Morning meds',

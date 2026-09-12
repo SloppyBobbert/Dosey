@@ -2126,6 +2126,8 @@ class _RobotFaceActionPanel extends StatefulWidget {
 
 class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
   final Set<String> _submittingDoseIds = <String>{};
+  // Help can start during terminal authorization; each submission owns its lock.
+  final Set<String> _terminalSubmittingDoseIds = <String>{};
   final Set<String> _terminalReservedDoseIds = <String>{};
   String? _latestNonNullActionDoseId;
   int _nonNullActionDoseGeneration = 0;
@@ -2360,7 +2362,9 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
 
   bool get _isSubmittingCurrentDose {
     final actionDoseId = widget.state.actionDoseId;
-    return actionDoseId != null && _submittingDoseIds.contains(actionDoseId);
+    return actionDoseId != null &&
+        (_submittingDoseIds.contains(actionDoseId) ||
+            _terminalSubmittingDoseIds.contains(actionDoseId));
   }
 
   Set<RobotFaceActionKind> _completedActionsForDose(String actionDoseId) {
@@ -2408,7 +2412,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     required String successMessage,
   }) async {
     final actionDoseId = widget.state.actionDoseId;
-    if (actionDoseId == null || _submittingDoseIds.contains(actionDoseId)) {
+    if (actionDoseId == null || _isSubmittingCurrentDose) {
       return;
     }
     if (_isTerminalAction(actionKind)) {
@@ -2500,7 +2504,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
         return;
       }
 
-      setState(() => _submittingDoseIds.add(actionDoseId));
+      setState(() => _terminalSubmittingDoseIds.add(actionDoseId));
       isSubmitting = true;
       messenger = ScaffoldMessenger.of(context)..clearSnackBars();
       final logged = actionKind == RobotFaceActionKind.confirmTaken
@@ -2532,7 +2536,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
       );
     } finally {
       if (isSubmitting && mounted) {
-        setState(() => _submittingDoseIds.remove(actionDoseId));
+        setState(() => _terminalSubmittingDoseIds.remove(actionDoseId));
       }
       _releaseTerminalDose(actionDoseId);
     }
