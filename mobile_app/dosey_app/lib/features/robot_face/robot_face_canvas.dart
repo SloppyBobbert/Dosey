@@ -35,7 +35,6 @@ class RobotFaceCanvas extends StatefulWidget {
     this.isSpeaking = false,
     this.animationCue,
     this.animationRevision = 0,
-    this.compactOverlay = false,
     this.onAnimationCompleted,
   });
 
@@ -45,7 +44,6 @@ class RobotFaceCanvas extends StatefulWidget {
   final bool isSpeaking;
   final RobotFaceAnimationCue? animationCue;
   final int animationRevision;
-  final bool compactOverlay;
   final void Function(RobotFaceAnimationCue cue, int revision)?
   onAnimationCompleted;
 
@@ -335,7 +333,6 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
               cueProgress: _cueProgress,
               outgoingCue: _outgoingCue,
               outgoingCueProgress: _outgoingCueProgress,
-              compactOverlay: widget.compactOverlay,
             ),
             child: const SizedBox.expand(),
           );
@@ -356,7 +353,6 @@ class _RobotFacePainter extends CustomPainter {
     required this.cueProgress,
     this.outgoingCue,
     this.outgoingCueProgress = 0,
-    this.compactOverlay = false,
   });
 
   final RobotFaceState state;
@@ -368,7 +364,6 @@ class _RobotFacePainter extends CustomPainter {
   final double cueProgress;
   final RobotFaceAnimationCue? outgoingCue;
   final double outgoingCueProgress;
-  final bool compactOverlay;
 
   // Captured from the exact RRects sent to paint, after tilt. Consumers map
   // these through the RenderBox transform, including the reserved-area fit.
@@ -541,15 +536,11 @@ class _RobotFacePainter extends CustomPainter {
     final baseEyes = _baseEyeRects(
       size,
       centerY:
-          size.height *
-              (compactOverlay
-                  ? 0.28
-                  : 0.48 - motion.eyeLift - frame.cue.eyeLift) +
+          size.height * (0.48 - motion.eyeLift - frame.cue.eyeLift) +
           motion.idleDrift,
     );
-    final compactScale = compactOverlay ? 0.5 : 1.0;
-    final eyeWidth = baseEyes.first.width * breathing * compactScale;
-    final eyeHeight = baseEyes.first.height * eyelidOpen * compactScale;
+    final eyeWidth = baseEyes.first.width * breathing;
+    final eyeHeight = baseEyes.first.height * eyelidOpen;
     final eyeRadius = Radius.circular(math.max(26, eyeHeight * 0.42));
 
     final spacing = _eyeSpacingFor(state, controllerCondition);
@@ -594,7 +585,7 @@ class _RobotFacePainter extends CustomPainter {
     ];
 
     final attentionRingStrength = math.max(
-      frame.cue.attentionRingStrength,
+      math.max(motion.attentionRingStrength, frame.cue.attentionRingStrength),
       isSpeaking
           ? 0.38 + (speakingPulse * 0.34)
           : isPreparing
@@ -1528,7 +1519,8 @@ class _RobotFacePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _RobotFacePainter oldDelegate) {
-    return oldDelegate.state != state ||
+    final repaint =
+        oldDelegate.state != state ||
         oldDelegate.phase != phase ||
         oldDelegate.isPreparing != isPreparing ||
         oldDelegate.isSpeaking != isSpeaking ||
@@ -1536,8 +1528,10 @@ class _RobotFacePainter extends CustomPainter {
         oldDelegate.animationCue != animationCue ||
         oldDelegate.cueProgress != cueProgress ||
         oldDelegate.outgoingCue != outgoingCue ||
-        oldDelegate.outgoingCueProgress != outgoingCueProgress ||
-        oldDelegate.compactOverlay != compactOverlay;
+        oldDelegate.outgoingCueProgress != outgoingCueProgress;
+    // RenderCustomPaint installs the new delegate even when it keeps old pixels.
+    if (!repaint) debugPaintedEyeRects = oldDelegate.debugPaintedEyeRects;
+    return repaint;
   }
 }
 

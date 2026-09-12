@@ -73,6 +73,15 @@ jobs:
       - name: Test
         run: flutter test
 
+      - name: Upload Robot Face golden failures
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: robot-face-golden-failures
+          path: mobile_app/dosey_app/test/features/robot_face/failures/*.png
+          if-no-files-found: ignore
+          retention-days: 3
+
       - name: Verify runtime capability contracts
         run: |
           set -euo pipefail

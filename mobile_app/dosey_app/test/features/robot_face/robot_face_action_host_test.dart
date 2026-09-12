@@ -756,12 +756,28 @@ void main() {
       (tester) async {
         final states = StreamController<RobotFaceState>.broadcast();
         final authorizer = _DelayedActionAuthorizer();
+        final loggedEvents = <DoseLogEventKind>[];
+        var takenCalls = 0;
         addTearDown(states.close);
 
         await tester.pumpWidget(
           _ActionHostTestApp(
             stateStream: states.stream,
             actionAuthorizer: authorizer.call,
+            doseActionLogger: (_, action, _) async {
+              loggedEvents.add(action.kind);
+              return true;
+            },
+            visibleAndTakenLogger:
+                (
+                  _, {
+                  required doseId,
+                  required occurredAt,
+                  required successMessage,
+                }) async {
+                  takenCalls++;
+                  return true;
+                },
           ),
         );
         states.add(
@@ -787,8 +803,20 @@ void main() {
         await tester.pump();
 
         expect(authorizer.calls, 1);
+        expect(loggedEvents, isEmpty);
+        expect(takenCalls, 0);
         authorizer.complete();
         await tester.pump();
+        expect(
+          loggedEvents,
+          firstAction == RobotFaceActionKind.skipDose
+              ? [DoseLogEventKind.doseSkipped]
+              : isEmpty,
+        );
+        expect(
+          takenCalls,
+          firstAction == RobotFaceActionKind.confirmTaken ? 1 : 0,
+        );
       },
     );
   }

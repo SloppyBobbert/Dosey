@@ -413,9 +413,14 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                                         color: Color(0x9900A8E8),
                                       ),
                                     ),
-                                    icon: const Icon(
-                                      Icons.arrow_back_rounded,
-                                      semanticLabel: 'Open Today',
+                                    icon: RotatedBox(
+                                      quarterTurns:
+                                          (isPortraitFrame ? 1 : 0) +
+                                          (state.isFlipped ? 2 : 0),
+                                      child: const Icon(
+                                        Icons.arrow_back_rounded,
+                                        semanticLabel: 'Open Today',
+                                      ),
                                     ),
                                   ),
                                 )

@@ -1082,6 +1082,17 @@ void main() {
 
     expect(find.text('DISPENSING'), findsOneWidget);
     expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
+    expect(find.text('Dispensing in progress.'), findsOneWidget);
+    await tester.tap(find.byKey(RobotFaceScreen.canvasKey));
+    await tester.pump();
+    expect(find.text('Dispensing in progress.'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(RobotFaceScreen.bottomCardKey),
+        matching: find.text('Dispensing in progress.'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('pins shortage details inside the robot face status card', (

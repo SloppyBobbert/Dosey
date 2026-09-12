@@ -315,6 +315,18 @@ void main() {
                 expect(prompt.overlaps(action), isFalse);
                 final exit = _rect(tester, RobotFaceScreen.exitButtonKey);
                 expect(exit.shortestSide, greaterThanOrEqualTo(48));
+                expect(
+                  tester
+                      .widget<RotatedBox>(
+                        find.descendant(
+                          of: find.byKey(RobotFaceScreen.exitButtonKey),
+                          matching: find.byType(RotatedBox),
+                        ),
+                      )
+                      .quarterTurns,
+                  (viewport.height > viewport.width ? 1 : 0) +
+                      (flipped ? 2 : 0),
+                );
                 expect(exit.overlaps(prompt), isFalse);
                 expect(exit.overlaps(text), isFalse);
                 expect(exit.overlaps(action), isFalse);
@@ -1436,10 +1448,7 @@ void main() {
       await tester.pump();
       states.add(_ready);
       await tester.pump();
-      expect(
-        find.byKey(RobotFaceScreen.actionPanelKey, skipOffstage: false),
-        findsOneWidget,
-      );
+      expect(find.byKey(RobotFaceScreen.actionPanelKey), findsOneWidget);
       await tester.pumpWidget(const _FaceTestApp(withExit: true));
       final unflippedCard = _rect(tester, RobotFaceScreen.bottomCardKey);
       await tester.pumpWidget(
@@ -1466,6 +1475,24 @@ void main() {
       );
     },
   );
+
+  testWidgets('painted eye bounds survive unchanged-input rebuilds', (
+    tester,
+  ) async {
+    await _setViewport(tester, const Size(800, 400));
+    Widget canvas() => MaterialApp(
+      home: MediaQuery(
+        data: const MediaQueryData(disableAnimations: true),
+        child: RobotFaceCanvas(state: _ready),
+      ),
+    );
+    await tester.pumpWidget(canvas());
+    final first = _faceRects(tester);
+    await tester.pumpWidget(canvas());
+    expect(_faceRects(tester), first);
+    await tester.pumpWidget(canvas());
+    expect(_faceRects(tester), first);
+  });
 
   testWidgets('action panel identity survives a compact state', (tester) async {
     await _setViewport(tester, const Size(800, 400));
