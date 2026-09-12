@@ -71,33 +71,7 @@ jobs:
         run: flutter analyze
 
       - name: Record Robot Face golden renderer provenance
-        run: |
-          python3 - <<'PY'
-          import hashlib
-          import json
-          import platform
-          import shutil
-          from pathlib import Path
-
-          sdk = Path(shutil.which('flutter')).resolve().parents[1]
-          print('uname:', platform.uname())
-          print('flutter_sdk:', sdk)
-          version = json.loads((sdk / 'bin/cache/flutter.version.json').read_text())
-          for key in ('flutterVersion', 'frameworkRevision', 'engineRevision',
-                      'engineContentHash', 'dartSdkVersion'):
-              print(f'{key}: {version.get(key, "missing")}')
-          for relative in ('bin/internal/engine.version', 'bin/cache/engine.stamp'):
-              path = sdk / relative
-              print(f'{relative}: {path.read_text().strip() if path.is_file() else "missing"}')
-          files = [sdk / 'bin/cache/artifacts/material_fonts' / name for name in
-                   ('Roboto-Regular.ttf', 'MaterialIcons-Regular.otf')]
-          files += sorted((sdk / 'bin/cache/artifacts/engine').glob('*/flutter_tester'))
-          if len(files) == 2:
-              print('flutter_tester: missing')
-          for path in files:
-              digest = hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else 'missing'
-              print(f'sha256 {path.relative_to(sdk)}: {digest}')
-          PY
+        run: python3 ../../.github/scripts/robot-face-renderer-provenance.py
 
       - name: Test
         run: flutter test
@@ -168,3 +142,49 @@ jobs:
           path: mobile_app/dosey_app/build/app/outputs/flutter-apk/dosey-robot-debug.apk
           if-no-files-found: error
           retention-days: 7
+
+  # Temporary PR138 comparison; remove after the renderer diagnosis.
+  robot-face-linux-3-44-1:
+    name: Robot Face Linux Flutter 3.44.1 diagnostic
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.number == 138 &&
+      github.head_ref == 'fix/robot-face-visual-refresh'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile_app/dosey_app
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Flutter 3.44.1
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: '3.44.1'
+          channel: stable
+          cache: false
+
+      - name: Install locked dependencies
+        run: |
+          sha256sum pubspec.lock
+          flutter pub get --enforce-lockfile
+          git diff --exit-code -- pubspec.lock
+
+      - name: Record Robot Face golden renderer provenance
+        run: python3 ../../.github/scripts/robot-face-renderer-provenance.py
+
+      - name: Test
+        run: flutter test --no-pub
+
+      - name: Upload Robot Face golden failures
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: robot-face-golden-failures-3.44.1
+          path: mobile_app/dosey_app/test/features/robot_face/failures/*.png
+          if-no-files-found: ignore
+          retention-days: 3
