@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/app/dosey_material_app.dart';
+import 'package:dosey_app/core/settings/app_theme_preference.dart';
 import 'package:dosey_app/core/bluetooth/ble_gateway.dart';
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
 import 'package:dosey_app/core/connectivity/connectivity_gateway.dart';
@@ -17,6 +21,9 @@ import 'package:dosey_app/features/robot_face/robot_face_screen.dart';
 import 'package:dosey_app/features/robot_face/robot_face_state.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/rendering.dart';
+
+import 'robot_face_test_font.dart';
 
 void main() {
   const readyState = RobotFaceState(
@@ -220,6 +227,252 @@ void main() {
       }
     }
   }
+
+  for (final terminal in [
+    RobotFaceActionKind.confirmTaken,
+    RobotFaceActionKind.skipDose,
+  ]) {
+    for (final throws in [false, true]) {
+      testWidgets(
+        'action host with Help still offered: terminal success before Help failure ${terminal.name} throws=$throws',
+        (tester) async {
+          final states = StreamController<RobotFaceState>.broadcast();
+          addTearDown(states.close);
+          final authorization = Completer<bool>();
+          final terminalLog = Completer<bool>();
+          final help = Completer<bool>();
+          var helpCalls = 0;
+          var terminalCalls = 0;
+          var authorizationCalls = 0;
+          await tester.pumpWidget(
+            _ActionHostTestApp(
+              stateStream: states.stream,
+              actionAuthorizer: (_) {
+                authorizationCalls++;
+                return authorization.future;
+              },
+              doseActionLogger: (_, event, _) {
+                if (event.kind == DoseLogEventKind.caregiverHelpRequested) {
+                  helpCalls++;
+                  return helpCalls == 1 ? help.future : Future.value(true);
+                }
+                terminalCalls++;
+                return terminalLog.future;
+              },
+              visibleAndTakenLogger:
+                  (
+                    _, {
+                    required doseId,
+                    required occurredAt,
+                    required successMessage,
+                  }) {
+                    terminalCalls++;
+                    return terminalLog.future;
+                  },
+            ),
+          );
+          // This isolates host bookkeeping while the supplied actions still
+          // include Help. The production controller/service may close the dose
+          // and ignore post-terminal Help; this does not qualify durable retry.
+          states.add(
+            readyState.copyWith(
+              availableActions: const {
+                RobotFaceActionKind.confirmTaken,
+                RobotFaceActionKind.skipDose,
+                RobotFaceActionKind.askForHelp,
+              },
+            ),
+          );
+          await tester.pump();
+          final terminalKey = terminal == RobotFaceActionKind.confirmTaken
+              ? RobotFaceScreen.confirmTakenButtonKey
+              : RobotFaceScreen.skipDoseButtonKey;
+          final terminalCallback = tester
+              .widget<FilledButton>(find.byKey(terminalKey))
+              .onPressed!;
+          terminalCallback();
+          await tester.pump();
+          tester
+              .widget<FilledButton>(
+                find.byKey(RobotFaceScreen.needHelpButtonKey),
+              )
+              .onPressed!();
+          await tester.pump();
+          expect(helpCalls, 1);
+          expect(terminalCalls, 0);
+          authorization.complete(true);
+          await tester.pump();
+          expect(terminalCalls, 1);
+          terminalLog.complete(
+            true,
+          ); // The missing race: real success, not false.
+          await tester.pump();
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.byKey(RobotFaceScreen.needHelpButtonKey),
+                )
+                .onPressed,
+            isNull,
+          );
+          if (throws) {
+            help.completeError(StateError('Help failure'));
+          } else {
+            help.complete(false);
+          }
+          await tester.pump();
+          final retry = tester
+              .widget<FilledButton>(
+                find.byKey(RobotFaceScreen.needHelpButtonKey),
+              )
+              .onPressed;
+          expect(retry, isNotNull);
+          retry!();
+          await tester.pump();
+          expect(helpCalls, 2);
+          expect(
+            tester
+                .widget<FilledButton>(
+                  find.byKey(RobotFaceScreen.needHelpButtonKey),
+                )
+                .onPressed,
+            isNull,
+          );
+          for (final key in [
+            RobotFaceScreen.confirmTakenButtonKey,
+            RobotFaceScreen.skipDoseButtonKey,
+          ]) {
+            expect(
+              tester.widget<FilledButton>(find.byKey(key)).onPressed,
+              isNull,
+            );
+          }
+          terminalCallback();
+          await tester.pump();
+          expect(terminalCalls, 1);
+          expect(authorizationCalls, 1);
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
+  for (final mode in [
+    RobotFaceMode.waitingForConfirmation,
+    RobotFaceMode.dispensing,
+    RobotFaceMode.missed,
+    RobotFaceMode.error,
+  ]) {
+    for (final brightness in Brightness.values) {
+      testWidgets('ordinary expanded reachability ${mode.name} ${brightness.name}', (
+        tester,
+      ) async {
+        await tester.runAsync(loadRobotFaceTestFont);
+        tester.view.physicalSize = const Size(800, 400);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        final database = DoseyDatabase.inMemory();
+        addTearDown(database.close);
+        await LocalAppSettingsRepository(
+          database,
+          defaultRole: AppDeviceRole.androidRobot,
+        ).setThemePreference(
+          brightness == Brightness.light
+              ? AppThemePreference.light
+              : AppThemePreference.dark,
+        );
+        final states = StreamController<RobotFaceState>.broadcast();
+        addTearDown(states.close);
+        const reminder =
+            'Now · Fictional extended release morning medication 100 mg / 25 mg combination tablet with breakfast and a full glass of water · final reminder words';
+        const status =
+            'Controller diagnostic: the fictional dose is visible awaiting confirmation; inspect the cup and contact your caregiver before proceeding · final diagnostic words';
+        await tester.pumpWidget(
+          _ActionHostTestApp(
+            stateStream: states.stream,
+            database: database,
+            productionScale: mode == RobotFaceMode.error ? 1 : 2,
+          ),
+        );
+        states.add(
+          readyState.copyWith(
+            mode: mode,
+            nextEventLabel: reminder,
+            statusLabel: status,
+            availableActions: mode == RobotFaceMode.missed
+                ? const {RobotFaceActionKind.recognizeMissedDose}
+                : const {RobotFaceActionKind.askForHelp},
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          Theme.of(tester.element(find.byType(RobotFaceScreen))).brightness,
+          brightness,
+        );
+        final labels = [
+          reminder,
+          if (mode != RobotFaceMode.missed) status,
+          if (mode == RobotFaceMode.missed) ...[
+            'This dose was missed.',
+            'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+            'Missed dose',
+          ],
+        ];
+        await _expectReachableDetails(
+          tester,
+          labels,
+          '${mode.name}_${brightness.name}',
+        );
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
+  testWidgets('light theme idle chevron contrasts on its dark pill', (
+    tester,
+  ) async {
+    await tester.runAsync(loadRobotFaceTestFont);
+    final database = DoseyDatabase.inMemory();
+    addTearDown(database.close);
+    await LocalAppSettingsRepository(
+      database,
+      defaultRole: AppDeviceRole.androidRobot,
+    ).setThemePreference(AppThemePreference.light);
+    final states = StreamController<RobotFaceState>.broadcast();
+    addTearDown(states.close);
+    await tester.pumpWidget(
+      _ActionHostTestApp(
+        stateStream: states.stream,
+        database: database,
+        productionScale: 1,
+      ),
+    );
+    states.add(
+      readyState.copyWith(mode: RobotFaceMode.idle, availableActions: const {}),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      Theme.of(tester.element(find.byType(RobotFaceScreen))).brightness,
+      Brightness.light,
+    );
+    final icon = find.byIcon(Icons.expand_less_rounded);
+    final color =
+        tester.widget<Icon>(icon).color ??
+        IconTheme.of(tester.element(icon)).color!;
+    final background = Color.alphaBlend(
+      const Color(0xC40B111B),
+      const Color(0xFF02050A),
+    );
+    final foreground = Color.alphaBlend(color, background);
+    final luminances = [
+      foreground.computeLuminance(),
+      background.computeLuminance(),
+    ]..sort();
+    final contrast = (luminances.last + .05) / (luminances.first + .05);
+    expect(contrast, greaterThanOrEqualTo(3));
+    await _captureFixture(tester, 'idle_light');
+  });
 
   const skipState = RobotFaceState(
     mode: RobotFaceMode.waitingForConfirmation,
@@ -977,6 +1230,114 @@ void main() {
   }
 }
 
+Future<void> _captureFixture(WidgetTester tester, String name) async {
+  final directory = Platform.environment['ROBOT_FACE_FIXTURE_DIR'];
+  if (directory == null) return;
+  final boundary = tester.renderObject<RenderRepaintBoundary>(
+    find.byKey(const ValueKey('ordinary-fixture')),
+  );
+  await tester.runAsync(() async {
+    final image = await boundary.toImage();
+    try {
+      final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+      await File(
+        '$directory/$name.png',
+      ).writeAsBytes(bytes!.buffer.asUint8List());
+    } finally {
+      image.dispose();
+    }
+  });
+}
+
+Future<void> _expectReachableDetails(
+  WidgetTester tester,
+  List<String> labels,
+  String fixture,
+) async {
+  final card = find.byKey(RobotFaceScreen.bottomCardKey);
+  final scroll = find.descendant(of: card, matching: find.byType(Scrollable));
+  final position = tester.state<ScrollableState>(scroll).position;
+  final viewport = find.descendant(
+    of: card,
+    matching: find.byType(SingleChildScrollView),
+  );
+  final keys = [
+    fixture.startsWith('missed')
+        ? RobotFaceScreen.recognizeMissedDoseButtonKey
+        : RobotFaceScreen.needHelpButtonKey,
+    RobotFaceScreen.exitButtonKey,
+  ];
+  final pinned = keys.map((key) => tester.getRect(find.byKey(key))).toList();
+  final screen =
+      Offset.zero & tester.view.physicalSize / tester.view.devicePixelRatio;
+  for (final rect in pinned) {
+    expect(
+      screen.contains(rect.topLeft) && screen.contains(rect.bottomRight),
+      isTrue,
+    );
+    expect(rect.shortestSide, greaterThanOrEqualTo(48));
+    expect(rect.overlaps(tester.getRect(card)), isFalse);
+  }
+  final glyphs = <(RenderParagraph, Rect)>[];
+  for (final label in labels) {
+    final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
+    expect(
+      paragraph.didExceedMaxLines,
+      isFalse,
+      reason: 'Expanded text cannot discard a suffix: $label',
+    );
+    expect(
+      paragraph.textScaler.scale(10),
+      fixture.startsWith('error') ? 10 : 20,
+    );
+    expect(paragraph.text.style?.fontFamily, robotFaceTestFont);
+    // Check each painted character: an ellipsized suffix cannot silently yield
+    // an empty word-box list and pass the traversal assertion.
+    for (var i = 0; i < label.length; i++) {
+      if (label[i].trim().isEmpty) continue;
+      final boxes = paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: i, extentOffset: i + 1),
+      );
+      expect(boxes, isNotEmpty, reason: 'Missing glyph $i of $label');
+      glyphs.addAll(boxes.map((box) => (paragraph, box.toRect())));
+    }
+    for (final word in RegExp(r'\S+').allMatches(label)) {
+      final boxes = paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: word.start, extentOffset: word.end),
+      );
+      expect(boxes, isNotEmpty);
+      glyphs.addAll(boxes.map((box) => (paragraph, box.toRect())));
+    }
+  }
+  expect(glyphs, isNotEmpty);
+  final reached = <int>{};
+  final extent = position.maxScrollExtent;
+  final step = position.viewportDimension / 3;
+  expect(step, greaterThan(0));
+  await _captureFixture(tester, '${fixture}_start');
+  for (double offset = 0; offset < extent + step; offset += step) {
+    position.jumpTo(offset.clamp(0, extent));
+    await tester.pumpAndSettle();
+    final visible = tester.getRect(viewport).inflate(.001);
+    for (var i = 0; i < glyphs.length; i++) {
+      final (paragraph, box) = glyphs[i];
+      final rect = MatrixUtils.transformRect(
+        paragraph.getTransformTo(null),
+        box,
+      );
+      if (visible.contains(rect.topLeft) &&
+          visible.contains(rect.bottomRight)) {
+        reached.add(i);
+      }
+    }
+    for (var i = 0; i < keys.length; i++) {
+      expect(tester.getRect(find.byKey(keys[i])), pinned[i]);
+    }
+  }
+  expect(reached.length, glyphs.length);
+  await _captureFixture(tester, '${fixture}_end');
+}
+
 class _ActionHostTestApp extends StatefulWidget {
   const _ActionHostTestApp({
     required this.stateStream,
@@ -984,8 +1345,10 @@ class _ActionHostTestApp extends StatefulWidget {
     this.doseActionLogger,
     this.visibleAndTakenLogger,
     this.actionAuthorizer,
+    this.productionScale,
   });
 
+  final double? productionScale;
   final Stream<RobotFaceState> stateStream;
   final DoseyDatabase? database;
   final RobotFaceDoseActionLogger? doseActionLogger;
@@ -1015,14 +1378,39 @@ class _ActionHostTestAppState extends State<_ActionHostTestApp> {
       permissionGateway: _FakePermissionGateway(),
       reminderScheduler: _FakeReminderScheduler(),
       missedDoseReconciliationService: _FakeMissedDoseReconciliationService(),
-      child: MaterialApp(
-        home: RobotFaceScreen(
-          stateStream: widget.stateStream,
-          doseActionLogger: widget.doseActionLogger,
-          visibleAndTakenLogger: widget.visibleAndTakenLogger,
-          actionAuthorizer: widget.actionAuthorizer,
-        ),
-      ),
+      child: widget.productionScale != null
+          ? DoseyMaterialApp(
+              home: Builder(
+                builder: (context) => MediaQuery(
+                  data: MediaQuery.of(context).copyWith(
+                    textScaler: TextScaler.linear(widget.productionScale!),
+                    disableAnimations: true,
+                  ),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      textTheme: Theme.of(
+                        context,
+                      ).textTheme.apply(fontFamily: robotFaceTestFont),
+                    ),
+                    child: RepaintBoundary(
+                      key: const ValueKey('ordinary-fixture'),
+                      child: RobotFaceScreen(
+                        stateStream: widget.stateStream,
+                        onLongPress: () {},
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : MaterialApp(
+              home: RobotFaceScreen(
+                stateStream: widget.stateStream,
+                doseActionLogger: widget.doseActionLogger,
+                visibleAndTakenLogger: widget.visibleAndTakenLogger,
+                actionAuthorizer: widget.actionAuthorizer,
+              ),
+            ),
     );
   }
 }

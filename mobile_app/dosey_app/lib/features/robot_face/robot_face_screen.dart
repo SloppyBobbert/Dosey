@@ -1631,7 +1631,11 @@ class _RobotFaceStatusCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Icon(Icons.expand_less_rounded, size: 20),
+                  const Icon(
+                    Icons.expand_less_rounded,
+                    size: 20,
+                    color: Colors.white,
+                  ),
                 ],
               ),
             ),
@@ -1761,8 +1765,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           state.nextEventLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
@@ -1772,8 +1774,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
                       ] else
                         Text(
                           state.nextEventLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -1821,8 +1821,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
                           ),
                           child: Text(
                             statusLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                               fontSize: 12,
@@ -2525,7 +2523,10 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
         if (_nonNullActionDoseGeneration != submissionGeneration) {
           return;
         }
-        _completedActionsForDose(actionDoseId).addAll(submissionActions);
+        // Terminal success cannot complete an independent Help request.
+        _completedActionsForDose(
+          actionDoseId,
+        ).addAll(submissionActions.where(_isTerminalAction));
       });
     } on Object catch (error) {
       if (!context.mounted) {
