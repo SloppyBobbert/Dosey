@@ -410,13 +410,30 @@ void main() {
           Theme.of(tester.element(find.byType(RobotFaceScreen))).brightness,
           brightness,
         );
+        final cardWidth = tester
+            .getSize(find.byKey(RobotFaceScreen.bottomCardKey))
+            .width;
+        final reminderRect = tester.getRect(find.text(reminder));
+        expect(
+          reminderRect.width,
+          greaterThan(cardWidth * .85),
+          reason: 'Expanded reminder uses the readable card width',
+        );
+        if (mode != RobotFaceMode.missed) {
+          final statusRect = tester.getRect(find.text(status));
+          expect(
+            statusRect.top,
+            greaterThanOrEqualTo(reminderRect.bottom),
+            reason: 'Instructions follow the reminder, never a side pill',
+          );
+          expect(statusRect.width, greaterThan(cardWidth * .85));
+        }
         final labels = [
           reminder,
-          if (mode != RobotFaceMode.missed) status,
+          status,
           if (mode == RobotFaceMode.missed) ...[
             'This dose was missed.',
             'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-            'Missed dose',
           ],
         ];
         await _expectReachableDetails(
@@ -1337,6 +1354,17 @@ Future<void> _expectReachableDetails(
   expect(reached.length, glyphs.length);
   await _captureFixture(tester, '${fixture}_end');
 }
+
+// Shared by the isolated, real-font presentation preview suite.
+Widget robotFacePreviewApp({
+  required Stream<RobotFaceState> states,
+  required DoseyDatabase database,
+  required double scale,
+}) => _ActionHostTestApp(
+  stateStream: states,
+  database: database,
+  productionScale: scale,
+);
 
 class _ActionHostTestApp extends StatefulWidget {
   const _ActionHostTestApp({

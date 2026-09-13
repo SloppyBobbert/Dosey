@@ -977,8 +977,9 @@ void main() {
     );
     expect(urgentPrompt.data, 'READY');
     expect(urgentPrompt.style?.fontSize, lessThanOrEqualTo(20));
-    expect(find.text('Ready to dispense'), findsNothing);
-    expect(find.text('Ready now'), findsOneWidget);
+    expect(find.text('Ready to dispense'), findsOneWidget);
+    expect(find.text('Ready now'), findsNothing);
+    expect(find.text('READY NOW'), findsNothing);
   });
 
   testWidgets('updates from later state stream events', (
@@ -1021,7 +1022,7 @@ void main() {
     expect(find.text('Controller connected'), findsNothing);
   });
 
-  testWidgets('keeps urgent treatment compact and face first', (
+  testWidgets('keeps urgent treatment compact and full instructions visible', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1056,8 +1057,9 @@ void main() {
     final promptBorder = promptDecoration.border! as Border;
     expect(promptBorder.top.color.r, greaterThan(promptBorder.top.color.g));
     expect(promptBorder.top.color.g, greaterThan(promptBorder.top.color.b));
-    expect(find.text('Dispense soon'), findsNothing);
-    expect(find.text('Coming up'), findsOneWidget);
+    expect(find.text('Dispense soon'), findsOneWidget);
+    expect(find.text('Coming up'), findsNothing);
+    expect(find.text('UP NEXT'), findsNothing);
     expect(find.text('Dose ready'), findsNothing);
     expect(find.text('Need help'), findsNothing);
   });

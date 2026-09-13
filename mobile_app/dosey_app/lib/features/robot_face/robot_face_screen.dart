@@ -1014,13 +1014,6 @@ class _UrgentPromptOverlay extends StatelessWidget {
                 border: Border.all(
                   color: _promptColorFor(state.mode).withValues(alpha: 0.32),
                 ),
-                boxShadow: <BoxShadow>[
-                  BoxShadow(
-                    color: _promptColorFor(state.mode).withValues(alpha: 0.14),
-                    blurRadius: 18,
-                    spreadRadius: 1,
-                  ),
-                ],
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -1036,15 +1029,6 @@ class _UrgentPromptOverlay extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: _promptColorFor(state.mode),
                         shape: BoxShape.circle,
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: _promptColorFor(
-                              state.mode,
-                            ).withValues(alpha: 0.4),
-                            blurRadius: 10,
-                            spreadRadius: 1,
-                          ),
-                        ],
                       ),
                     ),
                     const SizedBox(width: 10),
@@ -1223,23 +1207,35 @@ class _RobotFaceFrame extends StatelessWidget {
                       behavior: HitTestBehavior.opaque,
                       onTapDown: (_) => onInteraction(),
                       onLongPress: onLongPress,
-                      child: ClipRect(
-                        child: FittedBox(
-                          fit: BoxFit.contain,
-                          child: SizedBox(
-                            key: RobotFaceScreen.canvasKey,
-                            width: 800,
-                            height: 400,
-                            child: RobotFaceCanvas(
-                              state: state,
-                              isActive: isActive,
-                              isPreparing:
-                                  voicePhase == VoicePlaybackPhase.preparing,
-                              isSpeaking:
-                                  voicePhase == VoicePlaybackPhase.speaking,
-                              animationCue: animationCue,
-                              animationRevision: animationRevision,
-                              onAnimationCompleted: onAnimationCompleted,
+                      child: Center(
+                        child: ConstrainedBox(
+                          // Decorative eyes never grow to dominate the reminder.
+                          // The measured reservation and full-area tap target remain.
+                          constraints: const BoxConstraints(
+                            maxWidth: 360,
+                            maxHeight: 180,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              child: SizedBox(
+                                key: RobotFaceScreen.canvasKey,
+                                width: 800,
+                                height: 400,
+                                child: RobotFaceCanvas(
+                                  state: state,
+                                  isActive: isActive,
+                                  isPreparing:
+                                      voicePhase ==
+                                      VoicePlaybackPhase.preparing,
+                                  isSpeaking:
+                                      voicePhase == VoicePlaybackPhase.speaking,
+                                  animationCue: animationCue,
+                                  animationRevision: animationRevision,
+                                  onAnimationCompleted: onAnimationCompleted,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -1682,7 +1678,7 @@ class _RobotFaceStatusCard extends StatelessWidget {
             : isSleepyState
             ? const Color(0xC20A0E16)
             : const Color(0xC20B111B),
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isMissedState
               ? const Color(0x66FF728C)
@@ -1690,48 +1686,22 @@ class _RobotFaceStatusCard extends StatelessWidget {
               ? const Color(0x4D92A2C8)
               : Colors.white.withValues(alpha: 0.08),
         ),
-        boxShadow: <BoxShadow>[
-          BoxShadow(
-            color: isMissedState
-                ? const Color(0x66FF728C)
-                : isSleepyState
-                ? const Color(0x2F6477A8)
-                : Colors.black.withValues(alpha: 0.26),
-            blurRadius: isMissedState ? 28 : 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: _accentFor(state.mode),
-                    shape: BoxShape.circle,
-                    boxShadow: <BoxShadow>[
-                      BoxShadow(
-                        color: _accentFor(state.mode).withValues(alpha: 0.42),
-                        blurRadius: 12,
-                        spreadRadius: 2,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    if (_headlineFor(state.mode) case final headline?) ...[
                       Text(
-                        _headlineFor(state.mode),
+                        headline,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -1741,93 +1711,63 @@ class _RobotFaceStatusCard extends StatelessWidget {
                               : const Color(0xFF8A96AD),
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      if (isMissedState) ...<Widget>[
-                        const Text(
-                          'This dose was missed.',
-                          style: TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            height: 1.05,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                            color: Color(0xFFF4D7DD),
-                            height: 1.3,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          state.nextEventLabel,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFFFFB4C1),
-                          ),
-                        ),
-                      ] else
-                        Text(
-                          state.nextEventLabel,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
+                      const SizedBox(height: 8),
                     ],
-                  ),
-                ),
-                if (_compactStatusLabelFor(state)
-                    case final statusLabel?) ...<Widget>[
-                  const SizedBox(width: 12),
-                  Flexible(
-                    child: AnimatedScale(
-                      duration: const Duration(milliseconds: 280),
-                      scale: 1 + (badgeEmphasis * 0.05),
-                      child: DecoratedBox(
-                        key: RobotFaceScreen.statusBadgeKey,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(
-                            alpha: 0.06 + (badgeEmphasis * 0.05),
-                          ),
-                          borderRadius: BorderRadius.circular(999),
-                          border: Border.all(
-                            color: _accentFor(
-                              state.mode,
-                            ).withValues(alpha: 0.08 + (badgeEmphasis * 0.14)),
-                          ),
-                          boxShadow: badgeEmphasis == 0
-                              ? null
-                              : <BoxShadow>[
-                                  BoxShadow(
-                                    color: _accentFor(state.mode).withValues(
-                                      alpha: 0.12 + (badgeEmphasis * 0.1),
-                                    ),
-                                    blurRadius: 16,
-                                    spreadRadius: 0.5,
-                                  ),
-                                ],
+                    Text(
+                      state.nextEventLabel,
+                      style: const TextStyle(
+                        fontSize: 22,
+                        height: 1.25,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    if (isMissedState) ...<Widget>[
+                      const SizedBox(height: 12),
+                      const Text(
+                        'This dose was missed.',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          height: 1.05,
                         ),
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            horizontal: 12 + (badgeEmphasis * 2),
-                            vertical: 8,
-                          ),
-                          child: Text(
-                            statusLabel,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFFD3DAE7),
-                            ),
-                          ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFFF4D7DD),
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (_requiredStatus case final statusLabel?) ...<Widget>[
+                  const SizedBox(height: 12),
+                  DecoratedBox(
+                    key: RobotFaceScreen.statusBadgeKey,
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(
+                          color: _accentFor(
+                            state.mode,
+                          ).withValues(alpha: 0.16 + badgeEmphasis * 0.2),
+                        ),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        statusLabel,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          height: 1.35,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFFD3DAE7),
                         ),
                       ),
                     ),
@@ -1850,20 +1790,14 @@ class _RobotFaceStatusCard extends StatelessWidget {
     );
   }
 
-  String _headlineFor(RobotFaceMode mode) {
-    return switch (mode) {
-      RobotFaceMode.doseReady => 'READY NOW',
-      RobotFaceMode.doseApproaching => 'UP NEXT',
-      RobotFaceMode.happyConfirmed => 'CONFIRMED',
-      RobotFaceMode.error => 'CHECK ROBOT',
-      RobotFaceMode.offline => 'OFFLINE',
-      RobotFaceMode.sleepy => 'RESTING',
-      RobotFaceMode.waitingForConfirmation => 'WAITING',
-      RobotFaceMode.dispensing => 'DISPENSING',
-      RobotFaceMode.missed => 'MISSED',
-      _ => 'NEXT EVENT',
-    };
-  }
+  // Urgent modes already have a pinned headline above the face.
+  String? _headlineFor(RobotFaceMode mode) => switch (mode) {
+    RobotFaceMode.sleepy => 'RESTING',
+    RobotFaceMode.waitingForConfirmation => 'WAITING',
+    RobotFaceMode.dispensing => 'DISPENSING',
+    RobotFaceMode.idle => 'NEXT EVENT',
+    _ => null,
+  };
 
   Color _accentFor(RobotFaceMode mode) {
     return switch (mode.tone) {
@@ -1872,24 +1806,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
       RobotFaceTone.calm => const Color(0xFF4EE6FF),
       RobotFaceTone.warning => const Color(0xFFFF728C),
       RobotFaceTone.offline => const Color(0xFF98A5BC),
-    };
-  }
-
-  String? _compactStatusLabelFor(RobotFaceState state) {
-    final statusLabel = _requiredStatus?.trim();
-    if (statusLabel == null || statusLabel.isEmpty) {
-      return null;
-    }
-
-    return switch (state.mode) {
-      RobotFaceMode.doseReady => 'Ready now',
-      RobotFaceMode.doseApproaching => 'Coming up',
-      RobotFaceMode.happyConfirmed => 'Dose logged',
-      RobotFaceMode.sleepy => 'Sleep mode',
-      RobotFaceMode.error => statusLabel,
-      RobotFaceMode.missed => 'Missed dose',
-      RobotFaceMode.offline => 'Reconnect needed',
-      _ => statusLabel,
     };
   }
 
@@ -2306,7 +2222,8 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFFD94A66),
             foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            minimumSize: const Size(48, 48),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             textStyle: const TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
