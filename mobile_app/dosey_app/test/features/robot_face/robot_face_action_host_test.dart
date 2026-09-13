@@ -46,6 +46,113 @@ void main() {
     actionDoseId: 'dose-1',
     availableActions: {RobotFaceActionKind.askForHelp},
   );
+  for (final terminal in [
+    RobotFaceActionKind.confirmTaken,
+    RobotFaceActionKind.skipDose,
+  ]) {
+    for (final addedDuringAuthorization in [true, false]) {
+      testWidgets(
+        'terminal completion blocks newly available actions ${terminal.name} pending=$addedDuringAuthorization',
+        (tester) async {
+          final states = StreamController<RobotFaceState>.broadcast();
+          addTearDown(states.close);
+          final authorizer = _DelayedActionAuthorizer();
+          var terminalCalls = 0;
+          var helpCalls = 0;
+          await tester.pumpWidget(
+            _ActionHostTestApp(
+              stateStream: states.stream,
+              actionAuthorizer: authorizer.call,
+              doseActionLogger: (_, event, _) async {
+                if (event.kind == DoseLogEventKind.caregiverHelpRequested) {
+                  helpCalls++;
+                } else {
+                  terminalCalls++;
+                }
+                return true;
+              },
+              visibleAndTakenLogger:
+                  (
+                    _, {
+                    required doseId,
+                    required occurredAt,
+                    required successMessage,
+                  }) async {
+                    terminalCalls++;
+                    return true;
+                  },
+            ),
+          );
+          final initial = readyState.copyWith(availableActions: {terminal});
+          final expanded = readyState.copyWith(
+            availableActions: const {
+              RobotFaceActionKind.confirmTaken,
+              RobotFaceActionKind.skipDose,
+              RobotFaceActionKind.askForHelp,
+            },
+          );
+          states.add(initial);
+          await tester.pump();
+          final terminalKey = terminal == RobotFaceActionKind.confirmTaken
+              ? RobotFaceScreen.confirmTakenButtonKey
+              : RobotFaceScreen.skipDoseButtonKey;
+          final originalCallback = tester
+              .widget<FilledButton>(find.byKey(terminalKey))
+              .onPressed!;
+          originalCallback();
+          await tester.pump();
+          if (addedDuringAuthorization) {
+            states.add(expanded);
+            await tester.pump();
+          }
+          expect(terminalCalls, 0);
+          authorizer.complete();
+          await tester.pump();
+          expect(terminalCalls, 1);
+          if (!addedDuringAuthorization) {
+            states.add(expanded);
+            await tester.pump();
+          }
+          for (final key in [
+            RobotFaceScreen.confirmTakenButtonKey,
+            RobotFaceScreen.skipDoseButtonKey,
+          ]) {
+            expect(
+              tester.widget<FilledButton>(find.byKey(key)).onPressed,
+              isNull,
+              reason: 'Terminal success closes every terminal kind for dose-1',
+            );
+          }
+          originalCallback();
+          await tester.pump();
+          expect(authorizer.calls, 1);
+          expect(terminalCalls, 1);
+          // Host-only Help independence; no post-terminal persistence claim.
+          tester
+              .widget<FilledButton>(
+                find.byKey(RobotFaceScreen.needHelpButtonKey),
+              )
+              .onPressed!();
+          await tester.pump();
+          expect(helpCalls, 1);
+          states.add(expanded.copyWith(actionDoseId: 'dose-2'));
+          await tester.pump();
+          for (final key in [
+            RobotFaceScreen.confirmTakenButtonKey,
+            RobotFaceScreen.skipDoseButtonKey,
+            RobotFaceScreen.needHelpButtonKey,
+          ]) {
+            expect(
+              tester.widget<FilledButton>(find.byKey(key)).onPressed,
+              isNotNull,
+            );
+          }
+          expect(tester.takeException(), isNull);
+        },
+      );
+    }
+  }
+
   for (final helpFinishesFirst in <bool>[false, true]) {
     testWidgets(
       'Help during terminal authorization, help finishes first=$helpFinishesFirst',
@@ -1210,6 +1317,49 @@ void main() {
     RobotFaceActionKind.confirmTaken,
     RobotFaceActionKind.skipDose,
   ]) {
+    testWidgets('retries ${action.name} after denied authorization', (
+      tester,
+    ) async {
+      final states = StreamController<RobotFaceState>.broadcast();
+      addTearDown(states.close);
+      var authorizationCalls = 0;
+      var terminalCalls = 0;
+      await tester.pumpWidget(
+        _ActionHostTestApp(
+          stateStream: states.stream,
+          actionAuthorizer: (_) async => ++authorizationCalls > 1,
+          doseActionLogger: (_, _, _) async {
+            terminalCalls++;
+            return true;
+          },
+          visibleAndTakenLogger:
+              (
+                _, {
+                required doseId,
+                required occurredAt,
+                required successMessage,
+              }) async {
+                terminalCalls++;
+                return true;
+              },
+        ),
+      );
+      states.add(readyState.copyWith(availableActions: {action}));
+      await tester.pump();
+      final key = action == RobotFaceActionKind.confirmTaken
+          ? RobotFaceScreen.confirmTakenButtonKey
+          : RobotFaceScreen.skipDoseButtonKey;
+      tester.widget<FilledButton>(find.byKey(key)).onPressed!();
+      await tester.pump();
+      expect(terminalCalls, 0);
+      expect(authorizationCalls, 1);
+      tester.widget<FilledButton>(find.byKey(key)).onPressed!();
+      await tester.pump();
+      expect(authorizationCalls, 2);
+      expect(terminalCalls, 1);
+      expect(tester.widget<FilledButton>(find.byKey(key)).onPressed, isNull);
+    });
+
     testWidgets(
       'releases ${action.name} after an authorization error for retry',
       (tester) async {

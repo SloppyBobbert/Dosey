@@ -2408,9 +2408,6 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
     ScaffoldMessengerState? messenger;
     try {
       final submissionGeneration = _nonNullActionDoseGeneration;
-      final submissionActions = Set<RobotFaceActionKind>.of(
-        widget.state.availableActions,
-      );
       if (!await _authorizeAction(context) ||
           !context.mounted ||
           _nonNullActionDoseGeneration != submissionGeneration ||
@@ -2440,10 +2437,10 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
         if (_nonNullActionDoseGeneration != submissionGeneration) {
           return;
         }
-        // Terminal success cannot complete an independent Help request.
+        // Close even terminal kinds offered later, but not independent Help.
         _completedActionsForDose(
           actionDoseId,
-        ).addAll(submissionActions.where(_isTerminalAction));
+        ).addAll(RobotFaceActionKind.values.where(_isTerminalAction));
       });
     } on Object catch (error) {
       if (!context.mounted) {
