@@ -1477,6 +1477,163 @@ void main() {
     },
   );
 
+  for (final state in [
+    _ready,
+    _idle,
+    for (final mode in RobotFaceMode.values)
+      if (mode != RobotFaceMode.idle && mode != RobotFaceMode.doseReady)
+        _idle.copyWith(mode: mode),
+  ]) {
+    testWidgets('ordinary ${state.mode.name} has dominant contained eyes', (
+      tester,
+    ) async {
+      await _setViewport(tester, const Size(800, 400));
+      await tester.runAsync(loadRobotFaceTestFont);
+      await tester.pumpWidget(
+        _FaceTestApp(
+          state: state.copyWith(statusLabel: 'Ready to dispense'),
+          fontFamily: robotFaceTestFont,
+          reducedMotion: true,
+          withExit: true,
+        ),
+      );
+      final canvas = _rect(tester, RobotFaceScreen.canvasKey);
+      final eyes = _faceRects(tester).take(2).toList();
+      for (final eye in eyes) {
+        expect(
+          eye.width,
+          greaterThanOrEqualTo(
+            state.mode == RobotFaceMode.doseReady ? 160 : 220,
+          ),
+        );
+        // Closed lids and concerned tilts are expressions, not smaller faces.
+        if ([
+          RobotFaceMode.idle,
+          RobotFaceMode.doseReady,
+        ].contains(state.mode)) {
+          expect(eye.height, greaterThanOrEqualTo(100));
+        }
+        expect(canvas.inflate(0.001).contains(eye.topLeft), isTrue);
+        expect(canvas.inflate(0.001).contains(eye.bottomRight), isTrue);
+        expect(
+          eye.overlaps(_rect(tester, RobotFaceScreen.bottomCardKey)),
+          isFalse,
+        );
+      }
+      expect(eyes.last.right - eyes.first.left, greaterThan(430));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final viewport in [const Size(800, 400), const Size(400, 800)]) {
+    for (final padding in [
+      EdgeInsets.zero,
+      const EdgeInsets.fromLTRB(24, 18, 30, 20),
+    ]) {
+      for (final flipped in [false, true]) {
+        testWidgets(
+          'full surface paints every edge $viewport $padding flipped=$flipped',
+          (tester) async {
+            await _setViewport(tester, viewport);
+            await tester.runAsync(loadRobotFaceTestFont);
+            await tester.pumpWidget(
+              _FaceTestApp(
+                state: _ready.copyWith(
+                  isFlipped: flipped,
+                  statusLabel: 'Ready to dispense',
+                  availableActions: {RobotFaceActionKind.askForHelp},
+                ),
+                fontFamily: robotFaceTestFont,
+                reducedMotion: true,
+                padding: padding,
+                withExit: true,
+              ),
+            );
+            final surfaceFinder = find.descendant(
+              of: find.byType(RobotFaceSurface),
+              matching: find.byType(CustomPaint),
+            );
+            final surfaceBox = tester.renderObject<RenderBox>(surfaceFinder);
+            final dynamic surfacePainter = tester
+                .widget<CustomPaint>(surfaceFinder)
+                .painter!;
+            final painted = surfacePainter.debugPaintedSurfaceRect as Rect;
+            _expectViewportRect(
+              MatrixUtils.transformRect(
+                surfaceBox.getTransformTo(null),
+                painted,
+              ),
+              viewport,
+            );
+            final boundary = tester.renderObject<RenderRepaintBoundary>(
+              find.byKey(const ValueKey('face-test-boundary')),
+            );
+            await tester.runAsync(() async {
+              final image = await boundary.toImage();
+              try {
+                final bytes = (await image.toByteData(
+                  format: ui.ImageByteFormat.rawRgba,
+                ))!;
+                for (var y = 0; y < image.height; y++) {
+                  for (var x = 0; x < image.width; x++) {
+                    if (x != 0 &&
+                        y != 0 &&
+                        x != image.width - 1 &&
+                        y != image.height - 1) {
+                      continue;
+                    }
+                    final offset = (y * image.width + x) * 4;
+                    expect(bytes.getUint8(offset + 3), 255);
+                    expect(
+                      [
+                        bytes.getUint8(offset),
+                        bytes.getUint8(offset + 1),
+                        bytes.getUint8(offset + 2),
+                      ],
+                      isNot([2, 5, 10]),
+                      reason: 'No old black gutter at $x,$y',
+                    );
+                  }
+                }
+              } finally {
+                image.dispose();
+              }
+            });
+            final status = _rect(tester, RobotFaceScreen.bottomCardKey);
+            final help = _rect(tester, RobotFaceScreen.needHelpButtonKey);
+            final exit = _rect(tester, RobotFaceScreen.exitButtonKey);
+            for (final target in [help, exit]) {
+              expect(target.shortestSide, greaterThanOrEqualTo(48));
+              _expectInsideSafeBounds(target, padding, viewport);
+            }
+            expect(find.text('Need help').hitTestable(), findsOneWidget);
+            expect(
+              _textGlyphsFit(
+                tester.renderObject<RenderParagraph>(
+                  find.text('Ready to dispense'),
+                ),
+                status,
+              ),
+              isTrue,
+            );
+            for (final eye in _faceRects(tester).take(2)) {
+              for (final overlay in [status, help, exit]) {
+                expect(eye.overlaps(overlay), isFalse);
+              }
+              if (padding == EdgeInsets.zero &&
+                  !flipped &&
+                  viewport.width == 800) {
+                expect(eye.width, greaterThan(230));
+                expect(eye.height, greaterThan(150));
+              }
+            }
+            expect(tester.takeException(), isNull);
+          },
+        );
+      }
+    }
+  }
+
   testWidgets('painted eye bounds survive unchanged-input rebuilds', (
     tester,
   ) async {

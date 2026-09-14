@@ -361,7 +361,20 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                           doseActionLogger: widget.doseActionLogger,
                           visibleAndTakenLogger: widget.visibleAndTakenLogger,
                           actionAuthorizer: widget.actionAuthorizer,
-                          statusSafePadding: statusSafePadding,
+                          // Noncompact rotated/flipped text must also clear
+                          // the fixed physical exit; the surface stays full-size.
+                          statusSafePadding: squarePrompt
+                              ? statusSafePadding
+                              : statusSafePadding +
+                                    (isPortraitFrame
+                                        ? (state.isFlipped
+                                              ? const EdgeInsets.only(right: 60)
+                                              : const EdgeInsets.only(left: 60))
+                                        : (state.isFlipped
+                                              ? const EdgeInsets.only(
+                                                  bottom: 60,
+                                                )
+                                              : EdgeInsets.zero)),
                           squarePrompt: squarePrompt,
                           isPortrait: isPortraitFrame,
                         );
@@ -1168,63 +1181,82 @@ class _RobotFaceFrame extends StatelessWidget {
         transform: state.isFlipped
             ? Matrix4.rotationZ(math.pi)
             : Matrix4.identity(),
-        child: ColoredBox(
+        child: Stack(
           key: RobotFaceScreen.displayFrameKey,
-          color: const Color(0xFF02050A),
-          child: Padding(
-            padding: statusSafePadding.add(
-              const EdgeInsets.symmetric(horizontal: 8),
+          fit: StackFit.expand,
+          children: [
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (_) => onInteraction(),
+              onLongPress: onLongPress,
+              child: RobotFaceSurface(state: state),
             ),
-            child: CustomMultiChildLayout(
-              delegate: _ReservedFaceLayout(
-                squarePrompt: squarePrompt,
-                isFlipped: state.isFlipped,
-                isPortrait: isPortrait,
-                preferActionRail: preferActionRail,
+            Padding(
+              padding: statusSafePadding.add(
+                const EdgeInsets.symmetric(horizontal: 8),
               ),
-              children: <Widget>[
-                LayoutId(
-                  id: 'prompt',
-                  child: squarePrompt
-                      ? const SizedBox.shrink()
-                      : _UrgentPromptOverlay(
-                          state: state,
-                          safePadding: EdgeInsets.zero,
-                          isPortrait: false,
-                          constrained: false,
-                        ),
+              child: CustomMultiChildLayout(
+                delegate: _ReservedFaceLayout(
+                  squarePrompt: squarePrompt,
+                  isFlipped: state.isFlipped,
+                  isPortrait: isPortrait,
+                  reserveExitRow:
+                      MediaQuery.textScalerOf(context).scale(12) > 12,
+                  preferActionRail: preferActionRail,
+                  preferInlineAction:
+                      !useCompactOverlay &&
+                      hasActionPanel &&
+                      state.availableActions.length == 1 &&
+                      state.availableActions.contains(
+                        RobotFaceActionKind.askForHelp,
+                      ),
                 ),
-                LayoutId(
-                  id: 'face',
-                  child: Semantics(
-                    key: RobotFaceScreen.detailRevealKey,
-                    button: true,
-                    label: showDetails
-                        ? 'Robot Face. Reminder details are shown.'
-                        : 'Robot Face. Tap to show reminder details.',
-                    onTap: onInteraction,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTapDown: (_) => onInteraction(),
-                      onLongPress: onLongPress,
-                      child: Center(
-                        child: ConstrainedBox(
-                          // Decorative eyes never grow to dominate the reminder.
-                          // The measured reservation and full-area tap target remain.
-                          constraints: const BoxConstraints(
-                            maxWidth: 360,
-                            maxHeight: 180,
+                children: <Widget>[
+                  LayoutId(
+                    id: 'prompt',
+                    child: squarePrompt
+                        ? const SizedBox.shrink()
+                        : _UrgentPromptOverlay(
+                            state: state,
+                            safePadding: EdgeInsets.zero,
+                            isPortrait: false,
+                            constrained: false,
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(24),
-                            child: FittedBox(
+                  ),
+                  LayoutId(
+                    id: 'face',
+                    child: Semantics(
+                      key: RobotFaceScreen.detailRevealKey,
+                      button: true,
+                      label: showDetails
+                          ? 'Robot Face. Reminder details are shown.'
+                          : 'Robot Face. Tap to show reminder details.',
+                      onTap: onInteraction,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapDown: (_) => onInteraction(),
+                        onLongPress: onLongPress,
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            // Match the reservation's aspect ratio, then scale uniformly.
+                            // A 400dp paint height also scales rings/minimum lids safely
+                            // when mandatory content leaves only a sliver for the face.
+                            final scale = math.max(
+                              1.0,
+                              400 / math.max(1.0, constraints.maxHeight),
+                            );
+                            return FittedBox(
+                              // Let the soft glow blend across the full surface.
                               fit: BoxFit.contain,
                               child: SizedBox(
                                 key: RobotFaceScreen.canvasKey,
-                                width: 800,
-                                height: 400,
+                                width: constraints.maxWidth * scale,
+                                height:
+                                    math.max(1.0, constraints.maxHeight) *
+                                    scale,
                                 child: RobotFaceCanvas(
                                   state: state,
+                                  paintSurface: false,
                                   isActive: isActive,
                                   isPreparing:
                                       voicePhase ==
@@ -1236,41 +1268,41 @@ class _RobotFaceFrame extends StatelessWidget {
                                   onAnimationCompleted: onAnimationCompleted,
                                 ),
                               ),
-                            ),
-                          ),
+                            );
+                          },
                         ),
                       ),
                     ),
                   ),
-                ),
-                LayoutId(
-                  id: 'status',
-                  child: _ScrollableFaceDetails(
-                    key: RobotFaceScreen.bottomCardKey,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      excludeFromSemantics: true,
-                      onTap: onInteraction,
-                      onLongPress: () {},
-                      child: _RobotFaceStatusCard(
-                        state: state,
-                        actionHost: const SizedBox.shrink(),
-                        showDetails: showDetails,
-                        compactOverlay: useCompactOverlay,
+                  LayoutId(
+                    id: 'status',
+                    child: _ScrollableFaceDetails(
+                      key: RobotFaceScreen.bottomCardKey,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        excludeFromSemantics: true,
+                        onTap: onInteraction,
+                        onLongPress: () {},
+                        child: _RobotFaceStatusCard(
+                          state: state,
+                          actionHost: const SizedBox.shrink(),
+                          showDetails: showDetails,
+                          compactOverlay: useCompactOverlay,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                LayoutId(
-                  id: 'actions',
-                  child: _RailOrBodyAction(
-                    preferRail: preferActionRail,
-                    child: actionHost,
+                  LayoutId(
+                    id: 'actions',
+                    child: _RailOrBodyAction(
+                      preferRail: preferActionRail,
+                      child: actionHost,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -1423,8 +1455,12 @@ class _ReservedFaceLayout extends MultiChildLayoutDelegate {
     required this.isFlipped,
     required this.isPortrait,
     required this.preferActionRail,
+    required this.preferInlineAction,
+    required this.reserveExitRow,
   });
 
+  final bool reserveExitRow;
+  final bool preferInlineAction;
   final bool squarePrompt;
   final bool isFlipped;
   final bool isPortrait;
@@ -1434,14 +1470,17 @@ class _ReservedFaceLayout extends MultiChildLayoutDelegate {
   void performLayout(Size size) {
     final gutter = squarePrompt ? 72.0 : 0.0;
     final start = isFlipped ? 0.0 : gutter;
-    final header = squarePrompt ? 0.0 : 60.0;
+    // The prompt overlays the gap between the eyes, not an excluded canvas row.
+    // Scaled exit text widens into the eye column; keep its whole row clear.
+    final header = squarePrompt ? 0.0 : (reserveExitRow ? 60.0 : 32.0);
     final width = math.max(0.0, size.width - gutter);
     final normalMargin = math.min(8.0, size.height / 2);
     final bodyHeight = size.height - 2 * normalMargin;
-    final height = math.max(0.0, bodyHeight - header);
+    // Long text must still stop below the exit; only eyes can use the center gap.
+    final height = math.max(0.0, bodyHeight - (squarePrompt ? 0 : 60));
     layoutChild(
       'prompt',
-      BoxConstraints.tight(squarePrompt ? Size.zero : Size(size.width, header)),
+      BoxConstraints.tight(squarePrompt ? Size.zero : Size(size.width, 60)),
     );
     positionChild('prompt', Offset(0, normalMargin));
     final actions = layoutChild(
@@ -1455,18 +1494,29 @@ class _ReservedFaceLayout extends MultiChildLayoutDelegate {
         actions.width <= 64 &&
         actions.height <= bodyHeight - 64 - 48 - 16;
     final actionHeight = useRail ? 0.0 : actions.height;
+    // A single Help control can share the bottom overlay with full-size text.
+    // If that would leave a narrow text column, retain the existing stack.
+    final inlineAction =
+        preferInlineAction && width - actions.width - 16 >= 400;
+    final statusWidth = inlineAction ? width - actions.width - 16 : width;
     // Required content may reclaim up to 8dp of decorative margin, never
     // physical safe insets. The badge, exit, and accepted rail stay anchored.
     final reclaimable = squarePrompt ? math.min(8.0, 2 * normalMargin) : 0.0;
     final status = layoutChild(
       'status',
       BoxConstraints(
-        minWidth: width,
-        maxWidth: width,
-        maxHeight: math.max(0.0, height - actionHeight + reclaimable),
+        minWidth: statusWidth,
+        maxWidth: statusWidth,
+        maxHeight: math.max(
+          0.0,
+          height - (inlineAction ? 0 : actionHeight) + reclaimable,
+        ),
       ),
     );
-    final reclaimed = math.max(0.0, status.height + actionHeight - height);
+    final overlayHeight = inlineAction
+        ? math.max(status.height, actionHeight)
+        : status.height + actionHeight;
+    final reclaimed = math.max(0.0, overlayHeight - height);
     final margin = normalMargin - reclaimed / 2;
     positionChild(
       'actions',
@@ -1482,17 +1532,23 @@ class _ReservedFaceLayout extends MultiChildLayoutDelegate {
                       : 128),
             )
           : Offset(
-              start + (width - actions.width) / 2,
+              start + (width - actions.width) / (inlineAction ? 1 : 2),
               size.height - margin - actions.height,
             ),
     );
     positionChild(
       'status',
-      Offset(start, size.height - margin - actionHeight - status.height),
+      Offset(
+        start,
+        size.height -
+            margin -
+            (inlineAction ? 0 : actionHeight) -
+            status.height,
+      ),
     );
     final faceHeight = math.max(
       0.0,
-      height + reclaimed - actionHeight - status.height - 8,
+      bodyHeight - header + reclaimed - overlayHeight - 8,
     );
     layoutChild('face', BoxConstraints.tight(Size(width, faceHeight)));
     positionChild('face', Offset(start, margin + header));
@@ -1503,7 +1559,9 @@ class _ReservedFaceLayout extends MultiChildLayoutDelegate {
       squarePrompt != oldDelegate.squarePrompt ||
       isFlipped != oldDelegate.isFlipped ||
       isPortrait != oldDelegate.isPortrait ||
-      preferActionRail != oldDelegate.preferActionRail;
+      preferActionRail != oldDelegate.preferActionRail ||
+      preferInlineAction != oldDelegate.preferInlineAction ||
+      reserveExitRow != oldDelegate.reserveExitRow;
 }
 
 class _RobotFaceStatusCard extends StatelessWidget {
@@ -1532,7 +1590,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final badgeEmphasis = _badgeEmphasisFor(state);
     final isMissedState = state.mode == RobotFaceMode.missed;
-    final isSleepyState = state.mode == RobotFaceMode.sleepy;
     // The controller owns action availability, including offline/error
     // follow-up states after a dispense. The screen only renders that contract.
 
@@ -1640,7 +1697,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
             context,
             badgeEmphasis: badgeEmphasis,
             isMissedState: isMissedState,
-            isSleepyState: isSleepyState,
           );
 
     return Column(
@@ -1669,123 +1725,105 @@ class _RobotFaceStatusCard extends StatelessWidget {
     BuildContext context, {
     required double badgeEmphasis,
     required bool isMissedState,
-    required bool isSleepyState,
   }) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: isMissedState
-            ? const Color(0xD11E0C12)
-            : isSleepyState
-            ? const Color(0xC20A0E16)
-            : const Color(0xC20B111B),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isMissedState
-              ? const Color(0x66FF728C)
-              : isSleepyState
-              ? const Color(0x4D92A2C8)
-              : Colors.white.withValues(alpha: 0.08),
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    if (_headlineFor(state.mode) case final headline?) ...[
-                      Text(
-                        headline,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.2,
-                          color: isMissedState
-                              ? const Color(0xFFFFB4C1)
-                              : const Color(0xFF8A96AD),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                    ],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (_headlineFor(state.mode) case final headline?) ...[
                     Text(
-                      state.nextEventLabel,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        height: 1.25,
+                      headline,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 1.2,
+                        color: isMissedState
+                            ? const Color(0xFFFFB4C1)
+                            : const Color(0xFF8A96AD),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  Text(
+                    state.nextEventLabel,
+                    style: const TextStyle(
+                      fontSize: 22,
+                      height: 1.25,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
+                  if (isMissedState) ...<Widget>[
+                    const SizedBox(height: 12),
+                    const Text(
+                      'This dose was missed.',
+                      style: TextStyle(
+                        fontSize: 20,
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
+                        height: 1.05,
                       ),
                     ),
-                    if (isMissedState) ...<Widget>[
-                      const SizedBox(height: 12),
-                      const Text(
-                        'This dose was missed.',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          height: 1.05,
-                        ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFFF4D7DD),
+                        height: 1.3,
                       ),
-                      const SizedBox(height: 6),
-                      const Text(
-                        'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFFF4D7DD),
-                          height: 1.3,
-                        ),
-                      ),
-                    ],
+                    ),
                   ],
-                ),
-                if (_requiredStatus case final statusLabel?) ...<Widget>[
-                  const SizedBox(height: 12),
-                  DecoratedBox(
-                    key: RobotFaceScreen.statusBadgeKey,
-                    decoration: BoxDecoration(
-                      border: Border(
-                        top: BorderSide(
-                          color: _accentFor(
-                            state.mode,
-                          ).withValues(alpha: 0.16 + badgeEmphasis * 0.2),
-                        ),
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.only(top: 12),
-                      child: Text(
-                        statusLabel,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          height: 1.35,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFFD3DAE7),
-                        ),
+                ],
+              ),
+              if (_requiredStatus case final statusLabel?) ...<Widget>[
+                const SizedBox(height: 4),
+                DecoratedBox(
+                  key: RobotFaceScreen.statusBadgeKey,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: _accentFor(
+                          state.mode,
+                        ).withValues(alpha: 0.16 + badgeEmphasis * 0.2),
                       ),
                     ),
                   ),
-                ],
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      statusLabel,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        height: 1.35,
+                        fontWeight: FontWeight.w500,
+                        color: Color(0xFFD3DAE7),
+                      ),
+                    ),
+                  ),
+                ),
               ],
-            ),
-            if (state.networkAdvisory ==
-                RobotFaceNetworkAdvisory.internetOffline) ...<Widget>[
-              const SizedBox(height: 10),
-              const _RobotFaceNetworkAdvisoryBadge(),
             ],
-            if (state.hasPinnedShortageAlert) ...<Widget>[
-              const SizedBox(height: 12),
-              _RobotFaceShortageCard(state: state),
-            ],
+          ),
+          if (state.networkAdvisory ==
+              RobotFaceNetworkAdvisory.internetOffline) ...<Widget>[
+            const SizedBox(height: 10),
+            const _RobotFaceNetworkAdvisoryBadge(),
           ],
-        ),
+          if (state.hasPinnedShortageAlert) ...<Widget>[
+            const SizedBox(height: 12),
+            _RobotFaceShortageCard(state: state),
+          ],
+        ],
       ),
     );
   }

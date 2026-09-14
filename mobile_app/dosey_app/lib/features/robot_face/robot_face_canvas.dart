@@ -26,11 +26,33 @@ bool _usesNetworkAdvisoryPalette(RobotFaceState state) =>
     state.mode == RobotFaceMode.idle &&
     state.networkAdvisory == RobotFaceNetworkAdvisory.internetOffline;
 
+// The surface spans the viewport; only the animated eyes need layout exclusions.
+class RobotFaceSurface extends StatelessWidget {
+  const RobotFaceSurface({super.key, required this.state});
+  final RobotFaceState state;
+
+  @override
+  Widget build(BuildContext context) => CustomPaint(
+    painter: _RobotFacePainter(
+      state: state,
+      phase: 0,
+      isPreparing: false,
+      isSpeaking: false,
+      reducedMotion: true,
+      animationCue: null,
+      cueProgress: 0,
+      paintEyes: false,
+    ),
+    child: const SizedBox.expand(),
+  );
+}
+
 class RobotFaceCanvas extends StatefulWidget {
   const RobotFaceCanvas({
     super.key,
     required this.state,
     this.isActive = true,
+    this.paintSurface = true,
     this.isPreparing = false,
     this.isSpeaking = false,
     this.animationCue,
@@ -40,6 +62,7 @@ class RobotFaceCanvas extends StatefulWidget {
 
   final RobotFaceState state;
   final bool isActive;
+  final bool paintSurface;
   final bool isPreparing;
   final bool isSpeaking;
   final RobotFaceAnimationCue? animationCue;
@@ -325,6 +348,7 @@ class _RobotFaceCanvasState extends State<RobotFaceCanvas>
           return CustomPaint(
             painter: _RobotFacePainter(
               state: widget.state,
+              paintSurface: widget.paintSurface,
               phase: _controller.value,
               isPreparing: widget.isPreparing,
               isSpeaking: widget.isSpeaking,
@@ -353,8 +377,13 @@ class _RobotFacePainter extends CustomPainter {
     required this.cueProgress,
     this.outgoingCue,
     this.outgoingCueProgress = 0,
+    this.paintSurface = true,
+    this.paintEyes = true,
   });
 
+  final bool paintSurface;
+  final bool paintEyes;
+  Rect? debugPaintedSurfaceRect;
   final RobotFaceState state;
   final double phase;
   final bool isPreparing;
@@ -452,7 +481,21 @@ class _RobotFacePainter extends CustomPainter {
 
   List<Rect> _baseEyeRects(Size size, {required double centerY}) {
     const eyeAspectRatio = 1.55;
-    final eyeWidth = math.min(size.width * 0.31, size.height * 0.72);
+    // Reserve for the expression's open lid, not an imaginary fully open eye.
+    // Keep headroom for tilt, breathing and cues in short content reservations.
+    final lid = _eyelidOpenFor(
+      state,
+      0,
+      0,
+      _effectiveControllerCondition(state),
+    ).clamp(0.72, 1.08);
+    // Keep the user's approved idle and READY geometry byte-for-byte.
+    final heightRatio =
+        state.mode == RobotFaceMode.idle ||
+            state.mode == RobotFaceMode.doseReady
+        ? 0.9
+        : 1.15 / lid;
+    final eyeWidth = math.min(size.width * 0.34, size.height * heightRatio);
     final eyeHeight = eyeWidth / eyeAspectRatio;
     final eyeOffset = size.width * 0.19;
     return <Rect>[
@@ -506,31 +549,39 @@ class _RobotFacePainter extends CustomPainter {
                 frame.cue.eyelidBoost)
             .clamp(0.12, 1.08);
 
-    final backgroundPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: <Color>[palette.backgroundTop, palette.backgroundBottom],
-      ).createShader(rect);
-    canvas.drawRect(rect, backgroundPaint);
+    if (paintSurface) {
+      final backgroundPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: <Color>[palette.backgroundTop, palette.backgroundBottom],
+        ).createShader(rect);
+      canvas.drawRect(rect, backgroundPaint);
+      debugPaintedSurfaceRect = rect;
 
-    _paintDisplayTexture(canvas, size, palette, state, pulse);
+      // No decorative bands on the edge-to-edge surface behind the overlays.
+      if (paintEyes) _paintDisplayTexture(canvas, size, palette, state, pulse);
 
-    final directionalGlow = _ambientGlowRects(size).single;
-    _paintDirectionalGlow(
-      canvas,
-      directionalGlow,
-      palette.glow.withValues(
-        alpha: 0.16 + motion.glowBoost + frame.ambientGlowPulse,
-      ),
-    );
+      final directionalGlow = _ambientGlowRects(size).single;
+      _paintDirectionalGlow(
+        canvas,
+        directionalGlow,
+        palette.glow.withValues(
+          alpha: 0.16 + motion.glowBoost + frame.ambientGlowPulse,
+        ),
+      );
 
-    if (motion.wakeAura > 0) {
-      _paintWakeAura(canvas, size, palette, motion.wakeAura, pulse);
+      if (paintEyes && motion.wakeAura > 0) {
+        _paintWakeAura(canvas, size, palette, motion.wakeAura, pulse);
+      }
+
+      if (state.mode == RobotFaceMode.sleepy) {
+        _paintSleepVeil(canvas, size, effectivePhase);
+      }
     }
-
-    if (state.mode == RobotFaceMode.sleepy) {
-      _paintSleepVeil(canvas, size, effectivePhase);
+    if (!paintEyes) {
+      _paintDisplayVignette(canvas, rect, state);
+      return;
     }
 
     final baseEyes = _baseEyeRects(
@@ -631,7 +682,7 @@ class _RobotFacePainter extends CustomPainter {
     );
 
     _paintStateMarker(canvas, size, palette, state, controllerCondition, pulse);
-    _paintDisplayVignette(canvas, rect, state);
+    if (paintSurface) _paintDisplayVignette(canvas, rect, state);
   }
 
   double _eyeSpacingFor(
@@ -1521,6 +1572,8 @@ class _RobotFacePainter extends CustomPainter {
   bool shouldRepaint(covariant _RobotFacePainter oldDelegate) {
     final repaint =
         oldDelegate.state != state ||
+        oldDelegate.paintSurface != paintSurface ||
+        oldDelegate.paintEyes != paintEyes ||
         oldDelegate.phase != phase ||
         oldDelegate.isPreparing != isPreparing ||
         oldDelegate.isSpeaking != isSpeaking ||
@@ -1530,7 +1583,10 @@ class _RobotFacePainter extends CustomPainter {
         oldDelegate.outgoingCue != outgoingCue ||
         oldDelegate.outgoingCueProgress != outgoingCueProgress;
     // RenderCustomPaint installs the new delegate even when it keeps old pixels.
-    if (!repaint) debugPaintedEyeRects = oldDelegate.debugPaintedEyeRects;
+    if (!repaint) {
+      debugPaintedEyeRects = oldDelegate.debugPaintedEyeRects;
+      debugPaintedSurfaceRect = oldDelegate.debugPaintedSurfaceRect;
+    }
     return repaint;
   }
 }
