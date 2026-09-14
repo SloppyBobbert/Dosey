@@ -39,6 +39,12 @@ import 'package:dosey_app/features/today/today_next_dose_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+Future<void> _openDetails(WidgetTester tester) async {
+  expect(find.byTooltip('Show details').hitTestable(), findsOneWidget);
+  await tester.tap(find.byTooltip('Show details'));
+  await tester.pump();
+}
+
 void main() {
   testWidgets('uses the Classic palette for idle and red for missed doses', (
     WidgetTester tester,
@@ -918,12 +924,15 @@ void main() {
 
     expect(find.byKey(RobotFaceScreen.canvasKey), findsOneWidget);
     expect(find.byKey(RobotFaceScreen.bottomCardKey), findsOneWidget);
-    expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
+    expect(find.text('8:00 PM · Evening meds'), findsNothing);
     expect(find.text('Controller connected'), findsNothing);
 
     final canvasSize = tester.getSize(find.byKey(RobotFaceScreen.canvasKey));
     final cardSize = tester.getSize(find.byKey(RobotFaceScreen.bottomCardKey));
     expect(canvasSize.height, greaterThan(cardSize.height * 2));
+    await _openDetails(tester);
+    expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
+    expect(find.text('Controller connected'), findsOneWidget);
   });
 
   testWidgets('applies flipped transform when flipped', (
@@ -977,6 +986,8 @@ void main() {
     );
     expect(urgentPrompt.data, 'READY');
     expect(urgentPrompt.style?.fontSize, lessThanOrEqualTo(20));
+    expect(find.text('Ready to dispense'), findsNothing);
+    await _openDetails(tester);
     expect(find.text('Ready to dispense'), findsOneWidget);
     expect(find.text('Ready now'), findsNothing);
     expect(find.text('READY NOW'), findsNothing);
@@ -1017,6 +1028,8 @@ void main() {
 
     await tester.pump();
 
+    expect(find.text('No reminders scheduled'), findsNothing);
+    await _openDetails(tester);
     expect(find.text('No reminders scheduled'), findsOneWidget);
     expect(find.text('Reconnect needed'), findsNothing);
     expect(find.text('Controller connected'), findsNothing);
@@ -1057,6 +1070,8 @@ void main() {
     final promptBorder = promptDecoration.border! as Border;
     expect(promptBorder.top.color.r, greaterThan(promptBorder.top.color.g));
     expect(promptBorder.top.color.g, greaterThan(promptBorder.top.color.b));
+    expect(find.text('Dispense soon'), findsNothing);
+    await _openDetails(tester);
     expect(find.text('Dispense soon'), findsOneWidget);
     expect(find.text('Coming up'), findsNothing);
     expect(find.text('UP NEXT'), findsNothing);
@@ -1083,6 +1098,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('DISPENSING'), findsOneWidget);
+    expect(find.text('8:00 PM · Evening meds'), findsNothing);
+    await _openDetails(tester);
     expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
     expect(find.text('Dispensing in progress.'), findsOneWidget);
     await tester.tap(find.byKey(RobotFaceScreen.canvasKey));
@@ -1120,6 +1137,8 @@ void main() {
 
     await tester.pump();
 
+    expect(find.text('SHORTAGE · Check loading'), findsOneWidget);
+    await _openDetails(tester);
     expect(find.text('Urgent shortage'), findsOneWidget);
     expect(find.text('Vitamin D'), findsOneWidget);
     expect(find.text('Scheduled 10:00'), findsOneWidget);
@@ -1776,6 +1795,8 @@ void main() {
       );
       await tester.pump();
 
+      expect(find.text('Device problem · Ask caregiver'), findsOneWidget);
+      await _openDetails(tester);
       expect(find.text('Bluetooth is unavailable'), findsOneWidget);
       expect(
         find.text('Internet offline. Local reminders still work.'),
@@ -1905,6 +1926,7 @@ void main() {
 
     await tester.pump();
 
+    await _openDetails(tester);
     final soonScale = tester.widget<AnimatedScale>(
       find.byKey(RobotFaceScreen.urgentPromptScaleKey),
     );
@@ -1928,6 +1950,7 @@ void main() {
 
     await tester.pump();
 
+    await _openDetails(tester);
     final readyScale = tester.widget<AnimatedScale>(
       find.byKey(RobotFaceScreen.urgentPromptScaleKey),
     );
@@ -1965,6 +1988,7 @@ void main() {
 
     await tester.pump();
 
+    await _openDetails(tester);
     BoxDecoration readyDecoration() =>
         tester
                 .widget<DecoratedBox>(
@@ -2056,6 +2080,8 @@ void main() {
 
     expect(find.byKey(RobotFaceScreen.statusBadgeKey), findsNothing);
     expect(find.text('Controller connected'), findsNothing);
+    expect(find.text('8:00 PM · Evening meds'), findsNothing);
+    await _openDetails(tester);
     expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
   });
 
@@ -2164,6 +2190,75 @@ void main() {
     },
   );
 
+  for (final warning in [
+    (
+      RobotFaceControllerCondition.fault,
+      false,
+      'Controller fault · Ask caregiver',
+    ),
+    (
+      RobotFaceControllerCondition.bluetoothUnavailable,
+      false,
+      'Bluetooth unavailable',
+    ),
+    (null, true, 'SHORTAGE · Check loading'),
+  ]) {
+    testWidgets('minimal disclosure preserves warning ${warning.$3}', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          initialState: RobotFaceState(
+            mode: RobotFaceMode.error,
+            nextEventLabel: '8:00 AM · Medication full original reminder',
+            statusLabel:
+                'Original diagnostic: do not dispense; ask your caregiver for assistance.',
+            controllerCondition: warning.$1,
+            activeShortageMedicationLabel: warning.$2
+                ? 'Morning medication'
+                : null,
+            hasPinnedShortageAlert: warning.$2,
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text(warning.$3), findsOneWidget);
+      expect(
+        find.text('8:00 AM · Medication full original reminder'),
+        findsNothing,
+      );
+      final toggle = find.byKey(const ValueKey('robot-face-toggle-details'));
+      expect(toggle.hitTestable(), findsOneWidget);
+      expect(tester.getSize(toggle), const Size(48, 48));
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(
+        find.text('8:00 AM · Medication full original reminder'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Original diagnostic: do not dispense; ask your caregiver for assistance.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(find.text(warning.$3), findsOneWidget);
+      expect(
+        find.text('8:00 AM · Medication full original reminder'),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    });
+  }
+
   testWidgets('shows red missed-dose treatment and safe copy', (
     WidgetTester tester,
   ) async {
@@ -2185,8 +2280,11 @@ void main() {
 
     await tester.pump();
 
-    expect(find.text('MISSED'), findsWidgets);
-    expect(find.text('This dose was missed.'), findsOneWidget);
+    expect(find.text('MISSED'), findsOneWidget);
+    expect(find.text('This dose was missed.'), findsNothing);
+    expect(find.text('Missed dose alert'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('robot-face-toggle-details')));
+    await tester.pump();
     expect(
       find.text(
         'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
@@ -2194,10 +2292,7 @@ void main() {
       findsOneWidget,
     );
 
-    final badge = tester.widget<DecoratedBox>(
-      find.byKey(RobotFaceScreen.statusBadgeKey),
-    );
-    final border = (badge.decoration as BoxDecoration).border! as Border;
+    expect(find.byKey(RobotFaceScreen.statusBadgeKey), findsNothing);
     final customPaint = tester.widget<CustomPaint>(
       find.descendant(
         of: find.byType(RobotFaceCanvas),
@@ -2206,7 +2301,6 @@ void main() {
     );
     final dynamic painter = customPaint.painter;
     final palette = painter.debugPaletteColors as List<Color>;
-    expect(border.top.color.r, greaterThan(border.top.color.g));
     expect(palette[2].r, greaterThan(palette[2].g));
     expect(palette[3].r, greaterThan(palette[3].b));
   });
@@ -2540,7 +2634,7 @@ void main() {
         ),
       );
       await tester.pump();
-      expect(find.text('This dose was missed.'), findsOneWidget);
+      expect(find.text('MISSED'), findsOneWidget);
       await tester.tapAt(
         tester.getCenter(find.byKey(RobotFaceScreen.canvasKey)),
       );
@@ -2564,8 +2658,11 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
+      expect(find.text('8:00 PM · Evening meds'), findsNothing);
       expect(find.text('NEXT EVENT'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('robot-face-toggle-details')));
+      await tester.pump();
+      expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
     },
   );
 

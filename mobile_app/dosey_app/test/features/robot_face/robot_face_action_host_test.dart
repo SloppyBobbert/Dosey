@@ -36,6 +36,79 @@ void main() {
     actionDoseId: 'dose-1',
     availableActions: {RobotFaceActionKind.confirmTaken},
   );
+  for (final action in [
+    RobotFaceActionKind.confirmTaken,
+    RobotFaceActionKind.skipDose,
+    RobotFaceActionKind.askForHelp,
+  ]) {
+    testWidgets(
+      'details toggles retain pending and completed action ownership ${action.name}',
+      (tester) async {
+        final states = StreamController<RobotFaceState>.broadcast();
+        addTearDown(states.close);
+        final saved = Completer<bool>();
+        var calls = 0;
+        await tester.pumpWidget(
+          _ActionHostTestApp(
+            stateStream: states.stream,
+            visibleAndTakenLogger:
+                (
+                  _, {
+                  required doseId,
+                  required occurredAt,
+                  required successMessage,
+                }) {
+                  calls++;
+                  return saved.future;
+                },
+            doseActionLogger: (_, event, _) {
+              calls++;
+              return saved.future;
+            },
+          ),
+        );
+        states.add(readyState.copyWith(availableActions: {action}));
+        await tester.pump();
+        final panel = tester.state(find.byKey(RobotFaceScreen.actionPanelKey));
+        final button = find.byKey(switch (action) {
+          RobotFaceActionKind.confirmTaken =>
+            RobotFaceScreen.confirmTakenButtonKey,
+          RobotFaceActionKind.skipDose => RobotFaceScreen.skipDoseButtonKey,
+          _ => RobotFaceScreen.needHelpButtonKey,
+        });
+        final callback = tester.widget<FilledButton>(button).onPressed!;
+        await tester.tap(button);
+        await tester.pump();
+        for (var i = 0; i < 2; i++) {
+          await tester.tap(
+            find.byKey(const ValueKey('robot-face-toggle-details')),
+          );
+          await tester.pump();
+          expect(
+            tester.state(find.byKey(RobotFaceScreen.actionPanelKey)),
+            same(panel),
+          );
+          expect(tester.widget<FilledButton>(button).onPressed, isNull);
+        }
+        expect(calls, 1);
+        saved.complete(true);
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('robot-face-toggle-details')),
+        );
+        await tester.pump();
+        expect(tester.widget<FilledButton>(button).onPressed, isNull);
+        // Existing terminal callbacks also reject stale invocations. Help's
+        // disabled UI is tested here without changing its logger policy.
+        if (action != RobotFaceActionKind.askForHelp) callback();
+        await tester.pump();
+        expect(calls, 1);
+        expect(tester.widget<FilledButton>(button).onPressed, isNull);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
   const helpState = RobotFaceState(
     mode: RobotFaceMode.waitingForConfirmation,
     nextEventLabel: 'Taken? · Morning meds',
@@ -517,6 +590,10 @@ void main() {
           Theme.of(tester.element(find.byType(RobotFaceScreen))).brightness,
           brightness,
         );
+        await tester.tap(
+          find.byKey(const ValueKey('robot-face-toggle-details')),
+        );
+        await tester.pumpAndSettle();
         final cardWidth = tester
             .getSize(find.byKey(RobotFaceScreen.bottomCardKey))
             .width;
@@ -539,7 +616,6 @@ void main() {
           reminder,
           status,
           if (mode == RobotFaceMode.missed) ...[
-            'This dose was missed.',
             'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
           ],
         ];
@@ -553,7 +629,7 @@ void main() {
     }
   }
 
-  testWidgets('light theme idle chevron contrasts on its dark pill', (
+  testWidgets('light theme idle details icon contrasts on its control', (
     tester,
   ) async {
     await tester.runAsync(loadRobotFaceTestFont);
@@ -580,14 +656,20 @@ void main() {
       Theme.of(tester.element(find.byType(RobotFaceScreen))).brightness,
       Brightness.light,
     );
-    final icon = find.byIcon(Icons.expand_less_rounded);
+    final icon = find.byIcon(Icons.info_outline);
     final color =
         tester.widget<Icon>(icon).color ??
         IconTheme.of(tester.element(icon)).color!;
-    final background = Color.alphaBlend(
-      const Color(0xC40B111B),
-      const Color(0xFF02050A),
-    );
+    final background = tester
+        .widget<Material>(
+          find
+              .descendant(
+                of: find.byKey(const ValueKey('robot-face-toggle-details')),
+                matching: find.byType(Material),
+              )
+              .first,
+        )
+        .color!;
     final foreground = Color.alphaBlend(color, background);
     final luminances = [
       foreground.computeLuminance(),

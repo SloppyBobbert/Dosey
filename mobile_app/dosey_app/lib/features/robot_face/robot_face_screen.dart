@@ -259,6 +259,10 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
     _interactionController?.recordInteraction();
   }
 
+  void _toggleDetails() {
+    setState(() => _detailsRevealed = !_detailsRevealed);
+  }
+
   void _revealDetails() {
     if (_detailsRevealed) return;
     setState(() => _detailsRevealed = true);
@@ -357,6 +361,7 @@ class _RobotFaceScreenState extends State<RobotFaceScreen>
                               : _completeInteractionAnimation,
                           onInteraction: _activateFace,
                           detailsRevealed: _detailsRevealed,
+                          onToggleDetails: _toggleDetails,
                           onLongPress: widget.onLongPress,
                           doseActionLogger: widget.doseActionLogger,
                           visibleAndTakenLogger: widget.visibleAndTakenLogger,
@@ -1076,6 +1081,9 @@ class _UrgentPromptOverlay extends StatelessWidget {
       RobotFaceMode.happyConfirmed => 'DONE',
       RobotFaceMode.error => 'HELP',
       RobotFaceMode.offline => 'OFFLINE',
+      RobotFaceMode.waitingForConfirmation => 'WAITING',
+      RobotFaceMode.dispensing => 'DISPENSING',
+      RobotFaceMode.sleepy => 'RESTING',
       _ => null,
     };
   }
@@ -1112,6 +1120,7 @@ class _RobotFaceFrame extends StatelessWidget {
     required this.onAnimationCompleted,
     required this.onInteraction,
     required this.detailsRevealed,
+    required this.onToggleDetails,
     required this.statusSafePadding,
     required this.squarePrompt,
     required this.isPortrait,
@@ -1130,6 +1139,7 @@ class _RobotFaceFrame extends StatelessWidget {
   onAnimationCompleted;
   final VoidCallback onInteraction;
   final bool detailsRevealed;
+  final VoidCallback onToggleDetails;
   final EdgeInsets statusSafePadding;
   final bool squarePrompt;
   final bool isPortrait;
@@ -1142,33 +1152,17 @@ class _RobotFaceFrame extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasActionPanel =
         state.actionDoseId != null && state.availableActions.isNotEmpty;
-    final requiresDetails =
-        hasActionPanel ||
-        state.mode == RobotFaceMode.doseApproaching ||
-        state.mode == RobotFaceMode.doseReady ||
-        state.mode == RobotFaceMode.dispensing ||
-        state.mode == RobotFaceMode.missed ||
-        state.mode == RobotFaceMode.error ||
-        state.hasPinnedShortageAlert ||
-        state.controllerCondition == RobotFaceControllerCondition.fault ||
-        state.controllerCondition ==
-            RobotFaceControllerCondition.bluetoothUnavailable;
-    final showDetails = detailsRevealed || requiresDetails;
+    final showDetails = detailsRevealed;
     final useCompactOverlay =
         (state.mode == RobotFaceMode.doseReady ||
             state.mode == RobotFaceMode.error) &&
         squarePrompt;
-    final preferActionRail =
-        useCompactOverlay &&
-        hasActionPanel &&
-        state.availableActions.length == 1 &&
-        state.availableActions.contains(RobotFaceActionKind.askForHelp);
     final actionHost = _RobotFaceActionHost(
       key: RobotFaceScreen.actionHostKey,
       state: state,
       isCompact: useCompactOverlay,
-      preferRail: preferActionRail,
-      isVisible: hasActionPanel && showDetails,
+      preferRail: false,
+      isVisible: hasActionPanel,
       doseActionLogger: doseActionLogger,
       visibleAndTakenLogger: visibleAndTakenLogger,
       actionAuthorizer: actionAuthorizer,
@@ -1201,15 +1195,20 @@ class _RobotFaceFrame extends StatelessWidget {
                   isFlipped: state.isFlipped,
                   isPortrait: isPortrait,
                   reserveExitRow:
+                      showDetails ||
                       MediaQuery.textScalerOf(context).scale(12) > 12,
-                  preferActionRail: preferActionRail,
+                  preferActionRail: false,
                   preferInlineAction:
                       !useCompactOverlay &&
                       hasActionPanel &&
                       state.availableActions.length == 1 &&
-                      state.availableActions.contains(
-                        RobotFaceActionKind.askForHelp,
-                      ),
+                      (state.availableActions.contains(
+                            RobotFaceActionKind.askForHelp,
+                          ) ||
+                          (state.mode == RobotFaceMode.missed &&
+                              state.availableActions.contains(
+                                RobotFaceActionKind.recognizeMissedDose,
+                              ))),
                 ),
                 children: <Widget>[
                   LayoutId(
@@ -1294,9 +1293,31 @@ class _RobotFaceFrame extends StatelessWidget {
                   ),
                   LayoutId(
                     id: 'actions',
-                    child: _RailOrBodyAction(
-                      preferRail: preferActionRail,
-                      child: actionHost,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Flexible(
+                          child: _RailOrBodyAction(
+                            preferRail: false,
+                            child: actionHost,
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                          key: const ValueKey('robot-face-toggle-details'),
+                          tooltip: showDetails
+                              ? 'Hide details'
+                              : 'Show details',
+                          onPressed: onToggleDetails,
+                          constraints: const BoxConstraints.tightFor(
+                            width: 48,
+                            height: 48,
+                          ),
+                          icon: Icon(
+                            showDetails ? Icons.close : Icons.info_outline,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1499,6 +1520,7 @@ class _ReservedFaceLayout extends MultiChildLayoutDelegate {
     final inlineAction =
         preferInlineAction && width - actions.width - 16 >= 400;
     final statusWidth = inlineAction ? width - actions.width - 16 : width;
+    final actionGap = inlineAction || useRail ? 0.0 : 4.0;
     // Required content may reclaim up to 8dp of decorative margin, never
     // physical safe insets. The badge, exit, and accepted rail stay anchored.
     final reclaimable = squarePrompt ? math.min(8.0, 2 * normalMargin) : 0.0;
@@ -1509,13 +1531,13 @@ class _ReservedFaceLayout extends MultiChildLayoutDelegate {
         maxWidth: statusWidth,
         maxHeight: math.max(
           0.0,
-          height - (inlineAction ? 0 : actionHeight) + reclaimable,
+          height - (inlineAction ? 0 : actionHeight) - actionGap + reclaimable,
         ),
       ),
     );
     final overlayHeight = inlineAction
         ? math.max(status.height, actionHeight)
-        : status.height + actionHeight;
+        : status.height + actionHeight + actionGap;
     final reclaimed = math.max(0.0, overlayHeight - height);
     final margin = normalMargin - reclaimed / 2;
     positionChild(
@@ -1543,6 +1565,7 @@ class _ReservedFaceLayout extends MultiChildLayoutDelegate {
         size.height -
             margin -
             (inlineAction ? 0 : actionHeight) -
+            actionGap -
             status.height,
       ),
     );
@@ -1578,16 +1601,54 @@ class _RobotFaceStatusCard extends StatelessWidget {
   final bool compactOverlay;
 
   String? get _requiredStatus =>
-      state.statusLabel ??
-      switch (state.controllerCondition) {
-        RobotFaceControllerCondition.fault => 'Controller fault',
-        RobotFaceControllerCondition.bluetoothUnavailable =>
-          'Bluetooth unavailable',
-        _ => null,
-      };
+      // The pinned MISSED badge already says this; retain all other status advice.
+      state.mode == RobotFaceMode.missed &&
+          const {'Dose missed', 'Missed dose alert'}.contains(state.statusLabel)
+      ? null
+      : state.statusLabel ??
+            switch (state.controllerCondition) {
+              RobotFaceControllerCondition.fault => 'Controller fault',
+              RobotFaceControllerCondition.bluetoothUnavailable =>
+                'Bluetooth unavailable',
+              _ => null,
+            };
 
   @override
   Widget build(BuildContext context) {
+    if (!showDetails) {
+      final controllerWarning = switch (state.controllerCondition) {
+        RobotFaceControllerCondition.fault =>
+          'Controller fault · Ask caregiver',
+        RobotFaceControllerCondition.bluetoothUnavailable =>
+          'Bluetooth unavailable',
+        RobotFaceControllerCondition.disconnected => 'Controller disconnected',
+        RobotFaceControllerCondition.offline => 'Controller offline',
+        RobotFaceControllerCondition.connecting => 'Controller connecting',
+        RobotFaceControllerCondition.reconnecting => 'Controller reconnecting',
+        RobotFaceControllerCondition.verifying => 'Controller verifying',
+        _ =>
+          state.mode == RobotFaceMode.error && !state.hasPinnedShortageAlert
+              ? 'Device problem · Ask caregiver'
+              : null,
+      };
+      final warning = [
+        if (state.hasPinnedShortageAlert) 'SHORTAGE · Check loading',
+        ?controllerWarning,
+      ].join(' · ');
+      return warning.isEmpty
+          ? const SizedBox.shrink()
+          : Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Text(
+                warning,
+                style: const TextStyle(
+                  fontSize: 16,
+                  height: 1.3,
+                  color: Colors.white,
+                ),
+              ),
+            );
+    }
     final badgeEmphasis = _badgeEmphasisFor(state);
     final isMissedState = state.mode == RobotFaceMode.missed;
     // The controller owns action availability, including offline/error
@@ -1762,16 +1823,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
                     ),
                   ),
                   if (isMissedState) ...<Widget>[
-                    const SizedBox(height: 12),
-                    const Text(
-                      'This dose was missed.',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        height: 1.05,
-                      ),
-                    ),
                     const SizedBox(height: 6),
                     const Text(
                       'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',

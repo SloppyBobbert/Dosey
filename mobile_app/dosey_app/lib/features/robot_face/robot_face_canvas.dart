@@ -1162,7 +1162,8 @@ class _RobotFacePainter extends CustomPainter {
       _ => switch (state.mode) {
         RobotFaceMode.sleepy => 0.22,
         RobotFaceMode.offline => 0.54,
-        RobotFaceMode.error || RobotFaceMode.missed => 0.46,
+        RobotFaceMode.error => 0.46,
+        RobotFaceMode.missed => 0.68,
         RobotFaceMode.happyConfirmed => 1.08,
         RobotFaceMode.doseApproaching => 1.0 + awakeLift + (ramp * 0.06),
         RobotFaceMode.doseReady => 1.06,

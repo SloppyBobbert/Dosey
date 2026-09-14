@@ -11,6 +11,77 @@ import 'package:flutter_test/flutter_test.dart';
 import 'robot_face_golden_path.dart';
 import 'robot_face_test_font.dart';
 
+Future<void> _openDetails(WidgetTester tester) async {
+  expect(find.byTooltip('Show details').hitTestable(), findsOneWidget);
+  await tester.tap(find.byTooltip('Show details'));
+  await tester.pump();
+  await tester.pump();
+  expect(find.byTooltip('Hide details').hitTestable(), findsOneWidget);
+}
+
+// Full content must be reachable, even when the persistent details control
+// consumes enough room to require the existing native scroller.
+Future<void> robotFaceExpectEveryWordReachable(
+  WidgetTester tester,
+  Finder text,
+) async {
+  await tester.pumpAndSettle();
+  final card = find.byKey(RobotFaceScreen.bottomCardKey);
+  final scroll = find.descendant(of: card, matching: find.byType(Scrollable));
+  final position = tester.state<ScrollableState>(scroll).position;
+  final paragraph = tester.renderObject<RenderParagraph>(text);
+  final boxes = [
+    for (final word in RegExp(r'\S+').allMatches(paragraph.text.toPlainText()))
+      ...paragraph.getBoxesForSelection(
+        TextSelection(baseOffset: word.start, extentOffset: word.end),
+      ),
+  ];
+  final pinned = <Key, Rect>{
+    for (final key in [
+      RobotFaceScreen.needHelpButtonKey,
+      RobotFaceScreen.exitButtonKey,
+      const ValueKey('robot-face-toggle-details'),
+    ])
+      if (find.byKey(key).evaluate().isNotEmpty) key: _rect(tester, key),
+  };
+  expect(position.viewportDimension, greaterThan(0));
+  final reached = <int>{};
+  final extent = position.maxScrollExtent;
+  for (
+    double offset = 0;
+    offset < extent + position.viewportDimension / 2;
+    offset += position.viewportDimension / 2
+  ) {
+    position.jumpTo(offset.clamp(0, extent));
+    await tester.pumpAndSettle();
+    final visible = tester
+        .getRect(
+          find.descendant(
+            of: card,
+            matching: find.byType(SingleChildScrollView),
+          ),
+        )
+        .inflate(0.001);
+    for (var i = 0; i < boxes.length; i++) {
+      final rect = MatrixUtils.transformRect(
+        paragraph.getTransformTo(null),
+        boxes[i].toRect(),
+      );
+      if (visible.contains(rect.topLeft) &&
+          visible.contains(rect.bottomRight)) {
+        reached.add(i);
+      }
+    }
+    for (final entry in pinned.entries) {
+      expect(_rect(tester, entry.key), entry.value);
+    }
+  }
+  expect(reached.length, boxes.length);
+  position.jumpTo(0);
+  await tester.pump();
+  await tester.pump();
+}
+
 const _idle = RobotFaceState(
   mode: RobotFaceMode.idle,
   nextEventLabel: 'No reminders scheduled',
@@ -102,6 +173,8 @@ void main() {
             reducedMotion: true,
           ),
         );
+        expect(find.text('Controller fault · Ask caregiver'), findsOneWidget);
+        await _openDetails(tester);
         for (final label in ['Now · Morning meds', 'Controller fault']) {
           expect(find.text(label).hitTestable(), findsOneWidget);
           expect(find.bySemanticsLabel(label), findsOneWidget);
@@ -216,9 +289,27 @@ void main() {
                     reducedMotion: true,
                   ),
                 );
+                final mainWarning = find.text(
+                  'SHORTAGE · Check loading · Controller fault · Ask caregiver',
+                );
+                expect(mainWarning.hitTestable(), findsOneWidget);
+                expect(
+                  _textGlyphsFit(
+                    tester.renderObject<RenderParagraph>(mainWarning),
+                    _rect(tester, RobotFaceScreen.bottomCardKey),
+                  ),
+                  isTrue,
+                  reason:
+                      'Main blocking warning must not require scrolling or disclosure',
+                );
+                await _openDetails(tester);
                 final textFinder = find.descendant(
                   of: find.byKey(RobotFaceScreen.bottomCardKey),
-                  matching: find.byType(Text),
+                  matching: find.byWidgetPredicate(
+                    (w) =>
+                        w is Text &&
+                        w.key != const ValueKey('robot-face-more-details'),
+                  ),
                 );
                 expect(textFinder, findsOneWidget);
                 final statusText = tester.widget<Text>(textFinder);
@@ -265,7 +356,7 @@ void main() {
                   action.inflate(0.001).contains(helpTextRect.bottomRight),
                   isTrue,
                 );
-                expect(helpParagraph.text.style!.fontSize, 12);
+                expect(helpParagraph.text.style!.fontSize, 13);
                 expect(helpParagraph.textScaler.scale(12), 24);
                 expect(_textGlyphsFit(helpParagraph, action), isTrue);
                 expect(
@@ -274,29 +365,14 @@ void main() {
                         find.byKey(RobotFaceScreen.needHelpButtonKey),
                       )
                       .style!
-                      .shape!
-                      .resolve({}),
-                  RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
+                      .shape,
+                  isNull, // Body actions retain the native button shape.
                 );
                 final paragraph = tester.renderObject<RenderParagraph>(
                   textFinder,
                 );
                 expect(paragraph.textScaler.scale(12), 24);
-                expect(_textGlyphsFit(paragraph, status), isTrue);
-                expect(
-                  tester
-                      .state<ScrollableState>(
-                        find.descendant(
-                          of: find.byKey(RobotFaceScreen.bottomCardKey),
-                          matching: find.byType(Scrollable),
-                        ),
-                      )
-                      .position
-                      .maxScrollExtent,
-                  0,
-                );
+                await robotFaceExpectEveryWordReachable(tester, textFinder);
                 final prompt = _rect(
                   tester,
                   RobotFaceScreen.urgentPromptSurfaceKey,
@@ -304,15 +380,12 @@ void main() {
                 debugPrint(
                   'Severe measured text=$text status=$status action=$action viewport=$viewport',
                 );
-                expect(status.inflate(0.001).contains(text.topLeft), isTrue);
-                expect(
-                  status.inflate(0.001).contains(text.bottomRight),
-                  isTrue,
-                );
+                final visibleText = text.intersect(status);
+                expect(visibleText.isEmpty, isFalse);
                 expect(textFinder.hitTestable(), findsOneWidget);
                 expect(action.shortestSide, greaterThanOrEqualTo(48 - 0.001));
-                expect(text.overlaps(action), isFalse);
-                expect(prompt.overlaps(text), isFalse);
+                expect(status.overlaps(action), isFalse);
+                expect(prompt.overlaps(status), isFalse);
                 expect(prompt.overlaps(action), isFalse);
                 final exit = _rect(tester, RobotFaceScreen.exitButtonKey);
                 expect(exit.shortestSide, greaterThanOrEqualTo(48));
@@ -329,7 +402,7 @@ void main() {
                       (flipped ? 2 : 0),
                 );
                 expect(exit.overlaps(prompt), isFalse);
-                expect(exit.overlaps(text), isFalse);
+                expect(exit.overlaps(status), isFalse);
                 expect(exit.overlaps(action), isFalse);
                 expect(find.bySemanticsLabel('Open Today'), findsOneWidget);
                 expect(prompt, const Rect.fromLTWH(91, 39, 64, 64));
@@ -339,7 +412,7 @@ void main() {
                   viewport.width - 97,
                   viewport.height - 149,
                 );
-                for (final rect in [text, action, prompt, exit]) {
+                for (final rect in [status, action, prompt, exit]) {
                   expect(safe.contains(rect.topLeft), isTrue);
                   expect(safe.contains(rect.bottomRight), isTrue);
                 }
@@ -427,6 +500,7 @@ void main() {
                       ),
                     ),
                   );
+                  await _openDetails(tester);
                   final finder = find.descendant(
                     of: find.byKey(RobotFaceScreen.bottomCardKey),
                     matching: find.byType(Text),
@@ -482,8 +556,14 @@ void main() {
                     tester,
                     RobotFaceScreen.urgentPromptSurfaceKey,
                   );
-                  for (final target in [action, exit]) {
-                    expect(target.shortestSide, greaterThanOrEqualTo(48));
+                  for (final key in [
+                    RobotFaceScreen.needHelpButtonKey,
+                    RobotFaceScreen.exitButtonKey,
+                  ]) {
+                    expect(
+                      tester.getSize(find.byKey(key)).shortestSide,
+                      greaterThanOrEqualTo(48),
+                    );
                   }
                   final surfaces = [card, action, exit, badge];
                   for (var i = 0; i < surfaces.length; i++) {
@@ -492,7 +572,11 @@ void main() {
                       expect(surfaces[i].overlaps(surfaces[j]), isFalse);
                     }
                     for (final eye in _faceRects(tester)) {
-                      expect(surfaces[i].overlaps(eye), isFalse);
+                      expect(
+                        surfaces[i].overlaps(eye),
+                        isFalse,
+                        reason: 'surface $i ${surfaces[i]} eye/marker $eye',
+                      );
                     }
                   }
                   expect(find.text('Need help').hitTestable(), findsOneWidget);
@@ -530,6 +614,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await _openDetails(tester);
       final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
       final style = tester.widget<Text>(find.text(label)).style!;
       final width = paragraph.size.width;
@@ -616,6 +701,8 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await _openDetails(tester);
+      await tester.pumpAndSettle();
       final scroll = find.descendant(
         of: find.byKey(RobotFaceScreen.bottomCardKey),
         matching: find.byType(Scrollable),
@@ -662,217 +749,236 @@ void main() {
     });
   }
 
-  for (final viewport in [const Size(800, 360), const Size(720, 360)]) {
-    for (final flipped in [false, true]) {
-      for (final brightness in Brightness.values) {
-        testWidgets('scroll fallback $viewport $flipped $brightness', (
-          tester,
-        ) async {
-          final semantics = tester.ensureSemantics();
-          try {
-            await _setViewport(tester, viewport);
-            await tester.runAsync(loadRobotFaceTestFont);
-            const padding = EdgeInsets.fromLTRB(83, 31, 97, 149);
-            const medication =
-                'Demo extended-release morning medication 100 mg / 25 mg combination tablet';
-            await tester.pumpWidget(
-              _FaceTestApp(
-                fontFamily: robotFaceTestFont,
-                brightness: brightness,
-                withExit: true,
-                textScaler: TextScaler.linear(2),
-                padding: padding,
-                reducedMotion: true,
-                state: _ready.copyWith(
-                  mode: RobotFaceMode.error,
-                  isFlipped: flipped,
-                  statusLabel: 'Controller fault. Ask for help.',
-                  availableActions: {RobotFaceActionKind.askForHelp},
-                  hasPinnedShortageAlert: true,
-                  activeShortageMedicationLabel: medication,
-                  activeShortageScheduledLabel: '8:00 AM',
-                  activeShortageSlotNumber: 2,
-                  networkAdvisory: RobotFaceNetworkAdvisory.internetOffline,
-                ),
-              ),
-            );
-            // Metrics arrive after layout. Do not lend the hint a forced pump:
-            // reduced motion must schedule its own follow-up frame.
-            expect(
-              tester.binding.hasScheduledFrame,
-              isTrue,
-              reason: 'Initial overflow metrics must request a frame',
-            );
-            await tester.pumpAndSettle();
-            final card = find.byKey(RobotFaceScreen.bottomCardKey);
-            final scroll = find.descendant(
-              of: card,
-              matching: find.byType(Scrollable),
-            );
-            final position = tester.state<ScrollableState>(scroll).position;
-            final details = find.descendant(
-              of: card,
-              matching: find.byWidgetPredicate(
-                (widget) =>
-                    widget is Text &&
-                    (widget.data?.contains(medication) ?? false),
-              ),
-            );
-            final text = tester.widget<Text>(details);
-            for (final meaning in [
-              'Now · Morning meds',
-              'Controller fault. Ask for help.',
-              medication,
-              '8:00 AM',
-              'Slot 2',
-              'Local only; pinned until loading is handled. Check Carousel loading before dispense.',
-              'Internet offline. Local reminders still work.',
-            ]) {
-              expect(text.data, contains(meaning));
-            }
-            expect(find.bySemanticsLabel(text.data!), findsOneWidget);
-            final paragraph = tester.renderObject<RenderParagraph>(details);
-            expect(paragraph.textScaler.scale(12), 24);
-            expect(text.style!.fontSize, 12);
-            expect(text.style!.height, 1.2);
-            expect(position.maxScrollExtent, greaterThan(0));
-            expect(
-              find.text('Scroll for more details').hitTestable(),
-              findsOneWidget,
-            );
-            await _expectScrollGolden(
-              tester,
-              'goldens/robot_face_scroll_${viewport.width.toInt()}_${flipped}_${brightness.name}_start.png',
-            );
-            final pinnedKeys = [
-              RobotFaceScreen.urgentPromptSurfaceKey,
-              RobotFaceScreen.needHelpButtonKey,
-              RobotFaceScreen.exitButtonKey,
-            ];
-            final pinned = pinnedKeys.map((key) => _rect(tester, key)).toList();
-            expect(pinned.first, const Rect.fromLTWH(91, 39, 64, 64));
-            final surfaces = [...pinned, tester.getRect(card)];
-            for (var i = 0; i < surfaces.length; i++) {
-              _expectInsideSafeBounds(surfaces[i], padding, viewport);
-              for (var j = i + 1; j < surfaces.length; j++) {
-                expect(surfaces[i].overlaps(surfaces[j]), isFalse);
-              }
-            }
-            for (final target in pinned.skip(1)) {
-              expect(target.shortestSide, greaterThanOrEqualTo(48 - 0.001));
-            }
-            // Native semantics must offer forward scrolling, not just a visual hint.
-            final scrollNodes = <SemanticsNode>[];
-            void collect(SemanticsNode node) {
-              if (node.getSemanticsData().hasAction(SemanticsAction.scrollUp) ||
-                  node.getSemanticsData().hasAction(
-                    SemanticsAction.scrollDown,
-                  )) {
-                scrollNodes.add(node);
-              }
-              node.visitChildren((child) {
-                collect(child);
-                return true;
-              });
-            }
-
-            collect(tester.getSemantics(scroll));
-            expect(scrollNodes, isNotEmpty);
-            final scrollNode = scrollNodes.first;
-            scrollNode.owner!.performAction(
-              scrollNode.id,
-              scrollNode.getSemanticsData().hasAction(SemanticsAction.scrollUp)
-                  ? SemanticsAction.scrollUp
-                  : SemanticsAction.scrollDown,
-            );
-            await tester.pumpAndSettle();
-            expect(position.pixels, greaterThan(0));
-            // Every complete word box must enter the viewport during traversal.
-            final boxes = <ui.TextBox>[
-              for (final word in RegExp(r'\S+').allMatches(text.data!))
-                ...paragraph.getBoxesForSelection(
-                  TextSelection(baseOffset: word.start, extentOffset: word.end),
-                ),
-            ];
-            final reached = <int>{};
-            final extent = position.maxScrollExtent;
-            for (
-              double offset = 0;
-              offset < extent + position.viewportDimension / 2;
-              offset += position.viewportDimension / 2
-            ) {
-              position.jumpTo(offset.clamp(0, extent));
-              await tester.pumpAndSettle();
-              final visible = tester
-                  .getRect(
-                    find.descendant(
-                      of: card,
-                      matching: find.byType(SingleChildScrollView),
+  for (final compareGolden in [false, true]) {
+    for (final viewport in [const Size(800, 360), const Size(720, 360)]) {
+      for (final flipped in [false, true]) {
+        for (final brightness in Brightness.values) {
+          testWidgets(
+            '${compareGolden ? 'scroll fallback' : 'scroll reachability'} $viewport $flipped $brightness',
+            (tester) async {
+              final semantics = tester.ensureSemantics();
+              try {
+                await _setViewport(tester, viewport);
+                await tester.runAsync(loadRobotFaceTestFont);
+                const padding = EdgeInsets.fromLTRB(83, 31, 97, 149);
+                const medication =
+                    'Demo extended-release morning medication 100 mg / 25 mg combination tablet';
+                await tester.pumpWidget(
+                  _FaceTestApp(
+                    fontFamily: robotFaceTestFont,
+                    brightness: brightness,
+                    withExit: true,
+                    textScaler: TextScaler.linear(2),
+                    padding: padding,
+                    reducedMotion: true,
+                    state: _ready.copyWith(
+                      mode: RobotFaceMode.error,
+                      isFlipped: flipped,
+                      statusLabel: 'Controller fault. Ask for help.',
+                      availableActions: {RobotFaceActionKind.askForHelp},
+                      hasPinnedShortageAlert: true,
+                      activeShortageMedicationLabel: medication,
+                      activeShortageScheduledLabel: '8:00 AM',
+                      activeShortageSlotNumber: 2,
+                      networkAdvisory: RobotFaceNetworkAdvisory.internetOffline,
                     ),
-                  )
-                  .inflate(0.001);
-              for (var i = 0; i < boxes.length; i++) {
-                final rect = MatrixUtils.transformRect(
-                  paragraph.getTransformTo(null),
-                  boxes[i].toRect(),
+                  ),
                 );
-                if (visible.contains(rect.topLeft) &&
-                    visible.contains(rect.bottomRight)) {
-                  reached.add(i);
+                await tester.tap(find.byTooltip('Show details'));
+                await tester.pump();
+                // Metrics arrive after layout. Do not lend the hint a forced pump:
+                // reduced motion must schedule its own follow-up frame.
+                expect(
+                  tester.binding.hasScheduledFrame,
+                  isTrue,
+                  reason: 'Initial overflow metrics must request a frame',
+                );
+                await tester.pumpAndSettle();
+                final card = find.byKey(RobotFaceScreen.bottomCardKey);
+                final scroll = find.descendant(
+                  of: card,
+                  matching: find.byType(Scrollable),
+                );
+                final position = tester.state<ScrollableState>(scroll).position;
+                final details = find.descendant(
+                  of: card,
+                  matching: find.byWidgetPredicate(
+                    (widget) =>
+                        widget is Text &&
+                        (widget.data?.contains(medication) ?? false),
+                  ),
+                );
+                final text = tester.widget<Text>(details);
+                for (final meaning in [
+                  'Now · Morning meds',
+                  'Controller fault. Ask for help.',
+                  medication,
+                  '8:00 AM',
+                  'Slot 2',
+                  'Local only; pinned until loading is handled. Check Carousel loading before dispense.',
+                  'Internet offline. Local reminders still work.',
+                ]) {
+                  expect(text.data, contains(meaning));
                 }
+                expect(find.bySemanticsLabel(text.data!), findsOneWidget);
+                final paragraph = tester.renderObject<RenderParagraph>(details);
+                expect(paragraph.textScaler.scale(12), 24);
+                expect(text.style!.fontSize, 12);
+                expect(text.style!.height, 1.2);
+                expect(position.maxScrollExtent, greaterThan(0));
+                expect(
+                  find.text('Scroll for more details').hitTestable(),
+                  findsOneWidget,
+                );
+                if (compareGolden) {
+                  await _expectScrollGolden(
+                    tester,
+                    'goldens/robot_face_scroll_${viewport.width.toInt()}_${flipped}_${brightness.name}_start.png',
+                  );
+                }
+                final pinnedKeys = [
+                  RobotFaceScreen.urgentPromptSurfaceKey,
+                  RobotFaceScreen.needHelpButtonKey,
+                  RobotFaceScreen.exitButtonKey,
+                ];
+                final pinned = pinnedKeys
+                    .map((key) => _rect(tester, key))
+                    .toList();
+                expect(pinned.first, const Rect.fromLTWH(91, 39, 64, 64));
+                final surfaces = [...pinned, tester.getRect(card)];
+                for (var i = 0; i < surfaces.length; i++) {
+                  _expectInsideSafeBounds(surfaces[i], padding, viewport);
+                  for (var j = i + 1; j < surfaces.length; j++) {
+                    expect(surfaces[i].overlaps(surfaces[j]), isFalse);
+                  }
+                }
+                for (final target in pinned.skip(1)) {
+                  expect(target.shortestSide, greaterThanOrEqualTo(48 - 0.001));
+                }
+                // Native semantics must offer forward scrolling, not just a visual hint.
+                final scrollNodes = <SemanticsNode>[];
+                void collect(SemanticsNode node) {
+                  if (node.getSemanticsData().hasAction(
+                        SemanticsAction.scrollUp,
+                      ) ||
+                      node.getSemanticsData().hasAction(
+                        SemanticsAction.scrollDown,
+                      )) {
+                    scrollNodes.add(node);
+                  }
+                  node.visitChildren((child) {
+                    collect(child);
+                    return true;
+                  });
+                }
+
+                collect(tester.getSemantics(scroll));
+                expect(scrollNodes, isNotEmpty);
+                final scrollNode = scrollNodes.first;
+                scrollNode.owner!.performAction(
+                  scrollNode.id,
+                  scrollNode.getSemanticsData().hasAction(
+                        SemanticsAction.scrollUp,
+                      )
+                      ? SemanticsAction.scrollUp
+                      : SemanticsAction.scrollDown,
+                );
+                await tester.pumpAndSettle();
+                expect(position.pixels, greaterThan(0));
+                // Every complete word box must enter the viewport during traversal.
+                final boxes = <ui.TextBox>[
+                  for (final word in RegExp(r'\S+').allMatches(text.data!))
+                    ...paragraph.getBoxesForSelection(
+                      TextSelection(
+                        baseOffset: word.start,
+                        extentOffset: word.end,
+                      ),
+                    ),
+                ];
+                final reached = <int>{};
+                final extent = position.maxScrollExtent;
+                for (
+                  double offset = 0;
+                  offset < extent + position.viewportDimension / 2;
+                  offset += position.viewportDimension / 2
+                ) {
+                  position.jumpTo(offset.clamp(0, extent));
+                  await tester.pumpAndSettle();
+                  final visible = tester
+                      .getRect(
+                        find.descendant(
+                          of: card,
+                          matching: find.byType(SingleChildScrollView),
+                        ),
+                      )
+                      .inflate(0.001);
+                  for (var i = 0; i < boxes.length; i++) {
+                    final rect = MatrixUtils.transformRect(
+                      paragraph.getTransformTo(null),
+                      boxes[i].toRect(),
+                    );
+                    if (visible.contains(rect.topLeft) &&
+                        visible.contains(rect.bottomRight)) {
+                      reached.add(i);
+                    }
+                  }
+                  for (var i = 0; i < pinnedKeys.length; i++) {
+                    expect(_rect(tester, pinnedKeys[i]), pinned[i]);
+                  }
+                }
+                expect(reached.length, boxes.length);
+                position.jumpTo(extent);
+                await tester.pumpAndSettle();
+                expect(position.extentAfter, 0);
+                if (compareGolden) {
+                  await _expectScrollGolden(
+                    tester,
+                    'goldens/robot_face_scroll_${viewport.width.toInt()}_${flipped}_${brightness.name}_end.png',
+                  );
+                }
+                expect(
+                  find.text('Scroll for more details').hitTestable(),
+                  findsNothing,
+                );
+                expect(
+                  tester.getSemantics(card).toStringDeep(),
+                  isNot(contains('Scroll for more details')),
+                );
+                for (var i = 0; i < pinnedKeys.length; i++) {
+                  expect(_rect(tester, pinnedKeys[i]), pinned[i]);
+                }
+                expect(find.text('Need help').hitTestable(), findsOneWidget);
+                position.jumpTo(0);
+                await tester.pumpAndSettle();
+                expect(
+                  find.text('Scroll for more details').hitTestable(),
+                  findsOneWidget,
+                );
+                expect(tester.binding.hasScheduledFrame, isFalse);
+                await _setViewport(tester, const Size(800, 500));
+                await tester
+                    .pump(); // Consume only the frame requested by resizing.
+                expect(
+                  tester.binding.hasScheduledFrame,
+                  isTrue,
+                  reason:
+                      'Overflow-to-fit metrics must request their own frame',
+                );
+                await tester.pumpAndSettle();
+                expect(
+                  tester.state<ScrollableState>(scroll).position,
+                  same(position),
+                );
+                expect(position.maxScrollExtent, 0);
+                expect(find.text('Scroll for more details'), findsNothing);
+                expect(_textGlyphsFit(paragraph, tester.getRect(card)), isTrue);
+                expect(tester.takeException(), isNull);
+              } finally {
+                semantics.dispose();
               }
-              for (var i = 0; i < pinnedKeys.length; i++) {
-                expect(_rect(tester, pinnedKeys[i]), pinned[i]);
-              }
-            }
-            expect(reached.length, boxes.length);
-            position.jumpTo(extent);
-            await tester.pumpAndSettle();
-            expect(position.extentAfter, 0);
-            await _expectScrollGolden(
-              tester,
-              'goldens/robot_face_scroll_${viewport.width.toInt()}_${flipped}_${brightness.name}_end.png',
-            );
-            expect(
-              find.text('Scroll for more details').hitTestable(),
-              findsNothing,
-            );
-            expect(
-              tester.getSemantics(card).toStringDeep(),
-              isNot(contains('Scroll for more details')),
-            );
-            for (var i = 0; i < pinnedKeys.length; i++) {
-              expect(_rect(tester, pinnedKeys[i]), pinned[i]);
-            }
-            expect(find.text('Need help').hitTestable(), findsOneWidget);
-            position.jumpTo(0);
-            await tester.pumpAndSettle();
-            expect(
-              find.text('Scroll for more details').hitTestable(),
-              findsOneWidget,
-            );
-            expect(tester.binding.hasScheduledFrame, isFalse);
-            await _setViewport(tester, const Size(800, 500));
-            await tester
-                .pump(); // Consume only the frame requested by resizing.
-            expect(
-              tester.binding.hasScheduledFrame,
-              isTrue,
-              reason: 'Overflow-to-fit metrics must request their own frame',
-            );
-            await tester.pumpAndSettle();
-            expect(
-              tester.state<ScrollableState>(scroll).position,
-              same(position),
-            );
-            expect(position.maxScrollExtent, 0);
-            expect(find.text('Scroll for more details'), findsNothing);
-            expect(_textGlyphsFit(paragraph, tester.getRect(card)), isTrue);
-            expect(tester.takeException(), isNull);
-          } finally {
-            semantics.dispose();
-          }
-        });
+            },
+          );
+        }
       }
     }
   }
@@ -904,9 +1010,13 @@ void main() {
             ),
           ),
         );
+        await _openDetails(tester);
         final finder = find.descendant(
           of: find.byKey(RobotFaceScreen.bottomCardKey),
-          matching: find.byType(Text),
+          matching: find.byWidgetPredicate(
+            (w) =>
+                w is Text && w.key != const ValueKey('robot-face-more-details'),
+          ),
         );
         final paragraph = tester.renderObject<RenderParagraph>(finder);
         final viewportHeight = tester
@@ -935,7 +1045,7 @@ void main() {
     );
   }
 
-  testWidgets('rail rejection remeasures the same action panel at body width', (
+  testWidgets('details and resizing preserve the same body action panel', (
     tester,
   ) async {
     await tester.runAsync(loadRobotFaceTestFont);
@@ -954,7 +1064,9 @@ void main() {
     );
     final panel = find.byKey(RobotFaceScreen.actionPanelKey);
     final originalState = tester.state(panel);
-    expect(_rect(tester, RobotFaceScreen.needHelpButtonKey).height, 66);
+    expect(_rect(tester, RobotFaceScreen.needHelpButtonKey).height, 48);
+    await _openDetails(tester);
+    expect(tester.state(panel), same(originalState));
     await _setViewport(tester, const Size(800, 360));
     await tester.pump();
     expect(tester.state(panel), same(originalState));
@@ -1365,6 +1477,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('NEXT EVENT'), findsNothing);
+    expect(find.text('6:00 PM · Evening meds'), findsNothing);
+    await _openDetails(tester);
     expect(find.text('6:00 PM · Evening meds'), findsOneWidget);
   });
 
@@ -1378,6 +1492,7 @@ void main() {
         _FaceTestApp(state: _ready, onLongPress: () => longPresses += 1),
       );
 
+      await _openDetails(tester);
       final card = _rect(tester, RobotFaceScreen.bottomCardKey);
       await tester.tapAt(card.topLeft + const Offset(4, 4));
       await tester.longPressAt(card.topLeft + const Offset(4, 4));
@@ -1410,12 +1525,15 @@ void main() {
         _rect(tester, RobotFaceScreen.displayFrameKey),
         const Size(800, 360),
       );
+      await tester.tap(find.byKey(const ValueKey('robot-face-toggle-details')));
+      await tester.pump();
       final scroll = find.byType(SingleChildScrollView);
       final scrollRect = tester.getRect(scroll);
       expect(scrollRect.left, greaterThanOrEqualTo(18));
       expect(scrollRect.right, lessThanOrEqualTo(776));
       expect(scrollRect.bottom, lessThanOrEqualTo(340));
-      expect(find.text('This dose was missed.'), findsOneWidget);
+      expect(find.text('This dose was missed.'), findsNothing);
+      expect(find.text('MISSED'), findsOneWidget);
       await tester.drag(scroll, const Offset(0, -400));
       await tester.pump();
       expect(
@@ -1602,20 +1720,18 @@ void main() {
             final status = _rect(tester, RobotFaceScreen.bottomCardKey);
             final help = _rect(tester, RobotFaceScreen.needHelpButtonKey);
             final exit = _rect(tester, RobotFaceScreen.exitButtonKey);
-            for (final target in [help, exit]) {
-              expect(target.shortestSide, greaterThanOrEqualTo(48));
-              _expectInsideSafeBounds(target, padding, viewport);
+            for (final key in [
+              RobotFaceScreen.needHelpButtonKey,
+              RobotFaceScreen.exitButtonKey,
+            ]) {
+              expect(
+                tester.getSize(find.byKey(key)).shortestSide,
+                greaterThanOrEqualTo(48),
+              );
+              _expectInsideSafeBounds(_rect(tester, key), padding, viewport);
             }
             expect(find.text('Need help').hitTestable(), findsOneWidget);
-            expect(
-              _textGlyphsFit(
-                tester.renderObject<RenderParagraph>(
-                  find.text('Ready to dispense'),
-                ),
-                status,
-              ),
-              isTrue,
-            );
+            expect(find.text('Ready to dispense'), findsNothing);
             for (final eye in _faceRects(tester).take(2)) {
               for (final overlay in [status, help, exit]) {
                 expect(eye.overlaps(overlay), isFalse);
@@ -1627,6 +1743,16 @@ void main() {
                 expect(eye.height, greaterThan(150));
               }
             }
+            await _openDetails(tester);
+            expect(
+              _textGlyphsFit(
+                tester.renderObject<RenderParagraph>(
+                  find.text('Ready to dispense'),
+                ),
+                _rect(tester, RobotFaceScreen.bottomCardKey),
+              ),
+              isTrue,
+            );
             expect(tester.takeException(), isNull);
           },
         );
@@ -1762,6 +1888,13 @@ List<Rect> _faceRects(WidgetTester tester) {
   final dynamic painter = tester.widget<CustomPaint>(paintFinder).painter!;
   final eyes = painter.debugPaintedEyeRects as List<Rect>;
   expect(eyes, hasLength(2));
+  // A zero-height reserved canvas paints no eyes; its FittedBox transform is
+  // singular, so transforming diagnostic local rectangles produces NaNs.
+  final reservation = find.byKey(RobotFaceScreen.detailRevealKey);
+  if (reservation.evaluate().isNotEmpty &&
+      tester.getSize(reservation).isEmpty) {
+    return [];
+  }
   final markers = painter.debugStateMarkerGeometry(box.size) as List<Rect>;
   return <Rect>[...eyes, ...markers.map((rect) => rect.inflate(6))]
       .map((rect) => MatrixUtils.transformRect(box.getTransformTo(null), rect))
