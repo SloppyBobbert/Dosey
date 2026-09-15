@@ -7,6 +7,7 @@ import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/local_schedule_profile_repository.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
+import 'package:dosey_app/features/shared/personal_summary_chip.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:flutter/material.dart';
 
@@ -441,15 +442,15 @@ class _ScheduleHeroCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                const _ScheduleHeroChip(
+                const PersonalSummaryChip(
                   icon: Icons.event_available_outlined,
                   label: 'Active routine',
                 ),
-                _ScheduleHeroChip(
+                PersonalSummaryChip(
                   icon: Icons.notifications_active_outlined,
                   label: '$enabledCount enabled / $scheduledCount scheduled',
                 ),
-                const _ScheduleHeroChip(
+                const PersonalSummaryChip(
                   icon: Icons.timeline_outlined,
                   label: 'Feeds Today timeline',
                 ),
@@ -457,44 +458,6 @@ class _ScheduleHeroCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ScheduleHeroChip extends StatelessWidget {
-  const _ScheduleHeroChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: colorScheme.surface.withValues(alpha: 0.76),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: colorScheme.primary),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: colorScheme.onSurface,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
       ),
     );
   }
