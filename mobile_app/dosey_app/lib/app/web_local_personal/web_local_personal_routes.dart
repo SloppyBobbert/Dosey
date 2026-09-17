@@ -114,6 +114,7 @@ class WebLocalPersonalRouteDelegate extends RouterDelegate<RouteInformation>
 
   final WebLocalPersonalRouteController controller;
   final WebLocalPersonalRouterBuilder builder;
+  final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   RouteInformation? get currentConfiguration =>
@@ -126,10 +127,17 @@ class WebLocalPersonalRouteDelegate extends RouterDelegate<RouteInformation>
   }
 
   @override
-  Widget build(BuildContext context) => builder(context, controller);
+  Widget build(BuildContext context) => Navigator(
+    key: _navigatorKey,
+    pages: [MaterialPage<void>(child: builder(context, controller))],
+    onDidRemovePage: (_) {},
+  );
 
   @override
-  Future<bool> popRoute() => Future.value(controller.goBack());
+  Future<bool> popRoute() async {
+    if (await _navigatorKey.currentState?.maybePop() ?? false) return true;
+    return controller.goBack();
+  }
 
   @override
   void dispose() {

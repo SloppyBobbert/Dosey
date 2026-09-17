@@ -1,5 +1,6 @@
 import 'package:dosey_app/core/cloud/cloud_identity_gateway.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/link.dart';
 
 import 'dosey_web_app.dart';
 import 'dosey_web_dependencies.dart';
@@ -61,7 +62,15 @@ Widget _protectedPage(
 }
 
 class WebLandingScreen extends StatelessWidget {
-  const WebLandingScreen({super.key});
+  const WebLandingScreen({
+    super.key,
+    this.localPersonalEnabled = const bool.fromEnvironment(
+      'LOCAL_PERSONAL_ENABLED',
+    ),
+  });
+
+  // Only paired builds expose the separate entry; caregiver-only builds stay valid.
+  final bool localPersonalEnabled;
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -69,7 +78,7 @@ class WebLandingScreen extends StatelessWidget {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 900),
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.all(28),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -94,6 +103,20 @@ class WebLandingScreen extends StatelessWidget {
                       Navigator.pushNamed(context, WebRoutes.signIn),
                   child: const Text('Sign in'),
                 ),
+                if (localPersonalEnabled) ...[
+                  const SizedBox(height: 16),
+                  Link(
+                    uri: Uri(path: '/local/'),
+                    target: LinkTarget.self,
+                    builder: (context, followLink) => OutlinedButton(
+                      onPressed: followLink,
+                      child: const Text('Use Personal on this browser'),
+                    ),
+                  ),
+                  const Text(
+                    'Local-only foundation — medication workflows are not available yet.',
+                  ),
+                ],
               ],
             ),
           ),

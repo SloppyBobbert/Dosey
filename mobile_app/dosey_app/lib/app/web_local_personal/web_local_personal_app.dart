@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 class WebLocalPersonalApp extends StatefulWidget {
   const WebLocalPersonalApp({
     super.key,
-    required this.storage,
+    this.storage,
+    this.startupPage,
     this.routeController,
     this.pageBuilder = buildWebLocalPersonalFoundationPage,
     this.onAddPrescription,
@@ -15,7 +16,8 @@ class WebLocalPersonalApp extends StatefulWidget {
     this.routeInformationProvider,
   });
 
-  final WebStorageBootstrapResult storage;
+  final WebStorageBootstrapResult? storage;
+  final Widget? startupPage;
 
   /// Fixed for the lifetime of this root app widget.
   final WebLocalPersonalRouteController? routeController;
@@ -60,7 +62,9 @@ class _WebLocalPersonalAppState extends State<WebLocalPersonalApp> {
     BuildContext context,
     WebLocalPersonalRouteController controller,
   ) {
-    if (widget.storage is WebStorageStartupRecovery) {
+    if (widget.startupPage case final page?) return page;
+    final storage = widget.storage;
+    if (storage == null || storage is WebStorageStartupRecovery) {
       return _RecoveryGate(onRetry: widget.onRetryStorage);
     }
     if (controller.hasUnknownPath) {
@@ -69,7 +73,7 @@ class _WebLocalPersonalAppState extends State<WebLocalPersonalApp> {
       );
     }
     return _PersonalShell(
-      storage: widget.storage,
+      storage: storage,
       controller: controller,
       pageBuilder: widget.pageBuilder,
       onAddPrescription: widget.onAddPrescription,
@@ -85,7 +89,7 @@ ThemeData _theme() {
   const coral = Color(0xFFC65F50);
   return ThemeData(
     useMaterial3: true,
-    fontFamily: 'Georgia',
+    fontFamily: 'DoseyLocalRoboto',
     colorScheme: const ColorScheme.light(
       primary: ink,
       onPrimary: paper,

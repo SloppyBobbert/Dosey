@@ -399,11 +399,12 @@ void main() {
       findsOneWidget,
     );
     expect(
-      Focus.of(
-        tester.element(
-          find.byKey(const ValueKey('web-local-personal-page-focus')),
-        ),
-      ).hasFocus,
+      tester
+          .widget<Focus>(
+            find.byKey(const ValueKey('web-local-personal-page-focus')),
+          )
+          .focusNode!
+          .hasFocus,
       isTrue,
     );
     semantics.dispose();
@@ -563,10 +564,21 @@ void main() {
         .where((file) => file.path.endsWith('.dart'))
         .map((file) => file.readAsStringSync())
         .join('\n');
-    final directives = RegExp(
-      r'''^(?:import|export)\s+['"]([^'"]+)['"]''',
-      multiLine: true,
-    ).allMatches(source).map((match) => match.group(1)!).join('\n');
+    final directives =
+        RegExp(r'''^(?:import|export)\s+['"]([^'"]+)['"]''', multiLine: true)
+            .allMatches(source)
+            .map((match) => match.group(1)!)
+            // Async database lifecycle ownership is not a remote sync adapter.
+            .where(
+              (uri) => !const {
+                'dart:async',
+                // Stage2 reuses only these shared forms; all other features stay forbidden.
+                'package:dosey_app/features/shared/personal_setup_scope.dart',
+                'package:dosey_app/features/prescriptions/prescriptions_screen.dart',
+                'package:dosey_app/features/reminders/reminders_screen.dart',
+              }.contains(uri),
+            )
+            .join('\n');
     for (final expression in [
       RegExp(
         r'appwrite|account|cloud|pairing|caregiver|household|sync|bluetooth|\bble\b|carousel|robot|native|notification|permission|audio',

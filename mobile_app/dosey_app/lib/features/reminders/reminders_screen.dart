@@ -1,4 +1,5 @@
 import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/features/shared/personal_setup_scope.dart';
 import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/permissions/app_permission_gateway.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
@@ -15,7 +16,7 @@ class RemindersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dependencies = DoseyAppScope.of(context);
+    final dependencies = PersonalSetupScope.of(context);
 
     return StreamBuilder<List<Prescription>>(
       stream: dependencies.prescriptions.watchPrescriptions(),
@@ -54,7 +55,25 @@ class RemindersScreen extends StatelessWidget {
                     final canAddSchedule =
                         prescriptions.isNotEmpty && activeProfile != null;
 
+                    if (prescriptionSnapshot.hasError ||
+                        profileSnapshot.hasError ||
+                        allSchedulesSnapshot.hasError ||
+                        scheduleSnapshot.hasError) {
+                      return const Text(
+                        'Schedule data could not be loaded. Reload to retry.',
+                      );
+                    }
+                    if (!prescriptionSnapshot.hasData ||
+                        !profileSnapshot.hasData ||
+                        !allSchedulesSnapshot.hasData ||
+                        !scheduleSnapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
                     return ListView(
+                      shrinkWrap: dependencies.localWeb,
+                      physics: dependencies.localWeb
+                          ? const NeverScrollableScrollPhysics()
+                          : null,
                       padding: const EdgeInsets.all(16),
                       children: [
                         _ScheduleHeroCard(
@@ -71,7 +90,12 @@ class RemindersScreen extends StatelessWidget {
                                 )
                               : null,
                         ),
-                        const _NotificationPermissionBanner(),
+                        if (dependencies.localWeb)
+                          const Text(
+                            'Saved in this browser for foreground Today. Web OS and background reminders are not supported.',
+                          )
+                        else
+                          const _NotificationPermissionBanner(),
                         const SizedBox(height: 16),
                         _ScheduleProfileSection(
                           profiles: profiles,
@@ -138,6 +162,8 @@ class RemindersScreen extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      isDismissible: !PersonalSetupScope.of(context).localWeb,
+      enableDrag: !PersonalSetupScope.of(context).localWeb,
       builder: (context) => _ScheduleSheet(
         reminderSchedules: reminderSchedules,
         prescriptions: prescriptions,
@@ -600,6 +626,8 @@ class _ScheduleProfileSection extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      isDismissible: !PersonalSetupScope.of(context).localWeb,
+      enableDrag: !PersonalSetupScope.of(context).localWeb,
       builder: (context) =>
           _ScheduleProfileSheet(profiles: profilesRepository, profile: profile),
     );
@@ -659,6 +687,8 @@ class _ScheduleProfileSheet extends StatefulWidget {
 
 class _ScheduleProfileSheetState extends State<_ScheduleProfileSheet> {
   final _nameController = TextEditingController();
+  late final String _newId =
+      'schedule-profile-${DateTime.now().microsecondsSinceEpoch}';
   var _isSaving = false;
   String? _errorText;
 
@@ -676,53 +706,59 @@ class _ScheduleProfileSheetState extends State<_ScheduleProfileSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            widget.profile == null
-                ? 'Add schedule profile'
-                : 'Rename schedule profile',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _nameController,
-            decoration: const InputDecoration(
-              labelText: 'Schedule name',
-              border: OutlineInputBorder(),
-            ),
-            textInputAction: TextInputAction.done,
-          ),
-          if (_errorText != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _errorText!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ],
-          const SizedBox(height: 16),
-          Row(
+    return protectSetupForm(
+      context,
+      _isSaving,
+      Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Cancel'),
+              Text(
+                widget.profile == null
+                    ? 'Add schedule profile'
+                    : 'Rename schedule profile',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              const Spacer(),
-              FilledButton(
-                onPressed: _isSaving ? null : _save,
-                child: const Text('Save schedule profile'),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _nameController,
+                decoration: const InputDecoration(
+                  labelText: 'Schedule name',
+                  border: OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              if (_errorText != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _errorText!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: _isSaving ? null : _save,
+                    child: const Text('Save schedule profile'),
+                  ),
+                ],
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -745,7 +781,7 @@ class _ScheduleProfileSheetState extends State<_ScheduleProfileSheet> {
     final existing = widget.profile;
     try {
       final profile = ScheduleProfile(
-        id: existing?.id ?? 'schedule-profile-${now.microsecondsSinceEpoch}',
+        id: existing?.id ?? _newId,
         name: name,
         isActive: existing?.isActive ?? false,
         createdAt: existing?.createdAt ?? now,
@@ -896,6 +932,11 @@ class _ScheduleTile extends StatelessWidget {
   }
 
   Future<void> _delete(BuildContext context) async {
+    if (PersonalSetupScope.of(context).localWeb &&
+        !await confirmSetupDelete(context, 'schedule')) {
+      return;
+    }
+    if (!context.mounted) return;
     try {
       final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
       if (!context.mounted) return;
@@ -956,6 +997,8 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
   late final TextEditingController _minuteController;
   late String? _selectedPrescriptionId;
   late bool _isEnabled;
+  late final String _newId =
+      'schedule-${DateTime.now().microsecondsSinceEpoch}';
   var _isSaving = false;
   String? _errorText;
 
@@ -982,102 +1025,106 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.schedule == null ? 'Add schedule' : 'Edit schedule',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Use the medication details you already entered. Dosey does not confirm your dose is correct.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Which prescription?',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            for (final prescription in widget.prescriptions)
-              Card.outlined(
-                child: ListTile(
-                  selected: _selectedPrescriptionId == prescription.id,
-                  title: Text(prescription.name),
-                  subtitle: Text(prescription.pillType.label),
-                  trailing: _selectedPrescriptionId == prescription.id
-                      ? const Icon(Icons.check_circle_outline)
-                      : null,
-                  onTap: () => setState(() {
-                    _selectedPrescriptionId = prescription.id;
-                  }),
-                ),
+    return protectSetupForm(
+      context,
+      _isSaving,
+      Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.schedule == null ? 'Add schedule' : 'Edit schedule',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _hourController,
-                    decoration: const InputDecoration(
-                      labelText: 'Hour',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.next,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _minuteController,
-                    decoration: const InputDecoration(
-                      labelText: 'Minute',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Enabled'),
-              value: _isEnabled,
-              onChanged: (value) => setState(() => _isEnabled = value),
-            ),
-            if (_errorText != null) ...[
               const SizedBox(height: 8),
               Text(
-                _errorText!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                'Use the medication details you already entered. Dosey does not confirm your dose is correct.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+              const SizedBox(height: 16),
+              Text(
+                'Which prescription?',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              for (final prescription in widget.prescriptions)
+                Card.outlined(
+                  child: ListTile(
+                    selected: _selectedPrescriptionId == prescription.id,
+                    title: Text(prescription.name),
+                    subtitle: Text(prescription.pillType.label),
+                    trailing: _selectedPrescriptionId == prescription.id
+                        ? const Icon(Icons.check_circle_outline)
+                        : null,
+                    onTap: () => setState(() {
+                      _selectedPrescriptionId = prescription.id;
+                    }),
+                  ),
                 ),
-                const Spacer(),
-                FilledButton(
-                  onPressed: _isSaving ? null : _save,
-                  child: const Text('Save schedule'),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _hourController,
+                      decoration: const InputDecoration(
+                        labelText: 'Hour',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      textInputAction: TextInputAction.next,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _minuteController,
+                      decoration: const InputDecoration(
+                        labelText: 'Minute',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Enabled'),
+                value: _isEnabled,
+                onChanged: (value) => setState(() => _isEnabled = value),
+              ),
+              if (_errorText != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _errorText!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
-            ),
-          ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: _isSaving ? null : _save,
+                    child: const Text('Save schedule'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1115,7 +1162,7 @@ class _ScheduleSheetState extends State<_ScheduleSheet> {
     // The schedule id is stable across edits so dose ids and loaded slots stay
     // tied to the same reminder unless the repository clears stale slots.
     final schedule = ReminderSchedule(
-      id: existing?.id ?? 'schedule-${now.microsecondsSinceEpoch}',
+      id: existing?.id ?? _newId,
       label: prescription.name,
       prescriptionId: prescription.id,
       profileId: existing?.profileId ?? widget.profileId,
