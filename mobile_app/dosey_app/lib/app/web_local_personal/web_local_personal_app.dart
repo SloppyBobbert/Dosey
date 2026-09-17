@@ -278,6 +278,9 @@ class _NavigationRail extends StatelessWidget {
                   // short form and keeps the full name for assistive tech.
                   : Semantics(
                       label: destination.label,
+                      // The stand-in glyph is visual only; without this a screen
+                      // reader announces the full name and the short form.
+                      excludeSemantics: true,
                       child: FittedBox(
                         fit: BoxFit.scaleDown,
                         child: Text(

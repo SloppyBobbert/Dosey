@@ -31,7 +31,12 @@ Widget protectSetupForm(BuildContext context, bool pending, Widget child) {
   if (!PersonalSetupScope.of(context).localWeb) return child;
   return PopScope(
     canPop: !pending,
-    child: AbsorbPointer(absorbing: pending, child: child),
+    // AbsorbPointer blocks pointers only, so an already-focused control could
+    // still pop the route from the keyboard while the action is pending.
+    child: ExcludeFocus(
+      excluding: pending,
+      child: AbsorbPointer(absorbing: pending, child: child),
+    ),
   );
 }
 

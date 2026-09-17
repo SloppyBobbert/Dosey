@@ -114,7 +114,7 @@ class WebLandingScreen extends StatelessWidget {
                     ),
                   ),
                   const Text(
-                    'Local-only foundation — medication workflows are not available yet.',
+                    'Local-only storage — prescriptions and schedules stay in this browser.',
                   ),
                 ],
               ],

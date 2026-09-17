@@ -25,6 +25,9 @@ class LocalReminderRepository implements ReminderRepository {
   });
 
   final DoseyDatabase _database;
+
+  /// Strict mode: a saved schedule must link to an existing prescription and
+  /// keep an existing schedule profile.
   final bool requireExistingLinks;
 
   /// Watches schedules in clock order so Today and Schedule share one ordering.
@@ -54,11 +57,14 @@ class LocalReminderRepository implements ReminderRepository {
         await _acquireWriterIntent(schedule.id);
         final prescriptionId = schedule.prescriptionId;
         if (requireExistingLinks) {
-          final medication = prescriptionId == null
-              ? null
-              : await (_database.select(_database.prescriptions)
-                      ..where((row) => row.id.equals(prescriptionId)))
-                    .getSingleOrNull();
+          if (prescriptionId == null) {
+            throw StateError(
+              'This schedule has no linked prescription. Refresh before saving.',
+            );
+          }
+          final medication = await (_database.select(
+            _database.prescriptions,
+          )..where((row) => row.id.equals(prescriptionId))).getSingleOrNull();
           final profile =
               await (_database.select(_database.scheduleProfiles)
                     ..where((row) => row.id.equals(schedule.profileId)))

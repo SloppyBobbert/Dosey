@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:dosey_app/app/web_local_personal/web_local_personal_startup.dart';
 import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/admin/protected_admin_action.dart';
+import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
@@ -40,6 +41,26 @@ void main() {
         updatedAt: now,
       );
       await expectLater(
+        setup.reminders.upsertSchedule(
+          ReminderSchedule(
+            id: schedule.id,
+            label: schedule.label,
+            hour: schedule.hour,
+            minute: schedule.minute,
+            isEnabled: schedule.isEnabled,
+            createdAt: now,
+            updatedAt: now,
+          ),
+        ),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.message,
+            'strict link error',
+            contains('has no linked prescription'),
+          ),
+        ),
+      );
+      await expectLater(
         setup.reminders.upsertSchedule(schedule),
         throwsStateError,
       );
@@ -47,6 +68,20 @@ void main() {
       await expectLater(
         setup.reminders.upsertSchedule(schedule.copyWith(profileId: 'absent')),
         throwsStateError,
+      );
+      // Inventory that moved after the editor opened is the conflict itself; the
+      // deferred-delete guard below must not be what satisfies this expectation.
+      await setup.prescriptions.addRefill(
+        prescriptionId: prescription.id,
+        doseCount: 2,
+        occurredAt: now.add(const Duration(minutes: 1)),
+      );
+      await expectLater(
+        setup.prescriptions.upsertPrescription(
+          prescription.copyWith(name: 'Stale'),
+          expectedState: prescription,
+        ),
+        throwsA(isA<PrescriptionInventoryConflict>()),
       );
       await db.customStatement(
         "INSERT INTO app_settings (key, value, updated_at) VALUES ('deferred_deleted_prescription:fictional', 'true', 1)",
@@ -60,7 +95,13 @@ void main() {
           prescription.copyWith(name: 'Stale'),
           expectedState: prescription,
         ),
-        throwsStateError,
+        throwsA(
+          isA<StateError>().having(
+            (error) => error,
+            'deferred deletion error',
+            isNot(isA<PrescriptionInventoryConflict>()),
+          ),
+        ),
       );
       expect(await db.select(db.reminderSchedules).get(), isEmpty);
       expect(await db.select(db.adminAuditEvents).get(), isEmpty);

@@ -941,6 +941,9 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
     final now = DateTime.now().toUtc();
     final existing = widget.prescription;
     final prescriptions = widget.prescriptions;
+    // Read the scope before the protected action awaits the PIN gate and actor:
+    // this sheet can unmount while those are still pending.
+    final localWeb = PersonalSetupScope.of(context).localWeb;
     final prescription = Prescription(
       id: existing?.id ?? _newId,
       name: name,
@@ -959,9 +962,7 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
         action: (actor) async {
           await prescriptions.upsertPrescription(
             prescription,
-            expectedState: PersonalSetupScope.of(context).localWeb
-                ? _expectedState
-                : null,
+            expectedState: localWeb ? _expectedState : null,
             auditEvent: const AdminAuditEventFactory().prescriptionSaved(
               actor: actor,
               sourceDeviceRole: sourceDeviceRole,

@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:dosey_app/core/admin/protected_admin_action.dart';
 import 'package:dosey_app/core/audit/admin_audit_event.dart';
+import 'package:dosey_app/core/auth/auth_service.dart';
+import 'package:dosey_app/core/auth/local_auth_repository.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/storage/dosey_database.dart';
@@ -166,12 +169,63 @@ void main() {
       await tester.pumpAndSettle();
       expect(repository.ids, [repository.ids.first, repository.ids.first]);
       expect(
-        (await repository.watchPrescriptions().first).single.remainingDoses,
+        (await tester.runAsync(
+          () => repository.watchPrescriptions().first,
+        ))!.single.remainingDoses,
         12,
       );
       expect(find.text('Save prescription'), findsNothing);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
+      await setup.drain();
+    },
+  );
+
+  testWidgets(
+    'local prescription save survives an unmount while the protected action resolves',
+    (tester) async {
+      final db = DoseyDatabase.inMemory();
+      addTearDown(db.close);
+      final original = PersonalSetupDependencies.local(db);
+      final auth = HeldActorLookup(db);
+      final repository = FailingPrescriptions(db)..fail = false;
+      final setup = PersonalSetupDependencies(
+        database: db,
+        prescriptions: repository,
+        reminders: original.reminders,
+        scheduleProfiles: original.scheduleProfiles,
+        reminderSchedules: original.reminderSchedules,
+        runner: ProtectedAdminActionRunner(
+          pinGate: original.runner.pinGate,
+          localAuth: auth,
+        ),
+        sourceRole: original.sourceRole,
+        localWeb: true,
+      );
+      await tester.pumpWidget(host(setup, const PrescriptionsScreen()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add prescription'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Medication name'),
+        'Fictional blue',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Remaining doses'),
+        '8',
+      );
+      await tester.tap(find.text('Save prescription'));
+      for (var pump = 0; pump < 20 && !auth.started.isCompleted; pump++) {
+        await tester.pump(const Duration(milliseconds: 10));
+      }
+      expect(auth.started.isCompleted, isTrue);
+      // The sheet leaves the tree while the PIN gate and actor lookup are still
+      // pending, so the save must not read the scope after this point.
+      await tester.pumpWidget(const SizedBox());
+      auth.release.complete();
+      await tester.pumpAndSettle();
+      expect(repository.ids, hasLength(1));
+      expect(tester.takeException(), isNull);
       await setup.drain();
     },
   );
@@ -295,5 +349,21 @@ class FailingPrescriptions extends LocalPrescriptionRepository {
       auditEvent: auditEvent,
       expectedState: expectedState,
     );
+  }
+}
+
+/// Holds the protected action open at actor resolution so a test can control
+/// when an action body runs relative to the widget tree.
+class HeldActorLookup extends LocalAuthRepository {
+  HeldActorLookup(super.database);
+
+  final started = Completer<void>();
+  final release = Completer<void>();
+
+  @override
+  Future<AuthUser?> readCurrentUser() async {
+    started.complete();
+    await release.future;
+    return null;
   }
 }

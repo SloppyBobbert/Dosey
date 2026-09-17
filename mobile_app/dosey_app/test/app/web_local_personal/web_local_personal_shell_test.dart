@@ -234,12 +234,37 @@ void main() {
   testWidgets('700 through 1023 use the compact rail and 1024 expands it', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     await _pump(tester, width: 700);
-    expect(tester.getSize(find.byType(NavigationRail)).width, 120);
+    final rail = find.byType(NavigationRail);
+    expect(tester.getSize(rail).width, 120);
+    // The compact rail paints the short "Meds" form, so assistive tech must get
+    // the full destination name instead of reading the stand-in text as well.
+    // The rail merges its own "Tab N of 5" index label into the same node.
+    for (final destination in WebLocalPersonalDestination.values) {
+      final node = tester.getSemantics(
+        find.descendant(
+          of: rail,
+          matching: find.bySemanticsLabel(
+            RegExp('^${RegExp.escape(destination.label)}\n'),
+          ),
+        ),
+      );
+      expect(
+        node.label.replaceFirst(RegExp(r'\nTab \d+ of \d+$'), ''),
+        destination.label,
+      );
+    }
+    expect(
+      find.descendant(of: rail, matching: find.bySemanticsLabel('Meds')),
+      findsNothing,
+      reason: 'the compact stand-in must not reach assistive tech',
+    );
     await _pump(tester, width: 1023);
     expect(tester.getSize(find.byType(NavigationRail)).width, 120);
     await _pump(tester, width: 1024);
     expect(tester.getSize(find.byType(NavigationRail)).width, 232);
+    semantics.dispose();
   });
 
   testWidgets('desktop rail uses clear high-contrast navigation states', (
