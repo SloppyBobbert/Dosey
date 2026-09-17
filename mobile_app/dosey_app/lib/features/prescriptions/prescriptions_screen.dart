@@ -725,6 +725,7 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
   late final String _newId =
       'prescription-${DateTime.now().microsecondsSinceEpoch}';
   String? _errorText;
+  String? _nameError;
 
   @override
   void initState() {
@@ -774,11 +775,15 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Medication name',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  errorText: _nameError,
                 ),
                 textInputAction: TextInputAction.done,
+                onChanged: (_) {
+                  if (_nameError != null) setState(() => _nameError = null);
+                },
               ),
               const SizedBox(height: 16),
               Text(
@@ -860,6 +865,7 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
                           _currentInventory = null;
                           _needsInventoryReview = false;
                           _errorText = null;
+                          _nameError = null;
                         }),
                   child: const Text('Use reviewed inventory'),
                 ),
@@ -897,7 +903,11 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
 
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      setState(() => _errorText = 'Enter a medication name.');
+      // Field-level error text keeps the message beside the field it describes.
+      setState(() {
+        _nameError = 'Enter a medication name.';
+        _errorText = null;
+      });
       return;
     }
     final remainingDoses = _parseDoseField(_remainingDosesController.text);
@@ -912,6 +922,7 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
 
     setState(() {
       _errorText = null;
+      _nameError = null;
       _isSaving = true;
     });
 

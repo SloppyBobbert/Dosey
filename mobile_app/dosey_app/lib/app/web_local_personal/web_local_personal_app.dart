@@ -389,11 +389,17 @@ class _BottomDestination extends StatelessWidget {
                 Icon(destination.icon, size: 22),
                 const SizedBox(height: 3),
                 Expanded(
-                  child: Text(
-                    destination.label,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.visible,
+                  // Long labels such as "Prescriptions" must not break mid-word
+                  // in the fixed-width compact bar, so scale down instead.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      destination.label,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.visible,
+                    ),
                   ),
                 ),
               ],
