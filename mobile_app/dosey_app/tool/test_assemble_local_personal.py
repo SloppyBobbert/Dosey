@@ -44,13 +44,26 @@ def main():
             raise AssertionError('Existing artifact was overwritten')
         except ValueError:
             pass
+        # A failure after the copy started must publish nothing and stay retryable.
+        (compiled / 'assets/.env').write_text('must be rejected')
+        try:
+            assembler.assemble(compiled, root / 'failed')
+            raise AssertionError('Environment artifact was accepted')
+        except ValueError:
+            assert not (root / 'failed').exists(), 'partial output was published'
+            assert not [
+                path for path in root.iterdir() if path.name.startswith('.failed')
+            ], 'staging directory was left behind'
+        (compiled / 'assets/.env').unlink()
+        assert assembler.assemble(compiled, root / 'failed')['files']
+        assert (root / 'failed/local-assets.json').is_file()
         (compiled / 'flutter_bootstrap.js').write_text('changed loader contract')
         try:
             assembler.assemble(compiled, root / 'rejected')
             raise AssertionError('Unknown generated loader was accepted')
         except ValueError:
             assert not (root / 'rejected').exists()
-    print('PASS: local CSP, fonts, asset hashes, caregiver exclusion, immutable output, fail-closed loader shape (synthetic fixture only)')
+    print('PASS: local CSP, fonts, asset hashes, caregiver exclusion, immutable output, fail-closed loader shape, atomic publish retry (synthetic fixture only)')
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import tempfile
 
 APP = Path(__file__).resolve().parents[1]
 STATIC = APP / 'tool/local_personal'
@@ -37,14 +38,27 @@ def assemble(compiled, output):
     prefix = bootstrap.split(marker)[0]
     if '"useLocalCanvasKit":true' not in prefix:
         raise ValueError('Compile with --no-web-resources-cdn')
-    output.mkdir(parents=True)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    # Stage beside the target and publish with a single rename, so a failure
+    # leaves no partial artifact that would block the retry.
+    staging = Path(tempfile.mkdtemp(prefix=f'.{output.name}-', dir=output.parent))
+    try:
+        receipt = _stage(compiled, staging, prefix)
+        staging.rename(output)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    return receipt
+
+
+def _stage(compiled, staging, prefix):
     # Allowlist excludes caregiver entry pages and their auth configuration.
     for name in ('main.dart.js', 'sqlite3.wasm', 'drift_worker.js'):
-        shutil.copyfile(compiled / name, output / name)
+        shutil.copyfile(compiled / name, staging / name)
     for name in ('assets', 'canvaskit'):
-        shutil.copytree(compiled / name, output / name)
-    shutil.copytree(STATIC / 'assets/local_fonts', output / 'assets/local_fonts')
-    font_manifest = output / 'assets/FontManifest.json'
+        shutil.copytree(compiled / name, staging / name)
+    shutil.copytree(STATIC / 'assets/local_fonts', staging / 'assets/local_fonts')
+    font_manifest = staging / 'assets/FontManifest.json'
     fonts = json.loads(font_manifest.read_text())
     for family in ('Roboto', 'DoseyLocalRoboto'):
         fonts = [entry for entry in fonts if entry['family'] != family]
@@ -53,15 +67,15 @@ def assemble(compiled, output):
             {'asset': 'local_fonts/Roboto-Bold.ttf', 'weight': 700},
         ]})
     font_manifest.write_text(json.dumps(fonts) + '\n')
-    shutil.copyfile(STATIC / 'index.html', output / 'index.html')
-    (output / 'flutter_bootstrap.js').write_text(prefix + '\n' + (STATIC / 'flutter_loader.js').read_text())
-    files = {str(p.relative_to(output)): sha(p) for p in sorted(output.rglob('*')) if p.is_file()}
+    shutil.copyfile(STATIC / 'index.html', staging / 'index.html')
+    (staging / 'flutter_bootstrap.js').write_text(prefix + '\n' + (STATIC / 'flutter_loader.js').read_text())
+    files = {str(p.relative_to(staging)): sha(p) for p in sorted(staging.rglob('*')) if p.is_file()}
     if any(Path(n).name == '.env' or Path(n).name.startswith('.env.') for n in files):
         raise ValueError('Unexpected environment artifact')
     receipt = {'compiled_main_sha256': sha(compiled / 'main.dart.js'),
                'compiled_bootstrap_sha256': sha(compiled / 'flutter_bootstrap.js'),
                'assembler_sha256': sha(Path(__file__)), 'files': files}
-    (output / 'local-assets.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
+    (staging / 'local-assets.json').write_text(json.dumps(receipt, indent=2, sort_keys=True) + '\n')
     return receipt
 
 
