@@ -235,9 +235,9 @@ void main() {
     tester,
   ) async {
     await _pump(tester, width: 700);
-    expect(tester.getSize(find.byType(NavigationRail)).width, 80);
+    expect(tester.getSize(find.byType(NavigationRail)).width, 120);
     await _pump(tester, width: 1023);
-    expect(tester.getSize(find.byType(NavigationRail)).width, 80);
+    expect(tester.getSize(find.byType(NavigationRail)).width, 120);
     await _pump(tester, width: 1024);
     expect(tester.getSize(find.byType(NavigationRail)).width, 232);
   });

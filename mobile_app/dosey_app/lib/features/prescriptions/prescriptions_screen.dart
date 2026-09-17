@@ -416,58 +416,70 @@ class _PrescriptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The five action buttons need roughly 256px. When the tile is narrower
+    // than this they used to take every pixel of the row beside the name,
+    // collapsing it to a one-character column, so they move onto their own
+    // line under the details instead.
+    const actionsNeedOwnLineBelow = 560.0;
+    final actions = Wrap(
+      spacing: 4,
+      children: [
+        IconButton(
+          tooltip: 'Add refill doses',
+          onPressed: () => _showRefillSheet(context),
+          icon: const Icon(Icons.add_box_outlined),
+        ),
+        IconButton(
+          tooltip: 'View schedule details',
+          onPressed: scheduleSummary.hasSchedules
+              ? () => _showScheduleDetails(context)
+              : null,
+          icon: const Icon(Icons.list_alt_outlined),
+        ),
+        IconButton(
+          tooltip: 'Schedule prescription',
+          onPressed: () => _schedule(context),
+          icon: const Icon(Icons.event_available_outlined),
+        ),
+        IconButton(
+          tooltip: 'Edit prescription',
+          onPressed: () => PrescriptionsScreen._showPrescriptionSheet(
+            context,
+            prescriptions,
+            prescription: prescription,
+          ),
+          icon: const Icon(Icons.edit_outlined),
+        ),
+        IconButton(
+          tooltip: 'Delete prescription',
+          onPressed: () => _delete(context),
+          icon: const Icon(Icons.delete_outline),
+        ),
+      ],
+    );
     return Card(
-      child: ListTile(
-        leading: _PillTypeBadge(pillType: prescription.pillType),
-        title: Text(prescription.name),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(prescription.pillType.label),
-            const SizedBox(height: 4),
-            _InventorySummary(prescription: prescription),
-            const SizedBox(height: 4),
-            if (scheduleSummary.hasSchedules)
-              Text(scheduleSummary.activeTimesLabel),
-            Text(scheduleSummary.coverageLabel),
-          ],
-        ),
-        trailing: Wrap(
-          spacing: 4,
-          children: [
-            IconButton(
-              tooltip: 'Add refill doses',
-              onPressed: () => _showRefillSheet(context),
-              icon: const Icon(Icons.add_box_outlined),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stackActions = constraints.maxWidth < actionsNeedOwnLineBelow;
+          return ListTile(
+            leading: _PillTypeBadge(pillType: prescription.pillType),
+            title: Text(prescription.name),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(prescription.pillType.label),
+                const SizedBox(height: 4),
+                _InventorySummary(prescription: prescription),
+                const SizedBox(height: 4),
+                if (scheduleSummary.hasSchedules)
+                  Text(scheduleSummary.activeTimesLabel),
+                Text(scheduleSummary.coverageLabel),
+                if (stackActions) actions,
+              ],
             ),
-            IconButton(
-              tooltip: 'View schedule details',
-              onPressed: scheduleSummary.hasSchedules
-                  ? () => _showScheduleDetails(context)
-                  : null,
-              icon: const Icon(Icons.list_alt_outlined),
-            ),
-            IconButton(
-              tooltip: 'Schedule prescription',
-              onPressed: () => _schedule(context),
-              icon: const Icon(Icons.event_available_outlined),
-            ),
-            IconButton(
-              tooltip: 'Edit prescription',
-              onPressed: () => PrescriptionsScreen._showPrescriptionSheet(
-                context,
-                prescriptions,
-                prescription: prescription,
-              ),
-              icon: const Icon(Icons.edit_outlined),
-            ),
-            IconButton(
-              tooltip: 'Delete prescription',
-              onPressed: () => _delete(context),
-              icon: const Icon(Icons.delete_outline),
-            ),
-          ],
-        ),
+            trailing: stackActions ? null : actions,
+          );
+        },
       ),
     );
   }

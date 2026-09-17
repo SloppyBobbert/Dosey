@@ -421,30 +421,31 @@ class _ScheduleHeroCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.start,
+              spacing: 12,
+              overflowSpacing: 12,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Routine builder',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w800,
-                        ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Routine builder',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w800,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        activeProfile?.name ?? 'No active schedule',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: colorScheme.onPrimaryContainer,
-                          fontWeight: FontWeight.w800,
-                        ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      activeProfile?.name ?? 'No active schedule',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w800,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
                 FilledButton.icon(
                   onPressed: onAddSchedule,
@@ -547,20 +548,22 @@ class _ScheduleProfileSection extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.start,
+              spacing: 12,
+              overflowSpacing: 12,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Active schedule',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(activeProfile?.name ?? 'No active schedule'),
-                    ],
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Active schedule',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(activeProfile?.name ?? 'No active schedule'),
+                  ],
                 ),
                 TextButton.icon(
                   onPressed: () => _showProfileSheet(context),
@@ -571,40 +574,54 @@ class _ScheduleProfileSection extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             for (final profile in profiles)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(profile.name),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_profileCountLabel(profile)),
-                    Text(profile.isActive ? 'Active' : 'Saved'),
-                  ],
-                ),
-                trailing: Wrap(
-                  spacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Tooltip(
-                      message: 'Edit ${profile.name} schedule',
-                      child: IconButton(
-                        onPressed: () =>
-                            _showProfileSheet(context, profile: profile),
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                    ),
-                    if (profile.isActive)
-                      const Icon(Icons.check_circle_outline)
-                    else
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  // The "Use <name>" button and the edit action need roughly
+                  // 200px. When the row is narrower than this they used to take
+                  // every pixel beside the profile name, collapsing it to a
+                  // one-character column, so they move onto their own line
+                  // under the details instead.
+                  const actionsNeedOwnLineBelow = 500.0;
+                  final stackActions =
+                      constraints.maxWidth < actionsNeedOwnLineBelow;
+                  final actions = Wrap(
+                    spacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
                       Tooltip(
-                        message: 'Use ${profile.name} schedule',
-                        child: TextButton(
-                          onPressed: () => _setActive(context, profile.id),
-                          child: Text('Use ${profile.name}'),
+                        message: 'Edit ${profile.name} schedule',
+                        child: IconButton(
+                          onPressed: () =>
+                              _showProfileSheet(context, profile: profile),
+                          icon: const Icon(Icons.edit_outlined),
                         ),
                       ),
-                  ],
-                ),
+                      if (profile.isActive)
+                        const Icon(Icons.check_circle_outline)
+                      else
+                        Tooltip(
+                          message: 'Use ${profile.name} schedule',
+                          child: TextButton(
+                            onPressed: () => _setActive(context, profile.id),
+                            child: Text('Use ${profile.name}'),
+                          ),
+                        ),
+                    ],
+                  );
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(profile.name),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_profileCountLabel(profile)),
+                        Text(profile.isActive ? 'Active' : 'Saved'),
+                        if (stackActions) actions,
+                      ],
+                    ),
+                    trailing: stackActions ? null : actions,
+                  );
+                },
               ),
           ],
         ),
@@ -847,46 +864,58 @@ class _ScheduleTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = prescription?.name ?? schedule.label;
+    // The switch and the two action buttons need roughly 160px. When the tile
+    // is narrower than this they used to take every pixel of the row beside
+    // the name, collapsing it to a one-character column, so they move onto
+    // their own line under the details instead.
+    const actionsNeedOwnLineBelow = 500.0;
+    final actions = Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 4,
+      children: [
+        Switch(
+          value: schedule.isEnabled,
+          onChanged: (value) => _setEnabled(context, value),
+        ),
+        IconButton(
+          tooltip: 'Edit schedule',
+          onPressed: () => RemindersScreen.showScheduleSheet(
+            context,
+            reminderSchedules,
+            prescriptions,
+            schedule: schedule,
+          ),
+          icon: const Icon(Icons.edit_outlined),
+        ),
+        IconButton(
+          tooltip: 'Delete schedule',
+          onPressed: () => _delete(context),
+          icon: const Icon(Icons.delete_outline),
+        ),
+      ],
+    );
     return Card(
-      child: ListTile(
-        title: Text(title),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(schedule.timeLabel),
-            if (prescription != null) Text(prescription!.pillType.label),
-          ],
-        ),
-        leading: Icon(
-          schedule.isEnabled
-              ? Icons.notifications_active_outlined
-              : Icons.notifications_off_outlined,
-        ),
-        trailing: Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 4,
-          children: [
-            Switch(
-              value: schedule.isEnabled,
-              onChanged: (value) => _setEnabled(context, value),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stackActions = constraints.maxWidth < actionsNeedOwnLineBelow;
+          return ListTile(
+            title: Text(title),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(schedule.timeLabel),
+                if (prescription != null) Text(prescription!.pillType.label),
+                if (stackActions) actions,
+              ],
             ),
-            IconButton(
-              tooltip: 'Edit schedule',
-              onPressed: () => RemindersScreen.showScheduleSheet(
-                context,
-                reminderSchedules,
-                prescriptions,
-                schedule: schedule,
-              ),
-              icon: const Icon(Icons.edit_outlined),
+            leading: Icon(
+              schedule.isEnabled
+                  ? Icons.notifications_active_outlined
+                  : Icons.notifications_off_outlined,
             ),
-            IconButton(
-              tooltip: 'Delete schedule',
-              onPressed: () => _delete(context),
-              icon: const Icon(Icons.delete_outline),
-            ),
-          ],
-        ),
+            trailing: stackActions ? null : actions,
+          );
+        },
       ),
     );
   }

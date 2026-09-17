@@ -226,7 +226,10 @@ class _NavigationRail extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     label: 'Primary navigation',
     child: Container(
-      width: expanded ? 232 : 80,
+      // The compact rail must be wide enough to hold its own labels: at 80px
+      // the 64px label slot forced "Schedule" and "Settings" to shrink to
+      // about 8px or break mid-word.
+      width: expanded ? 232 : 120,
       color: const Color(0xFF103E46),
       child: NavigationRail(
         backgroundColor: Colors.transparent,
@@ -236,13 +239,15 @@ class _NavigationRail extends StatelessWidget {
         indicatorColor: const Color(0xFFBFEAF0),
         selectedIconTheme: const IconThemeData(color: Color(0xFF103E46)),
         unselectedIconTheme: const IconThemeData(color: Color(0xFFFFFCF6)),
-        selectedLabelTextStyle: const TextStyle(
-          color: Color(0xFF103E46),
+        selectedLabelTextStyle: TextStyle(
+          color: const Color(0xFF103E46),
           fontWeight: FontWeight.w700,
+          fontSize: expanded ? null : 12,
         ),
-        unselectedLabelTextStyle: const TextStyle(
-          color: Color(0xFFFFFCF6),
+        unselectedLabelTextStyle: TextStyle(
+          color: const Color(0xFFFFFCF6),
           fontWeight: FontWeight.w600,
+          fontSize: expanded ? null : 12,
         ),
         selectedIndex: controller.current.index,
         labelType: expanded
@@ -266,7 +271,23 @@ class _NavigationRail extends StatelessWidget {
             NavigationRailDestination(
               icon: Icon(destination.icon),
               selectedIcon: Icon(destination.icon),
-              label: Text(destination.label),
+              label: expanded
+                  ? Text(destination.label)
+                  // The 64px compact destination cannot hold "Prescriptions" on one
+                  // line without shrinking it to about 5px, so the rail uses the
+                  // short form and keeps the full name for assistive tech.
+                  : Semantics(
+                      label: destination.label,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          destination.compactLabel,
+                          maxLines: 1,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                        ),
+                      ),
+                    ),
             ),
         ],
       ),
