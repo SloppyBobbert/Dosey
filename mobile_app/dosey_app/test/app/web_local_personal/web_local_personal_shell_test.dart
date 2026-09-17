@@ -192,6 +192,45 @@ void main() {
     },
   );
 
+  // Layout guard only: proves the long label is laid out as a single scaled
+  // line inside its 64px destination. Paint quality still needs a browser.
+  testWidgets('320px keeps every compact navigation label on one line', (
+    tester,
+  ) async {
+    await _pump(tester, width: 320, height: 640);
+    expect(
+      find.byKey(const ValueKey('web-local-personal-bottom-navigation')),
+      findsOneWidget,
+    );
+    for (final destination in WebLocalPersonalDestination.values) {
+      final target = find.byKey(
+        ValueKey('web-local-personal-nav-${destination.name}'),
+      );
+      final label = find.descendant(of: target, matching: find.byType(Text));
+      final fitted = find.descendant(
+        of: target,
+        matching: find.byType(FittedBox),
+      );
+      expect(target, findsOneWidget, reason: destination.label);
+      expect(label, findsOneWidget, reason: destination.label);
+      expect(fitted, findsOneWidget, reason: destination.label);
+      final text = tester.widget<Text>(label);
+      expect(text.maxLines, 1, reason: destination.label);
+      expect(text.softWrap, isFalse, reason: destination.label);
+      // A mid-word break such as "Prescript"/"ions" needs two text lines.
+      expect(
+        tester.getSize(label).height,
+        lessThan(24),
+        reason: destination.label,
+      );
+      expect(
+        tester.getSize(fitted).width,
+        lessThanOrEqualTo(tester.getSize(target).width + 0.5),
+        reason: destination.label,
+      );
+    }
+  });
+
   testWidgets('700 through 1023 use the compact rail and 1024 expands it', (
     tester,
   ) async {
