@@ -70,7 +70,7 @@ void main() {
     );
   });
 
-  testWidgets('appearance chips draw an ink ring only while focused', (
+  testWidgets('a focused appearance chip shows a ring without moving', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(320, 900);
@@ -94,30 +94,43 @@ void main() {
     await tester.tap(find.text('Add prescription'));
     await tester.pumpAndSettle();
 
+    const ringKey = ValueKey('appearance-chip-focus-ring');
     final capsule = find.widgetWithText(ChoiceChip, 'Capsule');
     expect(capsule, findsOneWidget);
-    expect(
-      tester.widget<ChoiceChip>(capsule).shape,
-      isNull,
-      reason: 'the unfocused chip keeps the theme default shape',
-    );
+    expect(find.byKey(ringKey), findsNothing, reason: 'no chip is focused yet');
+    final unfocusedSize = tester.getSize(capsule);
+    List<double> tops() => [
+      for (final label in ['Pill', 'Capsule', 'Tablet'])
+        tester.getTopLeft(find.widgetWithText(ChoiceChip, label)).dy,
+    ];
+    final unfocusedTops = tops();
 
     final node = tester.widget<ChoiceChip>(capsule).focusNode;
     expect(node, isNotNull, reason: 'chips need a focus node to style');
     node!.requestFocus();
     await tester.pumpAndSettle();
 
-    final shape = tester.widget<ChoiceChip>(capsule).shape;
-    expect(shape, isA<RoundedRectangleBorder>());
-    final border = (shape! as RoundedRectangleBorder).side;
-    expect(border.width, 2);
-    expect(border.color, const Color(0xFF103E46));
+    expect(node.hasFocus, isTrue);
+    final ring = find.byKey(ringKey);
+    expect(ring, findsOneWidget, reason: 'a focused chip needs a visible ring');
+    final decoration =
+        tester.widget<DecoratedBox>(ring).decoration as BoxDecoration;
+    final border = decoration.border! as Border;
+    expect(border.top.width, 2);
+    expect(border.top.color, const Color(0xFF103E46));
+
+    // Regression guard: the ring must not resize the chip. The appearance row
+    // has no slack, and a two-pixel-wider chip wrapped the last one onto a
+    // second line, which moved the whole sheet.
     expect(
-      node.hasFocus,
-      isTrue,
-      reason:
-          'the focus node should hold focus for this assertion to mean '
-          'anything',
+      tester.getSize(capsule),
+      unfocusedSize,
+      reason: 'the focus ring must not resize the chip',
+    );
+    expect(
+      tops(),
+      unfocusedTops,
+      reason: 'focusing a chip must not re-flow the appearance row',
     );
   });
 }

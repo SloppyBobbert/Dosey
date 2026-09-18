@@ -1237,18 +1237,34 @@ class _AppearanceChipState extends State<_AppearanceChip> {
   }
 
   @override
-  Widget build(BuildContext context) => ChoiceChip(
-    focusNode: _focusNode,
-    avatar: Icon(_iconFor(widget.pillType), size: 18),
-    label: Text(widget.pillType.label),
-    selected: widget.selected,
-    onSelected: widget.onSelected,
-    // Null keeps the theme's default shape when unfocused.
-    shape: _focused
-        ? RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-            side: const BorderSide(color: Color(0xFF103E46), width: 2),
-          )
-        : null,
-  );
+  Widget build(BuildContext context) {
+    final chip = ChoiceChip(
+      focusNode: _focusNode,
+      avatar: Icon(_iconFor(widget.pillType), size: 18),
+      label: Text(widget.pillType.label),
+      selected: widget.selected,
+      onSelected: widget.onSelected,
+    );
+    if (!_focused) return chip;
+    // A border on the chip itself grows its box by the stroke width, which
+    // re-flowed this row and wrapped the last chip when focus moved. Painting
+    // the ring as a positioned overlay keeps the chip's size untouched.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        chip,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              key: const ValueKey('appearance-chip-focus-ring'),
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFF103E46), width: 2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
