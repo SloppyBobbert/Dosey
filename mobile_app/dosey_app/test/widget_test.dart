@@ -34,6 +34,56 @@ import 'support/fake_app_scope_dependencies.dart';
 import 'support/bottom_navigation_test_helper.dart';
 import 'support/settings_accordion_test_helper.dart';
 
+void _expectSummaryChip(WidgetTester tester, String label, IconData icon) {
+  final textFinder = find.text(label);
+  expect(textFinder, findsOneWidget);
+  final text = tester.widget<Text>(textFinder);
+  final theme = Theme.of(tester.element(textFinder));
+  final containerFinder = find
+      .ancestor(
+        of: textFinder,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Container && widget.decoration is BoxDecoration,
+        ),
+      )
+      .first;
+  final container = tester.widget<Container>(containerFinder);
+  expect(
+    container.padding,
+    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+  );
+  expect(
+    container.decoration,
+    BoxDecoration(
+      color: theme.colorScheme.surface.withValues(alpha: 0.76),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(
+        color: theme.colorScheme.outlineVariant.withValues(alpha: 0.45),
+      ),
+    ),
+  );
+  final row = container.child! as Row;
+  expect(row.mainAxisSize, MainAxisSize.min);
+  final iconWidget = row.children[0] as Icon;
+  expect(iconWidget.icon, icon);
+  expect(iconWidget.size, 16);
+  expect(iconWidget.color, theme.colorScheme.primary);
+  expect((row.children[1] as SizedBox).width, 6);
+  expect(
+    text.style,
+    theme.textTheme.labelMedium?.copyWith(
+      color: theme.colorScheme.onSurface,
+      fontWeight: FontWeight.w800,
+    ),
+  );
+  final semantics = tester.ensureSemantics();
+  try {
+    expect(tester.getSemantics(textFinder).label.split('\n'), contains(label));
+  } finally {
+    semantics.dispose();
+  }
+}
+
 void main() {
   testWidgets('first install shows medical-device onboarding before shell', (
     WidgetTester tester,
@@ -3235,10 +3285,14 @@ void main() {
     await _pumpAppFrame(tester);
 
     expect(find.text('Medication cabinet'), findsOneWidget);
-    expect(find.text('2 entered'), findsOneWidget);
-    expect(find.text('1 scheduled'), findsOneWidget);
-    expect(find.text('Feeds schedule builder'), findsOneWidget);
-    expect(find.text('Local label reference'), findsOneWidget);
+    _expectSummaryChip(tester, '2 entered', Icons.medication_outlined);
+    _expectSummaryChip(tester, '1 scheduled', Icons.event_available_outlined);
+    _expectSummaryChip(tester, 'Feeds schedule builder', Icons.route_outlined);
+    _expectSummaryChip(
+      tester,
+      'Local label reference',
+      Icons.fact_check_outlined,
+    );
     expect(
       find.text('Dosey does not verify prescriptions or identify pills.'),
       findsOneWidget,
@@ -3735,10 +3789,18 @@ void main() {
     await _pumpAppFrame(tester);
 
     expect(find.text('Routine builder'), findsOneWidget);
-    expect(find.text('Active routine'), findsOneWidget);
+    _expectSummaryChip(
+      tester,
+      'Active routine',
+      Icons.event_available_outlined,
+    );
     expect(find.text('Schedule 1'), findsWidgets);
-    expect(find.text('1 enabled / 1 scheduled'), findsOneWidget);
-    expect(find.text('Feeds Today timeline'), findsOneWidget);
+    _expectSummaryChip(
+      tester,
+      '1 enabled / 1 scheduled',
+      Icons.notifications_active_outlined,
+    );
+    _expectSummaryChip(tester, 'Feeds Today timeline', Icons.timeline_outlined);
 
     await tester.scrollUntilVisible(find.text('Vitamin D'), 220);
     await _pumpAppFrame(tester);
