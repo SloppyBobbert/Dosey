@@ -79,7 +79,9 @@ Widget buildWebLocalPersonalFoundationPage(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 680),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 32),
+          // Match the horizontal inset the prescriptions and schedule pages use
+          // so switching tabs no longer shifts the content column sideways.
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
