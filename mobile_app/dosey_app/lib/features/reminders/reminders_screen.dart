@@ -451,6 +451,16 @@ class _ScheduleHeroCard extends StatelessWidget {
                   onPressed: onAddSchedule,
                   icon: const Icon(Icons.add),
                   label: const Text('Add schedule'),
+                  // Default disabled colours all but vanish on this dark hero,
+                  // which left an unexplained empty pill whenever the action is
+                  // unavailable. Keep the disabled state readable and visibly
+                  // muted; the hint below explains what is missing.
+                  style: FilledButton.styleFrom(
+                    disabledBackgroundColor: colorScheme.onPrimaryContainer
+                        .withValues(alpha: 0.12),
+                    disabledForegroundColor: colorScheme.onPrimaryContainer
+                        .withValues(alpha: 0.88),
+                  ),
                 ),
               ],
             ),

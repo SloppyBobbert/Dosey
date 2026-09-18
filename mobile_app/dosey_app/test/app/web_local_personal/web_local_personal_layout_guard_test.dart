@@ -245,6 +245,93 @@ void main() {
     await tester.pumpWidget(const SizedBox());
     await setup.drain();
   });
+
+  // Switching tabs must not shift the content column: the Settings page is the
+  // foundation copy while the other tabs render their own cards.
+  for (final width in <double>[320, 800]) {
+    testWidgets('settings content lines up with the other tabs at ${width}px', (
+      tester,
+    ) async {
+      tester.view.physicalSize = Size(width, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final database = DoseyDatabase.inMemory();
+      addTearDown(database.close);
+      final setup = PersonalSetupDependencies.local(database);
+      final controller = WebLocalPersonalRouteController(
+        initialPath: WebLocalPersonalDestination.settings.path,
+      );
+      addTearDown(controller.dispose);
+      await tester.runAsync(() => setup.initializeLocalProfile());
+
+      await tester.pumpWidget(
+        PersonalSetupScope(
+          dependencies: setup,
+          child: WebLocalPersonalApp(
+            storage: WebStorageReady(
+              database: database,
+              classification: classifyWebStorage(
+                WebStorageImplementation.opfsShared,
+              ),
+              missingFeatures: const {},
+            ),
+            routeController: controller,
+            routeInformationProvider: _FakeRouteInformationProvider(
+              WebLocalPersonalDestination.settings.path,
+            ),
+          ),
+        ),
+      );
+      for (var attempt = 0; attempt < 8; attempt++) {
+        await tester.pump(const Duration(milliseconds: 40));
+        if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 60)),
+        );
+      }
+      await tester.pump(const Duration(milliseconds: 40));
+
+      final page = find.byKey(
+        const ValueKey('web-local-personal-page-scroll-view'),
+      );
+      final settingsLeft = tester
+          .getTopLeft(
+            find.descendant(of: page, matching: find.text('Settings')).first,
+          )
+          .dx;
+
+      controller.goTo(WebLocalPersonalDestination.prescriptions);
+      for (var attempt = 0; attempt < 8; attempt++) {
+        await tester.pump(const Duration(milliseconds: 40));
+        if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 60)),
+        );
+      }
+      await tester.pump(const Duration(milliseconds: 40));
+
+      // Compare against the card's painted surface, not its widget box: a Card
+      // carries its own margin, so the widget rect sits 4px outside the edge a
+      // reader sees.
+      final cardFinder = find
+          .descendant(of: page, matching: find.byType(Card))
+          .first;
+      final cardSurface = find
+          .descendant(of: cardFinder, matching: find.byType(Material))
+          .first;
+      final cardLeft = tester.getTopLeft(cardSurface).dx;
+      expect(
+        (settingsLeft - cardLeft).abs(),
+        lessThanOrEqualTo(2),
+        reason:
+            'settings content starts at $settingsLeft but the prescriptions '
+            'card starts at $cardLeft; switching tabs must not shift the page',
+      );
+      await tester.pumpWidget(const SizedBox());
+      await tester.runAsync(() => setup.drain());
+    });
+  }
 }
 
 class _FakeRouteInformationProvider extends ValueNotifier<RouteInformation>
