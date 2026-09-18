@@ -311,14 +311,19 @@ void main() {
       }
       await tester.pump(const Duration(milliseconds: 40));
 
-      final cardLeft = tester
-          .getTopLeft(
-            find.descendant(of: page, matching: find.byType(Card)).first,
-          )
-          .dx;
+      // Compare against the card's painted surface, not its widget box: a Card
+      // carries its own margin, so the widget rect sits 4px outside the edge a
+      // reader sees.
+      final cardFinder = find
+          .descendant(of: page, matching: find.byType(Card))
+          .first;
+      final cardSurface = find
+          .descendant(of: cardFinder, matching: find.byType(Material))
+          .first;
+      final cardLeft = tester.getTopLeft(cardSurface).dx;
       expect(
         (settingsLeft - cardLeft).abs(),
-        lessThanOrEqualTo(8),
+        lessThanOrEqualTo(2),
         reason:
             'settings content starts at $settingsLeft but the prescriptions '
             'card starts at $cardLeft; switching tabs must not shift the page',
