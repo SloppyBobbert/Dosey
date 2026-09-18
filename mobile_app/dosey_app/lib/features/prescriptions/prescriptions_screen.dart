@@ -1,4 +1,4 @@
-import 'package:dosey_app/app/dosey_app_scope.dart';
+import 'package:dosey_app/features/shared/personal_setup_scope.dart';
 import 'package:dosey_app/core/admin/admin_audit_event_factory.dart';
 import 'package:dosey_app/core/prescriptions/local_prescription_repository.dart';
 import 'package:dosey_app/core/prescriptions/prescription.dart';
@@ -16,7 +16,7 @@ class PrescriptionsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dependencies = DoseyAppScope.of(context);
+    final dependencies = PersonalSetupScope.of(context);
     final prescriptions = dependencies.prescriptions;
 
     return StreamBuilder<List<Prescription>>(
@@ -33,7 +33,23 @@ class PrescriptionsScreen extends StatelessWidget {
               builder: (context, schedulesSnapshot) {
                 final schedules =
                     schedulesSnapshot.data ?? const <ReminderSchedule>[];
+                if (snapshot.hasError ||
+                    profileSnapshot.hasError ||
+                    schedulesSnapshot.hasError) {
+                  return const Text(
+                    'Medication data could not be loaded. Reload to retry.',
+                  );
+                }
+                if (!snapshot.hasData ||
+                    !profileSnapshot.hasData ||
+                    !schedulesSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
                 return ListView(
+                  shrinkWrap: dependencies.localWeb,
+                  physics: dependencies.localWeb
+                      ? const NeverScrollableScrollPhysics()
+                      : null,
                   padding: const EdgeInsets.all(16),
                   children: [
                     _PrescriptionHeroCard(
@@ -190,6 +206,8 @@ class PrescriptionsScreen extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      isDismissible: !PersonalSetupScope.of(context).localWeb,
+      enableDrag: !PersonalSetupScope.of(context).localWeb,
       builder: (context) => _PrescriptionSheet(
         prescriptions: prescriptions,
         prescription: prescription,
@@ -222,30 +240,31 @@ class _PrescriptionHeroCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+            OverflowBar(
+              alignment: MainAxisAlignment.spaceBetween,
+              overflowAlignment: OverflowBarAlignment.start,
+              spacing: 12,
+              overflowSpacing: 12,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Medication cabinet',
-                        style: theme.textTheme.labelLarge?.copyWith(
-                          color: colorScheme.onSecondaryContainer,
-                          fontWeight: FontWeight.w800,
-                        ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Medication cabinet',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        color: colorScheme.onSecondaryContainer,
+                        fontWeight: FontWeight.w800,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Prescriptions',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: colorScheme.onSecondaryContainer,
-                          fontWeight: FontWeight.w800,
-                        ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Prescriptions',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        color: colorScheme.onSecondaryContainer,
+                        fontWeight: FontWeight.w800,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
                 FilledButton.icon(
                   onPressed: onAddPrescription,
@@ -358,58 +377,70 @@ class _PrescriptionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // The five action buttons need roughly 256px. When the tile is narrower
+    // than this they used to take every pixel of the row beside the name,
+    // collapsing it to a one-character column, so they move onto their own
+    // line under the details instead.
+    const actionsNeedOwnLineBelow = 560.0;
+    final actions = Wrap(
+      spacing: 4,
+      children: [
+        IconButton(
+          tooltip: 'Add refill doses',
+          onPressed: () => _showRefillSheet(context),
+          icon: const Icon(Icons.add_box_outlined),
+        ),
+        IconButton(
+          tooltip: 'View schedule details',
+          onPressed: scheduleSummary.hasSchedules
+              ? () => _showScheduleDetails(context)
+              : null,
+          icon: const Icon(Icons.list_alt_outlined),
+        ),
+        IconButton(
+          tooltip: 'Schedule prescription',
+          onPressed: () => _schedule(context),
+          icon: const Icon(Icons.event_available_outlined),
+        ),
+        IconButton(
+          tooltip: 'Edit prescription',
+          onPressed: () => PrescriptionsScreen._showPrescriptionSheet(
+            context,
+            prescriptions,
+            prescription: prescription,
+          ),
+          icon: const Icon(Icons.edit_outlined),
+        ),
+        IconButton(
+          tooltip: 'Delete prescription',
+          onPressed: () => _delete(context),
+          icon: const Icon(Icons.delete_outline),
+        ),
+      ],
+    );
     return Card(
-      child: ListTile(
-        leading: _PillTypeBadge(pillType: prescription.pillType),
-        title: Text(prescription.name),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(prescription.pillType.label),
-            const SizedBox(height: 4),
-            _InventorySummary(prescription: prescription),
-            const SizedBox(height: 4),
-            if (scheduleSummary.hasSchedules)
-              Text(scheduleSummary.activeTimesLabel),
-            Text(scheduleSummary.coverageLabel),
-          ],
-        ),
-        trailing: Wrap(
-          spacing: 4,
-          children: [
-            IconButton(
-              tooltip: 'Add refill doses',
-              onPressed: () => _showRefillSheet(context),
-              icon: const Icon(Icons.add_box_outlined),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final stackActions = constraints.maxWidth < actionsNeedOwnLineBelow;
+          return ListTile(
+            leading: _PillTypeBadge(pillType: prescription.pillType),
+            title: Text(prescription.name),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(prescription.pillType.label),
+                const SizedBox(height: 4),
+                _InventorySummary(prescription: prescription),
+                const SizedBox(height: 4),
+                if (scheduleSummary.hasSchedules)
+                  Text(scheduleSummary.activeTimesLabel),
+                Text(scheduleSummary.coverageLabel),
+                if (stackActions) actions,
+              ],
             ),
-            IconButton(
-              tooltip: 'View schedule details',
-              onPressed: scheduleSummary.hasSchedules
-                  ? () => _showScheduleDetails(context)
-                  : null,
-              icon: const Icon(Icons.list_alt_outlined),
-            ),
-            IconButton(
-              tooltip: 'Schedule prescription',
-              onPressed: () => _schedule(context),
-              icon: const Icon(Icons.event_available_outlined),
-            ),
-            IconButton(
-              tooltip: 'Edit prescription',
-              onPressed: () => PrescriptionsScreen._showPrescriptionSheet(
-                context,
-                prescriptions,
-                prescription: prescription,
-              ),
-              icon: const Icon(Icons.edit_outlined),
-            ),
-            IconButton(
-              tooltip: 'Delete prescription',
-              onPressed: () => _delete(context),
-              icon: const Icon(Icons.delete_outline),
-            ),
-          ],
-        ),
+            trailing: stackActions ? null : actions,
+          );
+        },
       ),
     );
   }
@@ -440,7 +471,12 @@ class _PrescriptionTile extends StatelessWidget {
   }
 
   Future<void> _delete(BuildContext context) async {
-    final dependencies = DoseyAppScope.of(context);
+    final dependencies = PersonalSetupScope.of(context);
+    if (dependencies.localWeb &&
+        !await confirmSetupDelete(context, 'prescription and its schedules')) {
+      return;
+    }
+    if (!context.mounted) return;
     try {
       final sourceDeviceRole = await currentAdminSourceDeviceRole(context);
       if (!context.mounted) return;
@@ -497,6 +533,8 @@ class _PrescriptionTile extends StatelessWidget {
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
+      isDismissible: !PersonalSetupScope.of(context).localWeb,
+      enableDrag: !PersonalSetupScope.of(context).localWeb,
       builder: (context) => _RefillSheet(
         prescriptions: prescriptions,
         prescription: prescription,
@@ -653,13 +691,20 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
   late final TextEditingController _remainingDosesController;
   late final TextEditingController _refillThresholdController;
   late PillType _pillType;
+  Prescription? _expectedState;
+  Prescription? _currentInventory;
+  bool _needsInventoryReview = false;
   var _isSaving = false;
+  late final String _newId =
+      'prescription-${DateTime.now().microsecondsSinceEpoch}';
   String? _errorText;
+  String? _nameError;
 
   @override
   void initState() {
     super.initState();
     final prescription = widget.prescription;
+    _expectedState = prescription;
     _nameController = TextEditingController(text: prescription?.name ?? '');
     _remainingDosesController = TextEditingController(
       text: (prescription?.remainingDoses ?? 0).toString(),
@@ -680,111 +725,144 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 16,
-        right: 16,
-        bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              widget.prescription == null
-                  ? 'Add prescription'
-                  : 'Edit prescription',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                labelText: 'Medication name',
-                border: OutlineInputBorder(),
+    return protectSetupForm(
+      context,
+      _isSaving,
+      Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          right: 16,
+          bottom: MediaQuery.viewInsetsOf(context).bottom + 16,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                widget.prescription == null
+                    ? 'Add prescription'
+                    : 'Edit prescription',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-              textInputAction: TextInputAction.done,
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'What does it look like?',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final pillType in PillType.values)
-                  ChoiceChip(
-                    avatar: Icon(_iconFor(pillType), size: 18),
-                    label: Text(pillType.label),
-                    selected: _pillType == pillType,
-                    onSelected: (_) => setState(() => _pillType = pillType),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Refill tracking',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _remainingDosesController,
-                    decoration: const InputDecoration(
-                      labelText: 'Remaining doses',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _nameController,
+                decoration: InputDecoration(
+                  labelText: 'Medication name',
+                  border: const OutlineInputBorder(),
+                  errorText: _nameError,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _refillThresholdController,
-                    decoration: const InputDecoration(
-                      labelText: 'Low warning at',
-                      border: OutlineInputBorder(),
+                textInputAction: TextInputAction.done,
+                onChanged: (_) {
+                  if (_nameError != null) setState(() => _nameError = null);
+                },
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'What does it look like?',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final pillType in PillType.values)
+                    _AppearanceChip(
+                      pillType: pillType,
+                      selected: _pillType == pillType,
+                      onSelected: (_) => setState(() => _pillType = pillType),
                     ),
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Refill tracking',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _remainingDosesController,
+                      decoration: const InputDecoration(
+                        labelText: 'Remaining doses',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Dosey subtracts only after you confirm a dose was taken.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            if (_errorText != null) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _refillThresholdController,
+                      decoration: const InputDecoration(
+                        labelText: 'Low warning at',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 8),
               Text(
-                _errorText!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                'Dosey subtracts only after you confirm a dose was taken.',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-                const Spacer(),
-                FilledButton(
-                  onPressed: _isSaving ? null : _save,
-                  child: const Text('Save prescription'),
+              if (_errorText != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _errorText!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
-            ),
-          ],
+              if (_currentInventory case final current?) ...[
+                Text(
+                  'Current inventory: ${current.remainingDoses} remaining, ${current.availableDoses} available, ${current.loadedDoses} loaded, ${current.usedDoses} used, ${current.reviewDoses} review.',
+                ),
+                TextButton(
+                  onPressed: _isSaving
+                      ? null
+                      : () => setState(() {
+                          // Explicit review replaces counts, never the user's name/type input.
+                          _expectedState = current;
+                          _remainingDosesController.text = current
+                              .remainingDoses
+                              .toString();
+                          _currentInventory = null;
+                          _needsInventoryReview = false;
+                          _errorText = null;
+                          _nameError = null;
+                        }),
+                  child: const Text('Use reviewed inventory'),
+                ),
+              ],
+              const SizedBox(height: 16),
+              OverflowBar(
+                alignment: MainAxisAlignment.spaceBetween,
+                overflowAlignment: OverflowBarAlignment.end,
+                spacing: 12,
+                overflowSpacing: 12,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  FilledButton(
+                    onPressed: _isSaving || _needsInventoryReview
+                        ? null
+                        : _save,
+                    child: const Text('Save prescription'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -793,11 +871,15 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
   // Save local label, count, pill graphic, and refill settings only. The app
   // does not verify prescriptions or identify pills.
   Future<void> _save() async {
-    if (_isSaving) return;
+    if (_isSaving || _needsInventoryReview) return;
 
     final name = _nameController.text.trim();
     if (name.isEmpty) {
-      setState(() => _errorText = 'Enter a medication name.');
+      // Field-level error text keeps the message beside the field it describes.
+      setState(() {
+        _nameError = 'Enter a medication name.';
+        _errorText = null;
+      });
       return;
     }
     final remainingDoses = _parseDoseField(_remainingDosesController.text);
@@ -812,14 +894,18 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
 
     setState(() {
       _errorText = null;
+      _nameError = null;
       _isSaving = true;
     });
 
     final now = DateTime.now().toUtc();
     final existing = widget.prescription;
     final prescriptions = widget.prescriptions;
+    // Read the scope before the protected action awaits the PIN gate and actor:
+    // this sheet can unmount while those are still pending.
+    final localWeb = PersonalSetupScope.of(context).localWeb;
     final prescription = Prescription(
-      id: existing?.id ?? 'prescription-${now.microsecondsSinceEpoch}',
+      id: existing?.id ?? _newId,
       name: name,
       pillType: _pillType,
       remainingDoses: remainingDoses,
@@ -836,6 +922,7 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
         action: (actor) async {
           await prescriptions.upsertPrescription(
             prescription,
+            expectedState: localWeb ? _expectedState : null,
             auditEvent: const AdminAuditEventFactory().prescriptionSaved(
               actor: actor,
               sourceDeviceRole: sourceDeviceRole,
@@ -856,6 +943,18 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
         if (mounted) setState(() => _isSaving = false);
         return;
       }
+    } on PrescriptionInventoryConflict catch (error) {
+      final current = error.currentInventory;
+      if (!mounted) return;
+      setState(() {
+        _needsInventoryReview = true;
+        _currentInventory = current;
+        _errorText = current == null
+            ? 'Current inventory is unavailable. Close this editor and reload.'
+            : error.message;
+        _isSaving = false;
+      });
+      return;
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -904,65 +1003,69 @@ class _RefillSheetState extends State<_RefillSheet> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, bottomInset + 16),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Add refill doses',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _doseCountLabel(
-                widget.prescription.remainingDoses,
-                suffix: 'left now',
+    return protectSetupForm(
+      context,
+      _isSaving,
+      Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, bottomInset + 16),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Add refill doses',
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _doseCountController,
-              decoration: const InputDecoration(
-                labelText: 'Doses added',
-                border: OutlineInputBorder(),
-              ),
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _noteController,
-              decoration: const InputDecoration(
-                labelText: 'Note',
-                border: OutlineInputBorder(),
-              ),
-              textInputAction: TextInputAction.done,
-            ),
-            if (_errorText != null) ...[
               const SizedBox(height: 8),
               Text(
-                _errorText!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
-              ),
-            ],
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+                _doseCountLabel(
+                  widget.prescription.remainingDoses,
+                  suffix: 'left now',
                 ),
-                const Spacer(),
-                FilledButton(
-                  onPressed: _isSaving ? null : _save,
-                  child: const Text('Save refill'),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _doseCountController,
+                decoration: const InputDecoration(
+                  labelText: 'Doses added',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _noteController,
+                decoration: const InputDecoration(
+                  labelText: 'Note',
+                  border: OutlineInputBorder(),
+                ),
+                textInputAction: TextInputAction.done,
+              ),
+              if (_errorText != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _errorText!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ],
-            ),
-          ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('Cancel'),
+                  ),
+                  const Spacer(),
+                  FilledButton(
+                    onPressed: _isSaving ? null : _save,
+                    child: const Text('Save refill'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1049,4 +1152,80 @@ IconData _iconFor(PillType pillType) {
     PillType.capsule => Icons.medication_outlined,
     PillType.tablet => Icons.crop_square_outlined,
   };
+}
+
+/// Appearance choice with a visible keyboard focus ring.
+///
+/// The Material default focus cue is a tint of the chip's own surface (about
+/// 1.3:1 on this sheet, measured in a real browser), so a keyboard user could
+/// not see which chip was focused while the selected chip shouted in teal.
+/// A focused chip now draws its own ink ring.
+class _AppearanceChip extends StatefulWidget {
+  const _AppearanceChip({
+    required this.pillType,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final PillType pillType;
+  final bool selected;
+  final ValueChanged<bool> onSelected;
+
+  @override
+  State<_AppearanceChip> createState() => _AppearanceChipState();
+}
+
+class _AppearanceChipState extends State<_AppearanceChip> {
+  final FocusNode _focusNode = FocusNode(debugLabel: 'appearance chip');
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_handleFocusChanged);
+  }
+
+  void _handleFocusChanged() {
+    if (_focused == _focusNode.hasFocus) return;
+    setState(() => _focused = _focusNode.hasFocus);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChanged);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final chip = ChoiceChip(
+      focusNode: _focusNode,
+      avatar: Icon(_iconFor(widget.pillType), size: 18),
+      label: Text(widget.pillType.label),
+      selected: widget.selected,
+      onSelected: widget.onSelected,
+    );
+    if (!_focused) return chip;
+    // A border on the chip itself grows its box by the stroke width, which
+    // re-flowed this row and wrapped the last chip when focus moved. Painting
+    // the ring as a positioned overlay keeps the chip's size untouched.
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        chip,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              key: const ValueKey('appearance-chip-focus-ring'),
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFF103E46), width: 2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }

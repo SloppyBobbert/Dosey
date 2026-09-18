@@ -49,6 +49,34 @@ void main() {
     }
   });
 
+  test(
+    'named local store pins its own location and passes its name to open',
+    () async {
+      final probe = _Probe(
+        availableStorages: [
+          WasmStorageImplementation.opfsShared,
+          WasmStorageImplementation.sharedIndexedDb,
+        ],
+        existingDatabases: [
+          (WebStorageApi.opfs, 'dosey'),
+          (WebStorageApi.indexedDb, 'dosey-personal-local'),
+        ],
+      );
+      final result = await bootstrapWebDoseyDatabaseWithProbe(
+        () async => probe,
+        databaseName: 'dosey-personal-local',
+      );
+      expect(probe.openCalls, 1);
+      expect(probe.openedName, 'dosey-personal-local');
+      expect(
+        probe.openedImplementation,
+        WasmStorageImplementation.sharedIndexedDb,
+      );
+      expect(result, isA<WebStorageStartupRecovery>());
+      expect((result as WebStorageStartupRecovery).selectionFailure, isNull);
+    },
+  );
+
   test('multiple mapped database locations fail before probe.open', () async {
     final probe = _Probe(
       availableStorages: [
@@ -87,6 +115,8 @@ final class _Probe implements WasmProbeResult {
   @override
   final Set<MissingBrowserFeature> missingFeatures;
   int openCalls = 0;
+  String? openedName;
+  WasmStorageImplementation? openedImplementation;
 
   @override
   Future<DatabaseConnection> open(
@@ -97,7 +127,9 @@ final class _Probe implements WasmProbeResult {
     bool enableMigrations = true,
   }) async {
     openCalls += 1;
-    throw StateError('probe.open must not be called');
+    openedName = name;
+    openedImplementation = implementation;
+    throw StateError('injected open rejection');
   }
 
   @override

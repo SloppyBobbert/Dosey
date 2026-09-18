@@ -1,6 +1,15 @@
 import 'package:dosey_app/app/web_local_personal/web_local_personal_routes.dart';
 import 'package:dosey_app/core/storage/web_storage_types.dart';
 import 'package:flutter/material.dart';
+import 'package:dosey_app/features/prescriptions/prescriptions_screen.dart';
+import 'package:dosey_app/features/reminders/reminders_screen.dart';
+import 'package:dosey_app/features/shared/personal_setup_scope.dart';
+
+const localPersonalStorageNotice =
+    'Information stays only in this browser profile on this device. It is not '
+    'shared with an account or household. Clearing site data, private browsing '
+    'or browser eviction can lose it. There is no server recovery and no OS or '
+    'background reminder guarantee.';
 
 typedef WebLocalPersonalPageBuilder =
     Widget Function(
@@ -19,6 +28,14 @@ Widget buildWebLocalPersonalFoundationPage(
   VoidCallback? onAddSchedule,
 }) {
   final isReady = storage is WebStorageReady;
+  if (isReady && PersonalSetupScope.maybeOf(context) != null) {
+    if (destination == WebLocalPersonalDestination.prescriptions) {
+      return const PrescriptionsScreen();
+    }
+    if (destination == WebLocalPersonalDestination.schedule) {
+      return const RemindersScreen();
+    }
+  }
   final copy = switch (destination) {
     WebLocalPersonalDestination.today => (
       title: 'Today',
@@ -62,7 +79,10 @@ Widget buildWebLocalPersonalFoundationPage(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 680),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 32),
+          // Match the content column the prescriptions and schedule cards sit
+          // in (they add their own card inset), so switching tabs no longer
+          // shifts the text sideways.
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -81,6 +101,8 @@ Widget buildWebLocalPersonalFoundationPage(
               ),
               const SizedBox(height: 12),
               Text(_localOnlyMessage(storage)),
+              const SizedBox(height: 12),
+              const Text('Today actions and history are not available yet.'),
               if (copy.action != null) ...[
                 const SizedBox(height: 28),
                 OutlinedButton.icon(
@@ -98,7 +120,8 @@ Widget buildWebLocalPersonalFoundationPage(
 }
 
 String _storageMessage(WebStorageBootstrapResult storage) => switch (storage) {
-  WebStorageReady() => 'Local storage is ready for this browser.',
+  WebStorageReady(:final classification) =>
+    'Local storage is ready for this browser (${classification.implementation.name}).',
   WebStorageDemoOnly() =>
     'Demo only — non-persistent. Nothing entered here is saved.',
   WebStorageStartupRecovery() =>
@@ -107,7 +130,7 @@ String _storageMessage(WebStorageBootstrapResult storage) => switch (storage) {
 
 String _localOnlyMessage(WebStorageBootstrapResult storage) =>
     switch (storage) {
-      WebStorageReady() => 'Information stays in this browser.',
+      WebStorageReady() => localPersonalStorageNotice,
       WebStorageDemoOnly() => 'This is a fictional, non-persistent preview.',
       WebStorageStartupRecovery() => 'Information has not been opened.',
     };

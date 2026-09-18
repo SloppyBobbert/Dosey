@@ -2,16 +2,33 @@ import 'package:flutter/material.dart';
 
 enum WebLocalPersonalDestination {
   today('/today', 'Today', Icons.today_outlined),
-  prescriptions('/prescriptions', 'Prescriptions', Icons.medication_outlined),
+  prescriptions(
+    '/prescriptions',
+    'Prescriptions',
+    Icons.medication_outlined,
+    compactLabelOverride: 'Meds',
+  ),
   schedule('/schedule', 'Schedule', Icons.calendar_month_outlined),
   log('/log', 'Log', Icons.receipt_long_outlined),
   settings('/settings', 'Settings', Icons.tune_outlined);
 
-  const WebLocalPersonalDestination(this.path, this.label, this.icon);
+  const WebLocalPersonalDestination(
+    this.path,
+    this.label,
+    this.icon, {
+    this.compactLabelOverride,
+  });
 
   final String path;
   final String label;
   final IconData icon;
+
+  /// Shorter stand-in used where the full label does not fit.
+  final String? compactLabelOverride;
+
+  /// Short form for the 64px compact rail, where the full label for
+  /// prescriptions would have to shrink to about 5px to fit one line.
+  String get compactLabel => compactLabelOverride ?? label;
 
   static WebLocalPersonalDestination fromPath(String path) {
     final normalizedPath = normalizePath(path);
@@ -114,6 +131,7 @@ class WebLocalPersonalRouteDelegate extends RouterDelegate<RouteInformation>
 
   final WebLocalPersonalRouteController controller;
   final WebLocalPersonalRouterBuilder builder;
+  final _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   RouteInformation? get currentConfiguration =>
@@ -126,10 +144,17 @@ class WebLocalPersonalRouteDelegate extends RouterDelegate<RouteInformation>
   }
 
   @override
-  Widget build(BuildContext context) => builder(context, controller);
+  Widget build(BuildContext context) => Navigator(
+    key: _navigatorKey,
+    pages: [MaterialPage<void>(child: builder(context, controller))],
+    onDidRemovePage: (_) {},
+  );
 
   @override
-  Future<bool> popRoute() => Future.value(controller.goBack());
+  Future<bool> popRoute() async {
+    if (await _navigatorKey.currentState?.maybePop() ?? false) return true;
+    return controller.goBack();
+  }
 
   @override
   void dispose() {

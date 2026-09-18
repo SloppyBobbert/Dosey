@@ -19,9 +19,16 @@ abstract interface class ReminderRepository {
 }
 
 class LocalReminderRepository implements ReminderRepository {
-  const LocalReminderRepository(this._database);
+  const LocalReminderRepository(
+    this._database, {
+    this.requireExistingLinks = false,
+  });
 
   final DoseyDatabase _database;
+
+  /// Strict mode: a saved schedule must link to an existing prescription and
+  /// keep an existing schedule profile.
+  final bool requireExistingLinks;
 
   /// Watches schedules in clock order so Today and Schedule share one ordering.
   @override
@@ -49,6 +56,25 @@ class LocalReminderRepository implements ReminderRepository {
       () => _database.transaction(() async {
         await _acquireWriterIntent(schedule.id);
         final prescriptionId = schedule.prescriptionId;
+        if (requireExistingLinks) {
+          if (prescriptionId == null) {
+            throw StateError(
+              'This schedule has no linked prescription. Refresh before saving.',
+            );
+          }
+          final medication = await (_database.select(
+            _database.prescriptions,
+          )..where((row) => row.id.equals(prescriptionId))).getSingleOrNull();
+          final profile =
+              await (_database.select(_database.scheduleProfiles)
+                    ..where((row) => row.id.equals(schedule.profileId)))
+                  .getSingleOrNull();
+          if (medication == null || profile == null) {
+            throw StateError(
+              'Prescription or schedule profile no longer exists. Refresh before saving.',
+            );
+          }
+        }
         if (prescriptionId != null) {
           final isDeferredDeleted =
               await LocalPrescriptionRepository.isDeferredDeletedPrescriptionInDatabase(
