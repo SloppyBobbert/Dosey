@@ -39,6 +39,12 @@ import 'package:dosey_app/features/today/today_next_dose_helper.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+Future<void> _openDetails(WidgetTester tester) async {
+  expect(find.byTooltip('Show details').hitTestable(), findsOneWidget);
+  await tester.tap(find.byTooltip('Show details'));
+  await tester.pump();
+}
+
 void main() {
   testWidgets('uses the Classic palette for idle and red for missed doses', (
     WidgetTester tester,
@@ -87,9 +93,71 @@ void main() {
       Color(0xFFFFA0AD),
       Color(0xFFCF5066),
     ]);
+    for (final mode in <RobotFaceMode>[
+      RobotFaceMode.doseApproaching,
+      RobotFaceMode.dispensing,
+    ]) {
+      final palette = await paletteFor(mode);
+      expect(palette[2].r, greaterThan(palette[2].b));
+      expect(palette[3].r, greaterThan(palette[3].b));
+    }
   });
 
-  testWidgets('keeps the same tall base eye geometry across sizes and modes', (
+  testWidgets('uses distinct missed and controller-fault marker geometry', (
+    WidgetTester tester,
+  ) async {
+    Future<List<Rect>> markerGeometryFor(RobotFaceState state) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 800,
+            height: 400,
+            child: RobotFaceCanvas(isActive: false, state: state),
+          ),
+        ),
+      );
+      final painter =
+          tester
+                  .widget<CustomPaint>(
+                    find.descendant(
+                      of: find.byType(RobotFaceCanvas),
+                      matching: find.byType(CustomPaint),
+                    ),
+                  )
+                  .painter
+              as dynamic;
+      return painter.debugStateMarkerGeometry(const Size(800, 400))
+          as List<Rect>;
+    }
+
+    final missed = await markerGeometryFor(
+      const RobotFaceState(
+        mode: RobotFaceMode.missed,
+        nextEventLabel: 'Missed dose',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 1,
+        isInAwakeWindow: true,
+      ),
+    );
+    final fault = await markerGeometryFor(
+      const RobotFaceState(
+        mode: RobotFaceMode.error,
+        controllerCondition: RobotFaceControllerCondition.fault,
+        nextEventLabel: 'Controller fault',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 0,
+        isInAwakeWindow: true,
+      ),
+    );
+
+    expect(missed, hasLength(2));
+    expect(fault, hasLength(1));
+    expect(missed, isNot(fault));
+  });
+
+  testWidgets('keeps broad companion eyes within the Moto landscape frame', (
     WidgetTester tester,
   ) async {
     Future<List<Rect>> eyeRectsFor({
@@ -149,17 +217,20 @@ void main() {
       for (final state in states) {
         final eyes = await eyeRectsFor(size: size, state: state);
         expect(eyes, hasLength(2));
-        expect(eyes.first.width / eyes.first.height, closeTo(0.79, 0.02));
+        expect(eyes.first.width / eyes.first.height, closeTo(1.55, 0.02));
         expect(eyes[1].width, closeTo(eyes.first.width, 0.01));
         expect(eyes[1].height, closeTo(eyes.first.height, 0.01));
         expect(eyes.first.center.dy, closeTo(eyes[1].center.dy, 0.01));
         expect(eyes.first.left, greaterThanOrEqualTo(0));
         expect(eyes[1].right, lessThanOrEqualTo(size.width));
+        if (size == const Size(800, 400)) {
+          expect(eyes[1].right - eyes.first.left, inInclusiveRange(520, 576));
+        }
       }
     }
   });
 
-  testWidgets('uses equal ambient glow behind both eyes', (
+  testWidgets('uses one directional glow field behind the companion eyes', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -193,10 +264,53 @@ void main() {
     final glows =
         painter.debugAmbientGlowRects(const Size(800, 400)) as List<Rect>;
 
-    expect(glows, hasLength(2));
-    expect(glows.first.width, closeTo(glows[1].width, 0.01));
-    expect(glows.first.height, closeTo(glows[1].height, 0.01));
-    expect(glows.first.center.dy, closeTo(glows[1].center.dy, 0.01));
+    expect(glows, hasLength(1));
+    expect(glows.single, const Rect.fromLTWH(0, 0, 800, 400));
+  });
+
+  testWidgets('exposes non-text markers for ready, missed, and fault faces', (
+    WidgetTester tester,
+  ) async {
+    Future<String> markerFor(RobotFaceState state) async {
+      await tester.pumpWidget(
+        MaterialApp(home: RobotFaceCanvas(isActive: false, state: state)),
+      );
+      await tester.pump();
+      final customPaint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(RobotFaceCanvas),
+          matching: find.byType(CustomPaint),
+        ),
+      );
+      final dynamic painter = customPaint.painter;
+      return painter.debugStateMarker as String;
+    }
+
+    const base = RobotFaceState(
+      mode: RobotFaceMode.idle,
+      nextEventLabel: 'No reminders scheduled',
+      isFlipped: false,
+      isLandscapeOnly: true,
+      rampProgress: 0,
+      isInAwakeWindow: true,
+    );
+    expect(
+      await markerFor(base.copyWith(mode: RobotFaceMode.doseReady)),
+      'ready',
+    );
+    expect(
+      await markerFor(base.copyWith(mode: RobotFaceMode.missed)),
+      'missed',
+    );
+    expect(
+      await markerFor(
+        base.copyWith(
+          mode: RobotFaceMode.error,
+          controllerCondition: RobotFaceControllerCondition.fault,
+        ),
+      ),
+      'fault',
+    );
   });
 
   testWidgets(
@@ -241,7 +355,7 @@ void main() {
 
       expect(glance['eyeOffset'], isNot(start['eyeOffset']));
       expect(settle['eyeOffset'], isNot(glance['eyeOffset']));
-      expect(glance['baseAspectRatio'], closeTo(0.79, 0.02));
+      expect(glance['baseAspectRatio'], closeTo(1.55, 0.02));
     },
   );
 
@@ -281,6 +395,68 @@ void main() {
     expect(frame(0.23)['blink'], greaterThan(0.8));
     expect(frame(0.3)['blink'], 0.0);
   });
+
+  testWidgets(
+    'reduced motion uses phase-zero geometry after mid-cycle toggles',
+    (WidgetTester tester) async {
+      const state = RobotFaceState(
+        mode: RobotFaceMode.sleepy,
+        nextEventLabel: 'No active reminder',
+        isFlipped: false,
+        isLandscapeOnly: true,
+        rampProgress: 0,
+        isInAwakeWindow: false,
+      );
+
+      Widget canvas(bool disableAnimations) => MediaQuery(
+        data: MediaQueryData(disableAnimations: disableAnimations),
+        child: const SizedBox(
+          width: 800,
+          height: 400,
+          child: RobotFaceCanvas(
+            key: ValueKey<String>('motion-canvas'),
+            state: state,
+          ),
+        ),
+      );
+      Map<String, Object> frame() {
+        final painter =
+            tester
+                    .widget<CustomPaint>(
+                      find.descendant(
+                        of: find.byType(RobotFaceCanvas),
+                        matching: find.byType(CustomPaint),
+                      ),
+                    )
+                    .painter
+                as dynamic;
+        return painter.debugMotionFrame(const Size(800, 400))
+            as Map<String, Object>;
+      }
+
+      await tester.pumpWidget(MaterialApp(home: canvas(false)));
+      await tester.pump(const Duration(milliseconds: 900));
+      await tester.pumpWidget(MaterialApp(home: canvas(true)));
+      await tester.pump();
+      final firstReducedFrame = frame();
+
+      await tester.pumpWidget(MaterialApp(home: canvas(false)));
+      await tester.pump(const Duration(milliseconds: 1600));
+      await tester.pumpWidget(MaterialApp(home: canvas(true)));
+      await tester.pump();
+      final secondReducedFrame = frame();
+
+      for (final key in <String>[
+        'eyeOffset',
+        'blink',
+        'breathing',
+        'pulse',
+        'sleepStarDrift',
+      ]) {
+        expect(secondReducedFrame[key], firstReducedFrame[key], reason: key);
+      }
+    },
+  );
 
   testWidgets('idle personality pauses, glances both ways, and recenters', (
     WidgetTester tester,
@@ -748,12 +924,15 @@ void main() {
 
     expect(find.byKey(RobotFaceScreen.canvasKey), findsOneWidget);
     expect(find.byKey(RobotFaceScreen.bottomCardKey), findsOneWidget);
-    expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
-    expect(find.text('Controller connected'), findsOneWidget);
+    expect(find.text('8:00 PM · Evening meds'), findsNothing);
+    expect(find.text('Controller connected'), findsNothing);
 
     final canvasSize = tester.getSize(find.byKey(RobotFaceScreen.canvasKey));
     final cardSize = tester.getSize(find.byKey(RobotFaceScreen.bottomCardKey));
     expect(canvasSize.height, greaterThan(cardSize.height * 2));
+    await _openDetails(tester);
+    expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
+    expect(find.text('Controller connected'), findsOneWidget);
   });
 
   testWidgets('applies flipped transform when flipped', (
@@ -808,7 +987,10 @@ void main() {
     expect(urgentPrompt.data, 'READY');
     expect(urgentPrompt.style?.fontSize, lessThanOrEqualTo(20));
     expect(find.text('Ready to dispense'), findsNothing);
-    expect(find.text('Ready now'), findsOneWidget);
+    await _openDetails(tester);
+    expect(find.text('Ready to dispense'), findsOneWidget);
+    expect(find.text('Ready now'), findsNothing);
+    expect(find.text('READY NOW'), findsNothing);
   });
 
   testWidgets('updates from later state stream events', (
@@ -846,12 +1028,14 @@ void main() {
 
     await tester.pump();
 
+    expect(find.text('No reminders scheduled'), findsNothing);
+    await _openDetails(tester);
     expect(find.text('No reminders scheduled'), findsOneWidget);
-    expect(find.text('Reconnect needed'), findsOneWidget);
+    expect(find.text('Reconnect needed'), findsNothing);
     expect(find.text('Controller connected'), findsNothing);
   });
 
-  testWidgets('keeps urgent treatment compact and face first', (
+  testWidgets('keeps urgent treatment compact and full instructions visible', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -872,10 +1056,62 @@ void main() {
 
     expect(find.byKey(RobotFaceScreen.urgentPromptKey), findsOneWidget);
     expect(find.text('SOON'), findsOneWidget);
+    final promptDecoration =
+        tester
+                .widgetList<DecoratedBox>(
+                  find.ancestor(
+                    of: find.byKey(RobotFaceScreen.urgentPromptKey),
+                    matching: find.byType(DecoratedBox),
+                  ),
+                )
+                .first
+                .decoration
+            as BoxDecoration;
+    final promptBorder = promptDecoration.border! as Border;
+    expect(promptBorder.top.color.r, greaterThan(promptBorder.top.color.g));
+    expect(promptBorder.top.color.g, greaterThan(promptBorder.top.color.b));
     expect(find.text('Dispense soon'), findsNothing);
-    expect(find.text('Coming up'), findsOneWidget);
+    await _openDetails(tester);
+    expect(find.text('Dispense soon'), findsOneWidget);
+    expect(find.text('Coming up'), findsNothing);
+    expect(find.text('UP NEXT'), findsNothing);
     expect(find.text('Dose ready'), findsNothing);
     expect(find.text('Need help'), findsNothing);
+  });
+
+  testWidgets('keeps dispensing progress visible in the detail card', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const _RobotFaceTestApp(
+        initialState: RobotFaceState(
+          mode: RobotFaceMode.dispensing,
+          nextEventLabel: '8:00 PM · Evening meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          statusLabel: 'Dispensing in progress.',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('DISPENSING'), findsOneWidget);
+    expect(find.text('8:00 PM · Evening meds'), findsNothing);
+    await _openDetails(tester);
+    expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
+    expect(find.text('Dispensing in progress.'), findsOneWidget);
+    await tester.tap(find.byKey(RobotFaceScreen.canvasKey));
+    await tester.pump();
+    expect(find.text('Dispensing in progress.'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(RobotFaceScreen.bottomCardKey),
+        matching: find.text('Dispensing in progress.'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('pins shortage details inside the robot face status card', (
@@ -901,6 +1137,8 @@ void main() {
 
     await tester.pump();
 
+    expect(find.text('SHORTAGE · Check loading'), findsOneWidget);
+    await _openDetails(tester);
     expect(find.text('Urgent shortage'), findsOneWidget);
     expect(find.text('Vitamin D'), findsOneWidget);
     expect(find.text('Scheduled 10:00'), findsOneWidget);
@@ -993,6 +1231,8 @@ void main() {
     );
     await tester.pump();
 
+    await tester.tap(find.byKey(RobotFaceScreen.canvasKey));
+    await tester.pump();
     expect(
       tester.widget<RobotFaceCanvas>(find.byType(RobotFaceCanvas)).isSpeaking,
       isFalse,
@@ -1515,6 +1755,9 @@ void main() {
     );
     await tester.pump();
 
+    await tester.tap(find.byKey(RobotFaceScreen.canvasKey));
+    await tester.pump();
+
     expect(
       find.text('Internet offline. Local reminders still work.'),
       findsOneWidget,
@@ -1552,6 +1795,8 @@ void main() {
       );
       await tester.pump();
 
+      expect(find.text('Device problem · Ask caregiver'), findsOneWidget);
+      await _openDetails(tester);
       expect(find.text('Bluetooth is unavailable'), findsOneWidget);
       expect(
         find.text('Internet offline. Local reminders still work.'),
@@ -1681,6 +1926,7 @@ void main() {
 
     await tester.pump();
 
+    await _openDetails(tester);
     final soonScale = tester.widget<AnimatedScale>(
       find.byKey(RobotFaceScreen.urgentPromptScaleKey),
     );
@@ -1704,6 +1950,7 @@ void main() {
 
     await tester.pump();
 
+    await _openDetails(tester);
     final readyScale = tester.widget<AnimatedScale>(
       find.byKey(RobotFaceScreen.urgentPromptScaleKey),
     );
@@ -1741,6 +1988,7 @@ void main() {
 
     await tester.pump();
 
+    await _openDetails(tester);
     BoxDecoration readyDecoration() =>
         tester
                 .widget<DecoratedBox>(
@@ -1767,6 +2015,8 @@ void main() {
 
     await tester.pump();
 
+    await tester.tap(find.byKey(RobotFaceScreen.canvasKey));
+    await tester.pump();
     final waitingBorder = readyDecoration().border! as Border;
     expect(waitingBorder.top.color.g, greaterThan(waitingBorder.top.color.r));
     expect(waitingBorder.top.color.b, greaterThan(waitingBorder.top.color.r));
@@ -1809,7 +2059,7 @@ void main() {
     expect(promptBorder.top.color.b, greaterThan(promptBorder.top.color.r));
   });
 
-  testWidgets('shows alert support badge in awake idle window', (
+  testWidgets('keeps benign awake idle status compact', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1828,17 +2078,15 @@ void main() {
 
     await tester.pump();
 
-    final badge = tester.widget<DecoratedBox>(
-      find.byKey(RobotFaceScreen.statusBadgeKey),
-    );
-    final border = (badge.decoration as BoxDecoration).border! as Border;
-
-    expect(find.text('Controller connected'), findsOneWidget);
-    expect(border.top.color.a, greaterThan(0.08));
+    expect(find.byKey(RobotFaceScreen.statusBadgeKey), findsNothing);
+    expect(find.text('Controller connected'), findsNothing);
+    expect(find.text('8:00 PM · Evening meds'), findsNothing);
+    await _openDetails(tester);
+    expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
   });
 
   testWidgets(
-    'keeps the full-screen canvas while awake idle brightens from sleepy',
+    'keeps full-screen background and reserved eyes while awake idle brightens from sleepy',
     (WidgetTester tester) async {
       final states = StreamController<RobotFaceState>.broadcast();
       addTearDown(states.close);
@@ -1877,7 +2125,15 @@ void main() {
       );
       final dynamic sleepyPainter = sleepyPaint.painter;
       final sleepyPalette = sleepyPainter.debugPaletteColors as List<Color>;
-      expect(sleepyCanvasRect, const Rect.fromLTWH(0, 0, 800, 400));
+      expect(sleepyCanvasRect.shortestSide, greaterThan(0));
+      expect(sleepyDisplayRect.contains(sleepyCanvasRect.topLeft), isTrue);
+      expect(sleepyDisplayRect.contains(sleepyCanvasRect.bottomRight), isTrue);
+      expect(
+        sleepyCanvasRect.overlaps(
+          tester.getRect(find.byKey(RobotFaceScreen.bottomCardKey)),
+        ),
+        isFalse,
+      );
       expect(sleepyDisplayRect, const Rect.fromLTWH(0, 0, 800, 400));
       expect(sleepyPalette, const <Color>[
         Color(0xFF11172A),
@@ -1913,7 +2169,15 @@ void main() {
       );
       final dynamic awakePainter = awakePaint.painter;
       final awakePalette = awakePainter.debugPaletteColors as List<Color>;
-      expect(awakeCanvasRect, const Rect.fromLTWH(0, 0, 800, 400));
+      expect(awakeCanvasRect.shortestSide, greaterThan(0));
+      expect(awakeDisplayRect.contains(awakeCanvasRect.topLeft), isTrue);
+      expect(awakeDisplayRect.contains(awakeCanvasRect.bottomRight), isTrue);
+      expect(
+        awakeCanvasRect.overlaps(
+          tester.getRect(find.byKey(RobotFaceScreen.bottomCardKey)),
+        ),
+        isFalse,
+      );
       expect(awakeDisplayRect, const Rect.fromLTWH(0, 0, 800, 400));
       expect(awakePalette, const <Color>[
         Color(0xFF071A2D),
@@ -1925,6 +2189,75 @@ void main() {
       expect(awakePalette[2].b, greaterThan(sleepyPalette[2].b));
     },
   );
+
+  for (final warning in [
+    (
+      RobotFaceControllerCondition.fault,
+      false,
+      'Controller fault · Ask caregiver',
+    ),
+    (
+      RobotFaceControllerCondition.bluetoothUnavailable,
+      false,
+      'Bluetooth unavailable',
+    ),
+    (null, true, 'SHORTAGE · Check loading'),
+  ]) {
+    testWidgets('minimal disclosure preserves warning ${warning.$3}', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          initialState: RobotFaceState(
+            mode: RobotFaceMode.error,
+            nextEventLabel: '8:00 AM · Medication full original reminder',
+            statusLabel:
+                'Original diagnostic: do not dispense; ask your caregiver for assistance.',
+            controllerCondition: warning.$1,
+            activeShortageMedicationLabel: warning.$2
+                ? 'Morning medication'
+                : null,
+            hasPinnedShortageAlert: warning.$2,
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text(warning.$3), findsOneWidget);
+      expect(
+        find.text('8:00 AM · Medication full original reminder'),
+        findsNothing,
+      );
+      final toggle = find.byKey(const ValueKey('robot-face-toggle-details'));
+      expect(toggle.hitTestable(), findsOneWidget);
+      expect(tester.getSize(toggle), const Size(48, 48));
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(
+        find.text('8:00 AM · Medication full original reminder'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Original diagnostic: do not dispense; ask your caregiver for assistance.',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(find.text(warning.$3), findsOneWidget);
+      expect(
+        find.text('8:00 AM · Medication full original reminder'),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+      semantics.dispose();
+    });
+  }
 
   testWidgets('shows red missed-dose treatment and safe copy', (
     WidgetTester tester,
@@ -1947,8 +2280,11 @@ void main() {
 
     await tester.pump();
 
-    expect(find.text('MISSED'), findsWidgets);
-    expect(find.text('This dose was missed.'), findsOneWidget);
+    expect(find.text('MISSED'), findsOneWidget);
+    expect(find.text('This dose was missed.'), findsNothing);
+    expect(find.text('Missed dose alert'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('robot-face-toggle-details')));
+    await tester.pump();
     expect(
       find.text(
         'Follow your prescription instructions or ask your caregiver, pharmacist, or doctor.',
@@ -1956,10 +2292,7 @@ void main() {
       findsOneWidget,
     );
 
-    final badge = tester.widget<DecoratedBox>(
-      find.byKey(RobotFaceScreen.statusBadgeKey),
-    );
-    final border = (badge.decoration as BoxDecoration).border! as Border;
+    expect(find.byKey(RobotFaceScreen.statusBadgeKey), findsNothing);
     final customPaint = tester.widget<CustomPaint>(
       find.descendant(
         of: find.byType(RobotFaceCanvas),
@@ -1968,7 +2301,6 @@ void main() {
     );
     final dynamic painter = customPaint.painter;
     final palette = painter.debugPaletteColors as List<Color>;
-    expect(border.top.color.r, greaterThan(border.top.color.g));
     expect(palette[2].r, greaterThan(palette[2].g));
     expect(palette[3].r, greaterThan(palette[3].b));
   });
@@ -2150,7 +2482,7 @@ void main() {
   );
 
   testWidgets(
-    'tapping the Robot Face display records interaction through an injected controller',
+    'a sleepy wake-up records interaction and keeps details revealed',
     (WidgetTester tester) async {
       final harness = _RobotFaceInteractionControllerHarness();
       addTearDown(harness.dispose);
@@ -2163,7 +2495,7 @@ void main() {
       harness.advance(const Duration(minutes: 31));
       await tester.pump();
 
-      expect(find.text('Sleep mode'), findsOneWidget);
+      expect(find.text('Sleep mode'), findsNothing);
 
       await tester.tapAt(
         tester.getCenter(find.byKey(RobotFaceScreen.canvasKey)),
@@ -2172,6 +2504,7 @@ void main() {
 
       expect(find.text('Sleep mode'), findsNothing);
       expect(find.text('No active reminder'), findsOneWidget);
+      expect(find.text('NEXT EVENT'), findsOneWidget);
     },
   );
 
@@ -2249,31 +2582,132 @@ void main() {
     );
   });
 
+  testWidgets('app-owned sleepy wake-up keeps details revealed', (
+    WidgetTester tester,
+  ) async {
+    final harness = _RobotFaceInteractionControllerHarness();
+    addTearDown(harness.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RobotFaceScreen(controllerResolver: (_) => harness.controller),
+      ),
+    );
+
+    await tester.pump();
+    harness.advance(const Duration(minutes: 31));
+    await tester.pump();
+
+    expect(find.text('Sleep mode'), findsNothing);
+
+    await tester.tapAt(tester.getCenter(find.byKey(RobotFaceScreen.canvasKey)));
+    await tester.pump();
+
+    expect(find.text('Sleep mode'), findsNothing);
+    expect(find.text('No active reminder'), findsOneWidget);
+    expect(find.text('NEXT EVENT'), findsOneWidget);
+  });
+
   testWidgets(
-    'tapping the Robot Face display records interaction through the app-owned controller',
+    'resets disclosure for a future reminder with a stale missed voice occurrence',
     (WidgetTester tester) async {
-      final harness = _RobotFaceInteractionControllerHarness();
-      addTearDown(harness.dispose);
+      final states = StreamController<RobotFaceState>.broadcast();
+      final doseActionLogger = _FakeRobotFaceDoseActionLogger();
+      addTearDown(states.close);
+      const missedOccurrenceKey = 'morning:2026-07-08T08:00:00Z';
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: RobotFaceScreen(controllerResolver: (_) => harness.controller),
+        _RobotFaceTestApp(
+          stateStream: states.stream,
+          doseActionLogger: doseActionLogger.call,
+          initialState: const RobotFaceState(
+            mode: RobotFaceMode.missed,
+            nextEventLabel: '8:00 AM · Morning meds',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            actionDoseId: 'morning:2026-07-08',
+            voiceOccurrenceKey: missedOccurrenceKey,
+            availableActions: {RobotFaceActionKind.recognizeMissedDose},
+          ),
         ),
       );
-
       await tester.pump();
-      harness.advance(const Duration(minutes: 31));
-      await tester.pump();
-
-      expect(find.text('Sleep mode'), findsOneWidget);
-
+      expect(find.text('MISSED'), findsOneWidget);
       await tester.tapAt(
         tester.getCenter(find.byKey(RobotFaceScreen.canvasKey)),
       );
       await tester.pump();
+      await tester.tap(
+        find.byKey(RobotFaceScreen.recognizeMissedDoseButtonKey),
+      );
+      await tester.pump();
+      expect(doseActionLogger.events, hasLength(1));
 
-      expect(find.text('Sleep mode'), findsNothing);
-      expect(find.text('No active reminder'), findsOneWidget);
+      states.add(
+        const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: '8:00 PM · Evening meds',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+          voiceOccurrenceKey: missedOccurrenceKey,
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('8:00 PM · Evening meds'), findsNothing);
+      expect(find.text('NEXT EVENT'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('robot-face-toggle-details')));
+      await tester.pump();
+      expect(find.text('8:00 PM · Evening meds'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'resets disclosure when a same-label reminder occurrence changes',
+    (WidgetTester tester) async {
+      final states = StreamController<RobotFaceState>.broadcast();
+      addTearDown(states.close);
+      const label = '8:00 PM · Evening meds';
+
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          stateStream: states.stream,
+          initialState: const RobotFaceState(
+            mode: RobotFaceMode.idle,
+            nextEventLabel: label,
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 0,
+            isInAwakeWindow: true,
+            voiceOccurrenceKey: 'evening:2026-07-08T20:00:00Z',
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tapAt(
+        tester.getCenter(find.byKey(RobotFaceScreen.canvasKey)),
+      );
+      await tester.pump();
+      expect(find.text('NEXT EVENT'), findsOneWidget);
+
+      states.add(
+        const RobotFaceState(
+          mode: RobotFaceMode.idle,
+          nextEventLabel: label,
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 0,
+          isInAwakeWindow: true,
+          voiceOccurrenceKey: 'evening:2026-07-09T20:00:00Z',
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('NEXT EVENT'), findsNothing);
     },
   );
 
@@ -3035,6 +3469,68 @@ void main() {
     await tester.pump();
   });
 
+  testWidgets(
+    'allows a newly displayed dose while another dose log is pending',
+    (WidgetTester tester) async {
+      final states = StreamController<RobotFaceState>.broadcast();
+      final doseActionLogger = _FakeRobotFaceDoseActionLogger(
+        delayCompletion: true,
+      );
+      addTearDown(states.close);
+      const actions = <RobotFaceActionKind>{
+        RobotFaceActionKind.confirmTaken,
+        RobotFaceActionKind.skipDose,
+        RobotFaceActionKind.askForHelp,
+      };
+
+      await tester.pumpWidget(
+        _RobotFaceTestApp(
+          stateStream: states.stream,
+          doseActionLogger: doseActionLogger.call,
+          initialState: const RobotFaceState(
+            mode: RobotFaceMode.doseReady,
+            nextEventLabel: 'Now · Dose A',
+            isFlipped: false,
+            isLandscapeOnly: true,
+            rampProgress: 1,
+            isInAwakeWindow: true,
+            actionDoseId: 'dose-a',
+            availableActions: actions,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(RobotFaceScreen.skipDoseButtonKey));
+      await tester.pump();
+
+      states.add(
+        const RobotFaceState(
+          mode: RobotFaceMode.doseReady,
+          nextEventLabel: 'Now · Dose B',
+          isFlipped: false,
+          isLandscapeOnly: true,
+          rampProgress: 1,
+          isInAwakeWindow: true,
+          actionDoseId: 'dose-b',
+          availableActions: actions,
+        ),
+      );
+      await tester.pump();
+
+      final skipButton = find.byKey(RobotFaceScreen.skipDoseButtonKey);
+      expect(tester.widget<FilledButton>(skipButton).onPressed, isNotNull);
+      await tester.tap(skipButton);
+      await tester.pump();
+
+      expect(doseActionLogger.events.map((event) => event.doseId), <String>[
+        'dose-a',
+        'dose-b',
+      ]);
+      doseActionLogger.completeAllPendingLogs();
+      await tester.pump();
+    },
+  );
+
   testWidgets('logs skip action without marking the dose taken', (
     WidgetTester tester,
   ) async {
@@ -3583,9 +4079,7 @@ class _FakeRobotFaceDoseActionLogger {
 
   final List<DoseLogEvent> events = <DoseLogEvent>[];
   final bool delayCompletion;
-  Completer<bool>? _pendingLogCompleter;
-  BuildContext? _pendingContext;
-  String? _pendingSuccessMessage;
+  final List<_PendingDoseLog> _pendingLogs = <_PendingDoseLog>[];
 
   Future<bool> call(
     BuildContext context,
@@ -3594,13 +4088,10 @@ class _FakeRobotFaceDoseActionLogger {
   ) async {
     events.add(event);
     if (delayCompletion) {
-      _pendingContext = context;
-      _pendingSuccessMessage = successMessage;
-      _pendingLogCompleter = Completer<bool>();
-      final result = await _pendingLogCompleter!.future;
-      _pendingLogCompleter = null;
-      _pendingContext = null;
-      _pendingSuccessMessage = null;
+      final pending = _PendingDoseLog(context, successMessage);
+      _pendingLogs.add(pending);
+      final result = await pending.completer.future;
+      _pendingLogs.remove(pending);
       return result;
     }
     _showSuccess(context, successMessage);
@@ -3608,10 +4099,17 @@ class _FakeRobotFaceDoseActionLogger {
   }
 
   void completePendingLog({bool result = true}) {
-    if (result && _pendingContext != null && _pendingSuccessMessage != null) {
-      _showSuccess(_pendingContext!, _pendingSuccessMessage!);
+    final pending = _pendingLogs.isNotEmpty ? _pendingLogs.last : null;
+    if (pending == null) return;
+    if (result) _showSuccess(pending.context, pending.successMessage);
+    pending.completer.complete(result);
+  }
+
+  void completeAllPendingLogs({bool result = true}) {
+    for (final pending in List<_PendingDoseLog>.of(_pendingLogs)) {
+      if (result) _showSuccess(pending.context, pending.successMessage);
+      pending.completer.complete(result);
     }
-    _pendingLogCompleter?.complete(result);
   }
 
   void _showSuccess(BuildContext context, String successMessage) {
@@ -3621,6 +4119,14 @@ class _FakeRobotFaceDoseActionLogger {
     final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
     messenger.showSnackBar(SnackBar(content: Text(successMessage)));
   }
+}
+
+class _PendingDoseLog {
+  _PendingDoseLog(this.context, this.successMessage);
+
+  final BuildContext context;
+  final String successMessage;
+  final Completer<bool> completer = Completer<bool>();
 }
 
 class _FakeVisibleAndTakenLogger {
