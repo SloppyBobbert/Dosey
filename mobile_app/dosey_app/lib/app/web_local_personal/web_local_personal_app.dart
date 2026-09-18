@@ -399,13 +399,24 @@ class _BottomDestination extends StatelessWidget {
       key: ValueKey('web-local-personal-nav-${destination.name}'),
       autofocus: selected,
       onPressed: onSelect,
-      style: TextButton.styleFrom(
-        minimumSize: const Size(44, 44),
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
-        foregroundColor: selected
-            ? const Color(0xFF7DDAE5)
-            : const Color(0xFFFFFCF6),
-      ),
+      style:
+          TextButton.styleFrom(
+            minimumSize: const Size(44, 44),
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 5),
+            foregroundColor: selected
+                ? const Color(0xFF7DDAE5)
+                : const Color(0xFFFFFCF6),
+          ).copyWith(
+            // The default focus overlay is a tint of the bar itself (about 1.35:1
+            // in the browser), so a keyboard user cannot see where focus is.
+            // Draw an explicit mint ring instead; the teal selected foreground
+            // stays a different, stronger signal.
+            side: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.focused)
+                  ? const BorderSide(color: Color(0xFFBFEAF0), width: 2)
+                  : null,
+            ),
+          ),
       child: expanded
           ? Text(
               destination.label,

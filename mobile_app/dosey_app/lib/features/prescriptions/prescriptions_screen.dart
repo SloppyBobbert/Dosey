@@ -808,9 +808,8 @@ class _PrescriptionSheetState extends State<_PrescriptionSheet> {
                 runSpacing: 8,
                 children: [
                   for (final pillType in PillType.values)
-                    ChoiceChip(
-                      avatar: Icon(_iconFor(pillType), size: 18),
-                      label: Text(pillType.label),
+                    _AppearanceChip(
+                      pillType: pillType,
                       selected: _pillType == pillType,
                       onSelected: (_) => setState(() => _pillType = pillType),
                     ),
@@ -1192,4 +1191,64 @@ IconData _iconFor(PillType pillType) {
     PillType.capsule => Icons.medication_outlined,
     PillType.tablet => Icons.crop_square_outlined,
   };
+}
+
+/// Appearance choice with a visible keyboard focus ring.
+///
+/// The Material default focus cue is a tint of the chip's own surface (about
+/// 1.3:1 on this sheet, measured in a real browser), so a keyboard user could
+/// not see which chip was focused while the selected chip shouted in teal.
+/// A focused chip now draws its own ink ring.
+class _AppearanceChip extends StatefulWidget {
+  const _AppearanceChip({
+    required this.pillType,
+    required this.selected,
+    required this.onSelected,
+  });
+
+  final PillType pillType;
+  final bool selected;
+  final ValueChanged<bool> onSelected;
+
+  @override
+  State<_AppearanceChip> createState() => _AppearanceChipState();
+}
+
+class _AppearanceChipState extends State<_AppearanceChip> {
+  final FocusNode _focusNode = FocusNode(debugLabel: 'appearance chip');
+  bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_handleFocusChanged);
+  }
+
+  void _handleFocusChanged() {
+    if (_focused == _focusNode.hasFocus) return;
+    setState(() => _focused = _focusNode.hasFocus);
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_handleFocusChanged);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ChoiceChip(
+    focusNode: _focusNode,
+    avatar: Icon(_iconFor(widget.pillType), size: 18),
+    label: Text(widget.pillType.label),
+    selected: widget.selected,
+    onSelected: widget.onSelected,
+    // Null keeps the theme's default shape when unfocused.
+    shape: _focused
+        ? RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: const BorderSide(color: Color(0xFF103E46), width: 2),
+          )
+        : null,
+  );
 }
