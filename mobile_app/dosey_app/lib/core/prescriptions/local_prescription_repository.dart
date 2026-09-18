@@ -13,6 +13,7 @@ abstract interface class PrescriptionRepository {
   Future<void> upsertPrescription(
     Prescription prescription, {
     AdminAuditEvent? auditEvent,
+    Prescription? expectedState,
   });
 
   Future<void> addRefill({
@@ -29,6 +30,16 @@ abstract interface class PrescriptionRepository {
   });
 
   Future<void> deletePrescription(String id, {AdminAuditEvent? auditEvent});
+}
+
+class PrescriptionInventoryConflict extends StateError {
+  PrescriptionInventoryConflict(this.currentInventory)
+    : super(
+        'Inventory changed or this prescription was deleted. Review current inventory before saving.',
+      );
+
+  // Captured under writer intent; a stream may still cache another tab's old row.
+  final Prescription? currentInventory;
 }
 
 class LocalPrescriptionRepository implements PrescriptionRepository {
@@ -71,15 +82,41 @@ class LocalPrescriptionRepository implements PrescriptionRepository {
   Future<void> upsertPrescription(
     Prescription prescription, {
     AdminAuditEvent? auditEvent,
+    Prescription? expectedState,
   }) {
     _validatePrescription(prescription);
 
     return _database.transaction(() async {
+      // Lock before reading inventory: another tab may have confirmed Taken.
+      await _database.customUpdate(
+        'UPDATE prescriptions SET id = id WHERE id = ?',
+        variables: [Variable<String>(prescription.id)],
+      );
       await _rejectDeferredDeletedPrescription(prescription.id);
       final existing = await (_database.select(
         _database.prescriptions,
       )..where((row) => row.id.equals(prescription.id))).getSingleOrNull();
 
+      if (expectedState != null &&
+          (expectedState.id != prescription.id ||
+              existing == null ||
+              expectedState.remainingDoses != existing.remainingDoses ||
+              expectedState.availableDoses != existing.availableDoses ||
+              expectedState.loadedDoses != existing.loadedDoses ||
+              expectedState.usedDoses != existing.usedDoses ||
+              expectedState.reviewDoses != existing.reviewDoses)) {
+        throw PrescriptionInventoryConflict(
+          existing == null
+              ? null
+              : expectedState.copyWith(
+                  remainingDoses: existing.remainingDoses,
+                  availableDoses: existing.availableDoses,
+                  loadedDoses: existing.loadedDoses,
+                  usedDoses: existing.usedDoses,
+                  reviewDoses: existing.reviewDoses,
+                ),
+        );
+      }
       await _database
           .into(_database.prescriptions)
           .insertOnConflictUpdate(

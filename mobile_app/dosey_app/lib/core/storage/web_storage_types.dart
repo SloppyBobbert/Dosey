@@ -217,11 +217,16 @@ final class WebStorageDemoOnly extends WebStorageBootstrapResult {
   final WebStorageClassification classification;
 }
 
+enum WebStorageCleanup { notNeeded, completed, uncertain }
+
 final class WebStorageStartupRecovery extends WebStorageBootstrapResult {
   WebStorageStartupRecovery({
     required this.error,
     required this.stackTrace,
     this.selectionFailure,
+    this.cleanup = WebStorageCleanup.notNeeded,
+    this.cleanupError,
+    this.cleanupStackTrace,
     required super.missingFeatures,
   });
 
@@ -230,4 +235,7 @@ final class WebStorageStartupRecovery extends WebStorageBootstrapResult {
   final Object error;
   final StackTrace stackTrace;
   final WebStorageSelectionFailure? selectionFailure;
+  final WebStorageCleanup cleanup;
+  final Object? cleanupError;
+  final StackTrace? cleanupStackTrace;
 }

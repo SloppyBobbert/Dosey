@@ -6,7 +6,8 @@ import 'package:flutter/material.dart';
 class WebLocalPersonalApp extends StatefulWidget {
   const WebLocalPersonalApp({
     super.key,
-    required this.storage,
+    this.storage,
+    this.startupPage,
     this.routeController,
     this.pageBuilder = buildWebLocalPersonalFoundationPage,
     this.onAddPrescription,
@@ -15,7 +16,8 @@ class WebLocalPersonalApp extends StatefulWidget {
     this.routeInformationProvider,
   });
 
-  final WebStorageBootstrapResult storage;
+  final WebStorageBootstrapResult? storage;
+  final Widget? startupPage;
 
   /// Fixed for the lifetime of this root app widget.
   final WebLocalPersonalRouteController? routeController;
@@ -60,7 +62,9 @@ class _WebLocalPersonalAppState extends State<WebLocalPersonalApp> {
     BuildContext context,
     WebLocalPersonalRouteController controller,
   ) {
-    if (widget.storage is WebStorageStartupRecovery) {
+    if (widget.startupPage case final page?) return page;
+    final storage = widget.storage;
+    if (storage == null || storage is WebStorageStartupRecovery) {
       return _RecoveryGate(onRetry: widget.onRetryStorage);
     }
     if (controller.hasUnknownPath) {
@@ -69,7 +73,7 @@ class _WebLocalPersonalAppState extends State<WebLocalPersonalApp> {
       );
     }
     return _PersonalShell(
-      storage: widget.storage,
+      storage: storage,
       controller: controller,
       pageBuilder: widget.pageBuilder,
       onAddPrescription: widget.onAddPrescription,
@@ -85,7 +89,7 @@ ThemeData _theme() {
   const coral = Color(0xFFC65F50);
   return ThemeData(
     useMaterial3: true,
-    fontFamily: 'Georgia',
+    fontFamily: 'DoseyLocalRoboto',
     colorScheme: const ColorScheme.light(
       primary: ink,
       onPrimary: paper,
@@ -219,55 +223,84 @@ class _NavigationRail extends StatelessWidget {
   final bool expanded;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: 'Primary navigation',
-    child: Container(
-      width: expanded ? 232 : 80,
-      color: const Color(0xFF103E46),
-      child: NavigationRail(
-        backgroundColor: Colors.transparent,
-        extended: expanded,
-        minExtendedWidth: 232,
-        useIndicator: true,
-        indicatorColor: const Color(0xFFBFEAF0),
-        selectedIconTheme: const IconThemeData(color: Color(0xFF103E46)),
-        unselectedIconTheme: const IconThemeData(color: Color(0xFFFFFCF6)),
-        selectedLabelTextStyle: const TextStyle(
-          color: Color(0xFF103E46),
-          fontWeight: FontWeight.w700,
-        ),
-        unselectedLabelTextStyle: const TextStyle(
-          color: Color(0xFFFFFCF6),
-          fontWeight: FontWeight.w600,
-        ),
-        selectedIndex: controller.current.index,
-        labelType: expanded
-            ? NavigationRailLabelType.none
-            : NavigationRailLabelType.all,
-        onDestinationSelected: (index) =>
-            controller.goTo(WebLocalPersonalDestination.values[index]),
-        leading: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 18, 12, 24),
-          child: Text(
-            expanded ? 'Dosey\nPersonal' : 'D',
-            style: const TextStyle(
-              color: Color(0xFFFFFCF6),
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    // Base the rail label styles on the theme so they keep the app font;
+    // a bare TextStyle here dropped the family and fell back to the system
+    // font. The selected label must also stay light: the indicator pill wraps
+    // only the icon, so a dark selected colour was invisible on this rail.
+    final labelStyle =
+        Theme.of(context).textTheme.labelMedium ?? const TextStyle();
+    return Semantics(
+      label: 'Primary navigation',
+      child: Container(
+        width: expanded ? 232 : 120,
+        color: const Color(0xFF103E46),
+        child: NavigationRail(
+          backgroundColor: Colors.transparent,
+          extended: expanded,
+          minExtendedWidth: 232,
+          useIndicator: true,
+          indicatorColor: const Color(0xFFBFEAF0),
+          selectedIconTheme: const IconThemeData(color: Color(0xFF103E46)),
+          unselectedIconTheme: const IconThemeData(color: Color(0xFFFFFCF6)),
+          selectedLabelTextStyle: labelStyle.copyWith(
+            color: const Color(0xFFFFFCF6),
+            fontWeight: FontWeight.w700,
+            fontSize: expanded ? null : 12,
+          ),
+          unselectedLabelTextStyle: labelStyle.copyWith(
+            color: const Color(0xFFFFFCF6),
+            fontWeight: FontWeight.w600,
+            fontSize: expanded ? null : 12,
+          ),
+          selectedIndex: controller.current.index,
+          labelType: expanded
+              ? NavigationRailLabelType.none
+              : NavigationRailLabelType.all,
+          onDestinationSelected: (index) =>
+              controller.goTo(WebLocalPersonalDestination.values[index]),
+          leading: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 18, 12, 24),
+            child: Text(
+              expanded ? 'Dosey\nPersonal' : 'D',
+              style: const TextStyle(
+                color: Color(0xFFFFFCF6),
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
+          destinations: [
+            for (final destination in WebLocalPersonalDestination.values)
+              NavigationRailDestination(
+                icon: Icon(destination.icon),
+                selectedIcon: Icon(destination.icon),
+                label: expanded
+                    ? Text(destination.label)
+                    // The 64px compact destination cannot hold "Prescriptions" on one
+                    // line without shrinking it to about 5px, so the rail uses the
+                    // short form and keeps the full name for assistive tech.
+                    : Semantics(
+                        label: destination.label,
+                        // The stand-in glyph is visual only; without this a screen
+                        // reader announces the full name and the short form.
+                        excludeSemantics: true,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            destination.compactLabel,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.visible,
+                          ),
+                        ),
+                      ),
+              ),
+          ],
         ),
-        destinations: [
-          for (final destination in WebLocalPersonalDestination.values)
-            NavigationRailDestination(
-              icon: Icon(destination.icon),
-              selectedIcon: Icon(destination.icon),
-              label: Text(destination.label),
-            ),
-        ],
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _BottomNavigation extends StatelessWidget {
@@ -385,11 +418,17 @@ class _BottomDestination extends StatelessWidget {
                 Icon(destination.icon, size: 22),
                 const SizedBox(height: 3),
                 Expanded(
-                  child: Text(
-                    destination.label,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.visible,
+                  // Long labels such as "Prescriptions" must not break mid-word
+                  // in the fixed-width compact bar, so scale down instead.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      destination.label,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.visible,
+                    ),
                   ),
                 ),
               ],

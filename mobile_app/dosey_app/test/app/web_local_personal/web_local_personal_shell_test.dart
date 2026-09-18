@@ -192,15 +192,79 @@ void main() {
     },
   );
 
+  // Layout guard only: proves the long label is laid out as a single scaled
+  // line inside its 64px destination. Paint quality still needs a browser.
+  testWidgets('320px keeps every compact navigation label on one line', (
+    tester,
+  ) async {
+    await _pump(tester, width: 320, height: 640);
+    expect(
+      find.byKey(const ValueKey('web-local-personal-bottom-navigation')),
+      findsOneWidget,
+    );
+    for (final destination in WebLocalPersonalDestination.values) {
+      final target = find.byKey(
+        ValueKey('web-local-personal-nav-${destination.name}'),
+      );
+      final label = find.descendant(of: target, matching: find.byType(Text));
+      final fitted = find.descendant(
+        of: target,
+        matching: find.byType(FittedBox),
+      );
+      expect(target, findsOneWidget, reason: destination.label);
+      expect(label, findsOneWidget, reason: destination.label);
+      expect(fitted, findsOneWidget, reason: destination.label);
+      final text = tester.widget<Text>(label);
+      expect(text.maxLines, 1, reason: destination.label);
+      expect(text.softWrap, isFalse, reason: destination.label);
+      // A mid-word break such as "Prescript"/"ions" needs two text lines.
+      expect(
+        tester.getSize(label).height,
+        lessThan(24),
+        reason: destination.label,
+      );
+      expect(
+        tester.getSize(fitted).width,
+        lessThanOrEqualTo(tester.getSize(target).width + 0.5),
+        reason: destination.label,
+      );
+    }
+  });
+
   testWidgets('700 through 1023 use the compact rail and 1024 expands it', (
     tester,
   ) async {
+    final semantics = tester.ensureSemantics();
     await _pump(tester, width: 700);
-    expect(tester.getSize(find.byType(NavigationRail)).width, 80);
+    final rail = find.byType(NavigationRail);
+    expect(tester.getSize(rail).width, 120);
+    // The compact rail paints the short "Meds" form, so assistive tech must get
+    // the full destination name instead of reading the stand-in text as well.
+    // The rail merges its own "Tab N of 5" index label into the same node.
+    for (final destination in WebLocalPersonalDestination.values) {
+      final node = tester.getSemantics(
+        find.descendant(
+          of: rail,
+          matching: find.bySemanticsLabel(
+            RegExp('^${RegExp.escape(destination.label)}\n'),
+          ),
+        ),
+      );
+      expect(
+        node.label.replaceFirst(RegExp(r'\nTab \d+ of \d+$'), ''),
+        destination.label,
+      );
+    }
+    expect(
+      find.descendant(of: rail, matching: find.bySemanticsLabel('Meds')),
+      findsNothing,
+      reason: 'the compact stand-in must not reach assistive tech',
+    );
     await _pump(tester, width: 1023);
-    expect(tester.getSize(find.byType(NavigationRail)).width, 80);
+    expect(tester.getSize(find.byType(NavigationRail)).width, 120);
     await _pump(tester, width: 1024);
     expect(tester.getSize(find.byType(NavigationRail)).width, 232);
+    semantics.dispose();
   });
 
   testWidgets('desktop rail uses clear high-contrast navigation states', (
@@ -212,8 +276,15 @@ void main() {
     expect(rail.indicatorColor, const Color(0xFFBFEAF0));
     expect(rail.selectedIconTheme!.color, const Color(0xFF103E46));
     expect(rail.unselectedIconTheme!.color, const Color(0xFFFFFCF6));
-    expect(rail.selectedLabelTextStyle!.color, const Color(0xFF103E46));
+    // The indicator pill wraps only the icon, so the selected label sits on the
+    // rail background and must stay light; a dark selected colour rendered it
+    // invisibly. Selection is carried by the pill and the bolder weight, and
+    // both styles keep the app font.
+    expect(rail.selectedLabelTextStyle!.color, const Color(0xFFFFFCF6));
+    expect(rail.selectedLabelTextStyle!.fontWeight, FontWeight.w700);
+    expect(rail.selectedLabelTextStyle!.fontFamily, isNotNull);
     expect(rail.unselectedLabelTextStyle!.color, const Color(0xFFFFFCF6));
+    expect(rail.unselectedLabelTextStyle!.fontFamily, isNotNull);
   });
 
   testWidgets('error color uses an accessible dark foreground', (tester) async {
@@ -399,11 +470,12 @@ void main() {
       findsOneWidget,
     );
     expect(
-      Focus.of(
-        tester.element(
-          find.byKey(const ValueKey('web-local-personal-page-focus')),
-        ),
-      ).hasFocus,
+      tester
+          .widget<Focus>(
+            find.byKey(const ValueKey('web-local-personal-page-focus')),
+          )
+          .focusNode!
+          .hasFocus,
       isTrue,
     );
     semantics.dispose();
@@ -563,10 +635,21 @@ void main() {
         .where((file) => file.path.endsWith('.dart'))
         .map((file) => file.readAsStringSync())
         .join('\n');
-    final directives = RegExp(
-      r'''^(?:import|export)\s+['"]([^'"]+)['"]''',
-      multiLine: true,
-    ).allMatches(source).map((match) => match.group(1)!).join('\n');
+    final directives =
+        RegExp(r'''^(?:import|export)\s+['"]([^'"]+)['"]''', multiLine: true)
+            .allMatches(source)
+            .map((match) => match.group(1)!)
+            // Async database lifecycle ownership is not a remote sync adapter.
+            .where(
+              (uri) => !const {
+                'dart:async',
+                // Stage2 reuses only these shared forms; all other features stay forbidden.
+                'package:dosey_app/features/shared/personal_setup_scope.dart',
+                'package:dosey_app/features/prescriptions/prescriptions_screen.dart',
+                'package:dosey_app/features/reminders/reminders_screen.dart',
+              }.contains(uri),
+            )
+            .join('\n');
     for (final expression in [
       RegExp(
         r'appwrite|account|cloud|pairing|caregiver|household|sync|bluetooth|\bble\b|carousel|robot|native|notification|permission|audio',
