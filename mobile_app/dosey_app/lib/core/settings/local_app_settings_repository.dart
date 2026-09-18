@@ -327,10 +327,13 @@ class LocalAppSettingsRepository {
 
   static String _hashActionPin(String pin, String salt) {
     // This is a lightweight local deterrent, not medical-grade security.
-    var hash = 0xcbf29ce484222325;
+    // Exact on VM and web; masking preserves the stored native overflow result.
+    var hash = BigInt.parse('cbf29ce484222325', radix: 16);
+    final prime = BigInt.parse('100000001b3', radix: 16);
+    final mask = BigInt.parse('7fffffffffffffff', radix: 16);
     for (final codeUnit in '$salt:$pin'.codeUnits) {
-      hash ^= codeUnit;
-      hash = (hash * 0x100000001b3) & 0x7fffffffffffffff;
+      hash ^= BigInt.from(codeUnit);
+      hash = (hash * prime) & mask;
     }
     return hash.toRadixString(16).padLeft(16, '0');
   }
