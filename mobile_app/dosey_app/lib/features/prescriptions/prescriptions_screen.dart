@@ -5,6 +5,7 @@ import 'package:dosey_app/core/prescriptions/prescription.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule.dart';
 import 'package:dosey_app/core/reminders/reminder_schedule_service.dart';
 import 'package:dosey_app/core/schedules/schedule_profile.dart';
+import 'package:dosey_app/features/shared/personal_summary_chip.dart';
 import 'package:dosey_app/features/shared/protected_admin_ui.dart';
 import 'package:dosey_app/features/reminders/reminders_screen.dart';
 import 'package:flutter/material.dart';
@@ -293,19 +294,19 @@ class _PrescriptionHeroCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
-                _PrescriptionHeroChip(
+                PersonalSummaryChip(
                   icon: Icons.medication_outlined,
                   label: '$prescriptionCount entered',
                 ),
-                _PrescriptionHeroChip(
+                PersonalSummaryChip(
                   icon: Icons.event_available_outlined,
                   label: '$scheduledPrescriptionCount scheduled',
                 ),
-                const _PrescriptionHeroChip(
+                const PersonalSummaryChip(
                   icon: Icons.route_outlined,
                   label: 'Feeds schedule builder',
                 ),
-                const _PrescriptionHeroChip(
+                const PersonalSummaryChip(
                   icon: Icons.fact_check_outlined,
                   label: 'Local label reference',
                 ),
@@ -313,46 +314,6 @@ class _PrescriptionHeroCard extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PrescriptionHeroChip extends StatelessWidget {
-  const _PrescriptionHeroChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: colorScheme.surface.withValues(alpha: 0.76),
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(
-          color: colorScheme.outlineVariant.withValues(alpha: 0.45),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: colorScheme.primary),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              label,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: colorScheme.onSurface,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
