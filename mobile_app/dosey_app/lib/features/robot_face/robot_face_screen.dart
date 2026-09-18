@@ -1711,49 +1711,6 @@ class _RobotFaceStatusCard extends StatelessWidget {
                 const _RobotFaceNetworkAdvisoryBadge(),
             ],
           )
-        : !showDetails
-        ? DecoratedBox(
-            decoration: BoxDecoration(
-              color: const Color(0xC40B111B),
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _accentFor(state.mode),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: Text(
-                      state.nextEventLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(
-                    Icons.expand_less_rounded,
-                    size: 20,
-                    color: Colors.white,
-                  ),
-                ],
-              ),
-            ),
-          )
         : _buildDetails(
             context,
             badgeEmphasis: badgeEmphasis,
@@ -2494,7 +2451,6 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
   }) async {
     if (!_reserveTerminalDose(actionDoseId, actionKind)) return;
     var isSubmitting = false;
-    ScaffoldMessengerState? messenger;
     try {
       final submissionGeneration = _nonNullActionDoseGeneration;
       if (!await _authorizeAction(context) ||
@@ -2507,7 +2463,7 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
 
       setState(() => _terminalSubmittingDoseIds.add(actionDoseId));
       isSubmitting = true;
-      messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+      ScaffoldMessenger.of(context).clearSnackBars();
       final logged = actionKind == RobotFaceActionKind.confirmTaken
           ? await (widget.visibleAndTakenLogger ??
                 DoseActionLogger.logRobotFaceVisibleAndTaken)(
@@ -2535,9 +2491,9 @@ class _RobotFaceActionPanelState extends State<_RobotFaceActionPanel> {
       if (!context.mounted) {
         return;
       }
-      messenger?.showSnackBar(
-        SnackBar(content: Text('Dose action failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Dose action failed: $error')));
     } finally {
       if (isSubmitting && mounted) {
         setState(() => _terminalSubmittingDoseIds.remove(actionDoseId));

@@ -1443,7 +1443,7 @@ void main() {
     });
 
     testWidgets(
-      'releases ${action.name} after an authorization error for retry',
+      'shows an authorization error and releases ${action.name} for retry',
       (tester) async {
         final states = StreamController<RobotFaceState>.broadcast();
         final authorizer = _FailingOnceActionAuthorizer();
@@ -1467,6 +1467,10 @@ void main() {
         await tester.pump();
         await tester.pump();
 
+        expect(
+          find.text('Dose action failed: Bad state: authorization failed'),
+          findsOneWidget,
+        );
         expect(
           tester.widget<FilledButton>(find.byKey(key)).onPressed,
           isNotNull,
