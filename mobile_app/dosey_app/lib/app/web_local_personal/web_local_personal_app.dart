@@ -112,6 +112,25 @@ ThemeData _theme() {
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(minimumSize: const Size(44, 48)),
     ),
+    // Use contrasting rings: the default focus tint is too faint on these fills.
+    textButtonTheme: TextButtonThemeData(
+      style: ButtonStyle(
+        side: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.focused)
+              ? const BorderSide(color: ink, width: 2)
+              : null,
+        ),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        side: WidgetStateProperty.resolveWith(
+          (states) => states.contains(WidgetState.focused)
+              ? const BorderSide(color: Color(0xFFBFEAF0), width: 2)
+              : null,
+        ),
+      ),
+    ),
   );
 }
 

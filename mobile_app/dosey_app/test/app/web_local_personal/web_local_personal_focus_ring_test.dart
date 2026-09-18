@@ -70,6 +70,132 @@ void main() {
     );
   });
 
+  testWidgets('sheet buttons resolve a focus ring from the theme', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(320, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final controller = WebLocalPersonalRouteController(
+      initialPath: WebLocalPersonalDestination.prescriptions.path,
+    );
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MediaQuery(
+        data: MediaQueryData.fromView(tester.view),
+        child: WebLocalPersonalApp(
+          storage: WebStorageDemoOnly(
+            classification: classifyWebStorage(
+              WebStorageImplementation.inMemory,
+            ),
+            missingFeatures: const {},
+          ),
+          routeController: controller,
+          routeInformationProvider: _Fixed(controller.currentPath),
+          pageBuilder: buildWebLocalPersonalFoundationPage,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final theme = Theme.of(tester.element(find.byType(Scaffold).first));
+    // Each ring must contrast with its button's fill.
+    final textSide = theme.textButtonTheme.style?.side?.resolve(<WidgetState>{
+      WidgetState.focused,
+    });
+    expect(textSide, isNotNull, reason: 'text buttons need a focus ring');
+    expect(textSide!.width, 2);
+    expect(textSide.color, const Color(0xFF103E46));
+    final filledSide = theme.filledButtonTheme.style?.side?.resolve(
+      <WidgetState>{WidgetState.focused},
+    );
+    expect(filledSide, isNotNull, reason: 'filled buttons need a focus ring');
+    expect(filledSide!.width, 2);
+    expect(filledSide.color, const Color(0xFFBFEAF0));
+    expect(
+      theme.textButtonTheme.style?.side?.resolve(<WidgetState>{}),
+      isNull,
+      reason: 'unfocused buttons stay unstyled',
+    );
+  });
+
+  for (final width in [320.0, 800.0]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets(
+        'sheet button focus at ${width}px/${scale}x does not resize',
+        (tester) async {
+          tester.view.physicalSize = Size(width, 900);
+          tester.view.devicePixelRatio = 1;
+          tester.platformDispatcher.textScaleFactorTestValue = scale;
+          addTearDown(tester.view.reset);
+          addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+          final database = DoseyDatabase.inMemory();
+          addTearDown(database.close);
+          final setup = PersonalSetupDependencies.local(database);
+          await tester.runAsync(() => setup.initializeLocalProfile());
+          await tester.pumpWidget(
+            PersonalSetupScope(
+              dependencies: setup,
+              child: const WebLocalPersonalApp(
+                startupPage: Scaffold(
+                  body: SingleChildScrollView(child: PrescriptionsScreen()),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('Add prescription'));
+          await tester.pumpAndSettle();
+          final cancel = find.widgetWithText(TextButton, 'Cancel');
+          final save = find.widgetWithText(FilledButton, 'Save prescription');
+          final sizes = [tester.getSize(cancel), tester.getSize(save)];
+          final separation =
+              tester.getTopLeft(save) - tester.getTopLeft(cancel);
+
+          for (final target in [cancel, save]) {
+            await tester.ensureVisible(target);
+            await tester.pumpAndSettle();
+            final label = find.descendant(
+              of: target,
+              matching: find.byType(Text),
+            );
+            final focus = Focus.of(tester.element(label));
+            for (var tabs = 0; !focus.hasFocus && tabs < 12; tabs++) {
+              await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+              await tester.pumpAndSettle();
+            }
+            expect(focus.hasFocus, isTrue);
+            final material = tester.widget<Material>(
+              find
+                  .descendant(of: target, matching: find.byType(Material))
+                  .first,
+            );
+            final border = (material.shape! as OutlinedBorder).side;
+            expect(border.width, 2);
+            expect(
+              border.color,
+              target == cancel
+                  ? const Color(0xFF103E46)
+                  : const Color(0xFFBFEAF0),
+            );
+            expect([tester.getSize(cancel), tester.getSize(save)], sizes);
+            expect(
+              tester.getTopLeft(save) - tester.getTopLeft(cancel),
+              separation,
+            );
+            expect(
+              tester.getRect(cancel).overlaps(tester.getRect(save)),
+              isFalse,
+            );
+            expect(tester.takeException(), isNull);
+          }
+          await tester.pumpWidget(const SizedBox());
+          await setup.drain();
+        },
+      );
+    }
+  }
+
   testWidgets('a focused appearance chip shows a ring without moving', (
     tester,
   ) async {
