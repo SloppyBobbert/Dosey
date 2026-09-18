@@ -276,8 +276,15 @@ void main() {
     expect(rail.indicatorColor, const Color(0xFFBFEAF0));
     expect(rail.selectedIconTheme!.color, const Color(0xFF103E46));
     expect(rail.unselectedIconTheme!.color, const Color(0xFFFFFCF6));
-    expect(rail.selectedLabelTextStyle!.color, const Color(0xFF103E46));
+    // The indicator pill wraps only the icon, so the selected label sits on the
+    // rail background and must stay light; a dark selected colour rendered it
+    // invisibly. Selection is carried by the pill and the bolder weight, and
+    // both styles keep the app font.
+    expect(rail.selectedLabelTextStyle!.color, const Color(0xFFFFFCF6));
+    expect(rail.selectedLabelTextStyle!.fontWeight, FontWeight.w700);
+    expect(rail.selectedLabelTextStyle!.fontFamily, isNotNull);
     expect(rail.unselectedLabelTextStyle!.color, const Color(0xFFFFFCF6));
+    expect(rail.unselectedLabelTextStyle!.fontFamily, isNotNull);
   });
 
   testWidgets('error color uses an accessible dark foreground', (tester) async {

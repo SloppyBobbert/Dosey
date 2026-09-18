@@ -223,79 +223,84 @@ class _NavigationRail extends StatelessWidget {
   final bool expanded;
 
   @override
-  Widget build(BuildContext context) => Semantics(
-    label: 'Primary navigation',
-    child: Container(
-      // The compact rail must be wide enough to hold its own labels: at 80px
-      // the 64px label slot forced "Schedule" and "Settings" to shrink to
-      // about 8px or break mid-word.
-      width: expanded ? 232 : 120,
-      color: const Color(0xFF103E46),
-      child: NavigationRail(
-        backgroundColor: Colors.transparent,
-        extended: expanded,
-        minExtendedWidth: 232,
-        useIndicator: true,
-        indicatorColor: const Color(0xFFBFEAF0),
-        selectedIconTheme: const IconThemeData(color: Color(0xFF103E46)),
-        unselectedIconTheme: const IconThemeData(color: Color(0xFFFFFCF6)),
-        selectedLabelTextStyle: TextStyle(
-          color: const Color(0xFF103E46),
-          fontWeight: FontWeight.w700,
-          fontSize: expanded ? null : 12,
-        ),
-        unselectedLabelTextStyle: TextStyle(
-          color: const Color(0xFFFFFCF6),
-          fontWeight: FontWeight.w600,
-          fontSize: expanded ? null : 12,
-        ),
-        selectedIndex: controller.current.index,
-        labelType: expanded
-            ? NavigationRailLabelType.none
-            : NavigationRailLabelType.all,
-        onDestinationSelected: (index) =>
-            controller.goTo(WebLocalPersonalDestination.values[index]),
-        leading: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 18, 12, 24),
-          child: Text(
-            expanded ? 'Dosey\nPersonal' : 'D',
-            style: const TextStyle(
-              color: Color(0xFFFFFCF6),
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    // Base the rail label styles on the theme so they keep the app font;
+    // a bare TextStyle here dropped the family and fell back to the system
+    // font. The selected label must also stay light: the indicator pill wraps
+    // only the icon, so a dark selected colour was invisible on this rail.
+    final labelStyle =
+        Theme.of(context).textTheme.labelMedium ?? const TextStyle();
+    return Semantics(
+      label: 'Primary navigation',
+      child: Container(
+        width: expanded ? 232 : 120,
+        color: const Color(0xFF103E46),
+        child: NavigationRail(
+          backgroundColor: Colors.transparent,
+          extended: expanded,
+          minExtendedWidth: 232,
+          useIndicator: true,
+          indicatorColor: const Color(0xFFBFEAF0),
+          selectedIconTheme: const IconThemeData(color: Color(0xFF103E46)),
+          unselectedIconTheme: const IconThemeData(color: Color(0xFFFFFCF6)),
+          selectedLabelTextStyle: labelStyle.copyWith(
+            color: const Color(0xFFFFFCF6),
+            fontWeight: FontWeight.w700,
+            fontSize: expanded ? null : 12,
+          ),
+          unselectedLabelTextStyle: labelStyle.copyWith(
+            color: const Color(0xFFFFFCF6),
+            fontWeight: FontWeight.w600,
+            fontSize: expanded ? null : 12,
+          ),
+          selectedIndex: controller.current.index,
+          labelType: expanded
+              ? NavigationRailLabelType.none
+              : NavigationRailLabelType.all,
+          onDestinationSelected: (index) =>
+              controller.goTo(WebLocalPersonalDestination.values[index]),
+          leading: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 18, 12, 24),
+            child: Text(
+              expanded ? 'Dosey\nPersonal' : 'D',
+              style: const TextStyle(
+                color: Color(0xFFFFFCF6),
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ),
-        destinations: [
-          for (final destination in WebLocalPersonalDestination.values)
-            NavigationRailDestination(
-              icon: Icon(destination.icon),
-              selectedIcon: Icon(destination.icon),
-              label: expanded
-                  ? Text(destination.label)
-                  // The 64px compact destination cannot hold "Prescriptions" on one
-                  // line without shrinking it to about 5px, so the rail uses the
-                  // short form and keeps the full name for assistive tech.
-                  : Semantics(
-                      label: destination.label,
-                      // The stand-in glyph is visual only; without this a screen
-                      // reader announces the full name and the short form.
-                      excludeSemantics: true,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          destination.compactLabel,
-                          maxLines: 1,
-                          softWrap: false,
-                          overflow: TextOverflow.visible,
+          destinations: [
+            for (final destination in WebLocalPersonalDestination.values)
+              NavigationRailDestination(
+                icon: Icon(destination.icon),
+                selectedIcon: Icon(destination.icon),
+                label: expanded
+                    ? Text(destination.label)
+                    // The 64px compact destination cannot hold "Prescriptions" on one
+                    // line without shrinking it to about 5px, so the rail uses the
+                    // short form and keeps the full name for assistive tech.
+                    : Semantics(
+                        label: destination.label,
+                        // The stand-in glyph is visual only; without this a screen
+                        // reader announces the full name and the short form.
+                        excludeSemantics: true,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            destination.compactLabel,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.visible,
+                          ),
                         ),
                       ),
-                    ),
-            ),
-        ],
+              ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _BottomNavigation extends StatelessWidget {
